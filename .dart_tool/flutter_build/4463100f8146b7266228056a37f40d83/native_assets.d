@@ -1,0 +1,1 @@
+ /Users/untreu/Documents/GitHub/qiqstr/.dart_tool/flutter_build/4463100f8146b7266228056a37f40d83/native_assets.yaml: 

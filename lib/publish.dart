@@ -27,27 +27,31 @@ class _PublishPageState extends State<PublishPage> {
 
     String content = _contentController.text;
 
-    for (String relay in relayList) {
-      await _broadcastEvent(nsec, content, relay);
-    }
+    Event signedEvent = _signEvent(nsec, content);
+
+    List<Future<void>> futures = relayList.map((relay) => _broadcastEvent(signedEvent, relay)).toList();
+    
+    await Future.wait(futures);
 
     setState(() {
       _message = 'Note successfully shared!';
     });
   }
 
-  Future<void> _broadcastEvent(String nsec, String content, String relay) async {
+  Event _signEvent(String nsec, String content) {
+    return Event.from(
+      kind: 1,
+      tags: [],
+      content: content,
+      privkey: nsec,
+    );
+  }
+
+  Future<void> _broadcastEvent(Event signedEvent, String relay) async {
     try {
       WebSocket webSocket = await WebSocket.connect(relay);
 
-      Event newEvent = Event.from(
-        kind: 1,
-        tags: [],
-        content: content,
-        privkey: nsec,
-      );
-
-      String signedEventJson = jsonEncode(["EVENT", newEvent.toJson()]);
+      String signedEventJson = jsonEncode(["EVENT", signedEvent.toJson()]);
 
       webSocket.add(signedEventJson);
 
@@ -73,16 +77,29 @@ class _PublishPageState extends State<PublishPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
-            TextField(
-              controller: _contentController,
-              decoration: InputDecoration(
-                labelText: "Enter your note...",
+            Container(
+              height: 150,
+              child: TextField(
+                controller: _contentController,
+                maxLines: null,
+                expands: true,
+                decoration: InputDecoration(
+                  labelText: "Enter your note...",
+                  border: OutlineInputBorder(),
+                ),
               ),
             ),
             SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _publishNote,
-              child: Text('Share'),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _publishNote,
+                style: ElevatedButton.styleFrom(
+                  foregroundColor: Colors.black, backgroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: Text('Share'),
+              ),
             ),
             SizedBox(height: 20),
             Text(_message),

@@ -18,6 +18,7 @@ class FeedPage extends StatefulWidget {
 class _FeedPageState extends State<FeedPage> {
   List<Map<String, dynamic>> feedItems = [];
   Map<String, Map<String, String>> profileCache = {};
+  Set<String> eventIds = {};
 
   @override
   void initState() {
@@ -60,6 +61,13 @@ class _FeedPageState extends State<FeedPage> {
 
   Future<void> _loadFeed() async {
     List<String> followingNpubs = await getFollowingList(widget.npub);
+
+    for (String npub in followingNpubs) {
+      if (!profileCache.containsKey(npub)) {
+        await fetchProfileForNpub(npub);
+      }
+    }
+
     await fetchFeedForFollowingNpubs(followingNpubs);
   }
 
@@ -97,8 +105,14 @@ class _FeedPageState extends State<FeedPage> {
       return;
     }
 
-    WebSocket webSocket = await WebSocket.connect('wss://relay.damus.io');
-    var requestWithFilter = Request(generate64RandomHexChars(), [
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    List<String>? relayList = prefs.getStringList('relayList');
+
+    if (relayList == null || relayList.isEmpty) {
+      return;
+    }
+
+    Request requestEvent = Request(generate64RandomHexChars(), [
       Filter(
         authors: followingNpubs,
         kinds: [1],
@@ -106,43 +120,71 @@ class _FeedPageState extends State<FeedPage> {
       )
     ]);
 
-    webSocket.listen((event) async {
-      var decodedEvent = jsonDecode(event);
+    List<Future<void>> futures = relayList.map((relay) => _broadcastFeedRequest(requestEvent, relay)).toList();
+    await Future.wait(futures); 
+  }
 
-      if (decodedEvent[0] == "EVENT") {
-        var eventData = decodedEvent[2];
-        String author = eventData['pubkey'];
+  Future<void> _broadcastFeedRequest(Request requestEvent, String relay) async {
+    try {
+      WebSocket webSocket = await WebSocket.connect(relay);
 
-        if (!profileCache.containsKey(author)) {
-          await fetchProfileForNpub(author);
+      String requestJson = requestEvent.serialize();
+
+      webSocket.add(requestJson);
+
+      webSocket.listen((event) async {
+        var decodedEvent = jsonDecode(event);
+
+        if (decodedEvent[0] == "EVENT") {
+          var eventData = decodedEvent[2];
+          String eventId = eventData['id'];
+          String author = eventData['pubkey'];
+          String content = eventData['content'] ?? ''; 
+
+          if (content.trim().isEmpty) {
+            return; 
+          }
+
+          if (!eventIds.contains(eventId)) {
+            eventIds.add(eventId);
+
+            if (!profileCache.containsKey(author)) {
+              await fetchProfileForNpub(author);
+            }
+
+            if (mounted) {
+              setState(() {
+                String authorName = profileCache[author]?['name'] ?? 'Anonymous';
+                String profileImageUrl = profileCache[author]?['profileImage'] ?? '';
+                String nip05 = profileCache[author]?['nip05'] ?? ''; 
+
+                feedItems.add({
+                  'author': author,
+                  'name': authorName,
+                  'nip05': nip05, 
+                  'content': content,
+                  'noteId': eventId,
+                  'timestamp': DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000).toString(),
+                  'reaction': '',
+                  'profileImage': profileImageUrl,
+                });
+
+                feedItems.sort((a, b) {
+                  DateTime dateA = DateTime.parse(a['timestamp']);
+                  DateTime dateB = DateTime.parse(b['timestamp']);
+                  return dateB.compareTo(dateA); 
+                });
+              });
+            }
+          }
         }
-
-        if (mounted) {
-          setState(() {
-            feedItems.add({
-              'author': author,
-              'name': profileCache[author]?['name'] ?? 'Anonymous',
-              'content': eventData['content'],
-              'noteId': eventData['id'],
-              'timestamp': DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000).toString(),
-              'reaction': ''
-            });
-          });
-        }
-      }
-    });
-
-    webSocket.add(requestWithFilter.serialize());
-    await Future.delayed(Duration(seconds: 10));
-    await webSocket.close();
-
-    setState(() {
-      feedItems.sort((a, b) {
-        var dateA = DateTime.parse(a['timestamp']!);
-        var dateB = DateTime.parse(b['timestamp']!);
-        return dateB.compareTo(dateA);
       });
-    });
+
+      await Future.delayed(Duration(seconds: 10));
+      await webSocket.close();
+    } catch (e) {
+      print('Error connecting to relay: $e');
+    }
   }
 
   Future<void> fetchProfileForNpub(String npub) async {
@@ -164,9 +206,14 @@ class _FeedPageState extends State<FeedPage> {
 
         if (kind == 0) {
           var profileContent = jsonDecode(eventData['content']);
+          String authorName = profileContent['name'] ?? 'Anonymous';
+          String profileImage = profileContent['picture'] ?? '';
+          String nip05 = profileContent['nip05'] ?? '';  
+
           profileCache[npub] = {
-            'name': profileContent['name'] ?? 'Anonymous',
-            'profileImage': profileContent['picture'] ?? '',
+            'name': authorName,
+            'profileImage': profileImage,
+            'nip05': nip05,  
           };
         }
       }
@@ -180,6 +227,7 @@ class _FeedPageState extends State<FeedPage> {
   Future<void> _refreshFeed() async {
     setState(() {
       feedItems.clear();
+      eventIds.clear();
     });
     await _loadFeed();
   }
@@ -200,9 +248,8 @@ class _FeedPageState extends State<FeedPage> {
       privkey: nsec,
     );
 
-    for (String relay in relayList) {
-      await _broadcastReaction(reactionEvent, relay);
-    }
+    List<Future<void>> futures = relayList.map((relay) => _broadcastReaction(reactionEvent, relay)).toList();
+    await Future.wait(futures);
 
     setState(() {
       feedItems[index]['reaction'] = emoji;
@@ -228,6 +275,39 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
+  bool isImageUrl(String url) {
+    return url.endsWith('.png') ||
+        url.endsWith('.jpg') ||
+        url.endsWith('.jpeg') ||
+        url.endsWith('.gif') ||
+        url.endsWith('.webp');
+  }
+
+  List<String> extractImageUrls(String content) {
+    final RegExp urlPattern = RegExp(r'(https?:\/\/[^\s]+)');
+    final Iterable<RegExpMatch> matches = urlPattern.allMatches(content);
+    List<String> imageUrls = [];
+
+    matches.forEach((match) {
+      String url = match.group(0) ?? '';
+      if (isImageUrl(url)) {
+        imageUrls.add(url);
+      }
+    });
+
+    return imageUrls;
+  }
+
+  String removeImageUrls(String content, List<String> imageUrls) {
+    String updatedContent = content;
+
+    for (String imageUrl in imageUrls) {
+      updatedContent = updatedContent.replaceAll(imageUrl, '').trim();
+    }
+
+    return updatedContent;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -242,6 +322,10 @@ class _FeedPageState extends State<FeedPage> {
                 itemCount: feedItems.length,
                 itemBuilder: (context, index) {
                   final item = feedItems[index];
+                  final content = item['content'];
+
+                  final imageUrls = extractImageUrls(content);
+                  final updatedContent = removeImageUrls(content, imageUrls);
 
                   return GestureDetector(
                     onDoubleTap: () {
@@ -262,16 +346,100 @@ class _FeedPageState extends State<FeedPage> {
                         MaterialPageRoute(
                           builder: (context) => NotePage(
                             authorName: item['name'],
-                            content: item['content'],
+                            content: updatedContent,
                             timestamp: item['timestamp'],
+                            profileImageUrl: item['profileImage'],
+                            nip05: item['nip05'],
                           ),
                         ),
                       );
                     },
-                    child: ListTile(
-                      title: Text('${item['name']}'),
-                      subtitle: Text(item['content'] ?? ''),
-                      trailing: Text(item['timestamp'] ?? ''),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              item['profileImage'] != '' && item['profileImage'] != null
+                                  ? CircleAvatar(
+                                      backgroundImage: NetworkImage(item['profileImage']),
+                                      radius: 24,
+                                    )
+                                  : CircleAvatar(
+                                      radius: 24,
+                                      backgroundColor: Colors.grey,
+                                    ),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            '${item['name']}',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                              color: Colors.white,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        SizedBox(width: 4),
+                                        if (item['nip05'] != null && item['nip05']!.isNotEmpty)
+                                          Icon(Icons.verified, color: Colors.purple, size: 16),
+                                      ],
+                                    ),
+                                    if (item['nip05'] != null && item['nip05'] != '')
+                                      Flexible(
+                                        child: Text(
+                                          item['nip05'],
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: Colors.purpleAccent,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    SizedBox(height: 4),
+                                    if (updatedContent.isNotEmpty)
+                                      Flexible(
+                                        child: Text(
+                                          updatedContent,
+                                          style: TextStyle(fontSize: 14),
+                                        ),
+                                      ),
+                                    SizedBox(height: 8),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (imageUrls.isNotEmpty)
+                            Column(
+                              children: imageUrls.map((url) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 10),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.network(url),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          SizedBox(height: 8),
+                          Text(
+                            item['timestamp'] ?? '',
+                            style: TextStyle(color: Colors.grey, fontSize: 12),
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 },

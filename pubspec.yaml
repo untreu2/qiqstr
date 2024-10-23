@@ -40,6 +40,8 @@ dependencies:
   nostr: ^1.5.0
   flutter_link_previewer: ^3.2.2
   emoji_picker_flutter: ^1.0.5 
+  any_link_preview: ^3.0.2
+  bech32: ^0.2.2
   
 dev_dependencies:
   flutter_test:

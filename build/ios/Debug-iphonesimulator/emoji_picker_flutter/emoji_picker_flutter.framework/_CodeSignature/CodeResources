@@ -34,7 +34,7 @@
 		</data>
 		<key>Modules/emoji_picker_flutter.swiftmodule/arm64-apple-ios-simulator.swiftmodule</key>
 		<data>
-		83q+nG8Nhz2nWSSjsaHt2KsMMOc=
+		/+o3yalCGWtAlPdgWmwnTisZGA0=
 		</data>
 		<key>Modules/emoji_picker_flutter.swiftmodule/x86_64-apple-ios-simulator.abi.json</key>
 		<data>
@@ -46,7 +46,7 @@
 		</data>
 		<key>Modules/emoji_picker_flutter.swiftmodule/x86_64-apple-ios-simulator.swiftmodule</key>
 		<data>
-		kYG+glYNOOyAKqktQvfAQPuCmyw=
+		xUIM96KNXuQwiMxU11hbucHcbdo=
 		</data>
 		<key>Modules/module.modulemap</key>
 		<data>
@@ -101,7 +101,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			i+lq8T6z3q+XE07ZNcJW4HJFvmdHTxV1FE35OjSnlyI=
+			BnM9JdczPMMjfInHIO03ysHECOD18hbXYHJTM5Ob1ng=
 			</data>
 		</dict>
 		<key>Modules/emoji_picker_flutter.swiftmodule/x86_64-apple-ios-simulator.abi.json</key>
@@ -122,7 +122,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			eQkQRRlKy1Qz0FHfs8ZTL9izriruWJQXtOp7Pdji/3w=
+			pufwkdj/zyS6pgRJfj4EXTocmY03RuTmA1CDQ6lKEF8=
 			</data>
 		</dict>
 		<key>Modules/module.modulemap</key>
