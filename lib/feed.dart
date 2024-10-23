@@ -158,15 +158,19 @@ class _FeedPageState extends State<FeedPage> {
                 String profileImageUrl = profileCache[author]?['profileImage'] ?? '';
                 String nip05 = profileCache[author]?['nip05'] ?? ''; 
 
+                final imageUrls = extractImageUrls(content);
+                final updatedContent = removeImageUrls(content, imageUrls);
+
                 feedItems.add({
                   'author': author,
                   'name': authorName,
                   'nip05': nip05, 
-                  'content': content,
+                  'content': updatedContent,
                   'noteId': eventId,
                   'timestamp': DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000).toString(),
                   'reaction': '',
                   'profileImage': profileImageUrl,
+                  'imageUrls': imageUrls,
                 });
 
                 feedItems.sort((a, b) {
@@ -323,9 +327,7 @@ class _FeedPageState extends State<FeedPage> {
                 itemBuilder: (context, index) {
                   final item = feedItems[index];
                   final content = item['content'];
-
-                  final imageUrls = extractImageUrls(content);
-                  final updatedContent = removeImageUrls(content, imageUrls);
+                  final imageUrls = (item['imageUrls'] ?? []) as List<String>;
 
                   return GestureDetector(
                     onDoubleTap: () {
@@ -346,10 +348,11 @@ class _FeedPageState extends State<FeedPage> {
                         MaterialPageRoute(
                           builder: (context) => NotePage(
                             authorName: item['name'],
-                            content: updatedContent,
+                            content: content,
                             timestamp: item['timestamp'],
                             profileImageUrl: item['profileImage'],
                             nip05: item['nip05'],
+                            imageUrls: imageUrls,
                           ),
                         ),
                       );
@@ -408,10 +411,10 @@ class _FeedPageState extends State<FeedPage> {
                                         ),
                                       ),
                                     SizedBox(height: 4),
-                                    if (updatedContent.isNotEmpty)
+                                    if (content.isNotEmpty)
                                       Flexible(
                                         child: Text(
-                                          updatedContent,
+                                          content,
                                           style: TextStyle(fontSize: 14),
                                         ),
                                       ),
