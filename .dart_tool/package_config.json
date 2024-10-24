@@ -272,6 +272,12 @@
       "languageVersion": "2.12"
     },
     {
+      "name": "nested",
+      "rootUri": "file:///Users/untreu/.pub-cache/hosted/pub.dev/nested-1.0.0",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
       "name": "nostr",
       "rootUri": "file:///Users/untreu/.pub-cache/hosted/pub.dev/nostr-1.5.0",
       "packageUri": "lib/",
@@ -336,6 +342,12 @@
       "rootUri": "file:///Users/untreu/.pub-cache/hosted/pub.dev/pointycastle-3.9.1",
       "packageUri": "lib/",
       "languageVersion": "3.2"
+    },
+    {
+      "name": "provider",
+      "rootUri": "file:///Users/untreu/.pub-cache/hosted/pub.dev/provider-6.1.2",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
     },
     {
       "name": "shared_preferences",
@@ -542,7 +554,7 @@
       "languageVersion": "3.4"
     }
   ],
-  "generated": "2024-10-23T09:00:17.270241Z",
+  "generated": "2024-10-23T19:36:19.818374Z",
   "generator": "pub",
   "generatorVersion": "3.4.3",
   "flutterRoot": "file:///Users/untreu/development/flutter",

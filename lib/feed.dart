@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:qiqstr/publish.dart';
+import 'package:qiqstr/profile.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nostr/nostr.dart';
 import 'note.dart';
@@ -317,6 +318,18 @@ class _FeedPageState extends State<FeedPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text('Latest notes'),
+        centerTitle: true,
+        leading: GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ProfilePage(npub: widget.npub),
+              ),
+            );
+          },
+          child: Icon(Icons.account_circle, size: 30),
+        ),
       ),
       body: feedItems.isEmpty
           ? Center(child: Text('Loading...'))
@@ -366,15 +379,25 @@ class _FeedPageState extends State<FeedPage> {
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              item['profileImage'] != '' && item['profileImage'] != null
-                                  ? CircleAvatar(
-                                      backgroundImage: NetworkImage(item['profileImage']),
-                                      radius: 24,
-                                    )
-                                  : CircleAvatar(
-                                      radius: 24,
-                                      backgroundColor: Colors.grey,
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ProfilePage(npub: item['author']),
                                     ),
+                                  );
+                                },
+                                child: item['profileImage'] != '' && item['profileImage'] != null
+                                    ? CircleAvatar(
+                                        backgroundImage: NetworkImage(item['profileImage']),
+                                        radius: 18,
+                                      )
+                                    : CircleAvatar(
+                                        radius: 24,
+                                        backgroundColor: Colors.grey,
+                                      ),
+                              ),
                               SizedBox(width: 10),
                               Expanded(
                                 child: Column(

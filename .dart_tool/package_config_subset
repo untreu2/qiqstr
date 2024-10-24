@@ -166,6 +166,10 @@ meta
 2.12
 file:///Users/untreu/.pub-cache/hosted/pub.dev/meta-1.12.0/
 file:///Users/untreu/.pub-cache/hosted/pub.dev/meta-1.12.0/lib/
+nested
+2.12
+file:///Users/untreu/.pub-cache/hosted/pub.dev/nested-1.0.0/
+file:///Users/untreu/.pub-cache/hosted/pub.dev/nested-1.0.0/lib/
 nostr
 2.18
 file:///Users/untreu/.pub-cache/hosted/pub.dev/nostr-1.5.0/
@@ -210,6 +214,10 @@ pointycastle
 3.2
 file:///Users/untreu/.pub-cache/hosted/pub.dev/pointycastle-3.9.1/
 file:///Users/untreu/.pub-cache/hosted/pub.dev/pointycastle-3.9.1/lib/
+provider
+2.12
+file:///Users/untreu/.pub-cache/hosted/pub.dev/provider-6.1.2/
+file:///Users/untreu/.pub-cache/hosted/pub.dev/provider-6.1.2/lib/
 shared_preferences
 3.4
 file:///Users/untreu/.pub-cache/hosted/pub.dev/shared_preferences-2.3.2/
