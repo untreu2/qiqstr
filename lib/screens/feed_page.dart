@@ -15,89 +15,69 @@ class FeedPage extends StatefulWidget {
 
 class _FeedPageState extends State<FeedPage> {
   final List<NoteModel> feedItems = [];
-  final FeedService _feedService = FeedService();
+  late FeedService _feedService;
   final Set<String> cachedNoteIds = {};
-  Timer? _refreshTimer;
   bool isLoadingOlderNotes = false;
-  int currentLimit = 10;
 
   @override
   void initState() {
     super.initState();
-    _loadFeedFromCache(); 
-    _loadFeed();
-    _startBackgroundRefresh();
+    _feedService = FeedService(onNewNote: (newNote) {
+      if (!cachedNoteIds.contains(newNote.noteId)) {
+        setState(() {
+          cachedNoteIds.add(newNote.noteId);
+          feedItems.insert(0, newNote);
+          feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        });
+      }
+    });
+    _loadFeedFromCache();
+    _initializeRelayConnection();
   }
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
+    _feedService.closeConnections();
     super.dispose();
   }
 
-  void _startBackgroundRefresh() {
-    const refreshInterval = Duration(seconds: 10);
-    _refreshTimer = Timer.periodic(refreshInterval, (timer) {
-      _loadFeed();
-    });
+  Future<void> _initializeRelayConnection() async {
+    final relayList = await _feedService.getRelayListFromNpub(widget.npub);
+    final followingList = await _feedService.getFollowingList(widget.npub);
+    if (relayList.isNotEmpty) {
+      await _feedService.connectToRelays(relayList, followingList);
+    }
   }
 
   Future<void> _loadFeedFromCache() async {
     await _feedService.loadNotesFromCache((cachedNote) {
-      setState(() {
-        if (!cachedNoteIds.contains(cachedNote.noteId)) {
-          cachedNoteIds.add(cachedNote.noteId);
-          feedItems.add(cachedNote);
-        }
-      });
+      if (!cachedNoteIds.contains(cachedNote.noteId)) {
+        cachedNoteIds.add(cachedNote.noteId);
+        feedItems.add(cachedNote);
+      }
     });
-    _sortFeedItems();
+    setState(() {
+      feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    });
   }
 
-  Future<void> _loadFeed({bool loadOlderNotes = false}) async {
-    if (loadOlderNotes) {
-      setState(() {
-        isLoadingOlderNotes = true;
-      });
-      currentLimit += 10; 
-    }
+  Future<void> _loadOlderNotes() async {
+    setState(() {
+      isLoadingOlderNotes = true;
+    });
 
-    try {
-      final relayList = await _feedService.getRelayListFromNpub(widget.npub);
-      final followingList = await _feedService.getFollowingList(widget.npub);
-      for (var relayUrl in relayList) {
-        await _feedService.fetchFeedForFollowingNpubs(
-          relayUrl,
-          followingList,
-          (event) {
-            if (!cachedNoteIds.contains(event.noteId)) {
-              cachedNoteIds.add(event.noteId);
-              setState(() {
-                feedItems.add(event);
-                _sortFeedItems();
-              });
-            }
-          },
-          limit: currentLimit,
-        );
+    final followingList = await _feedService.getFollowingList(widget.npub);
+    await _feedService.fetchOlderNotes(followingList, (olderNote) {
+      if (!cachedNoteIds.contains(olderNote.noteId)) {
+        cachedNoteIds.add(olderNote.noteId);
+        feedItems.add(olderNote);
       }
-      if (loadOlderNotes) {
-        setState(() {
-          isLoadingOlderNotes = false;
-        });
-      }
-    } catch (e) {
-      print('Error loading feed: $e');
-      if (loadOlderNotes) {
-        setState(() {
-          isLoadingOlderNotes = false;
-        });
-      }
-    }
-  }
+    });
 
-  void _sortFeedItems() {
-    feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    setState(() {
+      feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      isLoadingOlderNotes = false;
+    });
   }
 
   @override
@@ -106,17 +86,17 @@ class _FeedPageState extends State<FeedPage> {
       appBar: AppBar(
         title: const Text('Latest notes'),
       ),
-      body: NotificationListener<ScrollNotification>(
-        onNotification: (scrollInfo) {
-          if (scrollInfo.metrics.pixels == scrollInfo.metrics.maxScrollExtent &&
-              !isLoadingOlderNotes) {
-            _loadFeed(loadOlderNotes: true);
-          }
-          return false;
-        },
-        child: feedItems.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : ListView.builder(
+      body: feedItems.isEmpty
+          ? const Center(child: CircularProgressIndicator())
+          : NotificationListener<ScrollNotification>(
+              onNotification: (scrollInfo) {
+                if (scrollInfo.metrics.pixels == scrollInfo.metrics.maxScrollExtent &&
+                    !isLoadingOlderNotes) {
+                  _loadOlderNotes();
+                }
+                return false;
+              },
+              child: ListView.builder(
                 itemCount: feedItems.length,
                 itemBuilder: (context, index) {
                   final item = feedItems[index];
@@ -149,7 +129,7 @@ class _FeedPageState extends State<FeedPage> {
                   );
                 },
               ),
-      ),
+            ),
     );
   }
 }
