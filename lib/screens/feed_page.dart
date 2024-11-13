@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../models/note_model.dart';
 import '../services/feed_service.dart';
+import '../screens/note_detail_page.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -12,7 +14,7 @@ class FeedPage extends StatefulWidget {
 }
 
 class _FeedPageState extends State<FeedPage> {
-  final List<Map<String, dynamic>> feedItems = [];
+  final List<NoteModel> feedItems = [];
   final FeedService _feedService = FeedService();
   final Set<String> cachedNoteIds = {};
   Timer? _refreshTimer;
@@ -22,8 +24,7 @@ class _FeedPageState extends State<FeedPage> {
   @override
   void initState() {
     super.initState();
-    _feedService.clearProfileCache();
-    _loadFeedFromCache();
+    _loadFeedFromCache(); 
     _loadFeed();
     _startBackgroundRefresh();
   }
@@ -35,7 +36,7 @@ class _FeedPageState extends State<FeedPage> {
   }
 
   void _startBackgroundRefresh() {
-    const refreshInterval = Duration(seconds: 1);
+    const refreshInterval = Duration(seconds: 10);
     _refreshTimer = Timer.periodic(refreshInterval, (timer) {
       _loadFeed();
     });
@@ -44,9 +45,13 @@ class _FeedPageState extends State<FeedPage> {
   Future<void> _loadFeedFromCache() async {
     await _feedService.loadNotesFromCache((cachedNote) {
       setState(() {
-        feedItems.add(cachedNote);
+        if (!cachedNoteIds.contains(cachedNote.noteId)) {
+          cachedNoteIds.add(cachedNote.noteId);
+          feedItems.add(cachedNote);
+        }
       });
     });
+    _sortFeedItems();
   }
 
   Future<void> _loadFeed({bool loadOlderNotes = false}) async {
@@ -54,36 +59,29 @@ class _FeedPageState extends State<FeedPage> {
       setState(() {
         isLoadingOlderNotes = true;
       });
+      currentLimit += 10; 
     }
+
     try {
       final relayList = await _feedService.getRelayListFromNpub(widget.npub);
       final followingList = await _feedService.getFollowingList(widget.npub);
-
       for (var relayUrl in relayList) {
         await _feedService.fetchFeedForFollowingNpubs(
           relayUrl,
           followingList,
           (event) {
-            if (!cachedNoteIds.contains(event['noteId'])) {
-              cachedNoteIds.add(event['noteId']);
+            if (!cachedNoteIds.contains(event.noteId)) {
+              cachedNoteIds.add(event.noteId);
               setState(() {
-                feedItems.insert(0, event);
-                if (feedItems.length > 100) {
-                  feedItems.removeAt(feedItems.length - 1);
-                }
-                feedItems.sort((a, b) {
-                  DateTime dateA = DateTime.parse(a['timestamp']);
-                  DateTime dateB = DateTime.parse(b['timestamp']);
-                  return dateB.compareTo(dateA);
-                });
+                feedItems.add(event);
+                _sortFeedItems();
               });
             }
           },
-          limit: loadOlderNotes ? currentLimit + 1 : 10,
+          limit: currentLimit,
         );
       }
       if (loadOlderNotes) {
-        currentLimit += 1;
         setState(() {
           isLoadingOlderNotes = false;
         });
@@ -96,6 +94,10 @@ class _FeedPageState extends State<FeedPage> {
         });
       }
     }
+  }
+
+  void _sortFeedItems() {
+    feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
   }
 
   @override
@@ -119,23 +121,31 @@ class _FeedPageState extends State<FeedPage> {
                 itemBuilder: (context, index) {
                   final item = feedItems[index];
                   return ListTile(
-                    title: Text(item['name'] ?? 'Anonymous'),
+                    title: Text(item.authorName),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(item['content'] ?? ''),
+                        Text(item.content),
                         const SizedBox(height: 4),
                         Text(
-                          item['timestamp'] ?? '',
+                          item.timestamp.toString(),
                           style: const TextStyle(fontSize: 12, color: Colors.grey),
                         ),
                       ],
                     ),
-                    trailing: item['profileImage'] != null
+                    trailing: item.authorProfileImage.isNotEmpty
                         ? CircleAvatar(
-                            backgroundImage: NetworkImage(item['profileImage']),
+                            backgroundImage: NetworkImage(item.authorProfileImage),
                           )
                         : const CircleAvatar(child: Icon(Icons.person)),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => NoteDetailPage(note: item),
+                        ),
+                      );
+                    },
                   );
                 },
               ),
