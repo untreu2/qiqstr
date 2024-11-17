@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/note_model.dart';
+import '../models/reaction_model.dart';
 import '../services/feed_service.dart';
 import '../screens/note_detail_page.dart';
 
@@ -15,6 +16,7 @@ class FeedPage extends StatefulWidget {
 
 class _FeedPageState extends State<FeedPage> {
   final List<NoteModel> feedItems = [];
+  final Map<String, List<ReactionModel>> reactionsMap = {};
   late FeedService _feedService;
   final Set<String> cachedNoteIds = {};
   bool isLoadingOlderNotes = false;
@@ -22,15 +24,22 @@ class _FeedPageState extends State<FeedPage> {
   @override
   void initState() {
     super.initState();
-    _feedService = FeedService(onNewNote: (newNote) {
-      if (!cachedNoteIds.contains(newNote.noteId)) {
+    _feedService = FeedService(
+      onNewNote: (newNote) {
+        if (!cachedNoteIds.contains(newNote.noteId)) {
+          setState(() {
+            cachedNoteIds.add(newNote.noteId);
+            feedItems.insert(0, newNote);
+            feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+          });
+        }
+      },
+      onReactionsUpdated: (noteId, reactions) {
         setState(() {
-          cachedNoteIds.add(newNote.noteId);
-          feedItems.insert(0, newNote);
-          feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+          reactionsMap[noteId] = reactions;
         });
-      }
-    });
+      },
+    );
     _loadFeedFromCache();
     _initializeRelayConnection();
   }
@@ -100,6 +109,7 @@ class _FeedPageState extends State<FeedPage> {
                 itemCount: feedItems.length,
                 itemBuilder: (context, index) {
                   final item = feedItems[index];
+                  final reactions = reactionsMap[item.noteId] ?? [];
                   return ListTile(
                     title: Text(item.authorName),
                     subtitle: Column(
@@ -109,6 +119,11 @@ class _FeedPageState extends State<FeedPage> {
                         const SizedBox(height: 4),
                         Text(
                           item.timestamp.toString(),
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Reactions: ${reactions.length}',
                           style: const TextStyle(fontSize: 12, color: Colors.grey),
                         ),
                       ],
@@ -122,7 +137,10 @@ class _FeedPageState extends State<FeedPage> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => NoteDetailPage(note: item),
+                          builder: (context) => NoteDetailPage(
+                            note: item,
+                            reactions: reactions,
+                          ),
                         ),
                       );
                     },

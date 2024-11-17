@@ -1,22 +1,25 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nostr/nostr.dart';
 import '../models/note_model.dart';
+import '../models/reaction_model.dart';
+import 'package:uuid/uuid.dart';
 
 class FeedService {
   List<NoteModel> feedItems = [];
   Set<String> eventIds = {};
+  Map<String, List<ReactionModel>> reactionsMap = {};
   Map<String, Map<String, String>> profileCache = {};
   Map<String, WebSocket> _webSockets = {};
   bool isConnecting = false;
   Timer? _checkNewNotesTimer;
   Function(NoteModel)? onNewNote;
+  Function(String, List<ReactionModel>)? onReactionsUpdated;
   int currentLimit = 100;
 
-  FeedService({this.onNewNote});
+  FeedService({this.onNewNote, this.onReactionsUpdated});
 
   Future<void> saveNotesToCache() async {
     final prefs = await SharedPreferences.getInstance();
@@ -35,8 +38,8 @@ class FeedService {
   }
 
   String generate64RandomHexChars() {
-    final random = Random.secure();
-    return List.generate(64, (_) => random.nextInt(16).toRadixString(16)).join();
+    var uuid = Uuid();
+    return uuid.v4().replaceAll('-', '');
   }
 
   Future<void> connectToRelays(List<String> relayList, List<String> followingNpubs) async {
@@ -55,6 +58,7 @@ class FeedService {
           });
 
           _fetchNotesForFollowing(webSocket, followingNpubs);
+          fetchReactionsForNotes(feedItems.map((note) => note.noteId).toList());
         } catch (e) {
           _reconnect(relayUrl, followingNpubs);
         }
@@ -77,34 +81,74 @@ class FeedService {
     webSocket.add(request.serialize());
   }
 
+  Future<void> fetchReactionsForNotes(List<String> noteIds) async {
+    for (var relayUrl in _webSockets.keys) {
+      final request = Request(generate64RandomHexChars(), [
+        Filter(
+          kinds: [7],
+          e: noteIds,
+        ),
+      ]);
+      _webSockets[relayUrl]?.add(request.serialize());
+    }
+  }
+
   void _handleEvent(dynamic event, List<String> followingNpubs) async {
     final decodedEvent = jsonDecode(event);
     if (decodedEvent[0] == 'EVENT') {
       final eventData = decodedEvent[2];
-      final eventId = eventData['id'];
-      final author = eventData['pubkey'];
-      final content = eventData['content'] ?? '';
+      final kind = eventData['kind'];
+      if (kind == 1) {
+        final eventId = eventData['id'];
+        final author = eventData['pubkey'];
+        final content = eventData['content'] ?? '';
 
-      if (eventIds.contains(eventId) || content.trim().isEmpty || !followingNpubs.contains(author)) {
-        return;
+        if (eventIds.contains(eventId) || content.trim().isEmpty || !followingNpubs.contains(author)) {
+          return;
+        }
+
+        final authorProfile = await getCachedUserProfile(author);
+        eventIds.add(eventId);
+
+        final newEvent = NoteModel(
+          noteId: eventId,
+          content: content,
+          author: author,
+          authorName: authorProfile['name'] ?? 'Anonymous',
+          authorProfileImage: authorProfile['profileImage'] ?? '',
+          timestamp: DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000),
+        );
+
+        feedItems.add(newEvent);
+        feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        await saveNotesToCache();
+        if (onNewNote != null) onNewNote!(newEvent);
+
+        fetchReactionsForNotes([eventId]);
+      } else if (kind == 7) {
+        _handleReactionEvent(eventData);
       }
+    }
+  }
 
-      final authorProfile = await getCachedUserProfile(author);
-      eventIds.add(eventId);
+  void _handleReactionEvent(Map<String, dynamic> eventData) {
+    final reaction = ReactionModel.fromEvent(eventData);
 
-      final newEvent = NoteModel(
-        noteId: eventId,
-        content: content,
-        author: author,
-        authorName: authorProfile['name'] ?? 'Anonymous',
-        authorProfileImage: authorProfile['profileImage'] ?? '',
-        timestamp: DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000),
-      );
+    String? noteId;
+    for (var tag in eventData['tags']) {
+      if (tag.length >= 2 && tag[0] == 'e') {
+        noteId = tag[1];
+        break;
+      }
+    }
+    if (noteId == null) return;
 
-      feedItems.add(newEvent);
-      feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      await saveNotesToCache();
-      if (onNewNote != null) onNewNote!(newEvent);
+    reactionsMap.putIfAbsent(noteId, () => []);
+    if (!reactionsMap[noteId]!.any((r) => r.reactionId == reaction.reactionId)) {
+      reactionsMap[noteId]!.add(reaction);
+      if (onReactionsUpdated != null) {
+        onReactionsUpdated!(noteId, reactionsMap[noteId]!);
+      }
     }
   }
 
@@ -167,7 +211,7 @@ class FeedService {
         }
       });
       webSocket.add(request.serialize());
-      await Future.delayed(Duration(seconds: 10));
+      await Future.delayed(Duration(seconds: 5));
       await webSocket.close();
     } catch (e) {
       print('Error fetching relay list: $e');
@@ -203,16 +247,22 @@ class FeedService {
   Future<void> fetchOlderNotes(List<String> followingNpubs, Function(NoteModel) onOlderNote) async {
     for (var relayUrl in _webSockets.keys) {
       final request = Request(generate64RandomHexChars(), [
-        Filter(authors: followingNpubs, kinds: [1], limit: currentLimit, until: feedItems.last.timestamp.millisecondsSinceEpoch ~/ 1000)
+        Filter(
+          authors: followingNpubs,
+          kinds: [1],
+          limit: currentLimit,
+          until: feedItems.last.timestamp.millisecondsSinceEpoch ~/ 1000,
+        ),
       ]);
       _webSockets[relayUrl]?.add(request.serialize());
     }
   }
 
   void _startCheckingForNewNotes(List<String> followingNpubs) {
-    _checkNewNotesTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+    _checkNewNotesTimer = Timer.periodic(Duration(seconds: 10), (timer) {
       for (var relayUrl in _webSockets.keys) {
         _fetchNotesForFollowing(_webSockets[relayUrl]!, followingNpubs);
+        fetchReactionsForNotes(feedItems.map((note) => note.noteId).toList());
       }
     });
   }
