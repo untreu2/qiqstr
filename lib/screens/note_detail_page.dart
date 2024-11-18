@@ -72,13 +72,28 @@ class NoteDetailPage extends StatelessWidget {
               Wrap(
                 spacing: 10,
                 children: reactions.map((reaction) {
-                  String displayContent = reaction.content;
-                  if (displayContent.isEmpty) {
-                    displayContent = '+';
-                  }
-                  return Text(
-                    displayContent,
-                    style: const TextStyle(fontSize: 24),
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircleAvatar(
+                        backgroundImage: reaction.authorProfileImage.isNotEmpty
+                            ? NetworkImage(reaction.authorProfileImage)
+                            : null,
+                        child: reaction.authorProfileImage.isEmpty
+                            ? const Icon(Icons.person)
+                            : null,
+                        radius: 24,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        reaction.authorName,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      Text(
+                        reaction.content.isNotEmpty ? reaction.content : '+',
+                        style: const TextStyle(fontSize: 24),
+                      ),
+                    ],
                   );
                 }).toList(),
               ),

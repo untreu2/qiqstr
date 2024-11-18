@@ -19,7 +19,62 @@ class FeedService {
   Function(String, List<ReactionModel>)? onReactionsUpdated;
   int currentLimit = 100;
 
+  List<String> relayUrls = [];
+
+  Map<String, Completer<Map<String, String>>> _pendingProfileRequests = {};
+  Map<String, String> _profileSubscriptionIds = {};
+
   FeedService({this.onNewNote, this.onReactionsUpdated});
+
+  Future<void> initializeConnections(String npub) async {
+    List<String> popularRelays = [
+      'wss://relay.damus.io',
+      'wss://relay.snort.social',
+      'wss://nos.lol',
+    ];
+
+    relayUrls = popularRelays;
+    List<String> followingNpubs = await getFollowingList(npub);
+    await connectToRelays(relayUrls, followingNpubs);
+  }
+
+  Future<void> connectToRelays(List<String> relayList, List<String> followingNpubs) async {
+    if (isConnecting) return;
+    isConnecting = true;
+
+    await Future.wait(relayList.map((relayUrl) async {
+      if (!_webSockets.containsKey(relayUrl) || _webSockets[relayUrl]?.readyState == WebSocket.closed) {
+        try {
+          final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
+          _webSockets[relayUrl] = webSocket;
+
+          webSocket.listen(
+            (event) => _handleEvent(event, followingNpubs),
+            onDone: () {
+              _webSockets.remove(relayUrl);
+              print('Disconnected from $relayUrl');
+            },
+            onError: (error) {
+              print('Relay error ($relayUrl): $error');
+              _webSockets.remove(relayUrl);
+            },
+          );
+
+          _fetchNotesForFollowing(webSocket, followingNpubs);
+          _fetchProfilesForFollowing(webSocket, followingNpubs);
+        } catch (e) {
+          print('Failed to connect to $relayUrl: $e');
+          _webSockets.remove(relayUrl);
+        }
+      }
+    }));
+
+    isConnecting = false;
+
+    if (_webSockets.isNotEmpty) {
+      _startCheckingForNewNotesAndProfiles(followingNpubs);
+    }
+  }
 
   Future<void> saveNotesToCache() async {
     final prefs = await SharedPreferences.getInstance();
@@ -42,41 +97,16 @@ class FeedService {
     return uuid.v4().replaceAll('-', '');
   }
 
-  Future<void> connectToRelays(List<String> relayList, List<String> followingNpubs) async {
-    if (isConnecting) return;
-    isConnecting = true;
-
-    for (var relayUrl in relayList) {
-      if (!_webSockets.containsKey(relayUrl) || _webSockets[relayUrl]?.readyState == WebSocket.closed) {
-        try {
-          final webSocket = await WebSocket.connect(relayUrl);
-          _webSockets[relayUrl] = webSocket;
-          webSocket.listen((event) => _handleEvent(event, followingNpubs), onDone: () {
-            _reconnect(relayUrl, followingNpubs);
-          }, onError: (error) {
-            _reconnect(relayUrl, followingNpubs);
-          });
-
-          _fetchNotesForFollowing(webSocket, followingNpubs);
-          fetchReactionsForNotes(feedItems.map((note) => note.noteId).toList());
-        } catch (e) {
-          _reconnect(relayUrl, followingNpubs);
-        }
-      }
-    }
-    isConnecting = false;
-    _startCheckingForNewNotes(followingNpubs);
-  }
-
-  void _reconnect(String relayUrl, List<String> followingNpubs) {
-    Future.delayed(Duration(seconds: 5), () {
-      connectToRelays([relayUrl], followingNpubs);
-    });
-  }
-
   void _fetchNotesForFollowing(WebSocket webSocket, List<String> followingNpubs) {
     final request = Request(generate64RandomHexChars(), [
-      Filter(authors: followingNpubs, kinds: [1], limit: currentLimit)
+      Filter(authors: followingNpubs, kinds: [1], limit: currentLimit),
+    ]);
+    webSocket.add(request.serialize());
+  }
+
+  void _fetchProfilesForFollowing(WebSocket webSocket, List<String> followingNpubs) {
+    final request = Request(generate64RandomHexChars(), [
+      Filter(authors: followingNpubs, kinds: [0]),
     ]);
     webSocket.add(request.serialize());
   }
@@ -84,55 +114,83 @@ class FeedService {
   Future<void> fetchReactionsForNotes(List<String> noteIds) async {
     for (var relayUrl in _webSockets.keys) {
       final request = Request(generate64RandomHexChars(), [
-        Filter(
-          kinds: [7],
-          e: noteIds,
-        ),
+        Filter(kinds: [7], e: noteIds),
       ]);
       _webSockets[relayUrl]?.add(request.serialize());
     }
   }
 
   void _handleEvent(dynamic event, List<String> followingNpubs) async {
-    final decodedEvent = jsonDecode(event);
-    if (decodedEvent[0] == 'EVENT') {
-      final eventData = decodedEvent[2];
-      final kind = eventData['kind'];
-      if (kind == 1) {
-        final eventId = eventData['id'];
-        final author = eventData['pubkey'];
-        final content = eventData['content'] ?? '';
+    try {
+      final decodedEvent = jsonDecode(event);
 
-        if (eventIds.contains(eventId) || content.trim().isEmpty || !followingNpubs.contains(author)) {
-          return;
+      if (decodedEvent[0] == 'EVENT') {
+        final eventData = decodedEvent[2];
+        final kind = eventData['kind'];
+
+        if (kind == 1) {
+          final eventId = eventData['id'];
+          final author = eventData['pubkey'];
+          final content = eventData['content'] ?? '';
+
+          if (eventIds.contains(eventId) || content.trim().isEmpty || (followingNpubs.isNotEmpty && !followingNpubs.contains(author))) {
+            return;
+          }
+
+          final authorProfile = await getCachedUserProfile(author);
+          eventIds.add(eventId);
+
+          final newEvent = NoteModel(
+            noteId: eventId,
+            content: content,
+            author: author,
+            authorName: authorProfile['name'] ?? 'Anonymous',
+            authorProfileImage: authorProfile['profileImage'] ?? '',
+            timestamp: DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000),
+          );
+
+          feedItems.add(newEvent);
+          feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+          await saveNotesToCache();
+
+          if (onNewNote != null) {
+            onNewNote!(newEvent);
+          }
+
+          fetchReactionsForNotes([eventId]);
+        } else if (kind == 7) {
+          _handleReactionEvent(eventData);
+        } else if (kind == 0) {
+          final author = eventData['pubkey'];
+          final profileContent = jsonDecode(eventData['content']);
+          final userName = profileContent['name'] ?? 'Anonymous';
+          final profileImage = profileContent['picture'] ?? '';
+
+          profileCache[author] = {'name': userName, 'profileImage': profileImage};
+
+          if (_pendingProfileRequests.containsKey(author)) {
+            _pendingProfileRequests[author]!.complete(profileCache[author]!);
+            _pendingProfileRequests.remove(author);
+          }
         }
-
-        final authorProfile = await getCachedUserProfile(author);
-        eventIds.add(eventId);
-
-        final newEvent = NoteModel(
-          noteId: eventId,
-          content: content,
-          author: author,
-          authorName: authorProfile['name'] ?? 'Anonymous',
-          authorProfileImage: authorProfile['profileImage'] ?? '',
-          timestamp: DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000),
-        );
-
-        feedItems.add(newEvent);
-        feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-        await saveNotesToCache();
-        if (onNewNote != null) onNewNote!(newEvent);
-
-        fetchReactionsForNotes([eventId]);
-      } else if (kind == 7) {
-        _handleReactionEvent(eventData);
+      } else if (decodedEvent[0] == 'EOSE') {
+        final subscriptionId = decodedEvent[1];
+        final npub = _profileSubscriptionIds[subscriptionId];
+        if (npub != null && _pendingProfileRequests.containsKey(npub)) {
+          profileCache[npub] = {'name': 'Anonymous', 'profileImage': ''};
+          _pendingProfileRequests[npub]!.complete(profileCache[npub]!);
+          _pendingProfileRequests.remove(npub);
+          _profileSubscriptionIds.remove(subscriptionId);
+        }
       }
+    } catch (e) {
+      print('Error handling event: $e');
     }
   }
 
-  void _handleReactionEvent(Map<String, dynamic> eventData) {
-    final reaction = ReactionModel.fromEvent(eventData);
+  void _handleReactionEvent(Map<String, dynamic> eventData) async {
+    final reactionPubKey = eventData['pubkey'];
+    final reactionProfile = await getCachedUserProfile(reactionPubKey);
 
     String? noteId;
     for (var tag in eventData['tags']) {
@@ -142,6 +200,8 @@ class FeedService {
       }
     }
     if (noteId == null) return;
+
+    final reaction = ReactionModel.fromEvent(eventData, reactionProfile);
 
     reactionsMap.putIfAbsent(noteId, () => []);
     if (!reactionsMap[noteId]!.any((r) => r.reactionId == reaction.reactionId)) {
@@ -157,90 +217,77 @@ class FeedService {
       return profileCache[npub]!;
     }
 
-    final profileData = await getUserProfileFromNpub(npub);
-    profileCache[npub] = profileData;
-    return profileData;
-  }
-
-  Future<Map<String, String>> getUserProfileFromNpub(String npub) async {
-    if (profileCache.containsKey(npub)) {
-      return profileCache[npub]!;
+    if (_pendingProfileRequests.containsKey(npub)) {
+      return _pendingProfileRequests[npub]!.future;
     }
 
-    final mainRelayUrl = 'wss://relay.damus.io';
-    String userName = 'Anonymous';
-    String profileImage = '';
-    try {
-      final webSocket = await WebSocket.connect(mainRelayUrl);
-      final request = Request(generate64RandomHexChars(), [
-        Filter(authors: [npub], kinds: [0], limit: 1),
-      ]);
-      webSocket.listen((event) {
-        final decodedEvent = jsonDecode(event);
-        if (decodedEvent[0] == 'EVENT') {
-          final profileContent = jsonDecode(decodedEvent[2]['content']);
-          userName = profileContent['name'] ?? 'Anonymous';
-          profileImage = profileContent['picture'] ?? '';
-        }
-      });
+    Completer<Map<String, String>> completer = Completer<Map<String, String>>();
+    _pendingProfileRequests[npub] = completer;
+
+    String subscriptionId = generate64RandomHexChars();
+    _profileSubscriptionIds[subscriptionId] = npub;
+
+    final request = Request(subscriptionId, [
+      Filter(authors: [npub], kinds: [0], limit: 1),
+    ]);
+
+    for (var webSocket in _webSockets.values) {
       webSocket.add(request.serialize());
-      await Future.delayed(Duration(seconds: 5));
-      await webSocket.close();
-    } catch (e) {
-      print('Error fetching user profile: $e');
     }
-    profileCache[npub] = {'name': userName, 'profileImage': profileImage};
-    return {'name': userName, 'profileImage': profileImage};
-  }
 
-  Future<List<String>> getRelayListFromNpub(String npub) async {
-    final mainRelayUrl = 'wss://relay.damus.io';
-    List<String> relayList = [];
-    try {
-      final webSocket = await WebSocket.connect(mainRelayUrl);
-      final request = Request(generate64RandomHexChars(), [
-        Filter(authors: [npub], kinds: [10002], limit: 1),
-      ]);
-      webSocket.listen((event) {
-        final decodedEvent = jsonDecode(event);
-        if (decodedEvent[0] == 'EVENT') {
-          final tags = decodedEvent[2]['tags'] as List;
-          for (var tag in tags) {
-            if (tag.isNotEmpty && tag[0] == 'r') relayList.add(tag[1]);
-          }
-        }
-      });
-      webSocket.add(request.serialize());
-      await Future.delayed(Duration(seconds: 5));
-      await webSocket.close();
-    } catch (e) {
-      print('Error fetching relay list: $e');
-    }
-    return relayList;
+    Future.delayed(Duration(seconds: 5), () {
+      if (!completer.isCompleted) {
+        profileCache[npub] = {'name': 'Anonymous', 'profileImage': ''};
+        completer.complete(profileCache[npub]!);
+        _pendingProfileRequests.remove(npub);
+        _profileSubscriptionIds.remove(subscriptionId);
+      }
+    });
+
+    return completer.future;
   }
 
   Future<List<String>> getFollowingList(String npub) async {
     List<String> followingNpubs = [];
-    final mainRelayUrl = 'wss://relay.damus.io';
-    try {
-      final webSocket = await WebSocket.connect(mainRelayUrl);
-      final request = Request(generate64RandomHexChars(), [
-        Filter(authors: [npub], kinds: [3], limit: 1),
-      ]);
-      webSocket.listen((event) {
-        final decodedEvent = jsonDecode(event);
-        if (decodedEvent[0] == 'EVENT') {
-          for (var tag in decodedEvent[2]['tags']) {
-            if (tag.isNotEmpty && tag[0] == 'p') followingNpubs.add(tag[1]);
+
+    for (var relayUrl in relayUrls) {
+      try {
+        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
+        final request = Request(generate64RandomHexChars(), [
+          Filter(authors: [npub], kinds: [3], limit: 1),
+        ]);
+
+        Completer<void> completer = Completer<void>();
+
+        webSocket.listen((event) {
+          final decodedEvent = jsonDecode(event);
+          if (decodedEvent[0] == 'EVENT') {
+            for (var tag in decodedEvent[2]['tags']) {
+              if (tag.isNotEmpty && tag[0] == 'p') {
+                followingNpubs.add(tag[1]);
+              }
+            }
+            completer.complete();
           }
-        }
-      });
-      webSocket.add(request.serialize());
-      await Future.delayed(Duration(seconds: 5));
-      await webSocket.close();
-    } catch (e) {
-      print('Error fetching following list: $e');
+        }, onDone: () {
+          if (!completer.isCompleted) completer.complete();
+        }, onError: (error) {
+          if (!completer.isCompleted) completer.complete();
+        });
+
+        webSocket.add(request.serialize());
+
+        await completer.future.timeout(Duration(seconds: 5), onTimeout: () {
+          webSocket.close();
+        });
+
+        await webSocket.close();
+      } catch (e) {
+        print("Error fetching following list from $relayUrl: $e");
+      }
     }
+
+    followingNpubs = followingNpubs.toSet().toList();
     return followingNpubs;
   }
 
@@ -258,10 +305,13 @@ class FeedService {
     }
   }
 
-  void _startCheckingForNewNotes(List<String> followingNpubs) {
+  void _startCheckingForNewNotesAndProfiles(List<String> followingNpubs) {
+    _checkNewNotesTimer?.cancel();
     _checkNewNotesTimer = Timer.periodic(Duration(seconds: 10), (timer) {
       for (var relayUrl in _webSockets.keys) {
-        _fetchNotesForFollowing(_webSockets[relayUrl]!, followingNpubs);
+        final webSocket = _webSockets[relayUrl]!;
+        _fetchNotesForFollowing(webSocket, followingNpubs);
+        _fetchProfilesForFollowing(webSocket, followingNpubs);
         fetchReactionsForNotes(feedItems.map((note) => note.noteId).toList());
       }
     });

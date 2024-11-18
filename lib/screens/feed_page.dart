@@ -51,11 +51,7 @@ class _FeedPageState extends State<FeedPage> {
   }
 
   Future<void> _initializeRelayConnection() async {
-    final relayList = await _feedService.getRelayListFromNpub(widget.npub);
-    final followingList = await _feedService.getFollowingList(widget.npub);
-    if (relayList.isNotEmpty) {
-      await _feedService.connectToRelays(relayList, followingList);
-    }
+    await _feedService.initializeConnections(widget.npub);
   }
 
   Future<void> _loadFeedFromCache() async {
@@ -93,7 +89,7 @@ class _FeedPageState extends State<FeedPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Latest notes'),
+        title: const Text('Latest Notes'),
       ),
       body: feedItems.isEmpty
           ? const Center(child: CircularProgressIndicator())
