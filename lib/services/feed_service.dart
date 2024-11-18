@@ -5,18 +5,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nostr/nostr.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
+import '../models/reply_model.dart';
 import 'package:uuid/uuid.dart';
 
 class FeedService {
   List<NoteModel> feedItems = [];
   Set<String> eventIds = {};
   Map<String, List<ReactionModel>> reactionsMap = {};
+  Map<String, List<ReplyModel>> repliesMap = {};
   Map<String, Map<String, String>> profileCache = {};
   Map<String, WebSocket> _webSockets = {};
   bool isConnecting = false;
   Timer? _checkNewNotesTimer;
   Function(NoteModel)? onNewNote;
   Function(String, List<ReactionModel>)? onReactionsUpdated;
+  Function(String, List<ReplyModel>)? onRepliesUpdated;
   int currentLimit = 100;
 
   List<String> relayUrls = [];
@@ -24,7 +27,11 @@ class FeedService {
   Map<String, Completer<Map<String, String>>> _pendingProfileRequests = {};
   Map<String, String> _profileSubscriptionIds = {};
 
-  FeedService({this.onNewNote, this.onReactionsUpdated});
+  FeedService({
+    this.onNewNote,
+    this.onReactionsUpdated,
+    this.onRepliesUpdated,
+  });
 
   Future<void> initializeConnections(String npub) async {
     List<String> popularRelays = [
@@ -36,6 +43,11 @@ class FeedService {
     relayUrls = popularRelays;
     List<String> followingNpubs = await getFollowingList(npub);
     await connectToRelays(relayUrls, followingNpubs);
+
+    Set<String> allParentIds = Set<String>.from(feedItems.map((note) => note.id));
+    allParentIds.addAll(repliesMap.keys);
+    await fetchRepliesForNotes(allParentIds.toList());
+    await fetchReactionsForNotes(allParentIds.toList());
   }
 
   Future<void> connectToRelays(List<String> relayList, List<String> followingNpubs) async {
@@ -43,27 +55,27 @@ class FeedService {
     isConnecting = true;
 
     await Future.wait(relayList.map((relayUrl) async {
-      if (!_webSockets.containsKey(relayUrl) || _webSockets[relayUrl]?.readyState == WebSocket.closed) {
+      if (!_webSockets.containsKey(relayUrl) ||
+          _webSockets[relayUrl]?.readyState == WebSocket.closed) {
         try {
-          final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
+          final webSocket =
+              await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
           _webSockets[relayUrl] = webSocket;
 
           webSocket.listen(
             (event) => _handleEvent(event, followingNpubs),
             onDone: () {
               _webSockets.remove(relayUrl);
-              print('Disconnected from $relayUrl');
             },
             onError: (error) {
-              print('Relay error ($relayUrl): $error');
               _webSockets.remove(relayUrl);
             },
           );
 
           _fetchNotesForFollowing(webSocket, followingNpubs);
           _fetchProfilesForFollowing(webSocket, followingNpubs);
+          _fetchRepliesForFollowing(webSocket, followingNpubs);
         } catch (e) {
-          print('Failed to connect to $relayUrl: $e');
           _webSockets.remove(relayUrl);
         }
       }
@@ -72,13 +84,14 @@ class FeedService {
     isConnecting = false;
 
     if (_webSockets.isNotEmpty) {
-      _startCheckingForNewNotesAndProfiles(followingNpubs);
+      _startCheckingForNewData(followingNpubs);
     }
   }
 
   Future<void> saveNotesToCache() async {
     final prefs = await SharedPreferences.getInstance();
-    final cachedNotes = feedItems.map((note) => jsonEncode(note.toJson())).toList();
+    final cachedNotes =
+        feedItems.map((note) => jsonEncode(note.toJson())).toList();
     await prefs.setStringList('cachedNotes', cachedNotes);
   }
 
@@ -87,7 +100,7 @@ class FeedService {
     final cachedNotes = prefs.getStringList('cachedNotes') ?? [];
     for (var noteJson in cachedNotes) {
       final note = NoteModel.fromJson(jsonDecode(noteJson));
-      eventIds.add(note.noteId);
+      eventIds.add(note.id);
       onLoad(note);
     }
   }
@@ -111,10 +124,38 @@ class FeedService {
     webSocket.add(request.serialize());
   }
 
+  void _fetchRepliesForFollowing(WebSocket webSocket, List<String> followingNpubs) {
+    final parentIds = feedItems.map((note) => note.id).toList();
+    parentIds.addAll(repliesMap.keys);
+
+    final request = Request(generate64RandomHexChars(), [
+      Filter(
+        kinds: [1],
+        e: parentIds,
+      ),
+    ]);
+    webSocket.add(request.serialize());
+  }
+
   Future<void> fetchReactionsForNotes(List<String> noteIds) async {
     for (var relayUrl in _webSockets.keys) {
       final request = Request(generate64RandomHexChars(), [
-        Filter(kinds: [7], e: noteIds),
+        Filter(
+          kinds: [7],
+          e: noteIds,
+        ),
+      ]);
+      _webSockets[relayUrl]?.add(request.serialize());
+    }
+  }
+
+  Future<void> fetchRepliesForNotes(List<String> parentIds) async {
+    for (var relayUrl in _webSockets.keys) {
+      final request = Request(generate64RandomHexChars(), [
+        Filter(
+          kinds: [1],
+          e: parentIds,
+        ),
       ]);
       _webSockets[relayUrl]?.add(request.serialize());
     }
@@ -125,48 +166,64 @@ class FeedService {
       final decodedEvent = jsonDecode(event);
 
       if (decodedEvent[0] == 'EVENT') {
-        final eventData = decodedEvent[2];
-        final kind = eventData['kind'];
+        final eventData = decodedEvent[2] as Map<String, dynamic>;
+        final kind = eventData['kind'] as int;
 
         if (kind == 1) {
-          final eventId = eventData['id'];
-          final author = eventData['pubkey'];
-          final content = eventData['content'] ?? '';
+          final eventId = eventData['id'] as String;
+          final author = eventData['pubkey'] as String;
+          final content = eventData['content'] as String? ?? '';
+          final tags = eventData['tags'] as List<dynamic>;
 
-          if (eventIds.contains(eventId) || content.trim().isEmpty || (followingNpubs.isNotEmpty && !followingNpubs.contains(author))) {
+          bool isReply = tags.any((tag) => tag.length >= 2 && tag[0] == 'e');
+
+          if (eventIds.contains(eventId) ||
+              content.trim().isEmpty) {
             return;
           }
 
-          final authorProfile = await getCachedUserProfile(author);
-          eventIds.add(eventId);
-
-          final newEvent = NoteModel(
-            noteId: eventId,
-            content: content,
-            author: author,
-            authorName: authorProfile['name'] ?? 'Anonymous',
-            authorProfileImage: authorProfile['profileImage'] ?? '',
-            timestamp: DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000),
-          );
-
-          feedItems.add(newEvent);
-          feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-          await saveNotesToCache();
-
-          if (onNewNote != null) {
-            onNewNote!(newEvent);
+          if (!isReply) {
+            if (followingNpubs.isNotEmpty && !followingNpubs.contains(author)) {
+              return;
+            }
           }
 
-          fetchReactionsForNotes([eventId]);
+          if (isReply) {
+            _handleReplyEvent(eventData);
+          } else {
+            final authorProfile = await getCachedUserProfile(author);
+            final newEvent = NoteModel(
+              id: eventId,
+              content: content,
+              author: author,
+              authorName: authorProfile['name'] ?? 'Anonymous',
+              authorProfileImage: authorProfile['profileImage'] ?? '',
+              timestamp: DateTime.fromMillisecondsSinceEpoch((eventData['created_at'] as int) * 1000),
+            );
+
+            feedItems.add(newEvent);
+            feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+            await saveNotesToCache();
+
+            if (onNewNote != null) {
+              onNewNote!(newEvent);
+            }
+
+            fetchReactionsForNotes([eventId]);
+            fetchRepliesForNotes([eventId]);
+          }
         } else if (kind == 7) {
           _handleReactionEvent(eventData);
         } else if (kind == 0) {
-          final author = eventData['pubkey'];
-          final profileContent = jsonDecode(eventData['content']);
-          final userName = profileContent['name'] ?? 'Anonymous';
-          final profileImage = profileContent['picture'] ?? '';
+          final author = eventData['pubkey'] as String;
+          final profileContent = jsonDecode(eventData['content'] as String) as Map<String, dynamic>;
+          final userName = profileContent['name'] as String? ?? 'Anonymous';
+          final profileImage = profileContent['picture'] as String? ?? '';
 
-          profileCache[author] = {'name': userName, 'profileImage': profileImage};
+          profileCache[author] = {
+            'name': userName,
+            'profileImage': profileImage,
+          };
 
           if (_pendingProfileRequests.containsKey(author)) {
             _pendingProfileRequests[author]!.complete(profileCache[author]!);
@@ -174,7 +231,7 @@ class FeedService {
           }
         }
       } else if (decodedEvent[0] == 'EOSE') {
-        final subscriptionId = decodedEvent[1];
+        final subscriptionId = decodedEvent[1] as String;
         final npub = _profileSubscriptionIds[subscriptionId];
         if (npub != null && _pendingProfileRequests.containsKey(npub)) {
           profileCache[npub] = {'name': 'Anonymous', 'profileImage': ''};
@@ -189,13 +246,13 @@ class FeedService {
   }
 
   void _handleReactionEvent(Map<String, dynamic> eventData) async {
-    final reactionPubKey = eventData['pubkey'];
+    final reactionPubKey = eventData['pubkey'] as String;
     final reactionProfile = await getCachedUserProfile(reactionPubKey);
 
     String? noteId;
     for (var tag in eventData['tags']) {
       if (tag.length >= 2 && tag[0] == 'e') {
-        noteId = tag[1];
+        noteId = tag[1] as String;
         break;
       }
     }
@@ -204,11 +261,49 @@ class FeedService {
     final reaction = ReactionModel.fromEvent(eventData, reactionProfile);
 
     reactionsMap.putIfAbsent(noteId, () => []);
-    if (!reactionsMap[noteId]!.any((r) => r.reactionId == reaction.reactionId)) {
+    if (!reactionsMap[noteId]!.any((r) => r.id == reaction.id)) {
       reactionsMap[noteId]!.add(reaction);
       if (onReactionsUpdated != null) {
         onReactionsUpdated!(noteId, reactionsMap[noteId]!);
       }
+
+      if (repliesMap.containsKey(noteId)) {
+        fetchReactionsForNotes([noteId]);
+      }
+    }
+  }
+
+  void _handleReplyEvent(Map<String, dynamic> eventData) async {
+    final replyPubKey = eventData['pubkey'] as String;
+    final replyProfile = await getCachedUserProfile(replyPubKey);
+
+    String? parentId;
+    List<String> eTags = [];
+
+    for (var tag in eventData['tags']) {
+      if (tag.length >= 2 && tag[0] == 'e') {
+        eTags.add(tag[1]);
+      }
+    }
+
+    if (eTags.isNotEmpty) {
+      parentId = eTags.last;
+    }
+
+    if (parentId == null || parentId.isEmpty) return;
+
+    final reply = ReplyModel.fromEvent(eventData, replyProfile);
+
+    repliesMap.putIfAbsent(parentId, () => []);
+    if (!repliesMap[parentId]!.any((r) => r.id == reply.id)) {
+      repliesMap[parentId]!.add(reply);
+
+      if (onRepliesUpdated != null) {
+        onRepliesUpdated!(parentId, repliesMap[parentId]!);
+      }
+
+      fetchRepliesForNotes([reply.id]);
+      fetchReactionsForNotes([reply.id]);
     }
   }
 
@@ -230,7 +325,6 @@ class FeedService {
     final request = Request(subscriptionId, [
       Filter(authors: [npub], kinds: [0], limit: 1),
     ]);
-
     for (var webSocket in _webSockets.values) {
       webSocket.add(request.serialize());
     }
@@ -264,7 +358,7 @@ class FeedService {
           if (decodedEvent[0] == 'EVENT') {
             for (var tag in decodedEvent[2]['tags']) {
               if (tag.isNotEmpty && tag[0] == 'p') {
-                followingNpubs.add(tag[1]);
+                followingNpubs.add(tag[1] as String);
               }
             }
             completer.complete();
@@ -292,6 +386,8 @@ class FeedService {
   }
 
   Future<void> fetchOlderNotes(List<String> followingNpubs, Function(NoteModel) onOlderNote) async {
+    if (feedItems.isEmpty) return;
+
     for (var relayUrl in _webSockets.keys) {
       final request = Request(generate64RandomHexChars(), [
         Filter(
@@ -305,14 +401,20 @@ class FeedService {
     }
   }
 
-  void _startCheckingForNewNotesAndProfiles(List<String> followingNpubs) {
+  void _startCheckingForNewData(List<String> followingNpubs) {
     _checkNewNotesTimer?.cancel();
     _checkNewNotesTimer = Timer.periodic(Duration(seconds: 10), (timer) {
+      Set<String> allParentIds = Set<String>.from(feedItems.map((note) => note.id));
+      allParentIds.addAll(repliesMap.keys);
+
+      List<String> allIds = allParentIds.toList();
+
       for (var relayUrl in _webSockets.keys) {
         final webSocket = _webSockets[relayUrl]!;
         _fetchNotesForFollowing(webSocket, followingNpubs);
         _fetchProfilesForFollowing(webSocket, followingNpubs);
-        fetchReactionsForNotes(feedItems.map((note) => note.noteId).toList());
+        fetchReactionsForNotes(allIds);
+        fetchRepliesForNotes(allParentIds.toList());
       }
     });
   }

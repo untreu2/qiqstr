@@ -1,5 +1,5 @@
 class NoteModel {
-  final String noteId;
+  final String id;
   final String content;
   final String author;
   final String authorName;
@@ -7,7 +7,7 @@ class NoteModel {
   final DateTime timestamp;
 
   NoteModel({
-    required this.noteId,
+    required this.id,
     required this.content,
     required this.author,
     required this.authorName,
@@ -17,23 +17,23 @@ class NoteModel {
 
   factory NoteModel.fromJson(Map<String, dynamic> json) {
     return NoteModel(
-      noteId: json['noteId'],
-      content: json['content'],
-      author: json['author'],
-      authorName: json['authorName'] ?? 'Anonymous',
-      authorProfileImage: json['profileImage'] ?? '',
-      timestamp: DateTime.parse(json['timestamp']),
+      id: json['id'] as String,
+      content: json['content'] as String,
+      author: json['author'] as String,
+      authorName: json['authorName'] as String? ?? 'Anonymous',
+      authorProfileImage: json['authorProfileImage'] as String? ?? '',
+      timestamp: DateTime.fromMillisecondsSinceEpoch((json['timestamp'] as int) * 1000),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'noteId': noteId,
+      'id': id,
       'content': content,
       'author': author,
       'authorName': authorName,
-      'profileImage': authorProfileImage,
-      'timestamp': timestamp.toIso8601String(),
+      'authorProfileImage': authorProfileImage,
+      'timestamp': timestamp.millisecondsSinceEpoch ~/ 1000,
     };
   }
 }

@@ -1,4 +1,4 @@
-class ReactionModel {
+class ReplyModel {
   final String id;
   final String parentId;
   final String content;
@@ -7,7 +7,7 @@ class ReactionModel {
   final String authorProfileImage;
   final DateTime timestamp;
 
-  ReactionModel({
+  ReplyModel({
     required this.id,
     required this.parentId,
     required this.content,
@@ -17,16 +17,21 @@ class ReactionModel {
     required this.timestamp,
   });
 
-  factory ReactionModel.fromEvent(Map<String, dynamic> eventData, Map<String, String> authorProfile) {
+  factory ReplyModel.fromEvent(Map<String, dynamic> eventData, Map<String, String> authorProfile) {
     String parentId = '';
+    List<String> eTags = [];
+
     for (var tag in eventData['tags']) {
       if (tag.length >= 2 && tag[0] == 'e') {
-        parentId = tag[1];
-        break;
+        eTags.add(tag[1]);
       }
     }
 
-    return ReactionModel(
+    if (eTags.isNotEmpty) {
+      parentId = eTags.last;
+    }
+
+    return ReplyModel(
       id: eventData['id'] as String,
       parentId: parentId,
       content: eventData['content'] as String? ?? '',

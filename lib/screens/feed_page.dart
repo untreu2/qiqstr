@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
+import '../models/reply_model.dart';
 import '../services/feed_service.dart';
 import '../screens/note_detail_page.dart';
 
@@ -17,6 +18,7 @@ class FeedPage extends StatefulWidget {
 class _FeedPageState extends State<FeedPage> {
   final List<NoteModel> feedItems = [];
   final Map<String, List<ReactionModel>> reactionsMap = {};
+  final Map<String, List<ReplyModel>> repliesMap = {};
   late FeedService _feedService;
   final Set<String> cachedNoteIds = {};
   bool isLoadingOlderNotes = false;
@@ -26,9 +28,9 @@ class _FeedPageState extends State<FeedPage> {
     super.initState();
     _feedService = FeedService(
       onNewNote: (newNote) {
-        if (!cachedNoteIds.contains(newNote.noteId)) {
+        if (!cachedNoteIds.contains(newNote.id)) {
           setState(() {
-            cachedNoteIds.add(newNote.noteId);
+            cachedNoteIds.add(newNote.id);
             feedItems.insert(0, newNote);
             feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
           });
@@ -37,6 +39,11 @@ class _FeedPageState extends State<FeedPage> {
       onReactionsUpdated: (noteId, reactions) {
         setState(() {
           reactionsMap[noteId] = reactions;
+        });
+      },
+      onRepliesUpdated: (noteId, replies) {
+        setState(() {
+          repliesMap[noteId] = replies;
         });
       },
     );
@@ -56,8 +63,8 @@ class _FeedPageState extends State<FeedPage> {
 
   Future<void> _loadFeedFromCache() async {
     await _feedService.loadNotesFromCache((cachedNote) {
-      if (!cachedNoteIds.contains(cachedNote.noteId)) {
-        cachedNoteIds.add(cachedNote.noteId);
+      if (!cachedNoteIds.contains(cachedNote.id)) {
+        cachedNoteIds.add(cachedNote.id);
         feedItems.add(cachedNote);
       }
     });
@@ -73,8 +80,8 @@ class _FeedPageState extends State<FeedPage> {
 
     final followingList = await _feedService.getFollowingList(widget.npub);
     await _feedService.fetchOlderNotes(followingList, (olderNote) {
-      if (!cachedNoteIds.contains(olderNote.noteId)) {
-        cachedNoteIds.add(olderNote.noteId);
+      if (!cachedNoteIds.contains(olderNote.id)) {
+        cachedNoteIds.add(olderNote.id);
         feedItems.add(olderNote);
       }
     });
@@ -105,7 +112,8 @@ class _FeedPageState extends State<FeedPage> {
                 itemCount: feedItems.length,
                 itemBuilder: (context, index) {
                   final item = feedItems[index];
-                  final reactions = reactionsMap[item.noteId] ?? [];
+                  final reactions = reactionsMap[item.id] ?? [];
+                  final replies = repliesMap[item.id] ?? [];
                   return ListTile(
                     title: Text(item.authorName),
                     subtitle: Column(
@@ -114,13 +122,22 @@ class _FeedPageState extends State<FeedPage> {
                         Text(item.content),
                         const SizedBox(height: 4),
                         Text(
-                          item.timestamp.toString(),
+                          _formatTimestamp(item.timestamp),
                           style: const TextStyle(fontSize: 12, color: Colors.grey),
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          'Reactions: ${reactions.length}',
-                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        Row(
+                          children: [
+                            Text(
+                              'Reactions: ${reactions.length}',
+                              style: const TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                            const SizedBox(width: 16),
+                            Text(
+                              'Replies: ${replies.length}',
+                              style: const TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -136,6 +153,9 @@ class _FeedPageState extends State<FeedPage> {
                           builder: (context) => NoteDetailPage(
                             note: item,
                             reactions: reactions,
+                            replies: replies,
+                            reactionsMap: reactionsMap,
+                            repliesMap: repliesMap,
                           ),
                         ),
                       );
@@ -145,5 +165,22 @@ class _FeedPageState extends State<FeedPage> {
               ),
             ),
     );
+  }
+
+  String _formatTimestamp(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+
+    if (difference.inSeconds < 60) {
+      return 'Just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes} minutes ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours} hours ago';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays} days ago';
+    } else {
+      return '${timestamp.month}/${timestamp.day}/${timestamp.year}';
+    }
   }
 }
