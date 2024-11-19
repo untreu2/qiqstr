@@ -9,6 +9,7 @@ class Qiqstr extends StatelessWidget {
     return MaterialApp(
       title: 'Qiqstr',
       theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: Colors.black,
         colorScheme: const ColorScheme.dark(
           primary: Colors.white,
           secondary: Colors.grey,
@@ -20,7 +21,7 @@ class Qiqstr extends StatelessWidget {
           onError: Colors.black,
         ),
       ),
-      home: const LoginPage(), 
+      home: const LoginPage(),
     );
   }
 }
