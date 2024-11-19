@@ -37,9 +37,9 @@ class NoteDetailPage extends StatelessWidget {
     return replyTree;
   }
 
-  Widget _buildReplyTree(String parentId, Map<String, List<ReplyModel>> replyTree, int depth) {
+  Widget _buildReplyTree(String parentId, Map<String, List<ReplyModel>> replyTree, int depth, BuildContext context) {
     if (!replyTree.containsKey(parentId)) {
-      return Container();
+      return const SizedBox.shrink();
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -48,42 +48,65 @@ class NoteDetailPage extends StatelessWidget {
         final replyCount = repliesMap[reply.id]?.length ?? 0;
         return Padding(
           padding: EdgeInsets.only(left: depth * 16.0, top: 8.0, bottom: 8.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  reply.authorProfileImage.isNotEmpty
-                      ? CircleAvatar(
-                          backgroundImage: NetworkImage(reply.authorProfileImage),
-                          radius: 16,
-                        )
-                      : const CircleAvatar(
-                          child: Icon(Icons.person, size: 16),
-                          radius: 16,
-                        ),
-                  const SizedBox(width: 8),
-                  Text(
-                    reply.authorName,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+          child: InkWell(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => NoteDetailPage(
+                    note: NoteModel(
+                      id: reply.id,
+                      content: reply.content,
+                      author: reply.author,
+                      authorName: reply.authorName,
+                      authorProfileImage: reply.authorProfileImage,
+                      timestamp: reply.timestamp,
+                    ),
+                    reactions: reactionsMap[reply.id] ?? [],
+                    replies: repliesMap[reply.id] ?? [],
+                    reactionsMap: reactionsMap,
+                    repliesMap: repliesMap,
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _formatTimestamp(reply.timestamp),
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(reply.content),
-              const SizedBox(height: 4),
-              Text(
-                'Reactions: $reactionCount Replies: $replyCount',
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-              const SizedBox(height: 8),
-              _buildReplyTree(reply.id, replyTree, depth + 1),
-            ],
+                ),
+              );
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    reply.authorProfileImage.isNotEmpty
+                        ? CircleAvatar(
+                            backgroundImage: NetworkImage(reply.authorProfileImage),
+                            radius: 16,
+                          )
+                        : const CircleAvatar(
+                            child: Icon(Icons.person, size: 16),
+                            radius: 16,
+                          ),
+                    const SizedBox(width: 8),
+                    Text(
+                      reply.authorName,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _formatTimestamp(reply.timestamp),
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(reply.content),
+                const SizedBox(height: 4),
+                Text(
+                  'Reactions: $reactionCount Replies: $replyCount',
+                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 8),
+                _buildReplyTree(reply.id, replyTree, depth + 1, context),
+              ],
+            ),
           ),
         );
       }).toList(),
@@ -206,7 +229,7 @@ class NoteDetailPage extends StatelessWidget {
                       'No replies yet.',
                       style: TextStyle(color: Colors.grey),
                     )
-                  : _buildReplyTree(note.id, replyTree, 0),
+                  : _buildReplyTree(note.id, replyTree, 0, context),
             ],
           ),
         ),
