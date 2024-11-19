@@ -1,5 +1,3 @@
-// lib/widgets/reply_widget.dart
-
 import 'package:flutter/material.dart';
 import '../models/reply_model.dart';
 
@@ -15,7 +13,6 @@ class ReplyWidget extends StatelessWidget {
     required this.depth,
   }) : super(key: key);
 
-  // Recursively build the reply tree
   Widget _buildReplies() {
     if (!replyTree.containsKey(reply.id)) {
       return Container();
@@ -37,12 +34,10 @@ class ReplyWidget extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Left Side: Lines and Dots
         Container(
           width: 20,
           child: Column(
             children: [
-              // Top line (except for the first level)
               if (depth > 0)
                 Expanded(
                   child: Container(
@@ -52,7 +47,6 @@ class ReplyWidget extends StatelessWidget {
                 )
               else
                 Container(),
-              // Dot or circle
               Container(
                 width: 8,
                 height: 8,
@@ -64,14 +58,12 @@ class ReplyWidget extends StatelessWidget {
             ],
           ),
         ),
-        // Right Side: Reply Content
         Expanded(
           child: Container(
             margin: EdgeInsets.only(bottom: 8.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Author Info
                 Row(
                   children: [
                     reply.authorProfileImage.isNotEmpty
@@ -88,17 +80,10 @@ class ReplyWidget extends StatelessWidget {
                       reply.authorName,
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _formatTimestamp(reply.timestamp),
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 4),
-                // Reply Content
                 Text(reply.content),
-                // Recursive Replies
                 _buildReplies(),
               ],
             ),
@@ -106,14 +91,5 @@ class ReplyWidget extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  String _formatTimestamp(DateTime timestamp) {
-    // Format the timestamp as desired, e.g., "2 hours ago"
-    final Duration diff = DateTime.now().difference(timestamp);
-    if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
   }
 }

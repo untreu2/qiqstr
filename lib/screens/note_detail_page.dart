@@ -3,7 +3,6 @@ import 'package:flutter/services.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
-import 'package:intl/intl.dart';
 
 class NoteDetailPage extends StatelessWidget {
   final NoteModel note;
@@ -30,13 +29,11 @@ class NoteDetailPage extends StatelessWidget {
 
   Map<String, List<ReplyModel>> _organizeReplies(List<ReplyModel> replies) {
     Map<String, List<ReplyModel>> replyTree = {};
-
     for (var reply in replies) {
       if (reply.parentId.isNotEmpty) {
         replyTree.putIfAbsent(reply.parentId, () => []).add(reply);
       }
     }
-
     return replyTree;
   }
 
@@ -44,13 +41,11 @@ class NoteDetailPage extends StatelessWidget {
     if (!replyTree.containsKey(parentId)) {
       return Container();
     }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: replyTree[parentId]!.map((reply) {
         final reactionCount = reactionsMap[reply.id]?.length ?? 0;
         final replyCount = repliesMap[reply.id]?.length ?? 0;
-
         return Padding(
           padding: EdgeInsets.only(left: depth * 16.0, top: 8.0, bottom: 8.0),
           child: Column(
@@ -96,20 +91,8 @@ class NoteDetailPage extends StatelessWidget {
   }
 
   String _formatTimestamp(DateTime timestamp) {
-    final now = DateTime.now();
-    final difference = now.difference(timestamp);
-
-    if (difference.inSeconds < 60) {
-      return 'Just now';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes} minutes ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours} hours ago';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays} days ago';
-    } else {
-      return DateFormat('MMM d, y').format(timestamp);
-    }
+    return "${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} "
+           "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}:${timestamp.second.toString().padLeft(2, '0')}";
   }
 
   @override
