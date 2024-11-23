@@ -29,10 +29,6 @@ class _LoginPageState extends State<LoginPage> {
       await prefs.setString('privateKey', nsecHex);
       await prefs.setString('npub', npub);
 
-      setState(() {
-        _message = 'NSEC and NPUB saved!';
-      });
-
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -50,7 +46,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Login'),
+        title: const Text('Welcome to Qiqstr!'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -65,11 +61,18 @@ class _LoginPageState extends State<LoginPage> {
               obscureText: true,
             ),
             const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                _saveNsecAndNpub(_nsecController.text);
-              },
-              child: const Text('Login'),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                ),
+                onPressed: () {
+                  _saveNsecAndNpub(_nsecController.text);
+                },
+                child: const Text('Login'),
+              ),
             ),
             const SizedBox(height: 20),
             Text(_message),
