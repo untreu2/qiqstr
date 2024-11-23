@@ -152,7 +152,6 @@
 				DF0D90B65A4C9DAA4B6253C8 /* Pods-RunnerTests.release.xcconfig */,
 				566DBABCF1B89854E2DBE3EC /* Pods-RunnerTests.profile.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -684,7 +683,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.example.qiqstrmoduleupdate;
+				PRODUCT_BUNDLE_IDENTIFIER = at.qiqstr.qiqstr;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;

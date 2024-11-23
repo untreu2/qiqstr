@@ -186,7 +186,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profil'),
+        title: const Text('Profile'),
       ),
       body: CustomScrollView(
         slivers: [

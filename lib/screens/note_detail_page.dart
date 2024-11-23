@@ -149,7 +149,7 @@ class NoteDetailPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Not Details'),
+        title: const Text('Note Details'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
