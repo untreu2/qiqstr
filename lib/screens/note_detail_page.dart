@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:nostr/nostr.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
@@ -21,7 +22,8 @@ class NoteDetailPage extends StatelessWidget {
   }) : super(key: key);
 
   void _copyNoteId(BuildContext context) {
-    Clipboard.setData(ClipboardData(text: note.id));
+    final formattedNoteId = Nip19.encodeNote(note.id);
+    Clipboard.setData(ClipboardData(text: formattedNoteId));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text("Note ID copied to clipboard")),
     );
