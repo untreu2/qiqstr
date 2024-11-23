@@ -42,6 +42,7 @@ dependencies:
   elliptic: ^0.3.11
   uuid: ^4.5.1
   intl: ^0.20.0
+  palette_generator: ^0.3.3+5
 
 dev_dependencies:
   flutter_test:

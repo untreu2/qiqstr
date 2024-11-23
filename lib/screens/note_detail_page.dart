@@ -4,6 +4,7 @@ import 'package:nostr/nostr.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
+import '../screens/profile_page.dart';
 
 class NoteDetailPage extends StatelessWidget {
   final NoteModel note;
@@ -25,7 +26,7 @@ class NoteDetailPage extends StatelessWidget {
     final formattedNoteId = Nip19.encodeNote(note.id);
     Clipboard.setData(ClipboardData(text: formattedNoteId));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Note ID copied to clipboard")),
+      const SnackBar(content: Text("Note ID copied to clipboard.")),
     );
   }
 
@@ -77,19 +78,39 @@ class NoteDetailPage extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    reply.authorProfileImage.isNotEmpty
-                        ? CircleAvatar(
-                            backgroundImage: NetworkImage(reply.authorProfileImage),
-                            radius: 16,
-                          )
-                        : const CircleAvatar(
-                            child: Icon(Icons.person, size: 16),
-                            radius: 16,
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ProfilePage(npub: reply.author),
                           ),
+                        );
+                      },
+                      child: reply.authorProfileImage.isNotEmpty
+                          ? CircleAvatar(
+                              backgroundImage: NetworkImage(reply.authorProfileImage),
+                              radius: 16,
+                            )
+                          : const CircleAvatar(
+                              child: Icon(Icons.person, size: 16),
+                              radius: 16,
+                            ),
+                    ),
                     const SizedBox(width: 8),
-                    Text(
-                      reply.authorName,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ProfilePage(npub: reply.author),
+                          ),
+                        );
+                      },
+                      child: Text(
+                        reply.authorName,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Text(
@@ -128,7 +149,7 @@ class NoteDetailPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Note Details'),
+        title: const Text('Not Details'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -138,22 +159,41 @@ class NoteDetailPage extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  note.authorProfileImage.isNotEmpty
-                      ? CircleAvatar(
-                          backgroundImage: NetworkImage(note.authorProfileImage),
-                          radius: 24,
-                        )
-                      : const CircleAvatar(
-                          child: Icon(Icons.person, size: 24),
-                          radius: 24,
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ProfilePage(npub: note.author),
                         ),
+                      );
+                    },
+                    child: note.authorProfileImage.isNotEmpty
+                        ? CircleAvatar(
+                            backgroundImage: NetworkImage(note.authorProfileImage),
+                            radius: 24,
+                          )
+                        : const CircleAvatar(
+                            child: Icon(Icons.person, size: 24),
+                            radius: 24,
+                          ),
+                  ),
                   const SizedBox(width: 12),
-                  Expanded(
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ProfilePage(npub: note.author),
+                        ),
+                      );
+                    },
                     child: Text(
                       note.authorName,
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                   ),
+                  const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.copy),
                     onPressed: () => _copyNoteId(context),
@@ -197,19 +237,39 @@ class NoteDetailPage extends StatelessWidget {
                     return Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        CircleAvatar(
-                          backgroundImage: reaction.authorProfileImage.isNotEmpty
-                              ? NetworkImage(reaction.authorProfileImage)
-                              : null,
-                          child: reaction.authorProfileImage.isEmpty
-                              ? const Icon(Icons.person, size: 16)
-                              : null,
-                          radius: 16,
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ProfilePage(npub: reaction.author),
+                              ),
+                            );
+                          },
+                          child: CircleAvatar(
+                            backgroundImage: reaction.authorProfileImage.isNotEmpty
+                                ? NetworkImage(reaction.authorProfileImage)
+                                : null,
+                            child: reaction.authorProfileImage.isEmpty
+                                ? const Icon(Icons.person, size: 16)
+                                : null,
+                            radius: 16,
+                          ),
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          reaction.authorName,
-                          style: const TextStyle(fontSize: 12),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ProfilePage(npub: reaction.author),
+                              ),
+                            );
+                          },
+                          child: Text(
+                            reaction.authorName,
+                            style: const TextStyle(fontSize: 12),
+                          ),
                         ),
                         Text(
                           reaction.content.isNotEmpty ? reaction.content : '+',

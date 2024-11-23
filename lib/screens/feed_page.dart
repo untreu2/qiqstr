@@ -5,6 +5,7 @@ import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
 import '../services/feed_service.dart';
 import '../screens/note_detail_page.dart';
+import '../screens/profile_page.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -115,7 +116,17 @@ class _FeedPageState extends State<FeedPage> {
                   final reactions = reactionsMap[item.id] ?? [];
                   final replies = repliesMap[item.id] ?? [];
                   return ListTile(
-                    title: Text(item.authorName),
+                    title: GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ProfilePage(npub: item.author),
+                          ),
+                        );
+                      },
+                      child: Text(item.authorName),
+                    ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -141,11 +152,21 @@ class _FeedPageState extends State<FeedPage> {
                         ),
                       ],
                     ),
-                    trailing: item.authorProfileImage.isNotEmpty
-                        ? CircleAvatar(
-                            backgroundImage: NetworkImage(item.authorProfileImage),
-                          )
-                        : const CircleAvatar(child: Icon(Icons.person)),
+                    trailing: GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ProfilePage(npub: item.author),
+                          ),
+                        );
+                      },
+                      child: item.authorProfileImage.isNotEmpty
+                          ? CircleAvatar(
+                              backgroundImage: NetworkImage(item.authorProfileImage),
+                            )
+                          : const CircleAvatar(child: Icon(Icons.person)),
+                    ),
                     onTap: () {
                       Navigator.push(
                         context,
