@@ -14,8 +14,14 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _nsecController = TextEditingController();
   String _message = '';
 
-  Future<void> _saveNsecAndNpub(String nsecHex) async {
+  Future<void> _saveNsecAndNpub(String nsecBech32) async {
     try {
+      final nsecHex = Nip19.decodePrivkey(nsecBech32);
+
+      if (nsecHex.isEmpty) {
+        throw Exception('Invalid nsec format.');
+      }
+
       final keychain = Keychain(nsecHex);
       final npub = keychain.public;
 
@@ -54,7 +60,7 @@ class _LoginPageState extends State<LoginPage> {
             TextField(
               controller: _nsecController,
               decoration: const InputDecoration(
-                labelText: 'your nsec (hex)...',
+                labelText: 'Enter your nsec...',
               ),
               obscureText: true,
             ),
