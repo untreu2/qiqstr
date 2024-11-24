@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
@@ -23,34 +24,17 @@ class _FeedPageState extends State<FeedPage> {
   late FeedService _feedService;
   final Set<String> cachedNoteIds = {};
   bool isLoadingOlderNotes = false;
+  final Debouncer _debouncer = Debouncer(milliseconds: 300);
+  Timer? _updateTimer;
+  bool _needsUpdate = false;
 
   @override
   void initState() {
     super.initState();
     _feedService = FeedService(
-      onNewNote: (newNote) {
-        if (!cachedNoteIds.contains(newNote.id)) {
-          setState(() {
-            cachedNoteIds.add(newNote.id);
-            feedItems.insert(0, newNote);
-            feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-            _feedService.fetchReactionsForNotes([newNote.id]);
-            _feedService.fetchRepliesForNotes([newNote.id]);
-          });
-        }
-      },
-      onReactionsUpdated: (noteId, reactions) {
-        setState(() {
-          reactionsMap[noteId] = reactions;
-        });
-        _feedService.saveReactionsToCache();
-      },
-      onRepliesUpdated: (noteId, replies) {
-        setState(() {
-          repliesMap[noteId] = replies;
-        });
-        _feedService.saveRepliesToCache();
-      },
+      onNewNote: _handleNewNote,
+      onReactionsUpdated: _handleReactionsUpdated,
+      onRepliesUpdated: _handleRepliesUpdated,
     );
     _loadFeedFromCache();
     _initializeRelayConnection();
@@ -58,8 +42,51 @@ class _FeedPageState extends State<FeedPage> {
 
   @override
   void dispose() {
+    _updateTimer?.cancel();
+    _debouncer.dispose();
     _feedService.closeConnections();
     super.dispose();
+  }
+
+  void _handleNewNote(NoteModel newNote) {
+    if (!cachedNoteIds.contains(newNote.id)) {
+      cachedNoteIds.add(newNote.id);
+      int insertIndex = feedItems.indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
+      if (insertIndex == -1) {
+        feedItems.add(newNote);
+      } else {
+        feedItems.insert(insertIndex, newNote);
+      }
+      _feedService.fetchReactionsForNotes([newNote.id]);
+      _feedService.fetchRepliesForNotes([newNote.id]);
+      _needsUpdate = true;
+      _scheduleUpdate();
+    }
+  }
+
+  void _handleReactionsUpdated(String noteId, List<ReactionModel> reactions) {
+    reactionsMap[noteId] = reactions;
+    _feedService.saveReactionsToCache();
+    _needsUpdate = true;
+    _scheduleUpdate();
+  }
+
+  void _handleRepliesUpdated(String noteId, List<ReplyModel> replies) {
+    repliesMap[noteId] = replies;
+    _feedService.saveRepliesToCache();
+    _needsUpdate = true;
+    _scheduleUpdate();
+  }
+
+  void _scheduleUpdate() {
+    if (_updateTimer?.isActive ?? false) return;
+    _updateTimer = Timer(Duration(milliseconds: 100), () {
+      if (_needsUpdate) {
+        setState(() {
+          _needsUpdate = false;
+        });
+      }
+    });
   }
 
   Future<void> _initializeRelayConnection() async {
@@ -73,16 +100,24 @@ class _FeedPageState extends State<FeedPage> {
         feedItems.add(cachedNote);
       }
     });
-    await _feedService.loadReactionsFromCache();
-    await _feedService.loadRepliesFromCache();
-    setState(() {
-      feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    setState(() {});
+    _loadReactionsAndReplies();
+  }
+
+  void _loadReactionsAndReplies() {
+    _feedService.loadReactionsFromCache().then((_) {
       reactionsMap.addAll(_feedService.reactionsMap);
+      setState(() {});
+    });
+    _feedService.loadRepliesFromCache().then((_) {
       repliesMap.addAll(_feedService.repliesMap);
+      setState(() {});
     });
   }
 
   Future<void> _loadOlderNotes() async {
+    if (isLoadingOlderNotes) return;
     setState(() {
       isLoadingOlderNotes = true;
     });
@@ -98,7 +133,6 @@ class _FeedPageState extends State<FeedPage> {
     });
 
     setState(() {
-      feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       isLoadingOlderNotes = false;
     });
   }
@@ -117,8 +151,8 @@ class _FeedPageState extends State<FeedPage> {
             );
           },
           child: Row(
-            children: [
-              const SizedBox(width: 16),
+            children: const [
+              SizedBox(width: 16),
               Text(
                 'Profile',
                 style: TextStyle(
@@ -136,10 +170,12 @@ class _FeedPageState extends State<FeedPage> {
           ? const Center(child: CircularProgressIndicator())
           : NotificationListener<ScrollNotification>(
               onNotification: (scrollInfo) {
-                if (scrollInfo.metrics.pixels == scrollInfo.metrics.maxScrollExtent &&
-                    !isLoadingOlderNotes) {
-                  _loadOlderNotes();
-                }
+                _debouncer.run(() {
+                  if (scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 200 &&
+                      !isLoadingOlderNotes) {
+                    _loadOlderNotes();
+                  }
+                });
                 return false;
               },
               child: ListView.builder(
@@ -202,7 +238,7 @@ class _FeedPageState extends State<FeedPage> {
                       },
                       child: item.authorProfileImage.isNotEmpty
                           ? CircleAvatar(
-                              backgroundImage: NetworkImage(item.authorProfileImage),
+                              backgroundImage: CachedNetworkImageProvider(item.authorProfileImage),
                             )
                           : const CircleAvatar(child: Icon(Icons.person)),
                     ),
@@ -229,6 +265,23 @@ class _FeedPageState extends State<FeedPage> {
 
   String _formatTimestamp(DateTime timestamp) {
     return "${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} "
-           "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}:${timestamp.second.toString().padLeft(2, '0')}";
+        "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}:${timestamp.second.toString().padLeft(2, '0')}";
+  }
+}
+
+class Debouncer {
+  final int milliseconds;
+  VoidCallback? action;
+  Timer? _timer;
+
+  Debouncer({required this.milliseconds});
+
+  void run(VoidCallback action) {
+    _timer?.cancel();
+    _timer = Timer(Duration(milliseconds: milliseconds), action);
+  }
+
+  void dispose() {
+    _timer?.cancel();
   }
 }

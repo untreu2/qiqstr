@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:palette_generator/palette_generator.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
@@ -22,6 +23,9 @@ class _ProfilePageState extends State<ProfilePage> {
   final Map<String, List<ReplyModel>> repliesMap = {};
   final Set<String> cachedNoteIds = {};
   bool isLoadingOlderNotes = false;
+  final Debouncer _debouncer = Debouncer(milliseconds: 300);
+  Timer? _updateTimer;
+  bool _needsUpdate = false;
 
   ProfileService? _profileService;
 
@@ -59,33 +63,54 @@ class _ProfilePageState extends State<ProfilePage> {
 
     _profileService = ProfileService(
       npub: widget.npub,
-      onNewNote: (newNote) {
-        if (!cachedNoteIds.contains(newNote.id)) {
-          setState(() {
-            cachedNoteIds.add(newNote.id);
-            profileNotes.insert(0, newNote);
-            profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-            _profileService!.fetchReactionsForNotes([newNote.id]);
-            _profileService!.fetchRepliesForNotes([newNote.id]);
-          });
-        }
-      },
-      onReactionsUpdated: (noteId, reactions) {
-        setState(() {
-          reactionsMap[noteId] = reactions;
-        });
-        _profileService!.saveReactionsToCache();
-      },
-      onRepliesUpdated: (noteId, replies) {
-        setState(() {
-          repliesMap[noteId] = replies;
-        });
-        _profileService!.saveRepliesToCache();
-      },
+      onNewNote: _handleNewNote,
+      onReactionsUpdated: _handleReactionsUpdated,
+      onRepliesUpdated: _handleRepliesUpdated,
     );
 
     _loadProfileFromCache();
     _initializeRelayConnection();
+  }
+
+  void _handleNewNote(NoteModel newNote) {
+    if (!cachedNoteIds.contains(newNote.id)) {
+      cachedNoteIds.add(newNote.id);
+      int insertIndex = profileNotes.indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
+      if (insertIndex == -1) {
+        profileNotes.add(newNote);
+      } else {
+        profileNotes.insert(insertIndex, newNote);
+      }
+      _profileService!.fetchReactionsForNotes([newNote.id]);
+      _profileService!.fetchRepliesForNotes([newNote.id]);
+      _needsUpdate = true;
+      _scheduleUpdate();
+    }
+  }
+
+  void _handleReactionsUpdated(String noteId, List<ReactionModel> reactions) {
+    reactionsMap[noteId] = reactions;
+    _profileService!.saveReactionsToCache();
+    _needsUpdate = true;
+    _scheduleUpdate();
+  }
+
+  void _handleRepliesUpdated(String noteId, List<ReplyModel> replies) {
+    repliesMap[noteId] = replies;
+    _profileService!.saveRepliesToCache();
+    _needsUpdate = true;
+    _scheduleUpdate();
+  }
+
+  void _scheduleUpdate() {
+    if (_updateTimer?.isActive ?? false) return;
+    _updateTimer = Timer(Duration(milliseconds: 100), () {
+      if (_needsUpdate) {
+        setState(() {
+          _needsUpdate = false;
+        });
+      }
+    });
   }
 
   @override
@@ -98,8 +123,10 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   void dispose() {
+    _updateTimer?.cancel();
     _profileService?.closeConnections();
     _profileService = null;
+    _debouncer.dispose();
     super.dispose();
   }
 
@@ -107,55 +134,57 @@ class _ProfilePageState extends State<ProfilePage> {
     if (_profileService == null) return;
     await _profileService!.initializeConnections();
 
-    final profile = await _profileService!.getCachedUserProfile(widget.npub);
-    if (!mounted) return;
-    setState(() {
-      userProfile = profile;
+    _profileService!.getCachedUserProfile(widget.npub).then((profile) {
+      if (!mounted) return;
+      setState(() {
+        userProfile = profile;
+      });
+      if (userProfile['profileImage']!.isNotEmpty) {
+        _updateBackgroundColor(userProfile['profileImage']!);
+      }
     });
-
-    if (userProfile['profileImage']!.isNotEmpty) {
-      _updateBackgroundColor(userProfile['profileImage']!);
-    }
   }
 
   Future<void> _loadProfileFromCache() async {
     if (_profileService == null) return;
     await _profileService!.loadNotesFromCache((cachedNote) {
       if (!cachedNoteIds.contains(cachedNote.id)) {
-        setState(() {
-          cachedNoteIds.add(cachedNote.id);
-          profileNotes.add(cachedNote);
-        });
+        cachedNoteIds.add(cachedNote.id);
+        profileNotes.add(cachedNote);
       }
     });
-    await _profileService!.loadReactionsFromCache();
-    await _profileService!.loadRepliesFromCache();
-    setState(() {
-      profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    setState(() {});
+    _loadReactionsAndReplies();
+  }
+
+  void _loadReactionsAndReplies() {
+    _profileService!.loadReactionsFromCache().then((_) {
       reactionsMap.addAll(_profileService!.reactionsMap);
+      setState(() {});
+    });
+    _profileService!.loadRepliesFromCache().then((_) {
       repliesMap.addAll(_profileService!.repliesMap);
+      setState(() {});
     });
   }
 
   Future<void> _loadOlderNotes() async {
-    if (_profileService == null) return;
+    if (_profileService == null || isLoadingOlderNotes) return;
     setState(() {
       isLoadingOlderNotes = true;
     });
 
     await _profileService!.fetchOlderNotes([widget.npub], (olderNote) {
       if (!cachedNoteIds.contains(olderNote.id)) {
-        setState(() {
-          cachedNoteIds.add(olderNote.id);
-          profileNotes.add(olderNote);
-          _profileService!.fetchReactionsForNotes([olderNote.id]);
-          _profileService!.fetchRepliesForNotes([olderNote.id]);
-        });
+        cachedNoteIds.add(olderNote.id);
+        profileNotes.add(olderNote);
+        _profileService!.fetchReactionsForNotes([olderNote.id]);
+        _profileService!.fetchRepliesForNotes([olderNote.id]);
       }
     });
 
     setState(() {
-      profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       isLoadingOlderNotes = false;
     });
   }
@@ -163,7 +192,7 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _updateBackgroundColor(String imageUrl) async {
     try {
       final PaletteGenerator paletteGenerator =
-          await PaletteGenerator.fromImageProvider(NetworkImage(imageUrl));
+          await PaletteGenerator.fromImageProvider(CachedNetworkImageProvider(imageUrl));
       if (!mounted) return;
       setState(() {
         backgroundColor = paletteGenerator.dominantColor?.color.withOpacity(0.1) ??
@@ -187,21 +216,18 @@ class _ProfilePageState extends State<ProfilePage> {
         slivers: [
           if (userProfile['banner']!.isNotEmpty)
             SliverToBoxAdapter(
-              child: Container(
+              child: CachedNetworkImage(
+                imageUrl: userProfile['banner']!,
                 width: double.infinity,
-                child: AspectRatio(
-                  aspectRatio: 18 / 9,
-                  child: Image.network(
-                    userProfile['banner']!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return Container(
-                        color: Colors.grey[300],
-                        child: const Center(
-                            child: Icon(Icons.broken_image, size: 50)),
-                      );
-                    },
-                  ),
+                height: 200,
+                fit: BoxFit.cover,
+                placeholder: (context, url) => Container(
+                  color: Colors.grey[300],
+                  child: const Center(child: CircularProgressIndicator()),
+                ),
+                errorWidget: (context, url, error) => Container(
+                  color: Colors.grey[300],
+                  child: const Center(child: Icon(Icons.broken_image, size: 50)),
                 ),
               ),
             ),
@@ -224,8 +250,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     child: userProfile['profileImage']!.isNotEmpty
                         ? CircleAvatar(
                             radius: 30,
-                            backgroundImage:
-                                NetworkImage(userProfile['profileImage']!),
+                            backgroundImage: CachedNetworkImageProvider(userProfile['profileImage']!),
                           )
                         : const CircleAvatar(
                             radius: 30,
@@ -248,8 +273,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           },
                           child: Text(
                             userProfile['name']!,
-                            style: const TextStyle(
-                                fontSize: 20, fontWeight: FontWeight.bold),
+                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -262,8 +286,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         if (userProfile['nip05']!.isNotEmpty)
                           Text(
                             '${userProfile['nip05']}',
-                            style: const TextStyle(
-                                fontSize: 12, color: Colors.grey),
+                            style: const TextStyle(fontSize: 12, color: Colors.grey),
                           ),
                       ],
                     ),
@@ -273,8 +296,8 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ),
           profileNotes.isEmpty
-              ? SliverFillRemaining(
-                  child: const Center(child: CircularProgressIndicator()),
+              ? const SliverFillRemaining(
+                  child: Center(child: CircularProgressIndicator()),
                 )
               : SliverList(
                   delegate: SliverChildBuilderDelegate(
@@ -307,22 +330,19 @@ class _ProfilePageState extends State<ProfilePage> {
                             const SizedBox(height: 4),
                             Text(
                               _formatTimestamp(item.timestamp),
-                              style: const TextStyle(
-                                  fontSize: 12, color: Colors.grey),
+                              style: const TextStyle(fontSize: 12, color: Colors.grey),
                             ),
                             const SizedBox(height: 4),
                             Row(
                               children: [
                                 Text(
                                   'Reactions: ${reactions.length}',
-                                  style: const TextStyle(
-                                      fontSize: 12, color: Colors.grey),
+                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
                                 ),
                                 const SizedBox(width: 16),
                                 Text(
                                   'Replies: ${replies.length}',
-                                  style: const TextStyle(
-                                      fontSize: 12, color: Colors.grey),
+                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
                                 ),
                               ],
                             ),
@@ -339,8 +359,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           },
                           child: item.authorProfileImage.isNotEmpty
                               ? CircleAvatar(
-                                  backgroundImage:
-                                      NetworkImage(item.authorProfileImage),
+                                  backgroundImage: CachedNetworkImageProvider(item.authorProfileImage),
                                 )
                               : const CircleAvatar(child: Icon(Icons.person)),
                         ),
@@ -365,8 +384,8 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
           if (isLoadingOlderNotes)
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
+              child: const Padding(
+                padding: EdgeInsets.all(16.0),
                 child: Center(child: CircularProgressIndicator()),
               ),
             ),
@@ -378,5 +397,22 @@ class _ProfilePageState extends State<ProfilePage> {
   String _formatTimestamp(DateTime timestamp) {
     return "${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} "
         "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}:${timestamp.second.toString().padLeft(2, '0')}";
+  }
+}
+
+class Debouncer {
+  final int milliseconds;
+  VoidCallback? action;
+  Timer? _timer;
+
+  Debouncer({required this.milliseconds});
+
+  void run(VoidCallback action) {
+    _timer?.cancel();
+    _timer = Timer(Duration(milliseconds: milliseconds), action);
+  }
+
+  void dispose() {
+    _timer?.cancel();
   }
 }
