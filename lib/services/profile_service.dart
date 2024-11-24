@@ -47,8 +47,8 @@ class ProfileService {
 
     Set<String> allParentIds = Set<String>.from(profileNotes.map((note) => note.id));
     allParentIds.addAll(repliesMap.keys);
-    await fetchRepliesForNotes(allParentIds.toList());
     await fetchReactionsForNotes(allParentIds.toList());
+    await fetchRepliesForNotes(allParentIds.toList());
   }
 
   Future<void> connectToRelays(List<String> relayList, List<String> targetNpubs) async {
@@ -103,6 +103,44 @@ class ProfileService {
       final note = NoteModel.fromJson(jsonDecode(noteJson));
       eventIds.add(note.id);
       onLoad(note);
+    }
+  }
+
+  Future<void> saveReactionsToCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    final cachedReactions = reactionsMap.map((key, value) =>
+        MapEntry(key, value.map((reaction) => jsonEncode(reaction.toJson())).toList()));
+    await prefs.setString('cachedProfileReactions_$npub', jsonEncode(cachedReactions));
+  }
+
+  Future<void> loadReactionsFromCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    final cachedReactionsString = prefs.getString('cachedProfileReactions_$npub');
+    if (cachedReactionsString != null) {
+      final Map<String, dynamic> decoded = jsonDecode(cachedReactionsString);
+      decoded.forEach((key, value) {
+        reactionsMap[key] = List<ReactionModel>.from(
+            value.map((item) => ReactionModel.fromJson(jsonDecode(item))));
+      });
+    }
+  }
+
+  Future<void> saveRepliesToCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    final cachedReplies = repliesMap.map((key, value) =>
+        MapEntry(key, value.map((reply) => jsonEncode(reply.toJson())).toList()));
+    await prefs.setString('cachedProfileReplies_$npub', jsonEncode(cachedReplies));
+  }
+
+  Future<void> loadRepliesFromCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    final cachedRepliesString = prefs.getString('cachedProfileReplies_$npub');
+    if (cachedRepliesString != null) {
+      final Map<String, dynamic> decoded = jsonDecode(cachedRepliesString);
+      decoded.forEach((key, value) {
+        repliesMap[key] = List<ReplyModel>.from(
+            value.map((item) => ReplyModel.fromJson(jsonDecode(item))));
+      });
     }
   }
 
@@ -178,7 +216,8 @@ class ProfileService {
 
           bool isReply = tags.any((tag) => tag.length >= 2 && tag[0] == 'e');
 
-          if (eventIds.contains(eventId) || content.trim().isEmpty) {
+          if (eventIds.contains(eventId) ||
+              content.trim().isEmpty) {
             return;
           }
 
@@ -277,6 +316,7 @@ class ProfileService {
     reactionsMap.putIfAbsent(noteId, () => []);
     if (!reactionsMap[noteId]!.any((r) => r.id == reaction.id)) {
       reactionsMap[noteId]!.add(reaction);
+      await saveReactionsToCache();
       if (onReactionsUpdated != null) {
         onReactionsUpdated!(noteId, reactionsMap[noteId]!);
       }
@@ -311,7 +351,7 @@ class ProfileService {
     repliesMap.putIfAbsent(parentId, () => []);
     if (!repliesMap[parentId]!.any((r) => r.id == reply.id)) {
       repliesMap[parentId]!.add(reply);
-
+      await saveRepliesToCache();
       if (onRepliesUpdated != null) {
         onRepliesUpdated!(parentId, repliesMap[parentId]!);
       }
@@ -348,9 +388,6 @@ class ProfileService {
         profileCache[npub] = {
           'name': 'Anonymous',
           'profileImage': '',
-          'about': '',
-          'nip05': '',
-          'banner': '',
         };
         completer.complete(profileCache[npub]!);
         _pendingProfileRequests.remove(npub);

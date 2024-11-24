@@ -34,6 +34,8 @@ class _FeedPageState extends State<FeedPage> {
             cachedNoteIds.add(newNote.id);
             feedItems.insert(0, newNote);
             feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+            _feedService.fetchReactionsForNotes([newNote.id]);
+            _feedService.fetchRepliesForNotes([newNote.id]);
           });
         }
       },
@@ -41,11 +43,13 @@ class _FeedPageState extends State<FeedPage> {
         setState(() {
           reactionsMap[noteId] = reactions;
         });
+        _feedService.saveReactionsToCache();
       },
       onRepliesUpdated: (noteId, replies) {
         setState(() {
           repliesMap[noteId] = replies;
         });
+        _feedService.saveRepliesToCache();
       },
     );
     _loadFeedFromCache();
@@ -69,8 +73,12 @@ class _FeedPageState extends State<FeedPage> {
         feedItems.add(cachedNote);
       }
     });
+    await _feedService.loadReactionsFromCache();
+    await _feedService.loadRepliesFromCache();
     setState(() {
       feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      reactionsMap.addAll(_feedService.reactionsMap);
+      repliesMap.addAll(_feedService.repliesMap);
     });
   }
 
@@ -84,6 +92,8 @@ class _FeedPageState extends State<FeedPage> {
       if (!cachedNoteIds.contains(olderNote.id)) {
         cachedNoteIds.add(olderNote.id);
         feedItems.add(olderNote);
+        _feedService.fetchReactionsForNotes([olderNote.id]);
+        _feedService.fetchRepliesForNotes([olderNote.id]);
       }
     });
 
@@ -133,8 +143,14 @@ class _FeedPageState extends State<FeedPage> {
                 return false;
               },
               child: ListView.builder(
-                itemCount: feedItems.length,
+                itemCount: feedItems.length + (isLoadingOlderNotes ? 1 : 0),
                 itemBuilder: (context, index) {
+                  if (index == feedItems.length) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
                   final item = feedItems[index];
                   final reactions = reactionsMap[item.id] ?? [];
                   final replies = repliesMap[item.id] ?? [];

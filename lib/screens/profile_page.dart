@@ -61,28 +61,26 @@ class _ProfilePageState extends State<ProfilePage> {
       npub: widget.npub,
       onNewNote: (newNote) {
         if (!cachedNoteIds.contains(newNote.id)) {
-          if (mounted) {
-            setState(() {
-              cachedNoteIds.add(newNote.id);
-              profileNotes.insert(0, newNote);
-              profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-            });
-          }
+          setState(() {
+            cachedNoteIds.add(newNote.id);
+            profileNotes.insert(0, newNote);
+            profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+            _profileService!.fetchReactionsForNotes([newNote.id]);
+            _profileService!.fetchRepliesForNotes([newNote.id]);
+          });
         }
       },
       onReactionsUpdated: (noteId, reactions) {
-        if (mounted) {
-          setState(() {
-            reactionsMap[noteId] = reactions;
-          });
-        }
+        setState(() {
+          reactionsMap[noteId] = reactions;
+        });
+        _profileService!.saveReactionsToCache();
       },
       onRepliesUpdated: (noteId, replies) {
-        if (mounted) {
-          setState(() {
-            repliesMap[noteId] = replies;
-          });
-        }
+        setState(() {
+          repliesMap[noteId] = replies;
+        });
+        _profileService!.saveRepliesToCache();
       },
     );
 
@@ -124,20 +122,19 @@ class _ProfilePageState extends State<ProfilePage> {
     if (_profileService == null) return;
     await _profileService!.loadNotesFromCache((cachedNote) {
       if (!cachedNoteIds.contains(cachedNote.id)) {
-        if (mounted) {
-          setState(() {
-            cachedNoteIds.add(cachedNote.id);
-            profileNotes.add(cachedNote);
-          });
-        }
+        setState(() {
+          cachedNoteIds.add(cachedNote.id);
+          profileNotes.add(cachedNote);
+        });
       }
     });
-
-    if (mounted) {
-      setState(() {
-        profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      });
-    }
+    await _profileService!.loadReactionsFromCache();
+    await _profileService!.loadRepliesFromCache();
+    setState(() {
+      profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      reactionsMap.addAll(_profileService!.reactionsMap);
+      repliesMap.addAll(_profileService!.repliesMap);
+    });
   }
 
   Future<void> _loadOlderNotes() async {
@@ -148,21 +145,19 @@ class _ProfilePageState extends State<ProfilePage> {
 
     await _profileService!.fetchOlderNotes([widget.npub], (olderNote) {
       if (!cachedNoteIds.contains(olderNote.id)) {
-        if (mounted) {
-          setState(() {
-            cachedNoteIds.add(olderNote.id);
-            profileNotes.add(olderNote);
-          });
-        }
+        setState(() {
+          cachedNoteIds.add(olderNote.id);
+          profileNotes.add(olderNote);
+          _profileService!.fetchReactionsForNotes([olderNote.id]);
+          _profileService!.fetchRepliesForNotes([olderNote.id]);
+        });
       }
     });
 
-    if (mounted) {
-      setState(() {
-        profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-        isLoadingOlderNotes = false;
-      });
-    }
+    setState(() {
+      profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      isLoadingOlderNotes = false;
+    });
   }
 
   Future<void> _updateBackgroundColor(String imageUrl) async {
@@ -284,6 +279,12 @@ class _ProfilePageState extends State<ProfilePage> {
               : SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
+                      if (index == profileNotes.length) {
+                        return const Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: Center(child: CircularProgressIndicator()),
+                        );
+                      }
                       final item = profileNotes[index];
                       final reactions = reactionsMap[item.id] ?? [];
                       final replies = repliesMap[item.id] ?? [];
@@ -359,7 +360,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         },
                       );
                     },
-                    childCount: profileNotes.length,
+                    childCount: profileNotes.length + (isLoadingOlderNotes ? 1 : 0),
                   ),
                 ),
           if (isLoadingOlderNotes)

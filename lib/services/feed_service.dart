@@ -46,8 +46,8 @@ class FeedService {
 
     Set<String> allParentIds = Set<String>.from(feedItems.map((note) => note.id));
     allParentIds.addAll(repliesMap.keys);
-    await fetchRepliesForNotes(allParentIds.toList());
     await fetchReactionsForNotes(allParentIds.toList());
+    await fetchRepliesForNotes(allParentIds.toList());
   }
 
   Future<void> connectToRelays(List<String> relayList, List<String> followingNpubs) async {
@@ -102,6 +102,44 @@ class FeedService {
       final note = NoteModel.fromJson(jsonDecode(noteJson));
       eventIds.add(note.id);
       onLoad(note);
+    }
+  }
+
+  Future<void> saveReactionsToCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    final cachedReactions = reactionsMap.map((key, value) =>
+        MapEntry(key, value.map((reaction) => jsonEncode(reaction.toJson())).toList()));
+    await prefs.setString('cachedReactions', jsonEncode(cachedReactions));
+  }
+
+  Future<void> loadReactionsFromCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    final cachedReactionsString = prefs.getString('cachedReactions');
+    if (cachedReactionsString != null) {
+      final Map<String, dynamic> decoded = jsonDecode(cachedReactionsString);
+      decoded.forEach((key, value) {
+        reactionsMap[key] = List<ReactionModel>.from(
+            value.map((item) => ReactionModel.fromJson(jsonDecode(item))));
+      });
+    }
+  }
+
+  Future<void> saveRepliesToCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    final cachedReplies = repliesMap.map((key, value) =>
+        MapEntry(key, value.map((reply) => jsonEncode(reply.toJson())).toList()));
+    await prefs.setString('cachedReplies', jsonEncode(cachedReplies));
+  }
+
+  Future<void> loadRepliesFromCache() async {
+    final prefs = await SharedPreferences.getInstance();
+    final cachedRepliesString = prefs.getString('cachedReplies');
+    if (cachedRepliesString != null) {
+      final Map<String, dynamic> decoded = jsonDecode(cachedRepliesString);
+      decoded.forEach((key, value) {
+        repliesMap[key] = List<ReplyModel>.from(
+            value.map((item) => ReplyModel.fromJson(jsonDecode(item))));
+      });
     }
   }
 
@@ -203,6 +241,7 @@ class FeedService {
 
             feedItems.add(newEvent);
             feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+            eventIds.add(eventId);
             await saveNotesToCache();
 
             if (onNewNote != null) {
@@ -263,6 +302,7 @@ class FeedService {
     reactionsMap.putIfAbsent(noteId, () => []);
     if (!reactionsMap[noteId]!.any((r) => r.id == reaction.id)) {
       reactionsMap[noteId]!.add(reaction);
+      await saveReactionsToCache();
       if (onReactionsUpdated != null) {
         onReactionsUpdated!(noteId, reactionsMap[noteId]!);
       }
@@ -297,7 +337,7 @@ class FeedService {
     repliesMap.putIfAbsent(parentId, () => []);
     if (!repliesMap[parentId]!.any((r) => r.id == reply.id)) {
       repliesMap[parentId]!.add(reply);
-
+      await saveRepliesToCache();
       if (onRepliesUpdated != null) {
         onRepliesUpdated!(parentId, repliesMap[parentId]!);
       }
