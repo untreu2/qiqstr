@@ -44,6 +44,7 @@ dependencies:
   intl: ^0.20.0
   palette_generator: ^0.3.3+5
   cached_network_image: ^3.4.0
+  flutter_secure_storage: ^4.2.1
 
 dev_dependencies:
   flutter_test:

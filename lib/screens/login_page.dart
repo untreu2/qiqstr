@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:nostr/nostr.dart';
 import 'feed_page.dart';
 
@@ -13,6 +13,7 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController _nsecController = TextEditingController();
   String _message = '';
+  final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
 
   Future<void> _saveNsecAndNpub(String nsecBech32) async {
     try {
@@ -23,16 +24,15 @@ class _LoginPageState extends State<LoginPage> {
       }
 
       final keychain = Keychain(nsecHex);
-      final npub = keychain.public;
+      final npubHex = keychain.public;
 
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.setString('privateKey', nsecHex);
-      await prefs.setString('npub', npub);
+      await _secureStorage.write(key: 'privateKey', value: nsecHex);
+      await _secureStorage.write(key: 'npub', value: npubHex);
 
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (context) => FeedPage(npub: npub),
+          builder: (context) => FeedPage(npub: npubHex),
         ),
       );
     } catch (e) {
