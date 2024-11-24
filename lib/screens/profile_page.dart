@@ -266,7 +266,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         const SizedBox(height: 8),
                         if (userProfile['nip05']!.isNotEmpty)
                           Text(
-                            'NIP-05: ${userProfile['nip05']}',
+                            '${userProfile['nip05']}',
                             style: const TextStyle(
                                 fontSize: 12, color: Colors.grey),
                           ),

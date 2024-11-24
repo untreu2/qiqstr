@@ -97,6 +97,29 @@ class _FeedPageState extends State<FeedPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ProfilePage(npub: widget.npub),
+              ),
+            );
+          },
+          child: Row(
+            children: [
+              const SizedBox(width: 16),
+              Text(
+                'Profile',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
+        leadingWidth: 120,
         title: const Text('Latest Notes'),
       ),
       body: feedItems.isEmpty
