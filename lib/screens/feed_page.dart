@@ -4,8 +4,8 @@ import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
 import '../services/qiqstr_service.dart';
-import '../screens/note_detail_page.dart';
-import '../screens/profile_page.dart';
+import 'note_detail_page.dart';
+import 'profile_page.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -23,6 +23,7 @@ class _FeedPageState extends State<FeedPage> {
   late DataService _dataService;
   final Set<String> cachedNoteIds = {};
   bool isLoadingOlderNotes = false;
+  bool isInitializing = true;
 
   @override
   void initState() {
@@ -34,8 +35,21 @@ class _FeedPageState extends State<FeedPage> {
       onReactionsUpdated: _handleReactionsUpdated,
       onRepliesUpdated: _handleRepliesUpdated,
     );
-    _loadFeedFromCache();
-    _initializeRelayConnection();
+    _initializeFeed();
+  }
+
+  Future<void> _initializeFeed() async {
+    await _dataService.initialize();
+
+    await _loadFeedFromCache();
+
+    await _dataService.initializeConnections();
+
+    if (mounted) {
+      setState(() {
+        isInitializing = false;
+      });
+    }
   }
 
   @override
@@ -55,24 +69,27 @@ class _FeedPageState extends State<FeedPage> {
       }
       _dataService.fetchReactionsForNotes([newNote.id]);
       _dataService.fetchRepliesForNotes([newNote.id]);
-      setState(() {});
+      _dataService.saveNotesToCache();
+      if (mounted) {
+        setState(() {});
+      }
     }
   }
 
   void _handleReactionsUpdated(String noteId, List<ReactionModel> reactions) {
     reactionsMap[noteId] = reactions;
     _dataService.saveReactionsToCache();
-    setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _handleRepliesUpdated(String noteId, List<ReplyModel> replies) {
     repliesMap[noteId] = replies;
     _dataService.saveRepliesToCache();
-    setState(() {});
-  }
-
-  Future<void> _initializeRelayConnection() async {
-    await _dataService.initializeConnections();
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _loadFeedFromCache() async {
@@ -83,19 +100,15 @@ class _FeedPageState extends State<FeedPage> {
       }
     });
     feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-    setState(() {});
-    _loadReactionsAndReplies();
-  }
 
-  void _loadReactionsAndReplies() {
-    _dataService.loadReactionsFromCache().then((_) {
-      reactionsMap.addAll(_dataService.reactionsMap);
+    await _dataService.loadReactionsFromCache();
+    await _dataService.loadRepliesFromCache();
+    reactionsMap.addAll(_dataService.reactionsMap);
+    repliesMap.addAll(_dataService.repliesMap);
+
+    if (mounted) {
       setState(() {});
-    });
-    _dataService.loadRepliesFromCache().then((_) {
-      repliesMap.addAll(_dataService.repliesMap);
-      setState(() {});
-    });
+    }
   }
 
   Future<void> _loadOlderNotes() async {
@@ -111,24 +124,57 @@ class _FeedPageState extends State<FeedPage> {
         feedItems.add(olderNote);
         _dataService.fetchReactionsForNotes([olderNote.id]);
         _dataService.fetchRepliesForNotes([olderNote.id]);
+        if (mounted) {
+          setState(() {});
+        }
       }
     });
 
-    setState(() {
-      isLoadingOlderNotes = false;
-    });
+    if (mounted) {
+      setState(() {
+        isLoadingOlderNotes = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (isInitializing && feedItems.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(
+          leading: GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => ProfilePage(npub: widget.npub)),
+              );
+            },
+            child: Row(
+              children: const [
+                SizedBox(width: 16),
+                Text(
+                  'Profile',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          leadingWidth: 120,
+          title: const Text('Latest Notes'),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         leading: GestureDetector(
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(
-                  builder: (context) => ProfilePage(npub: widget.npub)),
+              MaterialPageRoute(builder: (context) => ProfilePage(npub: widget.npub)),
             );
           },
           child: Row(
@@ -148,7 +194,7 @@ class _FeedPageState extends State<FeedPage> {
         title: const Text('Latest Notes'),
       ),
       body: feedItems.isEmpty
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: Text('No feed items available.'))
           : NotificationListener<ScrollNotification>(
               onNotification: (scrollInfo) {
                 if (scrollInfo.metrics.pixels >=
@@ -175,9 +221,7 @@ class _FeedPageState extends State<FeedPage> {
                       onTap: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(
-                              builder: (context) =>
-                                  ProfilePage(npub: item.author)),
+                          MaterialPageRoute(builder: (context) => ProfilePage(npub: item.author)),
                         );
                       },
                       child: Text(item.authorName),
@@ -189,22 +233,19 @@ class _FeedPageState extends State<FeedPage> {
                         const SizedBox(height: 4),
                         Text(
                           _formatTimestamp(item.timestamp),
-                          style:
-                              const TextStyle(fontSize: 12, color: Colors.grey),
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
                         ),
                         const SizedBox(height: 4),
                         Row(
                           children: [
                             Text(
                               'Reactions: ${reactions.length}',
-                              style: const TextStyle(
-                                  fontSize: 12, color: Colors.grey),
+                              style: const TextStyle(fontSize: 12, color: Colors.grey),
                             ),
                             const SizedBox(width: 16),
                             Text(
                               'Replies: ${replies.length}',
-                              style: const TextStyle(
-                                  fontSize: 12, color: Colors.grey),
+                              style: const TextStyle(fontSize: 12, color: Colors.grey),
                             ),
                           ],
                         ),
@@ -214,15 +255,12 @@ class _FeedPageState extends State<FeedPage> {
                       onTap: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(
-                              builder: (context) =>
-                                  ProfilePage(npub: item.author)),
+                          MaterialPageRoute(builder: (context) => ProfilePage(npub: item.author)),
                         );
                       },
                       child: item.authorProfileImage.isNotEmpty
                           ? CircleAvatar(
-                              backgroundImage: CachedNetworkImageProvider(
-                                  item.authorProfileImage),
+                              backgroundImage: CachedNetworkImageProvider(item.authorProfileImage),
                             )
                           : const CircleAvatar(child: Icon(Icons.person)),
                     ),

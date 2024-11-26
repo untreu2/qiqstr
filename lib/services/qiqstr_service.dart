@@ -35,6 +35,7 @@ class DataService {
   late Box reactionsBox;
   late Box repliesBox;
 
+  bool _isInitialized = false;
   bool _isClosed = false;
 
   DataService({
@@ -45,7 +46,19 @@ class DataService {
     this.onRepliesUpdated,
   });
 
+  Future<void> initialize() async {
+    notesBox = await Hive.openBox('notes_${dataType.toString()}_${npub}');
+    reactionsBox = await Hive.openBox('reactions_${dataType.toString()}_${npub}');
+    repliesBox = await Hive.openBox('replies_${dataType.toString()}_${npub}');
+
+    _isInitialized = true;
+  }
+
   Future<void> initializeConnections() async {
+    if (!_isInitialized) {
+      await initialize();
+    }
+
     List<String> popularRelays = [
       'wss://relay.damus.io',
       'wss://relay.snort.social',
@@ -64,11 +77,10 @@ class DataService {
       targetNpubs = [npub];
     }
 
-    notesBox = await Hive.openBox('notes_${dataType.toString()}_${npub}');
-    reactionsBox = await Hive.openBox('reactions_${dataType.toString()}_${npub}');
-    repliesBox = await Hive.openBox('replies_${dataType.toString()}_${npub}');
+    if (_isClosed) return;
 
     await connectToRelays(relayUrls, targetNpubs);
+
     Set<String> allParentIds = Set<String>.from(notes.map((note) => note.id));
     allParentIds.addAll(repliesMap.keys);
     await fetchReactionsForNotes(allParentIds.toList());
@@ -118,15 +130,15 @@ class DataService {
 
   Future<void> saveNotesToCache() async {
     if (notesBox.isOpen) {
-      await notesBox.put('notes', notes);
+      await notesBox.put('notes', notes.map((note) => note.toJson()).toList());
     }
   }
 
   Future<void> loadNotesFromCache(Function(NoteModel) onLoad) async {
     if (!notesBox.isOpen) return;
-    List<dynamic> cachedNotes = notesBox.get('notes', defaultValue: []);
-    for (var note in cachedNotes) {
-      final noteModel = note as NoteModel;
+    List<dynamic> cachedNotesJson = notesBox.get('notes', defaultValue: []);
+    for (var noteJson in cachedNotesJson) {
+      final noteModel = NoteModel.fromJson(Map<String, dynamic>.from(noteJson));
       eventIds.add(noteModel.id);
       onLoad(noteModel);
     }
@@ -134,29 +146,43 @@ class DataService {
 
   Future<void> saveReactionsToCache() async {
     if (reactionsBox.isOpen) {
-      await reactionsBox.put('reactions', reactionsMap);
+      Map<String, dynamic> reactionsJson = reactionsMap.map((key, value) {
+        return MapEntry(key, value.map((reaction) => reaction.toJson()).toList());
+      });
+      await reactionsBox.put('reactions', reactionsJson);
     }
   }
 
   Future<void> loadReactionsFromCache() async {
     if (!reactionsBox.isOpen) return;
-    Map<dynamic, dynamic> cachedReactions = reactionsBox.get('reactions', defaultValue: {});
-    cachedReactions.forEach((key, value) {
-      reactionsMap[key] = List<ReactionModel>.from(value);
+    Map<dynamic, dynamic> cachedReactionsJson = reactionsBox.get('reactions', defaultValue: {});
+    cachedReactionsJson.forEach((key, value) {
+      String noteId = key as String;
+      List<dynamic> reactionsList = value as List<dynamic>;
+      reactionsMap[noteId] = reactionsList
+          .map((reactionJson) => ReactionModel.fromJson(Map<String, dynamic>.from(reactionJson as Map)))
+          .toList();
     });
   }
 
   Future<void> saveRepliesToCache() async {
     if (repliesBox.isOpen) {
-      await repliesBox.put('replies', repliesMap);
+      Map<String, dynamic> repliesJson = repliesMap.map((key, value) {
+        return MapEntry(key, value.map((reply) => reply.toJson()).toList());
+      });
+      await repliesBox.put('replies', repliesJson);
     }
   }
 
   Future<void> loadRepliesFromCache() async {
     if (!repliesBox.isOpen) return;
-    Map<dynamic, dynamic> cachedReplies = repliesBox.get('replies', defaultValue: {});
-    cachedReplies.forEach((key, value) {
-      repliesMap[key] = List<ReplyModel>.from(value);
+    Map<dynamic, dynamic> cachedRepliesJson = repliesBox.get('replies', defaultValue: {});
+    cachedRepliesJson.forEach((key, value) {
+      String noteId = key as String;
+      List<dynamic> repliesList = value as List<dynamic>;
+      repliesMap[noteId] = repliesList
+          .map((replyJson) => ReplyModel.fromJson(Map<String, dynamic>.from(replyJson as Map)))
+          .toList();
     });
   }
 
@@ -252,7 +278,7 @@ class DataService {
           }
 
           if (isReply) {
-            _handleReplyEvent(eventData);
+            await _handleReplyEvent(eventData);
           } else {
             final authorProfile = await getCachedUserProfile(author);
             final newEvent = NoteModel(
@@ -278,7 +304,7 @@ class DataService {
             fetchRepliesForNotes([eventId]);
           }
         } else if (kind == 7) {
-          _handleReactionEvent(eventData);
+          await _handleReactionEvent(eventData);
         } else if (kind == 0) {
           final author = eventData['pubkey'] as String;
           final profileContent = jsonDecode(eventData['content'] as String) as Map<String, dynamic>;
@@ -321,7 +347,7 @@ class DataService {
     }
   }
 
-  void _handleReactionEvent(Map<String, dynamic> eventData) async {
+  Future<void> _handleReactionEvent(Map<String, dynamic> eventData) async {
     if (_isClosed) return;
     final reactionPubKey = eventData['pubkey'] as String;
     final reactionProfile = await getCachedUserProfile(reactionPubKey);
@@ -351,7 +377,7 @@ class DataService {
     }
   }
 
-  void _handleReplyEvent(Map<String, dynamic> eventData) async {
+  Future<void> _handleReplyEvent(Map<String, dynamic> eventData) async {
     if (_isClosed) return;
     final replyPubKey = eventData['pubkey'] as String;
     final replyProfile = await getCachedUserProfile(replyPubKey);
@@ -528,8 +554,8 @@ class DataService {
     }
     _webSockets.clear();
 
-    await notesBox.close();
-    await reactionsBox.close();
-    await repliesBox.close();
+    if (notesBox.isOpen) await notesBox.close();
+    if (reactionsBox.isOpen) await reactionsBox.close();
+    if (repliesBox.isOpen) await repliesBox.close();
   }
 }
