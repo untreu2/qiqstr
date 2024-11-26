@@ -41,16 +41,25 @@ class _FeedPageState extends State<FeedPage> {
   }
 
   Future<void> _initializeFeed() async {
-    await _dataService.initialize();
+    try {
+      await _dataService.initialize();
 
-    await _loadFeedFromCache();
+      await _loadFeedFromCache();
 
-    await _dataService.initializeConnections();
+      await _dataService.initializeConnections();
 
-    if (mounted) {
-      setState(() {
-        isInitializing = false;
-      });
+      if (mounted) {
+        setState(() {
+          isInitializing = false;
+        });
+      }
+    } catch (e) {
+      print('Error initializing feed: $e');
+      if (mounted) {
+        setState(() {
+          isInitializing = false;
+        });
+      }
     }
   }
 
@@ -140,15 +149,19 @@ class _FeedPageState extends State<FeedPage> {
   }
 
   Future<void> _logoutAndClearData() async {
-    await Hive.deleteFromDisk();
+    try {
+      await Hive.deleteFromDisk();
 
-    await _dataService.closeConnections();
+      await _dataService.closeConnections();
 
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginPage()),
-      (Route<dynamic> route) => false,
-    );
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginPage()),
+        (Route<dynamic> route) => false,
+      );
+    } catch (e) {
+      print('Error during logout: $e');
+    }
   }
 
   @override

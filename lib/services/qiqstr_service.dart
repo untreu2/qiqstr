@@ -25,7 +25,8 @@ class DataService {
   Map<String, WebSocket> _webSockets = {};
   bool isConnecting = false;
   Timer? _checkNewNotesTimer;
-  int currentLimit = 100;
+  int currentLimit = 30; 
+  int currentOffset = 0;
 
   List<String> relayUrls = [];
   Map<String, Completer<Map<String, String>>> _pendingProfileRequests = {};
@@ -81,10 +82,7 @@ class DataService {
 
     await connectToRelays(relayUrls, targetNpubs);
 
-    Set<String> allParentIds = Set<String>.from(notes.map((note) => note.id));
-    allParentIds.addAll(repliesMap.keys);
-    await fetchReactionsForNotes(allParentIds.toList());
-    await fetchRepliesForNotes(allParentIds.toList());
+    await fetchNotes(targetNpubs, initialLoad: true);
   }
 
   Future<void> connectToRelays(List<String> relayList, List<String> targetNpubs) async {
@@ -95,7 +93,7 @@ class DataService {
       if (_isClosed) return;
       if (!_webSockets.containsKey(relayUrl) || _webSockets[relayUrl]?.readyState == WebSocket.closed) {
         try {
-          final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
+          final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 2));
           if (_isClosed) {
             webSocket.close();
             return;
@@ -112,7 +110,6 @@ class DataService {
             },
           );
 
-          _fetchNotes(webSocket, targetNpubs);
           _fetchProfiles(webSocket, targetNpubs);
           _fetchReplies(webSocket, targetNpubs);
         } catch (e) {
@@ -125,6 +122,24 @@ class DataService {
 
     if (_webSockets.isNotEmpty) {
       _startCheckingForNewData(targetNpubs);
+    }
+  }
+
+  Future<void> fetchNotes(List<String> targetNpubs, {bool initialLoad = false}) async {
+    if (_isClosed) return;
+    for (var relayUrl in _webSockets.keys) {
+      final request = Request(generate64RandomHexChars(), [
+        Filter(
+          authors: targetNpubs,
+          kinds: [1],
+          limit: currentLimit,
+          since: currentOffset,
+        ),
+      ]);
+      _webSockets[relayUrl]?.add(request.serialize());
+    }
+    if (initialLoad) {
+      currentOffset += currentLimit;
     }
   }
 
@@ -195,12 +210,13 @@ class DataService {
     if (_isClosed) return;
     Filter filter;
     if (dataType == DataType.Feed) {
-      filter = Filter(authors: targetNpubs, kinds: [1], limit: currentLimit);
+      filter = Filter(authors: targetNpubs, kinds: [1], limit: currentLimit, since: currentOffset);
     } else {
-      filter = Filter(authors: [npub], kinds: [1], limit: currentLimit);
+      filter = Filter(authors: [npub], kinds: [1], limit: currentLimit, since: currentOffset);
     }
     final request = Request(generate64RandomHexChars(), [filter]);
     webSocket.add(request.serialize());
+    currentOffset += currentLimit;
   }
 
   void _fetchProfiles(WebSocket webSocket, List<String> targetNpubs) {
@@ -344,6 +360,7 @@ class DataService {
         }
       }
     } catch (e) {
+      print('Error handling event: $e');
     }
   }
 
@@ -442,7 +459,7 @@ class DataService {
       webSocket.add(request.serialize());
     }
 
-    Future.delayed(Duration(seconds: 5), () {
+    Future.delayed(Duration(seconds: 2), () {
       if (!completer.isCompleted) {
         profileCache[npub] = {
           'name': 'Anonymous',
@@ -465,7 +482,7 @@ class DataService {
 
     for (var relayUrl in relayUrls) {
       try {
-        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
+        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 2));
         if (_isClosed) {
           webSocket.close();
           return [];
@@ -494,12 +511,13 @@ class DataService {
 
         webSocket.add(request.serialize());
 
-        await completer.future.timeout(Duration(seconds: 5), onTimeout: () {
+        await completer.future.timeout(Duration(seconds: 2), onTimeout: () {
           webSocket.close();
         });
 
         await webSocket.close();
       } catch (e) {
+        print('Error fetching following list: $e');
       }
     }
 
@@ -525,7 +543,7 @@ class DataService {
 
   void _startCheckingForNewData(List<String> targetNpubs) {
     _checkNewNotesTimer?.cancel();
-    _checkNewNotesTimer = Timer.periodic(Duration(seconds: 10), (timer) {
+    _checkNewNotesTimer = Timer.periodic(Duration(seconds: 2), (timer) {
       if (_isClosed) {
         timer.cancel();
         return;

@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:hive/hive.dart';
 import 'package:palette_generator/palette_generator.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
 import '../services/qiqstr_service.dart';
 import 'note_detail_page.dart';
+import 'login_page.dart'; 
 
 class ProfilePage extends StatefulWidget {
   final String npub;
@@ -160,11 +162,9 @@ class _ProfilePageState extends State<ProfilePage> {
       }
     });
 
-    if (mounted) {
-      setState(() {
-        isLoadingOlderNotes = false;
-      });
-    }
+    setState(() {
+      isLoadingOlderNotes = false;
+    });
   }
 
   Future<void> _updateBackgroundColor(String imageUrl) async {
@@ -184,12 +184,50 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<void> _logoutAndClearData() async {
+    await Hive.deleteFromDisk();
+
+    await _dataService.closeConnections();
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const LoginPage()),
+      (Route<dynamic> route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isLoading && profileNotes.isEmpty) {
       return Scaffold(
         appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: _logoutAndClearData,
+          ),
           title: const Text('Profile'),
+          actions: [
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ProfilePage(npub: widget.npub)),
+                );
+              },
+              child: Row(
+                children: const [
+                  Text(
+                    'Profile',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                    ),
+                  ),
+                  SizedBox(width: 16),
+                ],
+              ),
+            ),
+          ],
         ),
         body: const Center(child: CircularProgressIndicator()),
       );
@@ -197,7 +235,33 @@ class _ProfilePageState extends State<ProfilePage> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.logout),
+          onPressed: _logoutAndClearData,
+        ),
         title: const Text('Profile'),
+        actions: [
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => ProfilePage(npub: widget.npub)),
+              );
+            },
+            child: Row(
+              children: const [
+                Text(
+                  'Profile',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                  ),
+                ),
+                SizedBox(width: 16),
+              ],
+            ),
+          ),
+        ],
       ),
       body: NotificationListener<ScrollNotification>(
         onNotification: (scrollInfo) {
@@ -360,6 +424,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   String _formatTimestamp(DateTime timestamp) {
     return "${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} "
-        "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}";
+        "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}:${timestamp.second.toString().padLeft(2, '0')}";
   }
 }
