@@ -1,10 +1,28 @@
-class ReplyModel {
+import 'package:hive/hive.dart';
+
+part 'reply_model.g.dart';
+
+@HiveType(typeId: 2)
+class ReplyModel extends HiveObject {
+  @HiveField(0)
   final String id;
+
+  @HiveField(1)
   final String author;
+
+  @HiveField(2)
   final String content;
+
+  @HiveField(3)
   final DateTime timestamp;
+
+  @HiveField(4)
   final String parentId;
+
+  @HiveField(5)
   final String authorName;
+
+  @HiveField(6)
   final String authorProfileImage;
 
   ReplyModel({
@@ -37,18 +55,6 @@ class ReplyModel {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'author': author,
-      'content': content,
-      'timestamp': timestamp.toIso8601String(),
-      'parentId': parentId,
-      'authorName': authorName,
-      'authorProfileImage': authorProfileImage,
-    };
-  }
-
   factory ReplyModel.fromJson(Map<String, dynamic> json) {
     return ReplyModel(
       id: json['id'],
@@ -59,5 +65,17 @@ class ReplyModel {
       authorName: json['authorName'],
       authorProfileImage: json['authorProfileImage'],
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'author': author,
+      'content': content,
+      'timestamp': timestamp.toIso8601String(),
+      'parentId': parentId,
+      'authorName': authorName,
+      'authorProfileImage': authorProfileImage,
+    };
   }
 }

@@ -1,10 +1,9 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
-import '../services/feed_service.dart';
+import '../services/qiqstr_service.dart';
 import '../screens/note_detail_page.dart';
 import '../screens/profile_page.dart';
 
@@ -21,17 +20,16 @@ class _FeedPageState extends State<FeedPage> {
   final List<NoteModel> feedItems = [];
   final Map<String, List<ReactionModel>> reactionsMap = {};
   final Map<String, List<ReplyModel>> repliesMap = {};
-  late FeedService _feedService;
+  late DataService _dataService;
   final Set<String> cachedNoteIds = {};
   bool isLoadingOlderNotes = false;
-  final Debouncer _debouncer = Debouncer(milliseconds: 300);
-  Timer? _updateTimer;
-  bool _needsUpdate = false;
 
   @override
   void initState() {
     super.initState();
-    _feedService = FeedService(
+    _dataService = DataService(
+      npub: widget.npub,
+      dataType: DataType.Feed,
       onNewNote: _handleNewNote,
       onReactionsUpdated: _handleReactionsUpdated,
       onRepliesUpdated: _handleRepliesUpdated,
@@ -42,9 +40,7 @@ class _FeedPageState extends State<FeedPage> {
 
   @override
   void dispose() {
-    _updateTimer?.cancel();
-    _debouncer.dispose();
-    _feedService.closeConnections();
+    _dataService.closeConnections();
     super.dispose();
   }
 
@@ -57,44 +53,30 @@ class _FeedPageState extends State<FeedPage> {
       } else {
         feedItems.insert(insertIndex, newNote);
       }
-      _feedService.fetchReactionsForNotes([newNote.id]);
-      _feedService.fetchRepliesForNotes([newNote.id]);
-      _needsUpdate = true;
-      _scheduleUpdate();
+      _dataService.fetchReactionsForNotes([newNote.id]);
+      _dataService.fetchRepliesForNotes([newNote.id]);
+      setState(() {});
     }
   }
 
   void _handleReactionsUpdated(String noteId, List<ReactionModel> reactions) {
     reactionsMap[noteId] = reactions;
-    _feedService.saveReactionsToCache();
-    _needsUpdate = true;
-    _scheduleUpdate();
+    _dataService.saveReactionsToCache();
+    setState(() {});
   }
 
   void _handleRepliesUpdated(String noteId, List<ReplyModel> replies) {
     repliesMap[noteId] = replies;
-    _feedService.saveRepliesToCache();
-    _needsUpdate = true;
-    _scheduleUpdate();
-  }
-
-  void _scheduleUpdate() {
-    if (_updateTimer?.isActive ?? false) return;
-    _updateTimer = Timer(Duration(milliseconds: 100), () {
-      if (_needsUpdate) {
-        setState(() {
-          _needsUpdate = false;
-        });
-      }
-    });
+    _dataService.saveRepliesToCache();
+    setState(() {});
   }
 
   Future<void> _initializeRelayConnection() async {
-    await _feedService.initializeConnections(widget.npub);
+    await _dataService.initializeConnections();
   }
 
   Future<void> _loadFeedFromCache() async {
-    await _feedService.loadNotesFromCache((cachedNote) {
+    await _dataService.loadNotesFromCache((cachedNote) {
       if (!cachedNoteIds.contains(cachedNote.id)) {
         cachedNoteIds.add(cachedNote.id);
         feedItems.add(cachedNote);
@@ -106,12 +88,12 @@ class _FeedPageState extends State<FeedPage> {
   }
 
   void _loadReactionsAndReplies() {
-    _feedService.loadReactionsFromCache().then((_) {
-      reactionsMap.addAll(_feedService.reactionsMap);
+    _dataService.loadReactionsFromCache().then((_) {
+      reactionsMap.addAll(_dataService.reactionsMap);
       setState(() {});
     });
-    _feedService.loadRepliesFromCache().then((_) {
-      repliesMap.addAll(_feedService.repliesMap);
+    _dataService.loadRepliesFromCache().then((_) {
+      repliesMap.addAll(_dataService.repliesMap);
       setState(() {});
     });
   }
@@ -122,13 +104,13 @@ class _FeedPageState extends State<FeedPage> {
       isLoadingOlderNotes = true;
     });
 
-    final followingList = await _feedService.getFollowingList(widget.npub);
-    await _feedService.fetchOlderNotes(followingList, (olderNote) {
+    final followingList = await _dataService.getFollowingList(widget.npub);
+    await _dataService.fetchOlderNotes(followingList, (olderNote) {
       if (!cachedNoteIds.contains(olderNote.id)) {
         cachedNoteIds.add(olderNote.id);
         feedItems.add(olderNote);
-        _feedService.fetchReactionsForNotes([olderNote.id]);
-        _feedService.fetchRepliesForNotes([olderNote.id]);
+        _dataService.fetchReactionsForNotes([olderNote.id]);
+        _dataService.fetchRepliesForNotes([olderNote.id]);
       }
     });
 
@@ -146,8 +128,7 @@ class _FeedPageState extends State<FeedPage> {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => ProfilePage(npub: widget.npub),
-              ),
+                  builder: (context) => ProfilePage(npub: widget.npub)),
             );
           },
           child: Row(
@@ -170,12 +151,11 @@ class _FeedPageState extends State<FeedPage> {
           ? const Center(child: CircularProgressIndicator())
           : NotificationListener<ScrollNotification>(
               onNotification: (scrollInfo) {
-                _debouncer.run(() {
-                  if (scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 200 &&
-                      !isLoadingOlderNotes) {
-                    _loadOlderNotes();
-                  }
-                });
+                if (scrollInfo.metrics.pixels >=
+                        scrollInfo.metrics.maxScrollExtent - 200 &&
+                    !isLoadingOlderNotes) {
+                  _loadOlderNotes();
+                }
                 return false;
               },
               child: ListView.builder(
@@ -196,8 +176,8 @@ class _FeedPageState extends State<FeedPage> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => ProfilePage(npub: item.author),
-                          ),
+                              builder: (context) =>
+                                  ProfilePage(npub: item.author)),
                         );
                       },
                       child: Text(item.authorName),
@@ -209,19 +189,22 @@ class _FeedPageState extends State<FeedPage> {
                         const SizedBox(height: 4),
                         Text(
                           _formatTimestamp(item.timestamp),
-                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                          style:
+                              const TextStyle(fontSize: 12, color: Colors.grey),
                         ),
                         const SizedBox(height: 4),
                         Row(
                           children: [
                             Text(
                               'Reactions: ${reactions.length}',
-                              style: const TextStyle(fontSize: 12, color: Colors.grey),
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.grey),
                             ),
                             const SizedBox(width: 16),
                             Text(
                               'Replies: ${replies.length}',
-                              style: const TextStyle(fontSize: 12, color: Colors.grey),
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.grey),
                             ),
                           ],
                         ),
@@ -232,13 +215,14 @@ class _FeedPageState extends State<FeedPage> {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => ProfilePage(npub: item.author),
-                          ),
+                              builder: (context) =>
+                                  ProfilePage(npub: item.author)),
                         );
                       },
                       child: item.authorProfileImage.isNotEmpty
                           ? CircleAvatar(
-                              backgroundImage: CachedNetworkImageProvider(item.authorProfileImage),
+                              backgroundImage: CachedNetworkImageProvider(
+                                  item.authorProfileImage),
                             )
                           : const CircleAvatar(child: Icon(Icons.person)),
                     ),
@@ -246,14 +230,13 @@ class _FeedPageState extends State<FeedPage> {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => NoteDetailPage(
-                            note: item,
-                            reactions: reactions,
-                            replies: replies,
-                            reactionsMap: reactionsMap,
-                            repliesMap: repliesMap,
-                          ),
-                        ),
+                            builder: (context) => NoteDetailPage(
+                                  note: item,
+                                  reactions: reactions,
+                                  replies: replies,
+                                  reactionsMap: reactionsMap,
+                                  repliesMap: repliesMap,
+                                )),
                       );
                     },
                   );
@@ -266,22 +249,5 @@ class _FeedPageState extends State<FeedPage> {
   String _formatTimestamp(DateTime timestamp) {
     return "${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} "
         "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}:${timestamp.second.toString().padLeft(2, '0')}";
-  }
-}
-
-class Debouncer {
-  final int milliseconds;
-  VoidCallback? action;
-  Timer? _timer;
-
-  Debouncer({required this.milliseconds});
-
-  void run(VoidCallback action) {
-    _timer?.cancel();
-    _timer = Timer(Duration(milliseconds: milliseconds), action);
-  }
-
-  void dispose() {
-    _timer?.cancel();
   }
 }

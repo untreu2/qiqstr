@@ -1,9 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:hive/hive.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'models/note_model.dart';
+import 'models/reaction_model.dart';
+import 'models/reply_model.dart';
 import 'screens/login_page.dart';
 import 'screens/feed_page.dart';
 
-void main() => runApp(Qiqstr());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Hive.initFlutter();
+
+  Hive.registerAdapter(NoteModelAdapter());
+  Hive.registerAdapter(ReactionModelAdapter());
+  Hive.registerAdapter(ReplyModelAdapter());
+
+  runApp(Qiqstr());
+}
 
 class Qiqstr extends StatelessWidget {
   @override

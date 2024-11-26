@@ -5,7 +5,7 @@ import 'package:palette_generator/palette_generator.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
-import '../services/profile_service.dart';
+import '../services/qiqstr_service.dart';
 import '../screens/note_detail_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -23,11 +23,7 @@ class _ProfilePageState extends State<ProfilePage> {
   final Map<String, List<ReplyModel>> repliesMap = {};
   final Set<String> cachedNoteIds = {};
   bool isLoadingOlderNotes = false;
-  final Debouncer _debouncer = Debouncer(milliseconds: 300);
-  Timer? _updateTimer;
-  bool _needsUpdate = false;
-
-  ProfileService? _profileService;
+  DataService? _dataService;
 
   Map<String, String> userProfile = {
     'name': 'Loading...',
@@ -42,11 +38,11 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void initState() {
     super.initState();
-    _initializeProfileService();
+    _initializeDataService();
   }
 
-  void _initializeProfileService() {
-    _profileService?.closeConnections();
+  void _initializeDataService() {
+    _dataService?.closeConnections();
 
     profileNotes.clear();
     reactionsMap.clear();
@@ -61,8 +57,9 @@ class _ProfilePageState extends State<ProfilePage> {
     };
     backgroundColor = Colors.blueAccent.withOpacity(0.1);
 
-    _profileService = ProfileService(
+    _dataService = DataService(
       npub: widget.npub,
+      dataType: DataType.Profile,
       onNewNote: _handleNewNote,
       onReactionsUpdated: _handleReactionsUpdated,
       onRepliesUpdated: _handleRepliesUpdated,
@@ -81,60 +78,44 @@ class _ProfilePageState extends State<ProfilePage> {
       } else {
         profileNotes.insert(insertIndex, newNote);
       }
-      _profileService!.fetchReactionsForNotes([newNote.id]);
-      _profileService!.fetchRepliesForNotes([newNote.id]);
-      _needsUpdate = true;
-      _scheduleUpdate();
+      _dataService!.fetchReactionsForNotes([newNote.id]);
+      _dataService!.fetchRepliesForNotes([newNote.id]);
+      setState(() {});
     }
   }
 
   void _handleReactionsUpdated(String noteId, List<ReactionModel> reactions) {
     reactionsMap[noteId] = reactions;
-    _profileService!.saveReactionsToCache();
-    _needsUpdate = true;
-    _scheduleUpdate();
+    _dataService!.saveReactionsToCache();
+    setState(() {});
   }
 
   void _handleRepliesUpdated(String noteId, List<ReplyModel> replies) {
     repliesMap[noteId] = replies;
-    _profileService!.saveRepliesToCache();
-    _needsUpdate = true;
-    _scheduleUpdate();
-  }
-
-  void _scheduleUpdate() {
-    if (_updateTimer?.isActive ?? false) return;
-    _updateTimer = Timer(Duration(milliseconds: 100), () {
-      if (_needsUpdate) {
-        setState(() {
-          _needsUpdate = false;
-        });
-      }
-    });
+    _dataService!.saveRepliesToCache();
+    setState(() {});
   }
 
   @override
   void didUpdateWidget(covariant ProfilePage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.npub != widget.npub) {
-      _initializeProfileService();
+      _initializeDataService();
     }
   }
 
   @override
   void dispose() {
-    _updateTimer?.cancel();
-    _profileService?.closeConnections();
-    _profileService = null;
-    _debouncer.dispose();
+    _dataService?.closeConnections();
+    _dataService = null;
     super.dispose();
   }
 
   Future<void> _initializeRelayConnection() async {
-    if (_profileService == null) return;
-    await _profileService!.initializeConnections();
+    if (_dataService == null) return;
+    await _dataService!.initializeConnections();
 
-    _profileService!.getCachedUserProfile(widget.npub).then((profile) {
+    _dataService!.getCachedUserProfile(widget.npub).then((profile) {
       if (!mounted) return;
       setState(() {
         userProfile = profile;
@@ -146,8 +127,8 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadProfileFromCache() async {
-    if (_profileService == null) return;
-    await _profileService!.loadNotesFromCache((cachedNote) {
+    if (_dataService == null) return;
+    await _dataService!.loadNotesFromCache((cachedNote) {
       if (!cachedNoteIds.contains(cachedNote.id)) {
         cachedNoteIds.add(cachedNote.id);
         profileNotes.add(cachedNote);
@@ -159,28 +140,28 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _loadReactionsAndReplies() {
-    _profileService!.loadReactionsFromCache().then((_) {
-      reactionsMap.addAll(_profileService!.reactionsMap);
+    _dataService!.loadReactionsFromCache().then((_) {
+      reactionsMap.addAll(_dataService!.reactionsMap);
       setState(() {});
     });
-    _profileService!.loadRepliesFromCache().then((_) {
-      repliesMap.addAll(_profileService!.repliesMap);
+    _dataService!.loadRepliesFromCache().then((_) {
+      repliesMap.addAll(_dataService!.repliesMap);
       setState(() {});
     });
   }
 
   Future<void> _loadOlderNotes() async {
-    if (_profileService == null || isLoadingOlderNotes) return;
+    if (_dataService == null || isLoadingOlderNotes) return;
     setState(() {
       isLoadingOlderNotes = true;
     });
 
-    await _profileService!.fetchOlderNotes([widget.npub], (olderNote) {
+    await _dataService!.fetchOlderNotes([widget.npub], (olderNote) {
       if (!cachedNoteIds.contains(olderNote.id)) {
         cachedNoteIds.add(olderNote.id);
         profileNotes.add(olderNote);
-        _profileService!.fetchReactionsForNotes([olderNote.id]);
-        _profileService!.fetchRepliesForNotes([olderNote.id]);
+        _dataService!.fetchReactionsForNotes([olderNote.id]);
+        _dataService!.fetchRepliesForNotes([olderNote.id]);
       }
     });
 
@@ -239,18 +220,12 @@ class _ProfilePageState extends State<ProfilePage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ProfilePage(npub: widget.npub),
-                        ),
-                      );
-                    },
+                    onTap: () {},
                     child: userProfile['profileImage']!.isNotEmpty
                         ? CircleAvatar(
                             radius: 30,
-                            backgroundImage: CachedNetworkImageProvider(userProfile['profileImage']!),
+                            backgroundImage:
+                                CachedNetworkImageProvider(userProfile['profileImage']!),
                           )
                         : const CircleAvatar(
                             radius: 30,
@@ -262,19 +237,9 @@ class _ProfilePageState extends State<ProfilePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ProfilePage(npub: widget.npub),
-                              ),
-                            );
-                          },
-                          child: Text(
-                            userProfile['name']!,
-                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                          ),
+                        Text(
+                          userProfile['name']!,
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
                         if (userProfile['about']!.isNotEmpty)
@@ -313,14 +278,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       final replies = repliesMap[item.id] ?? [];
                       return ListTile(
                         title: GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ProfilePage(npub: item.author),
-                              ),
-                            );
-                          },
+                          onTap: () {},
                           child: Text(item.authorName),
                         ),
                         subtitle: Column(
@@ -337,29 +295,25 @@ class _ProfilePageState extends State<ProfilePage> {
                               children: [
                                 Text(
                                   'Reactions: ${reactions.length}',
-                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                  style:
+                                      const TextStyle(fontSize: 12, color: Colors.grey),
                                 ),
                                 const SizedBox(width: 16),
                                 Text(
                                   'Replies: ${replies.length}',
-                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                  style:
+                                      const TextStyle(fontSize: 12, color: Colors.grey),
                                 ),
                               ],
                             ),
                           ],
                         ),
                         trailing: GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ProfilePage(npub: item.author),
-                              ),
-                            );
-                          },
+                          onTap: () {},
                           child: item.authorProfileImage.isNotEmpty
                               ? CircleAvatar(
-                                  backgroundImage: CachedNetworkImageProvider(item.authorProfileImage),
+                                  backgroundImage:
+                                      CachedNetworkImageProvider(item.authorProfileImage),
                                 )
                               : const CircleAvatar(child: Icon(Icons.person)),
                         ),
@@ -367,14 +321,13 @@ class _ProfilePageState extends State<ProfilePage> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => NoteDetailPage(
-                                note: item,
-                                reactions: reactions,
-                                replies: replies,
-                                reactionsMap: reactionsMap,
-                                repliesMap: repliesMap,
-                              ),
-                            ),
+                                builder: (context) => NoteDetailPage(
+                                      note: item,
+                                      reactions: reactions,
+                                      replies: replies,
+                                      reactionsMap: reactionsMap,
+                                      repliesMap: repliesMap,
+                                    )),
                           );
                         },
                       );
@@ -397,22 +350,5 @@ class _ProfilePageState extends State<ProfilePage> {
   String _formatTimestamp(DateTime timestamp) {
     return "${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} "
         "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}:${timestamp.second.toString().padLeft(2, '0')}";
-  }
-}
-
-class Debouncer {
-  final int milliseconds;
-  VoidCallback? action;
-  Timer? _timer;
-
-  Debouncer({required this.milliseconds});
-
-  void run(VoidCallback action) {
-    _timer?.cancel();
-    _timer = Timer(Duration(milliseconds: milliseconds), action);
-  }
-
-  void dispose() {
-    _timer?.cancel();
   }
 }

@@ -1,9 +1,25 @@
-class ReactionModel {
+import 'package:hive/hive.dart';
+
+part 'reaction_model.g.dart';
+
+@HiveType(typeId: 1)
+class ReactionModel extends HiveObject {
+  @HiveField(0)
   final String id;
+
+  @HiveField(1)
   final String author;
+
+  @HiveField(2)
   final String content;
+
+  @HiveField(3)
   final DateTime timestamp;
+
+  @HiveField(4)
   final String authorName;
+
+  @HiveField(5)
   final String authorProfileImage;
 
   ReactionModel({
@@ -26,17 +42,6 @@ class ReactionModel {
     );
   }
 
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'author': author,
-      'content': content,
-      'timestamp': timestamp.toIso8601String(),
-      'authorName': authorName,
-      'authorProfileImage': authorProfileImage,
-    };
-  }
-
   factory ReactionModel.fromJson(Map<String, dynamic> json) {
     return ReactionModel(
       id: json['id'],
@@ -46,5 +51,16 @@ class ReactionModel {
       authorName: json['authorName'],
       authorProfileImage: json['authorProfileImage'],
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'author': author,
+      'content': content,
+      'timestamp': timestamp.toIso8601String(),
+      'authorName': authorName,
+      'authorProfileImage': authorProfileImage,
+    };
   }
 }

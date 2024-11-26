@@ -1,9 +1,25 @@
-class NoteModel {
+import 'package:hive/hive.dart';
+
+part 'note_model.g.dart';
+
+@HiveType(typeId: 0)
+class NoteModel extends HiveObject {
+  @HiveField(0)
   final String id;
+
+  @HiveField(1)
   final String content;
+
+  @HiveField(2)
   final String author;
+
+  @HiveField(3)
   final String authorName;
+
+  @HiveField(4)
   final String authorProfileImage;
+
+  @HiveField(5)
   final DateTime timestamp;
 
   NoteModel({
