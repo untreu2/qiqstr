@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:hive/hive.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
 import '../services/qiqstr_service.dart';
 import 'note_detail_page.dart';
 import 'profile_page.dart';
+import 'login_page.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -137,12 +139,63 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
+  Future<void> _logoutAndClearData() async {
+    await Hive.deleteFromDisk();
+
+    await _dataService.closeConnections();
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const LoginPage()),
+      (Route<dynamic> route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isInitializing && feedItems.isEmpty) {
       return Scaffold(
         appBar: AppBar(
-          leading: GestureDetector(
+          leading: IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: _logoutAndClearData,
+          ),
+          title: const Text('Latest Notes'),
+          actions: [
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ProfilePage(npub: widget.npub)),
+                );
+              },
+              child: Row(
+                children: const [
+                  Text(
+                    'Profile',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                    ),
+                  ),
+                  SizedBox(width: 16),
+                ],
+              ),
+            ),
+          ],
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.logout),
+          onPressed: _logoutAndClearData,
+        ),
+        title: const Text('Latest Notes'),
+        actions: [
+          GestureDetector(
             onTap: () {
               Navigator.push(
                 context,
@@ -151,47 +204,18 @@ class _FeedPageState extends State<FeedPage> {
             },
             child: Row(
               children: const [
-                SizedBox(width: 16),
                 Text(
                   'Profile',
                   style: TextStyle(
-                    color: Colors.grey,
+                    color: Colors.white,
                     fontSize: 16,
                   ),
                 ),
+                SizedBox(width: 16),
               ],
             ),
           ),
-          leadingWidth: 120,
-          title: const Text('Latest Notes'),
-        ),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-    return Scaffold(
-      appBar: AppBar(
-        leading: GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => ProfilePage(npub: widget.npub)),
-            );
-          },
-          child: Row(
-            children: const [
-              SizedBox(width: 16),
-              Text(
-                'Profile',
-                style: TextStyle(
-                  color: Colors.grey,
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-        ),
-        leadingWidth: 120,
-        title: const Text('Latest Notes'),
+        ],
       ),
       body: feedItems.isEmpty
           ? const Center(child: Text('No feed items available.'))
