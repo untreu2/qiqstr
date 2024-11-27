@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:hive/hive.dart'; 
+import 'package:hive/hive.dart';
 import 'package:palette_generator/palette_generator.dart';
 import '../models/note_model.dart';
 import '../services/qiqstr_service.dart';
@@ -179,59 +179,11 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     if (isLoading && profileNotes.isEmpty) {
       return Scaffold(
-        appBar: AppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logoutAndClearData,
-          ),
-          title: const Text('Profile'),
-          actions: [
-            GestureDetector(
-              onTap: () {},
-              child: Row(
-                children: const [
-                  Text(
-                    'Profile',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                    ),
-                  ),
-                  SizedBox(width: 16),
-                ],
-              ),
-            ),
-          ],
-        ),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.logout),
-          onPressed: _logoutAndClearData,
-        ),
-        title: const Text('Profile'),
-        actions: [
-          GestureDetector(
-            onTap: () {},
-            child: Row(
-              children: const [
-                Text(
-                  'Profile',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                  ),
-                ),
-                SizedBox(width: 16),
-              ],
-            ),
-          ),
-        ],
-      ),
       body: NotificationListener<ScrollNotification>(
         onNotification: (scrollInfo) {
           if (scrollInfo.metrics.pixels >=
@@ -267,19 +219,16 @@ class _ProfilePageState extends State<ProfilePage> {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    GestureDetector(
-                      onTap: () {},
-                      child: userProfile['profileImage']!.isNotEmpty
-                          ? CircleAvatar(
-                              radius: 30,
-                              backgroundImage:
-                                  CachedNetworkImageProvider(userProfile['profileImage']!),
-                            )
-                          : const CircleAvatar(
-                              radius: 30,
-                              child: Icon(Icons.person, size: 30),
-                            ),
-                    ),
+                    userProfile['profileImage']!.isNotEmpty
+                        ? CircleAvatar(
+                            radius: 30,
+                            backgroundImage:
+                                CachedNetworkImageProvider(userProfile['profileImage']!),
+                          )
+                        : const CircleAvatar(
+                            radius: 30,
+                            child: Icon(Icons.person, size: 30),
+                          ),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Column(
@@ -299,7 +248,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           const SizedBox(height: 8),
                           if (userProfile['nip05']!.isNotEmpty)
                             Text(
-                              '${userProfile['nip05']}',
+                              userProfile['nip05']!,
                               style: const TextStyle(fontSize: 12, color: Colors.grey),
                             ),
                         ],
@@ -326,17 +275,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         }
                         final item = profileNotes[index];
                         return ListTile(
-                          title: GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (context) =>
-                                        ProfilePage(npub: item.author)),
-                              );
-                            },
-                            child: Text(item.authorName),
-                          ),
+                          title: Text(item.authorName),
                           subtitle: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -348,22 +287,12 @@ class _ProfilePageState extends State<ProfilePage> {
                               ),
                             ],
                           ),
-                          trailing: GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (context) =>
-                                        ProfilePage(npub: item.author)),
-                              );
-                            },
-                            child: item.authorProfileImage.isNotEmpty
-                                ? CircleAvatar(
-                                    backgroundImage: CachedNetworkImageProvider(
-                                        item.authorProfileImage),
-                                  )
-                                : const CircleAvatar(child: Icon(Icons.person)),
-                          ),
+                          trailing: item.authorProfileImage.isNotEmpty
+                              ? CircleAvatar(
+                                  backgroundImage: CachedNetworkImageProvider(
+                                      item.authorProfileImage),
+                                )
+                              : const CircleAvatar(child: Icon(Icons.person)),
                           onTap: () {
                             Navigator.push(
                               context,

@@ -23,6 +23,7 @@ class _FeedPageState extends State<FeedPage> {
   bool isLoadingOlderNotes = false;
   bool isInitializing = true;
   late DataService _dataService;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
@@ -137,69 +138,33 @@ class _FeedPageState extends State<FeedPage> {
   Widget build(BuildContext context) {
     if (isInitializing && feedItems.isEmpty) {
       return Scaffold(
+        key: _scaffoldKey,
         appBar: AppBar(
+          title: const Text('Following'),
           leading: IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logoutAndClearData,
+            icon: const Icon(Icons.menu),
+            onPressed: () {
+              _scaffoldKey.currentState?.openDrawer();
+            },
           ),
-          title: const Text('Latest Notes'),
-          actions: [
-            GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => ProfilePage(npub: widget.npub)),
-                );
-              },
-              child: Row(
-                children: const [
-                  Text(
-                    'Profile',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                    ),
-                  ),
-                  SizedBox(width: 16),
-                ],
-              ),
-            ),
-          ],
         ),
+        drawer: _buildSidebar(),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
+      key: _scaffoldKey,
       appBar: AppBar(
+        title: const Text('Following'),
         leading: IconButton(
-          icon: const Icon(Icons.logout),
-          onPressed: _logoutAndClearData,
+          icon: const Icon(Icons.menu),
+          onPressed: () {
+            _scaffoldKey.currentState?.openDrawer();
+          },
         ),
-        title: const Text('Latest Notes'),
-        actions: [
-          GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => ProfilePage(npub: widget.npub)),
-              );
-            },
-            child: Row(
-              children: const [
-                Text(
-                  'Profile',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                  ),
-                ),
-                SizedBox(width: 16),
-              ],
-            ),
-          ),
-        ],
       ),
+      drawer: _buildSidebar(),
       body: feedItems.isEmpty
           ? const Center(child: Text('No feed items available.'))
           : NotificationListener<ScrollNotification>(
@@ -273,6 +238,30 @@ class _FeedPageState extends State<FeedPage> {
                 },
               ),
             ),
+    );
+  }
+
+Widget _buildSidebar() {
+  return Drawer(
+    child: ListView(
+      children: [
+        ListTile(
+          leading: const Icon(Icons.person),
+          title: const Text('Profile'),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => ProfilePage(npub: widget.npub)),
+            );
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.logout),
+          title: const Text('Logout'),
+          onTap: _logoutAndClearData,
+        ),
+        ],
+      ),
     );
   }
 
