@@ -8,6 +8,8 @@ import '../services/qiqstr_service.dart';
 import 'note_detail_page.dart';
 import 'profile_page.dart';
 import 'login_page.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -22,10 +24,10 @@ class _FeedPageState extends State<FeedPage> {
   final List<NoteModel> feedItems = [];
   final Map<String, List<ReactionModel>> reactionsMap = {};
   final Map<String, List<ReplyModel>> repliesMap = {};
-  late DataService _dataService;
   final Set<String> cachedNoteIds = {};
   bool isLoadingOlderNotes = false;
   bool isInitializing = true;
+  late DataService _dataService;
 
   @override
   void initState() {
@@ -43,9 +45,7 @@ class _FeedPageState extends State<FeedPage> {
   Future<void> _initializeFeed() async {
     try {
       await _dataService.initialize();
-
       await _loadFeedFromCache();
-
       await _dataService.initializeConnections();
 
       if (mounted) {
@@ -72,7 +72,8 @@ class _FeedPageState extends State<FeedPage> {
   void _handleNewNote(NoteModel newNote) {
     if (!cachedNoteIds.contains(newNote.id)) {
       cachedNoteIds.add(newNote.id);
-      int insertIndex = feedItems.indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
+      int insertIndex =
+          feedItems.indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
       if (insertIndex == -1) {
         feedItems.add(newNote);
       } else {
@@ -104,10 +105,12 @@ class _FeedPageState extends State<FeedPage> {
   }
 
   Future<void> _loadFeedFromCache() async {
-    await _dataService.loadNotesFromCache((cachedNote) {
-      if (!cachedNoteIds.contains(cachedNote.id)) {
-        cachedNoteIds.add(cachedNote.id);
-        feedItems.add(cachedNote);
+    await _dataService.loadNotesFromCache((cachedNotes) {
+      for (var cachedNote in cachedNotes) {
+        if (!cachedNoteIds.contains(cachedNote.id)) {
+          cachedNoteIds.add(cachedNote.id);
+          feedItems.add(cachedNote);
+        }
       }
     });
     feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
@@ -148,21 +151,26 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
-  Future<void> _logoutAndClearData() async {
-    try {
-      await Hive.deleteFromDisk();
+Future<void> _logoutAndClearData() async {
+  try {
+    const secureStorage = FlutterSecureStorage();
 
-      await _dataService.closeConnections();
+    await secureStorage.deleteAll();
 
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-        (Route<dynamic> route) => false,
-      );
-    } catch (e) {
-      print('Error during logout: $e');
-    }
+    await Hive.deleteFromDisk();
+
+    await _dataService.closeConnections();
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const LoginPage()),
+      (Route<dynamic> route) => false,
+    );
+  } catch (e) {
+    print('Error during logout: $e');
   }
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -200,6 +208,7 @@ class _FeedPageState extends State<FeedPage> {
         body: const Center(child: CircularProgressIndicator()),
       );
     }
+
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
@@ -297,7 +306,8 @@ class _FeedPageState extends State<FeedPage> {
                       },
                       child: item.authorProfileImage.isNotEmpty
                           ? CircleAvatar(
-                              backgroundImage: CachedNetworkImageProvider(item.authorProfileImage),
+                              backgroundImage:
+                                  CachedNetworkImageProvider(item.authorProfileImage),
                             )
                           : const CircleAvatar(child: Icon(Icons.person)),
                     ),

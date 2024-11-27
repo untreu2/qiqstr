@@ -1,14 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:hive/hive.dart';
+import 'package:hive/hive.dart'; 
 import 'package:palette_generator/palette_generator.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
 import '../services/qiqstr_service.dart';
 import 'note_detail_page.dart';
-import 'login_page.dart'; 
+import 'login_page.dart';
 
 class ProfilePage extends StatefulWidget {
   final String npub;
@@ -45,29 +45,49 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _initializeDataService() async {
-    _dataService = DataService(
-      npub: widget.npub,
-      dataType: DataType.Profile,
-      onNewNote: _handleNewNote,
-      onReactionsUpdated: _handleReactionsUpdated,
-      onRepliesUpdated: _handleRepliesUpdated,
-    );
+    try {
+      _dataService = DataService(
+        npub: widget.npub,
+        dataType: DataType.Profile,
+        onNewNote: _handleNewNote,
+        onReactionsUpdated: _handleReactionsUpdated,
+        onRepliesUpdated: _handleRepliesUpdated,
+      );
 
-    await _dataService.initialize();
-    await _loadProfileFromCache();
-    await _initializeRelayConnection();
+      await _dataService.initialize();
 
-    if (mounted) {
-      setState(() {
-        isLoading = false;
-      });
+      await _loadProfileFromCache();
+
+      await _dataService.initializeConnections();
+
+      await _updateUserProfile();
+
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error initializing profile: $e');
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
+  }
+
+  @override
+  void dispose() {
+    _dataService.closeConnections();
+    super.dispose();
   }
 
   void _handleNewNote(NoteModel newNote) {
     if (!cachedNoteIds.contains(newNote.id)) {
       cachedNoteIds.add(newNote.id);
-      int insertIndex = profileNotes.indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
+      int insertIndex =
+          profileNotes.indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
       if (insertIndex == -1) {
         profileNotes.add(newNote);
       } else {
@@ -98,38 +118,13 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  @override
-  void didUpdateWidget(covariant ProfilePage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.npub != widget.npub) {
-      _initializeDataService();
-    }
-  }
-
-  @override
-  void dispose() {
-    _dataService.closeConnections();
-    super.dispose();
-  }
-
-  Future<void> _initializeRelayConnection() async {
-    await _dataService.initializeConnections();
-
-    final profile = await _dataService.getCachedUserProfile(widget.npub);
-    if (!mounted) return;
-    setState(() {
-      userProfile = profile;
-    });
-    if (userProfile['profileImage']!.isNotEmpty) {
-      _updateBackgroundColor(userProfile['profileImage']!);
-    }
-  }
-
   Future<void> _loadProfileFromCache() async {
-    await _dataService.loadNotesFromCache((cachedNote) {
-      if (!cachedNoteIds.contains(cachedNote.id)) {
-        cachedNoteIds.add(cachedNote.id);
-        profileNotes.add(cachedNote);
+    await _dataService.loadNotesFromCache((cachedNotes) {
+      for (var cachedNote in cachedNotes) {
+        if (!cachedNoteIds.contains(cachedNote.id)) {
+          cachedNoteIds.add(cachedNote.id);
+          profileNotes.add(cachedNote);
+        }
       }
     });
     profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
@@ -141,6 +136,21 @@ class _ProfilePageState extends State<ProfilePage> {
 
     if (mounted) {
       setState(() {});
+    }
+  }
+
+  Future<void> _initializeRelayConnection() async {
+    await _dataService.initializeConnections();
+  }
+
+  Future<void> _updateUserProfile() async {
+    final profile = await _dataService.getCachedUserProfile(widget.npub);
+    if (!mounted) return;
+    setState(() {
+      userProfile = profile;
+    });
+    if (userProfile['profileImage']!.isNotEmpty) {
+      await _updateBackgroundColor(userProfile['profileImage']!);
     }
   }
 
@@ -185,15 +195,19 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _logoutAndClearData() async {
-    await Hive.deleteFromDisk();
+    try {
+      await Hive.deleteFromDisk();
 
-    await _dataService.closeConnections();
+      await _dataService.closeConnections();
 
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginPage()),
-      (Route<dynamic> route) => false,
-    );
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginPage()),
+        (Route<dynamic> route) => false,
+      );
+    } catch (e) {
+      print('Error during logout: $e');
+    }
   }
 
   @override
@@ -209,10 +223,6 @@ class _ProfilePageState extends State<ProfilePage> {
           actions: [
             GestureDetector(
               onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => ProfilePage(npub: widget.npub)),
-                );
               },
               child: Row(
                 children: const [
@@ -243,10 +253,6 @@ class _ProfilePageState extends State<ProfilePage> {
         actions: [
           GestureDetector(
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => ProfilePage(npub: widget.npub)),
-              );
             },
             child: Row(
               children: const [
@@ -299,7 +305,8 @@ class _ProfilePageState extends State<ProfilePage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     GestureDetector(
-                      onTap: () {},
+                      onTap: () {
+                      },
                       child: userProfile['profileImage']!.isNotEmpty
                           ? CircleAvatar(
                               radius: 30,
@@ -318,7 +325,8 @@ class _ProfilePageState extends State<ProfilePage> {
                         children: [
                           Text(
                             userProfile['name']!,
-                            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                                fontSize: 20, fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 8),
                           if (userProfile['about']!.isNotEmpty)
@@ -359,7 +367,14 @@ class _ProfilePageState extends State<ProfilePage> {
                         final replies = repliesMap[item.id] ?? [];
                         return ListTile(
                           title: GestureDetector(
-                            onTap: () {},
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (context) =>
+                                        ProfilePage(npub: item.author)),
+                              );
+                            },
                             child: Text(item.authorName),
                           ),
                           subtitle: Column(
@@ -376,25 +391,30 @@ class _ProfilePageState extends State<ProfilePage> {
                                 children: [
                                   Text(
                                     'Reactions: ${reactions.length}',
-                                    style:
-                                        const TextStyle(fontSize: 12, color: Colors.grey),
+                                    style: const TextStyle(fontSize: 12, color: Colors.grey),
                                   ),
                                   const SizedBox(width: 16),
                                   Text(
                                     'Replies: ${replies.length}',
-                                    style:
-                                        const TextStyle(fontSize: 12, color: Colors.grey),
+                                    style: const TextStyle(fontSize: 12, color: Colors.grey),
                                   ),
                                 ],
                               ),
                             ],
                           ),
                           trailing: GestureDetector(
-                            onTap: () {},
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (context) =>
+                                        ProfilePage(npub: item.author)),
+                              );
+                            },
                             child: item.authorProfileImage.isNotEmpty
                                 ? CircleAvatar(
-                                    backgroundImage:
-                                        CachedNetworkImageProvider(item.authorProfileImage),
+                                    backgroundImage: CachedNetworkImageProvider(
+                                        item.authorProfileImage),
                                   )
                                 : const CircleAvatar(child: Icon(Icons.person)),
                           ),

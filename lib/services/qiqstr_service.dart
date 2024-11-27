@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:io';
 import 'package:hive/hive.dart';
 import 'package:nostr/nostr.dart';
@@ -7,6 +8,7 @@ import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
 import 'package:uuid/uuid.dart';
+
 
 enum DataType { Feed, Profile }
 
@@ -25,7 +27,7 @@ class DataService {
   Map<String, WebSocket> _webSockets = {};
   bool isConnecting = false;
   Timer? _checkNewNotesTimer;
-  int currentLimit = 30; 
+  int currentLimit = 20;
   int currentOffset = 0;
 
   List<String> relayUrls = [];
@@ -39,6 +41,10 @@ class DataService {
   bool _isInitialized = false;
   bool _isClosed = false;
 
+  late ReceivePort _receivePort;
+  late Isolate _isolate;
+  late SendPort _sendPort;
+
   DataService({
     required this.npub,
     required this.dataType,
@@ -48,11 +54,53 @@ class DataService {
   });
 
   Future<void> initialize() async {
-    notesBox = await Hive.openBox('notes_${dataType.toString()}_${npub}');
-    reactionsBox = await Hive.openBox('reactions_${dataType.toString()}_${npub}');
-    repliesBox = await Hive.openBox('replies_${dataType.toString()}_${npub}');
+    notesBox = await Hive.openBox('notes_${dataType.toString()}_$npub');
+    reactionsBox = await Hive.openBox('reactions_${dataType.toString()}_$npub');
+    repliesBox = await Hive.openBox('replies_${dataType.toString()}_$npub');
 
     _isInitialized = true;
+
+    await _initializeIsolate();
+  }
+
+  Future<void> _initializeIsolate() async {
+    _receivePort = ReceivePort();
+    _isolate = await Isolate.spawn(_dataProcessor, _receivePort.sendPort);
+
+    _receivePort.listen((message) {
+      if (message is SendPort) {
+        _sendPort = message;
+      } else if (message is List<NoteModel>) {
+        notes.addAll(message);
+        notes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        onNewNote?.call(message.last);
+        saveNotesToCache();
+        fetchReactionsForNotes([message.last.id]);
+        fetchRepliesForNotes([message.last.id]);
+      } else if (message is String && message.startsWith('Error:')) {
+        print(message);
+      }
+    });
+  }
+
+  static void _dataProcessor(SendPort sendPort) {
+    final ReceivePort isolateReceivePort = ReceivePort();
+    sendPort.send(isolateReceivePort.sendPort);
+
+    isolateReceivePort.listen((message) {
+      if (message is String) {
+        try {
+          final List<dynamic> jsonData = json.decode(message);
+          final List<NoteModel> parsedNotes =
+              jsonData.map((json) => NoteModel.fromJson(json)).toList();
+          sendPort.send(parsedNotes);
+        } catch (e) {
+          sendPort.send('Error: $e');
+        }
+      } else if (message == 'close') {
+        isolateReceivePort.close();
+      }
+    });
   }
 
   Future<void> initializeConnections() async {
@@ -70,13 +118,9 @@ class DataService {
     ];
 
     relayUrls = popularRelays;
-    List<String> targetNpubs = [];
-
-    if (dataType == DataType.Feed) {
-      targetNpubs = await getFollowingList(npub);
-    } else {
-      targetNpubs = [npub];
-    }
+    List<String> targetNpubs = dataType == DataType.Feed
+        ? await getFollowingList(npub)
+        : [npub];
 
     if (_isClosed) return;
 
@@ -93,7 +137,7 @@ class DataService {
       if (_isClosed) return;
       if (!_webSockets.containsKey(relayUrl) || _webSockets[relayUrl]?.readyState == WebSocket.closed) {
         try {
-          final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 2));
+          final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
           if (_isClosed) {
             webSocket.close();
             return;
@@ -114,6 +158,7 @@ class DataService {
           _fetchReplies(webSocket, targetNpubs);
         } catch (e) {
           _webSockets.remove(relayUrl);
+          print('Error connecting to relay $relayUrl: $e');
         }
       }
     }));
@@ -145,18 +190,26 @@ class DataService {
 
   Future<void> saveNotesToCache() async {
     if (notesBox.isOpen) {
-      await notesBox.put('notes', notes.map((note) => note.toJson()).toList());
+      String jsonString = json.encode(notes.map((note) => note.toJson()).toList());
+      await notesBox.put('notes_json', jsonString);
     }
   }
 
-  Future<void> loadNotesFromCache(Function(NoteModel) onLoad) async {
+  Future<void> loadNotesFromCache(Function(List<NoteModel>) onLoad) async {
     if (!notesBox.isOpen) return;
-    List<dynamic> cachedNotesJson = notesBox.get('notes', defaultValue: []);
-    for (var noteJson in cachedNotesJson) {
-      final noteModel = NoteModel.fromJson(Map<String, dynamic>.from(noteJson));
-      eventIds.add(noteModel.id);
-      onLoad(noteModel);
-    }
+    String jsonString = notesBox.get('notes_json', defaultValue: '');
+
+    if (jsonString.isEmpty) return;
+
+    _sendPort.send(jsonString);
+
+    _receivePort.listen((message) {
+      if (message is List<NoteModel>) {
+        onLoad(message);
+      } else if (message is String && message.startsWith('Error:')) {
+        print(message);
+      }
+    });
   }
 
   Future<void> saveReactionsToCache() async {
@@ -204,19 +257,6 @@ class DataService {
   String generate64RandomHexChars() {
     var uuid = Uuid();
     return uuid.v4().replaceAll('-', '');
-  }
-
-  void _fetchNotes(WebSocket webSocket, List<String> targetNpubs) {
-    if (_isClosed) return;
-    Filter filter;
-    if (dataType == DataType.Feed) {
-      filter = Filter(authors: targetNpubs, kinds: [1], limit: currentLimit, since: currentOffset);
-    } else {
-      filter = Filter(authors: [npub], kinds: [1], limit: currentLimit, since: currentOffset);
-    }
-    final request = Request(generate64RandomHexChars(), [filter]);
-    webSocket.add(request.serialize());
-    currentOffset += currentLimit;
   }
 
   void _fetchProfiles(WebSocket webSocket, List<String> targetNpubs) {
@@ -288,7 +328,9 @@ class DataService {
           }
 
           if (!isReply) {
-            if (dataType == DataType.Feed && targetNpubs.isNotEmpty && !targetNpubs.contains(author)) {
+            if (dataType == DataType.Feed &&
+                targetNpubs.isNotEmpty &&
+                !targetNpubs.contains(author)) {
               return;
             }
           }
@@ -303,14 +345,14 @@ class DataService {
               author: author,
               authorName: authorProfile['name'] ?? 'Anonymous',
               authorProfileImage: authorProfile['profileImage'] ?? '',
-              timestamp: DateTime.fromMillisecondsSinceEpoch(
-                  (eventData['created_at'] as int) * 1000),
+              timestamp:
+                  DateTime.fromMillisecondsSinceEpoch((eventData['created_at'] as int) * 1000),
             );
 
             notes.add(newEvent);
             notes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
             eventIds.add(eventId);
-            await saveNotesToCache();
+            saveNotesToCache();
 
             if (onNewNote != null) {
               onNewNote!(newEvent);
@@ -323,7 +365,8 @@ class DataService {
           await _handleReactionEvent(eventData);
         } else if (kind == 0) {
           final author = eventData['pubkey'] as String;
-          final profileContent = jsonDecode(eventData['content'] as String) as Map<String, dynamic>;
+          final profileContent =
+              jsonDecode(eventData['content'] as String) as Map<String, dynamic>;
           final userName = profileContent['name'] as String? ?? 'Anonymous';
           final profileImage = profileContent['picture'] as String? ?? '';
           final about = profileContent['about'] as String? ?? '';
@@ -459,7 +502,7 @@ class DataService {
       webSocket.add(request.serialize());
     }
 
-    Future.delayed(Duration(seconds: 2), () {
+    Future.delayed(Duration(seconds: 5), () {
       if (!completer.isCompleted) {
         profileCache[npub] = {
           'name': 'Anonymous',
@@ -482,7 +525,7 @@ class DataService {
 
     for (var relayUrl in relayUrls) {
       try {
-        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 2));
+        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
         if (_isClosed) {
           webSocket.close();
           return [];
@@ -511,7 +554,7 @@ class DataService {
 
         webSocket.add(request.serialize());
 
-        await completer.future.timeout(Duration(seconds: 2), onTimeout: () {
+        await completer.future.timeout(Duration(seconds: 5), onTimeout: () {
           webSocket.close();
         });
 
@@ -543,7 +586,7 @@ class DataService {
 
   void _startCheckingForNewData(List<String> targetNpubs) {
     _checkNewNotesTimer?.cancel();
-    _checkNewNotesTimer = Timer.periodic(Duration(seconds: 2), (timer) {
+    _checkNewNotesTimer = Timer.periodic(Duration(seconds: 10), (timer) {
       if (_isClosed) {
         timer.cancel();
         return;
@@ -555,7 +598,7 @@ class DataService {
 
       for (var relayUrl in _webSockets.keys) {
         final webSocket = _webSockets[relayUrl]!;
-        _fetchNotes(webSocket, targetNpubs);
+        fetchNotes(targetNpubs);
         _fetchProfiles(webSocket, targetNpubs);
         fetchReactionsForNotes(allIds);
         fetchRepliesForNotes(allParentIds.toList());
@@ -567,6 +610,11 @@ class DataService {
     if (_isClosed) return;
     _isClosed = true;
     _checkNewNotesTimer?.cancel();
+
+    _sendPort.send('close');
+    _isolate.kill(priority: Isolate.immediate);
+    _receivePort.close();
+
     for (var ws in _webSockets.values) {
       ws.close();
     }
