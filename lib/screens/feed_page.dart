@@ -2,14 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:hive/hive.dart';
 import '../models/note_model.dart';
-import '../models/reaction_model.dart';
-import '../models/reply_model.dart';
 import '../services/qiqstr_service.dart';
 import 'note_detail_page.dart';
 import 'profile_page.dart';
 import 'login_page.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -22,8 +19,6 @@ class FeedPage extends StatefulWidget {
 
 class _FeedPageState extends State<FeedPage> {
   final List<NoteModel> feedItems = [];
-  final Map<String, List<ReactionModel>> reactionsMap = {};
-  final Map<String, List<ReplyModel>> repliesMap = {};
   final Set<String> cachedNoteIds = {};
   bool isLoadingOlderNotes = false;
   bool isInitializing = true;
@@ -36,8 +31,6 @@ class _FeedPageState extends State<FeedPage> {
       npub: widget.npub,
       dataType: DataType.Feed,
       onNewNote: _handleNewNote,
-      onReactionsUpdated: _handleReactionsUpdated,
-      onRepliesUpdated: _handleRepliesUpdated,
     );
     _initializeFeed();
   }
@@ -47,7 +40,6 @@ class _FeedPageState extends State<FeedPage> {
       await _dataService.initialize();
       await _loadFeedFromCache();
       await _dataService.initializeConnections();
-
       if (mounted) {
         setState(() {
           isInitializing = false;
@@ -79,8 +71,6 @@ class _FeedPageState extends State<FeedPage> {
       } else {
         feedItems.insert(insertIndex, newNote);
       }
-      _dataService.fetchReactionsForNotes([newNote.id]);
-      _dataService.fetchRepliesForNotes([newNote.id]);
       _dataService.saveNotesToCache();
       if (mounted) {
         setState(() {});
@@ -88,38 +78,18 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
-  void _handleReactionsUpdated(String noteId, List<ReactionModel> reactions) {
-    reactionsMap[noteId] = reactions;
-    _dataService.saveReactionsToCache();
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  void _handleRepliesUpdated(String noteId, List<ReplyModel> replies) {
-    repliesMap[noteId] = replies;
-    _dataService.saveRepliesToCache();
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
   Future<void> _loadFeedFromCache() async {
     await _dataService.loadNotesFromCache((cachedNotes) {
-      for (var cachedNote in cachedNotes) {
-        if (!cachedNoteIds.contains(cachedNote.id)) {
-          cachedNoteIds.add(cachedNote.id);
-          feedItems.add(cachedNote);
+      setState(() {
+        for (var cachedNote in cachedNotes) {
+          if (!cachedNoteIds.contains(cachedNote.id)) {
+            cachedNoteIds.add(cachedNote.id);
+            feedItems.add(cachedNote);
+          }
         }
-      }
+        feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      });
     });
-    feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-    await _dataService.loadReactionsFromCache();
-    await _dataService.loadRepliesFromCache();
-    reactionsMap.addAll(_dataService.reactionsMap);
-    repliesMap.addAll(_dataService.repliesMap);
-
     if (mounted) {
       setState(() {});
     }
@@ -130,20 +100,16 @@ class _FeedPageState extends State<FeedPage> {
     setState(() {
       isLoadingOlderNotes = true;
     });
-
     final followingList = await _dataService.getFollowingList(widget.npub);
     await _dataService.fetchOlderNotes(followingList, (olderNote) {
       if (!cachedNoteIds.contains(olderNote.id)) {
         cachedNoteIds.add(olderNote.id);
         feedItems.add(olderNote);
-        _dataService.fetchReactionsForNotes([olderNote.id]);
-        _dataService.fetchRepliesForNotes([olderNote.id]);
         if (mounted) {
           setState(() {});
         }
       }
     });
-
     if (mounted) {
       setState(() {
         isLoadingOlderNotes = false;
@@ -151,26 +117,21 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
-Future<void> _logoutAndClearData() async {
-  try {
-    const secureStorage = FlutterSecureStorage();
-
-    await secureStorage.deleteAll();
-
-    await Hive.deleteFromDisk();
-
-    await _dataService.closeConnections();
-
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginPage()),
-      (Route<dynamic> route) => false,
-    );
-  } catch (e) {
-    print('Error during logout: $e');
+  Future<void> _logoutAndClearData() async {
+    try {
+      const secureStorage = FlutterSecureStorage();
+      await secureStorage.deleteAll();
+      await Hive.deleteFromDisk();
+      await _dataService.closeConnections();
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginPage()),
+        (Route<dynamic> route) => false,
+      );
+    } catch (e) {
+      print('Error during logout: $e');
+    }
   }
-}
-
 
   @override
   Widget build(BuildContext context) {
@@ -260,8 +221,6 @@ Future<void> _logoutAndClearData() async {
                     );
                   }
                   final item = feedItems[index];
-                  final reactions = reactionsMap[item.id] ?? [];
-                  final replies = repliesMap[item.id] ?? [];
                   return ListTile(
                     title: GestureDetector(
                       onTap: () {
@@ -280,20 +239,6 @@ Future<void> _logoutAndClearData() async {
                         Text(
                           _formatTimestamp(item.timestamp),
                           style: const TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Text(
-                              'Reactions: ${reactions.length}',
-                              style: const TextStyle(fontSize: 12, color: Colors.grey),
-                            ),
-                            const SizedBox(width: 16),
-                            Text(
-                              'Replies: ${replies.length}',
-                              style: const TextStyle(fontSize: 12, color: Colors.grey),
-                            ),
-                          ],
                         ),
                       ],
                     ),
@@ -317,10 +262,10 @@ Future<void> _logoutAndClearData() async {
                         MaterialPageRoute(
                             builder: (context) => NoteDetailPage(
                                   note: item,
-                                  reactions: reactions,
-                                  replies: replies,
-                                  reactionsMap: reactionsMap,
-                                  repliesMap: repliesMap,
+                                  reactions: [],
+                                  replies: [],
+                                  reactionsMap: {},
+                                  repliesMap: {},
                                 )),
                       );
                     },

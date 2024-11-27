@@ -4,8 +4,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:hive/hive.dart'; 
 import 'package:palette_generator/palette_generator.dart';
 import '../models/note_model.dart';
-import '../models/reaction_model.dart';
-import '../models/reply_model.dart';
 import '../services/qiqstr_service.dart';
 import 'note_detail_page.dart';
 import 'login_page.dart';
@@ -21,8 +19,6 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   final List<NoteModel> profileNotes = [];
-  final Map<String, List<ReactionModel>> reactionsMap = {};
-  final Map<String, List<ReplyModel>> repliesMap = {};
   final Set<String> cachedNoteIds = {};
   bool isLoadingOlderNotes = false;
   bool isLoading = true;
@@ -50,8 +46,6 @@ class _ProfilePageState extends State<ProfilePage> {
         npub: widget.npub,
         dataType: DataType.Profile,
         onNewNote: _handleNewNote,
-        onReactionsUpdated: _handleReactionsUpdated,
-        onRepliesUpdated: _handleRepliesUpdated,
       );
 
       await _dataService.initialize();
@@ -93,28 +87,10 @@ class _ProfilePageState extends State<ProfilePage> {
       } else {
         profileNotes.insert(insertIndex, newNote);
       }
-      _dataService.fetchReactionsForNotes([newNote.id]);
-      _dataService.fetchRepliesForNotes([newNote.id]);
       _dataService.saveNotesToCache();
       if (mounted) {
         setState(() {});
       }
-    }
-  }
-
-  void _handleReactionsUpdated(String noteId, List<ReactionModel> reactions) {
-    reactionsMap[noteId] = reactions;
-    _dataService.saveReactionsToCache();
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  void _handleRepliesUpdated(String noteId, List<ReplyModel> replies) {
-    repliesMap[noteId] = replies;
-    _dataService.saveRepliesToCache();
-    if (mounted) {
-      setState(() {});
     }
   }
 
@@ -129,18 +105,9 @@ class _ProfilePageState extends State<ProfilePage> {
     });
     profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-    await _dataService.loadReactionsFromCache();
-    await _dataService.loadRepliesFromCache();
-    reactionsMap.addAll(_dataService.reactionsMap);
-    repliesMap.addAll(_dataService.repliesMap);
-
     if (mounted) {
       setState(() {});
     }
-  }
-
-  Future<void> _initializeRelayConnection() async {
-    await _dataService.initializeConnections();
   }
 
   Future<void> _updateUserProfile() async {
@@ -164,8 +131,6 @@ class _ProfilePageState extends State<ProfilePage> {
       if (!cachedNoteIds.contains(olderNote.id)) {
         cachedNoteIds.add(olderNote.id);
         profileNotes.add(olderNote);
-        _dataService.fetchReactionsForNotes([olderNote.id]);
-        _dataService.fetchRepliesForNotes([olderNote.id]);
         if (mounted) {
           setState(() {});
         }
@@ -222,8 +187,7 @@ class _ProfilePageState extends State<ProfilePage> {
           title: const Text('Profile'),
           actions: [
             GestureDetector(
-              onTap: () {
-              },
+              onTap: () {},
               child: Row(
                 children: const [
                   Text(
@@ -252,8 +216,7 @@ class _ProfilePageState extends State<ProfilePage> {
         title: const Text('Profile'),
         actions: [
           GestureDetector(
-            onTap: () {
-            },
+            onTap: () {},
             child: Row(
               children: const [
                 Text(
@@ -305,8 +268,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     GestureDetector(
-                      onTap: () {
-                      },
+                      onTap: () {},
                       child: userProfile['profileImage']!.isNotEmpty
                           ? CircleAvatar(
                               radius: 30,
@@ -363,8 +325,6 @@ class _ProfilePageState extends State<ProfilePage> {
                               : const SizedBox.shrink();
                         }
                         final item = profileNotes[index];
-                        final reactions = reactionsMap[item.id] ?? [];
-                        final replies = repliesMap[item.id] ?? [];
                         return ListTile(
                           title: GestureDetector(
                             onTap: () {
@@ -385,20 +345,6 @@ class _ProfilePageState extends State<ProfilePage> {
                               Text(
                                 _formatTimestamp(item.timestamp),
                                 style: const TextStyle(fontSize: 12, color: Colors.grey),
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Text(
-                                    'Reactions: ${reactions.length}',
-                                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  Text(
-                                    'Replies: ${replies.length}',
-                                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                  ),
-                                ],
                               ),
                             ],
                           ),
@@ -424,10 +370,10 @@ class _ProfilePageState extends State<ProfilePage> {
                               MaterialPageRoute(
                                   builder: (context) => NoteDetailPage(
                                         note: item,
-                                        reactions: reactions,
-                                        replies: replies,
-                                        reactionsMap: reactionsMap,
-                                        repliesMap: repliesMap,
+                                        reactions: [],
+                                        replies: [],
+                                        reactionsMap: {},
+                                        repliesMap: {},
                                       )),
                             );
                           },

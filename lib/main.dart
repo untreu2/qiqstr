@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:hive/hive.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'models/note_model.dart';
 import 'models/reaction_model.dart';
@@ -10,16 +9,44 @@ import 'screens/feed_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Hive.initFlutter();
 
-  Hive.registerAdapter(NoteModelAdapter());
-  Hive.registerAdapter(ReactionModelAdapter());
-  Hive.registerAdapter(ReplyModelAdapter());
+  try {
+    await Hive.initFlutter();
 
-  runApp(Qiqstr());
+    Hive.registerAdapter(NoteModelAdapter());
+    Hive.registerAdapter(ReactionModelAdapter());
+    Hive.registerAdapter(ReplyModelAdapter());
+
+    const FlutterSecureStorage secureStorage = FlutterSecureStorage();
+    String? privateKey = await secureStorage.read(key: 'privateKey');
+    String? npub = await secureStorage.read(key: 'npub');
+
+    if (privateKey != null && npub != null) {
+      await Hive.openBox<NoteModel>('notes_Feed_$npub');
+      await Hive.openBox<ReactionModel>('reactions_Feed_$npub');
+      await Hive.openBox<ReplyModel>('replies_Feed_$npub');
+
+      await Hive.openBox<NoteModel>('notes_Profile_$npub');
+      await Hive.openBox<ReactionModel>('reactions_Profile_$npub');
+      await Hive.openBox<ReplyModel>('replies_Profile_$npub');
+    }
+
+    runApp(Qiqstr(
+      isLoggedIn: privateKey != null && npub != null,
+      npub: npub,
+    ));
+  } catch (e) {
+    print('Error initializing Hive: $e');
+    runApp(const HiveErrorApp());
+  }
 }
 
 class Qiqstr extends StatelessWidget {
+  final bool isLoggedIn;
+  final String? npub;
+
+  const Qiqstr({Key? key, required this.isLoggedIn, this.npub}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -37,18 +64,22 @@ class Qiqstr extends StatelessWidget {
           onError: Colors.black,
         ),
       ),
-      home: SplashScreen(),
+      home: isLoggedIn
+          ? FeedPage(npub: npub!)
+          : const SplashScreen(),
     );
   }
 }
 
 class SplashScreen extends StatefulWidget {
+  const SplashScreen({Key? key}) : super(key: key);
+
   @override
   _SplashScreenState createState() => _SplashScreenState();
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   @override
   void initState() {
@@ -57,22 +88,37 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _checkStoredNsec() async {
-    String? privateKey = await _secureStorage.read(key: 'privateKey');
-    String? npub = await _secureStorage.read(key: 'npub');
+    try {
+      String? privateKey = await _secureStorage.read(key: 'privateKey');
+      String? npub = await _secureStorage.read(key: 'npub');
 
-    if (privateKey != null && npub != null) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => FeedPage(npub: npub),
-        ),
-      );
-    } else {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const LoginPage(),
-        ),
+      if (privateKey != null && npub != null) {
+        await Hive.openBox<NoteModel>('notes_Feed_$npub');
+        await Hive.openBox<ReactionModel>('reactions_Feed_$npub');
+        await Hive.openBox<ReplyModel>('replies_Feed_$npub');
+
+        await Hive.openBox<NoteModel>('notes_Profile_$npub');
+        await Hive.openBox<ReactionModel>('reactions_Profile_$npub');
+        await Hive.openBox<ReplyModel>('replies_Profile_$npub');
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => FeedPage(npub: npub),
+          ),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const LoginPage(),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error reading secure storage or opening boxes: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("An error occurred while loading the app.")),
       );
     }
   }
@@ -81,6 +127,28 @@ class _SplashScreenState extends State<SplashScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+class HiveErrorApp extends StatelessWidget {
+  const HiveErrorApp({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(
+          title: const Text('Initialization Error'),
+        ),
+        body: const Center(
+          child: Text(
+            'An error occurred while initializing the application.',
+            style: TextStyle(fontSize: 18),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
     );
   }
 }
