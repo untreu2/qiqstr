@@ -372,13 +372,11 @@ class DataService {
 
   Future<void> _fetchProfiles(WebSocket webSocket, List<String> targetNpubs) async {
     if (_isClosed) return;
-    List<String> profilesToFetch = targetNpubs.where((npub) => !profileCache.containsKey(npub)).toList();
-    if (profilesToFetch.isEmpty) return;
     final request = Request(generate64RandomHexChars(), [
-      Filter(authors: profilesToFetch, kinds: [0]),
+      Filter(authors: targetNpubs, kinds: [0]),
     ]);
     webSocket.add(request.serialize());
-    print('Sent profile fetch request for profiles: $profilesToFetch');
+    print('Sent profile fetch request.');
   }
 
   Future<void> _fetchReplies(WebSocket webSocket, List<String> targetNpubs) async {

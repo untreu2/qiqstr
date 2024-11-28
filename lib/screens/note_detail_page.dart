@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nostr/nostr.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:video_player/video_player.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
@@ -9,14 +11,18 @@ import 'profile_page.dart';
 
 class NoteDetailPage extends StatefulWidget {
   final NoteModel note;
+  final List<ReactionModel> reactions;
+  final List<ReplyModel> replies;
+  final Map<String, List<ReactionModel>> reactionsMap;
+  final Map<String, List<ReplyModel>> repliesMap;
 
   const NoteDetailPage({
     Key? key,
     required this.note,
-    required List<ReactionModel> reactions,
-    required List<ReplyModel> replies,
-    required Map<String, List<ReactionModel>> reactionsMap,
-    required Map<String, List<ReplyModel>> repliesMap,
+    required this.reactions,
+    required this.replies,
+    required this.reactionsMap,
+    required this.repliesMap,
   }) : super(key: key);
 
   @override
@@ -88,7 +94,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     final formattedNoteId = Nip19.encodeNote(widget.note.id);
     Clipboard.setData(ClipboardData(text: formattedNoteId));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Note ID copied to clipboard.")),
+      const SnackBar(content: Text("Note ID kopyalandı.")),
     );
   }
 
@@ -180,15 +186,71 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text(reply.content),
-                const SizedBox(height: 8),
-                _buildReplyTree(reply.id, replyTree, depth + 1),
+                ..._buildParsedContent(reply.content),
               ],
             ),
           ),
         );
       }).toList(),
     );
+  }
+
+
+  Map<String, dynamic> _parseContent(String content) {
+    final RegExp mediaRegExp = RegExp(
+        r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|mp4))',
+        caseSensitive: false);
+    final Iterable<RegExpMatch> matches = mediaRegExp.allMatches(content);
+
+    final List<String> mediaUrls = matches.map((m) => m.group(0)!).toList();
+
+    final String text = content.replaceAll(mediaRegExp, '').trim();
+
+    return {
+      'text': text,
+      'mediaUrls': mediaUrls,
+    };
+  }
+
+  List<Widget> _buildParsedContent(String content) {
+    final parsedContent = _parseContent(content);
+    List<Widget> widgets = [];
+
+    if (parsedContent['text'] != null && (parsedContent['text'] as String).isNotEmpty) {
+      widgets.add(Text(
+        parsedContent['text'],
+        style: Theme.of(context).textTheme.bodyLarge,
+      ));
+      widgets.add(const SizedBox(height: 8));
+    }
+
+    if (parsedContent['mediaUrls'] != null && (parsedContent['mediaUrls'] as List).isNotEmpty) {
+      widgets.addAll(_buildMediaPreviews(parsedContent['mediaUrls'] as List<String>));
+      widgets.add(const SizedBox(height: 8));
+    }
+
+    return widgets;
+  }
+
+  List<Widget> _buildMediaPreviews(List<String> mediaUrls) {
+    return mediaUrls.map((url) {
+      if (url.toLowerCase().endsWith('.mp4')) {
+        return Padding(
+          padding: const EdgeInsets.only(top: 8.0),
+          child: _VideoPreview(url: url),
+        );
+      } else {
+        return Padding(
+          padding: const EdgeInsets.only(top: 8.0),
+          child: CachedNetworkImage(
+            imageUrl: url,
+            placeholder: (context, url) =>
+                const Center(child: CircularProgressIndicator()),
+            errorWidget: (context, url, error) => const Icon(Icons.error),
+          ),
+        );
+      }
+    }).toList();
   }
 
   String _formatTimestamp(DateTime timestamp) {
@@ -198,7 +260,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final replyTree = _organizeReplies(replies);
+    _organizeReplies(replies);
     final reactionCount = reactions.length;
     final replyCount = replies.length;
 
@@ -235,21 +297,22 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                                   ),
                           ),
                           const SizedBox(width: 12),
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ProfilePage(npub: widget.note.author),
-                                ),
-                              );
-                            },
-                            child: Text(
-                              widget.note.authorName,
-                              style: Theme.of(context).textTheme.titleMedium,
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ProfilePage(npub: widget.note.author),
+                                  ),
+                                );
+                              },
+                              child: Text(
+                                widget.note.authorName,
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
                             ),
                           ),
-                          const Spacer(),
                           IconButton(
                             icon: const Icon(Icons.copy),
                             onPressed: () => _copyNoteId(context),
@@ -257,10 +320,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      Text(
-                        widget.note.content,
-                        style: Theme.of(context).textTheme.bodyLarge,
-                      ),
+                      ..._buildParsedContent(widget.note.content),
                       const SizedBox(height: 16),
                       Row(
                         children: [
@@ -284,7 +344,8 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                       if (reactions.isNotEmpty) ...[
                         const Text(
                           'Reactions:',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style:
+                              TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
                         Wrap(
@@ -341,7 +402,8 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                       ],
                       const Text(
                         'Replies:',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style:
+                            TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
                       replies.isEmpty
@@ -349,11 +411,169 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                               'No replies yet.',
                               style: TextStyle(color: Colors.grey),
                             )
-                          : _buildReplyTree(widget.note.id, replyTree, 0),
+                          : ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
+                              itemCount: replies.length,
+                              itemBuilder: (context, index) {
+                                final reply = replies[index];
+                                return Padding(
+                                  padding: EdgeInsets.only(
+                                      left: 16.0 * _getReplyDepth(reply),
+                                      top: 8.0,
+                                      bottom: 8.0),
+                                  child: InkWell(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => NoteDetailPage(
+                                            note: NoteModel(
+                                              id: reply.id,
+                                              content: reply.content,
+                                              author: reply.author,
+                                              authorName: reply.authorName,
+                                              authorProfileImage: reply.authorProfileImage,
+                                              timestamp: reply.timestamp,
+                                            ),
+                                            reactions: [],
+                                            replies: [],
+                                            reactionsMap: {},
+                                            repliesMap: {},
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            GestureDetector(
+                                              onTap: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) => ProfilePage(npub: reply.author),
+                                                  ),
+                                                );
+                                              },
+                                              child: reply.authorProfileImage.isNotEmpty
+                                                  ? CircleAvatar(
+                                                      backgroundImage:
+                                                          NetworkImage(reply.authorProfileImage),
+                                                      radius: 16,
+                                                    )
+                                                  : const CircleAvatar(
+                                                      child: Icon(Icons.person, size: 16),
+                                                      radius: 16,
+                                                    ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            GestureDetector(
+                                              onTap: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) => ProfilePage(npub: reply.author),
+                                                  ),
+                                                );
+                                              },
+                                              child: Text(
+                                                reply.authorName,
+                                                style: const TextStyle(fontWeight: FontWeight.bold),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              _formatTimestamp(reply.timestamp),
+                                              style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        ..._buildParsedContent(reply.content),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                     ],
                   ),
                 ),
               ),
+      ),
+    );
+  }
+
+  int _getReplyDepth(ReplyModel reply) {
+    return 0;
+  }
+}
+
+class _VideoPreview extends StatefulWidget {
+  final String url;
+
+  const _VideoPreview({Key? key, required this.url}) : super(key: key);
+
+  @override
+  __VideoPreviewState createState() => __VideoPreviewState();
+}
+
+class __VideoPreviewState extends State<_VideoPreview> {
+  late VideoPlayerController _controller;
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.network(widget.url)
+      ..initialize().then((_) {
+        setState(() {
+          _isInitialized = true;
+        });
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _togglePlay() {
+    setState(() {
+      if (_controller.value.isPlaying) {
+        _controller.pause();
+      } else {
+        _controller.play();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_isInitialized) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    return GestureDetector(
+      onTap: _togglePlay,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          AspectRatio(
+            aspectRatio: _controller.value.aspectRatio,
+            child: VideoPlayer(_controller),
+          ),
+          if (!_controller.value.isPlaying)
+            const Icon(
+              Icons.play_circle_outline,
+              size: 64.0,
+              color: Colors.white70,
+            ),
+        ],
       ),
     );
   }
