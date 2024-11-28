@@ -188,55 +188,56 @@ class _FeedPageState extends State<FeedPage> {
                   }
                   final item = feedItems[index];
                   final parsedContent = _parseContent(item.content);
-                  return ListTile(
-                    title: GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => ProfilePage(npub: item.author)),
-                        );
-                      },
-                      child: Text(item.authorName),
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(parsedContent['text'] ?? ''),
-                        const SizedBox(height: 4),
-                        if (parsedContent['mediaUrls'] != null && parsedContent['mediaUrls'].isNotEmpty)
-                          _buildMediaPreviews(parsedContent['mediaUrls']),
-                        const SizedBox(height: 4),
-                        Text(
-                          _formatTimestamp(item.timestamp),
-                          style: const TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                      ],
-                    ),
-                    trailing: GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (context) => ProfilePage(npub: item.author)),
-                        );
-                      },
-                      child: item.authorProfileImage.isNotEmpty
-                          ? CircleAvatar(
-                              backgroundImage:
-                                  CachedNetworkImageProvider(item.authorProfileImage),
-                            )
-                          : const CircleAvatar(child: Icon(Icons.person)),
-                    ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) => NoteDetailPage(
-                                  note: item,
-                                  reactions: [],
-                                  replies: [],
-                                  reactionsMap: {},
-                                  repliesMap: {},
-                                )),
+        return ListTile(
+     title: GestureDetector(
+    onTap: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => ProfilePage(npub: item.author)),
+      );
+    },
+    child: Row(
+      children: [
+        item.authorProfileImage.isNotEmpty
+            ? CircleAvatar(
+                radius: 18,
+                backgroundImage: CachedNetworkImageProvider(item.authorProfileImage),
+              )
+            : const CircleAvatar(
+                radius: 12,
+                child: Icon(Icons.person, size: 16),
+              ),
+        const SizedBox(width: 12),
+        Text(item.authorName),
+      ],
+    ),
+  ),
+  subtitle: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+    const SizedBox(height: 12),
+      Text(parsedContent['text'] ?? ''),
+      const SizedBox(height: 4),
+      if (parsedContent['mediaUrls'] != null && parsedContent['mediaUrls'].isNotEmpty)
+        _buildMediaPreviews(parsedContent['mediaUrls']),
+      const SizedBox(height: 4),
+      Text(
+        _formatTimestamp(item.timestamp),
+        style: const TextStyle(fontSize: 12, color: Colors.grey),
+      ),
+    ],
+  ),
+  onTap: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (context) => NoteDetailPage(
+                note: item,
+                reactions: [],
+                replies: [],
+                reactionsMap: {},
+                repliesMap: {},
+              )),
                       );
                     },
                   );
