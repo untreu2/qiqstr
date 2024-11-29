@@ -291,7 +291,7 @@ class _FeedPageState extends State<FeedPage> {
 
   Map<String, dynamic> _parseContent(String content) {
     final RegExp mediaRegExp = RegExp(
-        r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|mp4))',
+        r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|mp4))',
         caseSensitive: false);
     final Iterable<RegExpMatch> matches = mediaRegExp.allMatches(content);
 
