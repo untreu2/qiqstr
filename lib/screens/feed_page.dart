@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:hive/hive.dart';
-import '../screens/share_note.dart';
+import 'package:qiqstr/screens/share_note.dart';
 import '../models/note_model.dart';
 import '../services/qiqstr_service.dart';
 import 'note_detail_page.dart';
