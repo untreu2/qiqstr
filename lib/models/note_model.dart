@@ -22,6 +22,18 @@ class NoteModel extends HiveObject {
   @HiveField(5)
   final DateTime timestamp;
 
+  @HiveField(6)
+  final bool isRepost;
+
+  @HiveField(7)
+  final String? repostedBy;
+
+  @HiveField(8)
+  final String? repostedByName;
+
+  @HiveField(9)
+  final String? repostedByProfileImage;
+
   NoteModel({
     required this.id,
     required this.content,
@@ -29,6 +41,10 @@ class NoteModel extends HiveObject {
     required this.authorName,
     required this.authorProfileImage,
     required this.timestamp,
+    this.isRepost = false,
+    this.repostedBy,
+    this.repostedByName,
+    this.repostedByProfileImage,
   });
 
   factory NoteModel.fromJson(Map<String, dynamic> json) {
@@ -39,6 +55,10 @@ class NoteModel extends HiveObject {
       authorName: json['authorName'] as String? ?? 'Anonymous',
       authorProfileImage: json['authorProfileImage'] as String? ?? '',
       timestamp: DateTime.fromMillisecondsSinceEpoch((json['timestamp'] as int) * 1000),
+      isRepost: json['isRepost'] as bool? ?? false,
+      repostedBy: json['repostedBy'] as String?,
+      repostedByName: json['repostedByName'] as String?,
+      repostedByProfileImage: json['repostedByProfileImage'] as String?,
     );
   }
 
@@ -50,6 +70,10 @@ class NoteModel extends HiveObject {
       'authorName': authorName,
       'authorProfileImage': authorProfileImage,
       'timestamp': timestamp.millisecondsSinceEpoch ~/ 1000,
+      'isRepost': isRepost,
+      'repostedBy': repostedBy,
+      'repostedByName': repostedByName,
+      'repostedByProfileImage': repostedByProfileImage,
     };
   }
 }

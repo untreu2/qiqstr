@@ -49,7 +49,6 @@ class _FeedPageState extends State<FeedPage> {
         });
       }
     } catch (e) {
-      print('Error initializing feed: $e');
       if (mounted) {
         setState(() {
           isInitializing = false;
@@ -131,9 +130,7 @@ class _FeedPageState extends State<FeedPage> {
         MaterialPageRoute(builder: (context) => const LoginPage()),
         (Route<dynamic> route) => false,
       );
-    } catch (e) {
-      print('Error during logout: $e');
-    }
+    } catch (e) {}
   }
 
   @override
@@ -155,138 +152,173 @@ class _FeedPageState extends State<FeedPage> {
       );
     }
 
-   return Scaffold(
-  key: _scaffoldKey,
-  appBar: AppBar(
-    title: const Text('Following'),
-    leading: IconButton(
-      icon: const Icon(Icons.menu),
-      onPressed: () {
-        _scaffoldKey.currentState?.openDrawer();
-      },
-    ),
-  ),
-  drawer: _buildSidebar(),
-  body: feedItems.isEmpty
-      ? const Center(child: Text('No feed items available.'))
-      : NotificationListener<ScrollNotification>(
-          onNotification: (scrollInfo) {
-            if (scrollInfo.metrics.pixels >=
-                    scrollInfo.metrics.maxScrollExtent - 200 &&
-                !isLoadingOlderNotes) {
-              _loadOlderNotes();
-            }
-            return false;
+    return Scaffold(
+      key: _scaffoldKey,
+      appBar: AppBar(
+        title: const Text('Following'),
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () {
+            _scaffoldKey.currentState?.openDrawer();
           },
-          child: ListView.builder(
-            itemCount: feedItems.length + (isLoadingOlderNotes ? 1 : 0),
-            itemBuilder: (context, index) {
-              if (index == feedItems.length) {
-                return const Padding(
-                  padding: EdgeInsets.all(16.0),
-                  child: Center(child: CircularProgressIndicator()),
-                );
-              }
-              final item = feedItems[index];
-              final parsedContent = _parseContent(item.content);
-              return ListTile(
-                title: GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (context) =>
-                              ProfilePage(npub: item.author)),
+        ),
+      ),
+      drawer: _buildSidebar(),
+      body: feedItems.isEmpty
+          ? const Center(child: Text('No feed items available.'))
+          : NotificationListener<ScrollNotification>(
+              onNotification: (scrollInfo) {
+                if (scrollInfo.metrics.pixels >=
+                        scrollInfo.metrics.maxScrollExtent - 200 &&
+                    !isLoadingOlderNotes) {
+                  _loadOlderNotes();
+                }
+                return false;
+              },
+              child: ListView.builder(
+                itemCount: feedItems.length + (isLoadingOlderNotes ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (index == feedItems.length) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Center(child: CircularProgressIndicator()),
                     );
-                  },
-                  child: Row(
+                  }
+                  final item = feedItems[index];
+                  final parsedContent = _parseContent(item.content);
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      item.authorProfileImage.isNotEmpty
-                          ? CircleAvatar(
-                              radius: 18,
-                              backgroundImage: CachedNetworkImageProvider(
-                                  item.authorProfileImage),
-                            )
-                          : const CircleAvatar(
-                              radius: 12,
-                              child: Icon(Icons.person, size: 16),
+                      if (item.isRepost)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16.0, top: 8.0),
+                          child: GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      ProfilePage(npub: item.repostedBy!),
+                                ),
+                              );
+                            },
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.repeat,
+                                  size: 16.0,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(width: 4.0),
+                                Text(
+                                  'Reposted by ${item.repostedByName}',
+                                  style: const TextStyle(
+                                    fontSize: 12.0,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
                             ),
-                      const SizedBox(width: 12),
-                      Text(item.authorName),
+                          ),
+                        ),
+                      ListTile(
+                        title: GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (context) =>
+                                      ProfilePage(npub: item.author)),
+                            );
+                          },
+                          child: Row(
+                            children: [
+                              item.authorProfileImage.isNotEmpty
+                                  ? CircleAvatar(
+                                      radius: 18,
+                                      backgroundImage: CachedNetworkImageProvider(
+                                          item.authorProfileImage),
+                                    )
+                                  : const CircleAvatar(
+                                      radius: 12,
+                                      child: Icon(Icons.person, size: 16),
+                                    ),
+                              const SizedBox(width: 12),
+                              Text(item.authorName),
+                            ],
+                          ),
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 12),
+                            Text(parsedContent['text'] ?? ''),
+                            const SizedBox(height: 4),
+                            if (parsedContent['mediaUrls'] != null &&
+                                parsedContent['mediaUrls'].isNotEmpty)
+                              _buildMediaPreviews(parsedContent['mediaUrls']),
+                            const SizedBox(height: 4),
+                            Text(
+                              _formatTimestamp(item.timestamp),
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (context) => NoteDetailPage(
+                                      note: item,
+                                      reactions: [],
+                                      replies: [],
+                                      reactionsMap: {},
+                                      repliesMap: {},
+                                    )),
+                          );
+                        },
+                      ),
                     ],
-                  ),
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 12),
-                    Text(parsedContent['text'] ?? ''),
-                    const SizedBox(height: 4),
-                    if (parsedContent['mediaUrls'] != null &&
-                        parsedContent['mediaUrls'].isNotEmpty)
-                      _buildMediaPreviews(parsedContent['mediaUrls']),
-                    const SizedBox(height: 4),
-                    Text(
-                      _formatTimestamp(item.timestamp),
-                      style: const TextStyle(
-                          fontSize: 12, color: Colors.grey),
-                    ),
-                  ],
-                ),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => NoteDetailPage(
-                              note: item,
-                              reactions: [],
-                              replies: [],
-                              reactionsMap: {},
-                              repliesMap: {},
-                            )),
                   );
                 },
-              );
-            },
-          ),
-        ),
-  floatingActionButton: Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-    child: SizedBox(
-      width: double.infinity,
-      height: 48.0,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24.0),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.2), 
-              blurRadius: 20.0, 
-              spreadRadius: 2.0, 
+              ),
             ),
-          ],
-        ),
-        child: FloatingActionButton.extended(
- onPressed: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ShareNotePage(dataService: _dataService),
-      ),
-    );
-  },
-          label: const Text(
-            'Compose a Note',
-            style: TextStyle(fontWeight: FontWeight.bold),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        child: SizedBox(
+          width: double.infinity,
+          height: 48.0,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24.0),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 20.0,
+                  spreadRadius: 2.0,
+                ),
+              ],
+            ),
+            child: FloatingActionButton.extended(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ShareNotePage(dataService: _dataService),
+                  ),
+                );
+              },
+              label: const Text(
+                'Compose a Note',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
           ),
         ),
       ),
-    ),
-  ),
-  floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-);
-
-
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+    );
   }
 
   Map<String, dynamic> _parseContent(String content) {
@@ -335,7 +367,8 @@ class _FeedPageState extends State<FeedPage> {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => ProfilePage(npub: widget.npub)),
+                MaterialPageRoute(
+                    builder: (context) => ProfilePage(npub: widget.npub)),
               );
             },
           ),

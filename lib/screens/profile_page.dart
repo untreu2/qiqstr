@@ -50,11 +50,8 @@ class _ProfilePageState extends State<ProfilePage> {
       );
 
       await _dataService.initialize();
-
       await _loadProfileFromCache();
-
       await _dataService.initializeConnections();
-
       await _updateUserProfile();
 
       if (mounted) {
@@ -63,7 +60,6 @@ class _ProfilePageState extends State<ProfilePage> {
         });
       }
     } catch (e) {
-      print('Error initializing profile: $e');
       if (mounted) {
         setState(() {
           isLoading = false;
@@ -81,8 +77,8 @@ class _ProfilePageState extends State<ProfilePage> {
   void _handleNewNote(NoteModel newNote) {
     if (!cachedNoteIds.contains(newNote.id)) {
       cachedNoteIds.add(newNote.id);
-      int insertIndex =
-          profileNotes.indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
+      int insertIndex = profileNotes
+          .indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
       if (insertIndex == -1) {
         profileNotes.add(newNote);
       } else {
@@ -146,10 +142,12 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _updateBackgroundColor(String imageUrl) async {
     try {
       final PaletteGenerator paletteGenerator =
-          await PaletteGenerator.fromImageProvider(CachedNetworkImageProvider(imageUrl));
+          await PaletteGenerator.fromImageProvider(
+              CachedNetworkImageProvider(imageUrl));
       if (!mounted) return;
       setState(() {
-        backgroundColor = paletteGenerator.dominantColor?.color.withOpacity(0.1) ??
+        backgroundColor = paletteGenerator.dominantColor?.color
+                .withOpacity(0.1) ??
             Colors.blueAccent.withOpacity(0.1);
       });
     } catch (e) {
@@ -163,17 +161,13 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _logoutAndClearData() async {
     try {
       await Hive.deleteFromDisk();
-
       await _dataService.closeConnections();
-
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const LoginPage()),
         (Route<dynamic> route) => false,
       );
-    } catch (e) {
-      print('Error during logout: $e');
-    }
+    } catch (e) {}
   }
 
   @override
@@ -209,7 +203,8 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   errorWidget: (context, url, error) => Container(
                     color: Colors.grey[300],
-                    child: const Center(child: Icon(Icons.broken_image, size: 50)),
+                    child:
+                        const Center(child: Icon(Icons.broken_image, size: 50)),
                   ),
                 ),
               ),
@@ -223,8 +218,8 @@ class _ProfilePageState extends State<ProfilePage> {
                     userProfile['profileImage']!.isNotEmpty
                         ? CircleAvatar(
                             radius: 30,
-                            backgroundImage:
-                                CachedNetworkImageProvider(userProfile['profileImage']!),
+                            backgroundImage: CachedNetworkImageProvider(
+                                userProfile['profileImage']!),
                           )
                         : const CircleAvatar(
                             radius: 30,
@@ -250,7 +245,8 @@ class _ProfilePageState extends State<ProfilePage> {
                           if (userProfile['nip05']!.isNotEmpty)
                             Text(
                               userProfile['nip05']!,
-                              style: const TextStyle(fontSize: 12, color: Colors.grey),
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.grey),
                             ),
                         ],
                       ),
@@ -264,82 +260,123 @@ class _ProfilePageState extends State<ProfilePage> {
                     child: Center(child: Text('No notes available.')),
                   )
                 : SliverList(
-  delegate: SliverChildBuilderDelegate(
-    (context, index) {
-      if (index == profileNotes.length) {
-        return isLoadingOlderNotes
-            ? const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            : const SizedBox.shrink();
-      }
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        if (index == profileNotes.length) {
+                          return isLoadingOlderNotes
+                              ? const Padding(
+                                  padding: EdgeInsets.all(16.0),
+                                  child: Center(
+                                      child: CircularProgressIndicator()),
+                                )
+                              : const SizedBox.shrink();
+                        }
 
-      final item = profileNotes[index];
-      final parsedContent = _parseContent(item.content);
+                        final item = profileNotes[index];
+                        final parsedContent = _parseContent(item.content);
 
-      return Column(
-        children: [
-          ListTile(
-            title: GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => ProfilePage(npub: item.author)),
-                );
-              },
-              child: Row(
-                children: [
-                  item.authorProfileImage.isNotEmpty
-                      ? CircleAvatar(
-                          radius: 18, 
-                          backgroundImage:
-                              CachedNetworkImageProvider(item.authorProfileImage),
-                        )
-                      : const CircleAvatar(
-                          radius: 12,
-                          child: Icon(Icons.person, size: 16),
-                        ),
-                  const SizedBox(width: 8), 
-                  Text(item.authorName),
-                ],
-              ),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 12),
-                Text(parsedContent['text'] ?? ''),
-                const SizedBox(height: 4),
-                if (parsedContent['mediaUrls'] != null &&
-                    parsedContent['mediaUrls']!.isNotEmpty)
-                  _buildMediaPreviews(parsedContent['mediaUrls']!),
-                const SizedBox(height: 4),
-                Text(
-                  _formatTimestamp(item.timestamp),
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-              ],
-            ),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => NoteDetailPage(
-                    note: item,
-                    reactions: [],
-                    replies: [],
-                    reactionsMap: {},
-                    repliesMap: {},
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
-      );
-    },
-    childCount: profileNotes.length + 1,
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (item.isRepost)
+                              Padding(
+                                padding:
+                                    const EdgeInsets.only(left: 16.0, top: 8.0),
+                                child: GestureDetector(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            ProfilePage(npub: item.repostedBy!),
+                                      ),
+                                    );
+                                  },
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.repeat,
+                                        size: 16.0,
+                                        color: Colors.grey,
+                                      ),
+                                      const SizedBox(width: 4.0),
+                                      Text(
+                                        'Reposted by ${item.repostedByName}',
+                                        style: const TextStyle(
+                                          fontSize: 12.0,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ListTile(
+                              title: GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (context) =>
+                                            ProfilePage(npub: item.author)),
+                                  );
+                                },
+                                child: Row(
+                                  children: [
+                                    item.authorProfileImage.isNotEmpty
+                                        ? CircleAvatar(
+                                            radius: 18,
+                                            backgroundImage:
+                                                CachedNetworkImageProvider(
+                                                    item.authorProfileImage),
+                                          )
+                                        : const CircleAvatar(
+                                            radius: 12,
+                                            child:
+                                                Icon(Icons.person, size: 16),
+                                          ),
+                                    const SizedBox(width: 12),
+                                    Text(item.authorName),
+                                  ],
+                                ),
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 12),
+                                  Text(parsedContent['text'] ?? ''),
+                                  const SizedBox(height: 4),
+                                  if (parsedContent['mediaUrls'] != null &&
+                                      parsedContent['mediaUrls'].isNotEmpty)
+                                    _buildMediaPreviews(
+                                        parsedContent['mediaUrls']),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _formatTimestamp(item.timestamp),
+                                    style: const TextStyle(
+                                        fontSize: 12, color: Colors.grey),
+                                  ),
+                                ],
+                              ),
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => NoteDetailPage(
+                                      note: item,
+                                      reactions: [],
+                                      replies: [],
+                                      reactionsMap: {},
+                                      repliesMap: {},
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        );
+                      },
+                      childCount: profileNotes.length + 1,
                     ),
                   ),
           ],
@@ -347,7 +384,6 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
-
 
   Map<String, dynamic> _parseContent(String content) {
     final RegExp mediaRegExp = RegExp(
