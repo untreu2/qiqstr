@@ -46,7 +46,7 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Welcome to Qiqstr!'),
+        title: const Text('WELCOME TO QIQSTR!'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -56,7 +56,7 @@ class _LoginPageState extends State<LoginPage> {
             TextField(
               controller: _nsecController,
               decoration: const InputDecoration(
-                labelText: 'Enter your nsec...',
+                labelText: 'ENTER YOUR NSEC...',
               ),
               obscureText: true,
             ),
@@ -71,7 +71,7 @@ class _LoginPageState extends State<LoginPage> {
                 onPressed: () {
                   _saveNsecAndNpub(_nsecController.text);
                 },
-                child: const Text('Login'),
+                child: const Text('LOGIN'),
               ),
             ),
             const SizedBox(height: 20),

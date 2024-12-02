@@ -51,7 +51,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
         if (_relayConnections.isEmpty) {
           _connectionMessage = 'No relay connections established.';
         } else {
-          _connectionMessage = 'Connected to ${_relayConnections.length} relays.';
+          _connectionMessage = 'CONNECTED TO ${_relayConnections.length} RELAYS.';
         }
       });
     } catch (e) {
@@ -127,7 +127,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
                 controller: _noteController,
                 focusNode: _noteFocusNode,
                 decoration: const InputDecoration(
-                  labelText: 'Enter your note...',
+                  labelText: 'ENTER YOUR NOTE...',
                 ),
                 maxLines: 4,
               ),
@@ -162,7 +162,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
                         color: Colors.white,
                       )
                     : const Text(
-                        'Post',
+                        'POST',
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
               ),

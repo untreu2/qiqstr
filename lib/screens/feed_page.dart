@@ -9,6 +9,7 @@ import 'profile_page.dart';
 import 'login_page.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:video_player/video_player.dart';
+import 'dart:ui';
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -26,6 +27,7 @@ class _FeedPageState extends State<FeedPage> {
   bool isInitializing = true;
   late DataService _dataService;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -59,6 +61,7 @@ class _FeedPageState extends State<FeedPage> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _dataService.closeConnections();
     super.dispose();
   }
@@ -66,8 +69,7 @@ class _FeedPageState extends State<FeedPage> {
   void _handleNewNote(NoteModel newNote) {
     if (!cachedNoteIds.contains(newNote.id)) {
       cachedNoteIds.add(newNote.id);
-      int insertIndex =
-          feedItems.indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
+      int insertIndex = feedItems.indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
       if (insertIndex == -1) {
         feedItems.add(newNote);
       } else {
@@ -138,15 +140,6 @@ class _FeedPageState extends State<FeedPage> {
     if (isInitializing && feedItems.isEmpty) {
       return Scaffold(
         key: _scaffoldKey,
-        appBar: AppBar(
-          title: const Text('Following'),
-          leading: IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () {
-              _scaffoldKey.currentState?.openDrawer();
-            },
-          ),
-        ),
         drawer: _buildSidebar(),
         body: const Center(child: CircularProgressIndicator()),
       );
@@ -154,136 +147,171 @@ class _FeedPageState extends State<FeedPage> {
 
     return Scaffold(
       key: _scaffoldKey,
-      appBar: AppBar(
-        title: const Text('Following'),
-        leading: IconButton(
-          icon: const Icon(Icons.menu),
-          onPressed: () {
-            _scaffoldKey.currentState?.openDrawer();
-          },
-        ),
-      ),
       drawer: _buildSidebar(),
-      body: feedItems.isEmpty
-          ? const Center(child: Text('No feed items available.'))
-          : NotificationListener<ScrollNotification>(
-              onNotification: (scrollInfo) {
-                if (scrollInfo.metrics.pixels >=
-                        scrollInfo.metrics.maxScrollExtent - 200 &&
-                    !isLoadingOlderNotes) {
-                  _loadOlderNotes();
-                }
-                return false;
-              },
-              child: ListView.builder(
-                itemCount: feedItems.length + (isLoadingOlderNotes ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (index == feedItems.length) {
-                    return const Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
+      body: NestedScrollView(
+        controller: _scrollController,
+        headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
+          return [
+            SliverAppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.menu),
+                onPressed: () {
+                  _scaffoldKey.currentState?.openDrawer();
+                },
+              ),
+              title: const Text(
+                'FOLLOWING',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 24.0,
+                ),
+              ),
+              floating: true,
+              snap: false,
+              pinned: false,
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              flexibleSpace: ClipRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    color: Colors.black.withOpacity(0.3),
+                  ),
+                ),
+              ),
+            ),
+          ];
+        },
+        body: feedItems.isEmpty
+            ? const Center(child: Text('No feed items available.'))
+            : NotificationListener<ScrollNotification>(
+                onNotification: (scrollInfo) {
+                  if (scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 200 &&
+                      !isLoadingOlderNotes) {
+                    _loadOlderNotes();
                   }
-                  final item = feedItems[index];
-                  final parsedContent = _parseContent(item.content);
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (item.isRepost)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 16.0, top: 8.0),
-                          child: GestureDetector(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      ProfilePage(npub: item.repostedBy!),
-                                ),
-                              );
-                            },
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.repeat,
-                                  size: 16.0,
-                                  color: Colors.grey,
-                                ),
-                                const SizedBox(width: 4.0),
-                                Text(
-                                  'Reposted by ${item.repostedByName}',
-                                  style: const TextStyle(
-                                    fontSize: 12.0,
+                  return false;
+                },
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  itemCount: feedItems.length + (isLoadingOlderNotes ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == feedItems.length) {
+                      return const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+                    final item = feedItems[index];
+                    final parsedContent = _parseContent(item.content);
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (item.isRepost)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 16.0, top: 8.0),
+                            child: GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ProfilePage(npub: item.repostedBy!),
+                                  ),
+                                );
+                              },
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.repeat,
+                                    size: 16.0,
                                     color: Colors.grey,
                                   ),
-                                ),
+                                  const SizedBox(width: 4.0),
+                                  Text(
+                                    'Reposted by ${item.repostedByName}',
+                                    style: const TextStyle(
+                                      fontSize: 12.0,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => ProfilePage(npub: item.author)),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+                            child: Row(
+                              children: [
+                                item.authorProfileImage.isNotEmpty
+                                    ? CircleAvatar(
+                                        radius: 18,
+                                        backgroundImage:
+                                            CachedNetworkImageProvider(item.authorProfileImage),
+                                      )
+                                    : const CircleAvatar(
+                                        radius: 12,
+                                        child: Icon(Icons.person, size: 16),
+                                      ),
+                                const SizedBox(width: 12),
+                                Text(item.authorName),
                               ],
                             ),
                           ),
                         ),
-                      ListTile(
-                        title: GestureDetector(
+                        GestureDetector(
                           onTap: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                  builder: (context) =>
-                                      ProfilePage(npub: item.author)),
+                                builder: (context) => NoteDetailPage(
+                                  note: item,
+                                  reactions: [],
+                                  replies: [],
+                                  reactionsMap: {},
+                                  repliesMap: {},
+                                ),
+                              ),
                             );
                           },
-                          child: Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              item.authorProfileImage.isNotEmpty
-                                  ? CircleAvatar(
-                                      radius: 18,
-                                      backgroundImage: CachedNetworkImageProvider(
-                                          item.authorProfileImage),
-                                    )
-                                  : const CircleAvatar(
-                                      radius: 12,
-                                      child: Icon(Icons.person, size: 16),
-                                    ),
-                              const SizedBox(width: 12),
-                              Text(item.authorName),
+                              if (parsedContent['text'] != null && parsedContent['text'] != '')
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                  child: Text(parsedContent['text']),
+                                ),
+                              if (parsedContent['text'] != null &&
+                                  parsedContent['text'] != '' &&
+                                  parsedContent['mediaUrls'] != null &&
+                                  parsedContent['mediaUrls'].isNotEmpty)
+                                const SizedBox(height: 16.0),
+                              if (parsedContent['mediaUrls'] != null &&
+                                  parsedContent['mediaUrls'].isNotEmpty)
+                                _buildMediaPreviews(parsedContent['mediaUrls']),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                                child: Text(
+                                  _formatTimestamp(item.timestamp),
+                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                              ),
                             ],
                           ),
                         ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 12),
-                            Text(parsedContent['text'] ?? ''),
-                            const SizedBox(height: 4),
-                            if (parsedContent['mediaUrls'] != null &&
-                                parsedContent['mediaUrls'].isNotEmpty)
-                              _buildMediaPreviews(parsedContent['mediaUrls']),
-                            const SizedBox(height: 4),
-                            Text(
-                              _formatTimestamp(item.timestamp),
-                              style: const TextStyle(
-                                  fontSize: 12, color: Colors.grey),
-                            ),
-                          ],
-                        ),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) => NoteDetailPage(
-                                      note: item,
-                                      reactions: [],
-                                      replies: [],
-                                      reactionsMap: {},
-                                      repliesMap: {},
-                                    )),
-                          );
-                        },
-                      ),
-                    ],
-                  );
-                },
+                      ],
+                    );
+                  },
+                ),
               ),
-            ),
+      ),
       floatingActionButton: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16.0),
         child: SizedBox(
@@ -310,7 +338,7 @@ class _FeedPageState extends State<FeedPage> {
                 );
               },
               label: const Text(
-                'Compose a Note',
+                'COMPOSE A NOTE',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -322,9 +350,8 @@ class _FeedPageState extends State<FeedPage> {
   }
 
   Map<String, dynamic> _parseContent(String content) {
-    final RegExp mediaRegExp = RegExp(
-        r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|mp4))',
-        caseSensitive: false);
+    final RegExp mediaRegExp =
+        RegExp(r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|mp4))', caseSensitive: false);
     final Iterable<RegExpMatch> matches = mediaRegExp.allMatches(content);
 
     final List<String> mediaUrls = matches.map((m) => m.group(0)!).toList();
@@ -343,14 +370,12 @@ class _FeedPageState extends State<FeedPage> {
         if (url.toLowerCase().endsWith('.mp4')) {
           return _VideoPreview(url: url);
         } else {
-          return Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: CachedNetworkImage(
-              imageUrl: url,
-              placeholder: (context, url) =>
-                  const Center(child: CircularProgressIndicator()),
-              errorWidget: (context, url, error) => const Icon(Icons.error),
-            ),
+          return CachedNetworkImage(
+            imageUrl: url,
+            placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+            errorWidget: (context, url, error) => const Icon(Icons.error),
+            fit: BoxFit.cover,
+            width: double.infinity,
           );
         }
       }).toList(),
@@ -363,18 +388,17 @@ class _FeedPageState extends State<FeedPage> {
         children: [
           ListTile(
             leading: const Icon(Icons.person),
-            title: const Text('Profile'),
+            title: const Text('PROFILE'),
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                    builder: (context) => ProfilePage(npub: widget.npub)),
+                MaterialPageRoute(builder: (context) => ProfilePage(npub: widget.npub)),
               );
             },
           ),
           ListTile(
             leading: const Icon(Icons.logout),
-            title: const Text('Logout'),
+            title: const Text('LOGOUT'),
             onTap: _logoutAndClearData,
           ),
         ],
@@ -439,9 +463,12 @@ class __VideoPreviewState extends State<_VideoPreview> {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          AspectRatio(
-            aspectRatio: _controller.value.aspectRatio,
-            child: VideoPlayer(_controller),
+          SizedBox(
+            width: double.infinity,
+            child: AspectRatio(
+              aspectRatio: _controller.value.aspectRatio,
+              child: VideoPlayer(_controller),
+            ),
           ),
           if (!_controller.value.isPlaying)
             const Icon(

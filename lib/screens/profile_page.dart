@@ -179,140 +179,144 @@ class _ProfilePageState extends State<ProfilePage> {
     }
 
     return Scaffold(
-      body: NotificationListener<ScrollNotification>(
-        onNotification: (scrollInfo) {
-          if (scrollInfo.metrics.pixels >=
-                  scrollInfo.metrics.maxScrollExtent - 200 &&
-              !isLoadingOlderNotes) {
-            _loadOlderNotes();
-          }
-          return false;
-        },
-        child: CustomScrollView(
-          slivers: [
-            if (userProfile['banner']!.isNotEmpty)
-              SliverToBoxAdapter(
-                child: CachedNetworkImage(
-                  imageUrl: userProfile['banner']!,
-                  width: double.infinity,
-                  height: 200,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => Container(
-                    color: Colors.grey[300],
-                    child: const Center(child: CircularProgressIndicator()),
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    color: Colors.grey[300],
-                    child:
-                        const Center(child: Icon(Icons.broken_image, size: 50)),
-                  ),
-                ),
-              ),
-            SliverToBoxAdapter(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                color: backgroundColor,
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    userProfile['profileImage']!.isNotEmpty
-                        ? CircleAvatar(
-                            radius: 30,
-                            backgroundImage: CachedNetworkImageProvider(
-                                userProfile['profileImage']!),
-                          )
-                        : const CircleAvatar(
-                            radius: 30,
-                            child: Icon(Icons.person, size: 30),
-                          ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            userProfile['name']!,
-                            style: const TextStyle(
-                                fontSize: 20, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 8),
-                          if (userProfile['about']!.isNotEmpty)
-                            Text(
-                              userProfile['about']!,
-                              style: const TextStyle(fontSize: 14),
-                            ),
-                          const SizedBox(height: 8),
-                          if (userProfile['nip05']!.isNotEmpty)
-                            Text(
-                              userProfile['nip05']!,
-                              style: const TextStyle(
-                                  fontSize: 12, color: Colors.grey),
-                            ),
-                        ],
-                      ),
+      body: SafeArea(
+        top: true,
+        bottom: false,
+        left: true,
+        right: true,
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (scrollInfo) {
+            if (scrollInfo.metrics.pixels >=
+                    scrollInfo.metrics.maxScrollExtent - 200 &&
+                !isLoadingOlderNotes) {
+              _loadOlderNotes();
+            }
+            return false;
+          },
+          child: CustomScrollView(
+            slivers: [
+              if (userProfile['banner']!.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: CachedNetworkImage(
+                    imageUrl: userProfile['banner']!,
+                    width: double.infinity,
+                    height: 200,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      color: Colors.grey[300],
+                      child: const Center(child: CircularProgressIndicator()),
                     ),
-                  ],
+                    errorWidget: (context, url, error) => Container(
+                      color: Colors.grey[300],
+                      child:
+                          const Center(child: Icon(Icons.broken_image, size: 50)),
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            profileNotes.isEmpty
-                ? const SliverFillRemaining(
-                    child: Center(child: Text('No notes available.')),
-                  )
-                : SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        if (index == profileNotes.length) {
-                          return isLoadingOlderNotes
-                              ? const Padding(
-                                  padding: EdgeInsets.all(16.0),
-                                  child: Center(
-                                      child: CircularProgressIndicator()),
-                                )
-                              : const SizedBox.shrink();
-                        }
-
-                        final item = profileNotes[index];
-                        final parsedContent = _parseContent(item.content);
-
-                        return Column(
+              SliverToBoxAdapter(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  color: backgroundColor,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      userProfile['profileImage']!.isNotEmpty
+                          ? CircleAvatar(
+                              radius: 30,
+                              backgroundImage: CachedNetworkImageProvider(
+                                  userProfile['profileImage']!),
+                            )
+                          : const CircleAvatar(
+                              radius: 30,
+                              child: Icon(Icons.person, size: 30),
+                            ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (item.isRepost)
-                              Padding(
-                                padding:
-                                    const EdgeInsets.only(left: 16.0, top: 8.0),
-                                child: GestureDetector(
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            ProfilePage(npub: item.repostedBy!),
-                                      ),
-                                    );
-                                  },
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.repeat,
-                                        size: 16.0,
-                                        color: Colors.grey,
-                                      ),
-                                      const SizedBox(width: 4.0),
-                                      Text(
-                                        'Reposted by ${item.repostedByName}',
-                                        style: const TextStyle(
-                                          fontSize: 12.0,
+                            Text(
+                              userProfile['name']!,
+                              style: const TextStyle(
+                                  fontSize: 20, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 8),
+                            if (userProfile['about']!.isNotEmpty)
+                              Text(
+                                userProfile['about']!,
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            const SizedBox(height: 8),
+                            if (userProfile['nip05']!.isNotEmpty)
+                              Text(
+                                userProfile['nip05']!,
+                                style: const TextStyle(
+                                    fontSize: 12, color: Colors.grey),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              profileNotes.isEmpty
+                  ? const SliverFillRemaining(
+                      child: Center(child: Text('No notes available.')),
+                    )
+                  : SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          if (index == profileNotes.length) {
+                            return isLoadingOlderNotes
+                                ? const Padding(
+                                    padding: EdgeInsets.all(16.0),
+                                    child: Center(
+                                        child: CircularProgressIndicator()),
+                                  )
+                                : const SizedBox.shrink();
+                          }
+
+                          final item = profileNotes[index];
+                          final parsedContent = _parseContent(item.content);
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (item.isRepost)
+                                Padding(
+                                  padding:
+                                      const EdgeInsets.only(left: 16.0, top: 8.0),
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              ProfilePage(npub: item.repostedBy!),
+                                        ),
+                                      );
+                                    },
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.repeat,
+                                          size: 16.0,
                                           color: Colors.grey,
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(width: 4.0),
+                                        Text(
+                                          'Reposted by ${item.repostedByName}',
+                                          style: const TextStyle(
+                                            fontSize: 12.0,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ListTile(
-                              title: GestureDetector(
+                              GestureDetector(
                                 onTap: () {
                                   Navigator.push(
                                     context,
@@ -321,65 +325,85 @@ class _ProfilePageState extends State<ProfilePage> {
                                             ProfilePage(npub: item.author)),
                                   );
                                 },
-                                child: Row(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 8.0, horizontal: 16.0),
+                                  child: Row(
+                                    children: [
+                                      item.authorProfileImage.isNotEmpty
+                                          ? CircleAvatar(
+                                              radius: 18,
+                                              backgroundImage:
+                                                  CachedNetworkImageProvider(
+                                                      item.authorProfileImage),
+                                            )
+                                          : const CircleAvatar(
+                                              radius: 12,
+                                              child:
+                                                  Icon(Icons.person, size: 16),
+                                            ),
+                                      const SizedBox(width: 12),
+                                      Text(item.authorName),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => NoteDetailPage(
+                                        note: item,
+                                        reactions: [],
+                                        replies: [],
+                                        reactionsMap: {},
+                                        repliesMap: {},
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    item.authorProfileImage.isNotEmpty
-                                        ? CircleAvatar(
-                                            radius: 18,
-                                            backgroundImage:
-                                                CachedNetworkImageProvider(
-                                                    item.authorProfileImage),
-                                          )
-                                        : const CircleAvatar(
-                                            radius: 12,
-                                            child:
-                                                Icon(Icons.person, size: 16),
-                                          ),
-                                    const SizedBox(width: 12),
-                                    Text(item.authorName),
+                                    if (parsedContent['text'] != null &&
+                                        parsedContent['text'] != '')
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 16.0),
+                                        child: Text(parsedContent['text']),
+                                      ),
+                                    if (parsedContent['text'] != null &&
+                                        parsedContent['text'] != '' &&
+                                        parsedContent['mediaUrls'] != null &&
+                                        parsedContent['mediaUrls'].isNotEmpty)
+                                      const SizedBox(
+                                          height:
+                                              16.0),
+                                    if (parsedContent['mediaUrls'] != null &&
+                                        parsedContent['mediaUrls'].isNotEmpty)
+                                      _buildMediaPreviews(
+                                          parsedContent['mediaUrls']),
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 16.0, vertical: 8.0),
+                                      child: Text(
+                                        _formatTimestamp(item.timestamp),
+                                        style: const TextStyle(
+                                            fontSize: 12, color: Colors.grey),
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const SizedBox(height: 12),
-                                  Text(parsedContent['text'] ?? ''),
-                                  const SizedBox(height: 4),
-                                  if (parsedContent['mediaUrls'] != null &&
-                                      parsedContent['mediaUrls'].isNotEmpty)
-                                    _buildMediaPreviews(
-                                        parsedContent['mediaUrls']),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _formatTimestamp(item.timestamp),
-                                    style: const TextStyle(
-                                        fontSize: 12, color: Colors.grey),
-                                  ),
-                                ],
-                              ),
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => NoteDetailPage(
-                                      note: item,
-                                      reactions: [],
-                                      replies: [],
-                                      reactionsMap: {},
-                                      repliesMap: {},
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        );
-                      },
-                      childCount: profileNotes.length + 1,
+                            ],
+                          );
+                        },
+                        childCount: profileNotes.length + 1,
+                      ),
                     ),
-                  ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -407,14 +431,13 @@ class _ProfilePageState extends State<ProfilePage> {
         if (url.toLowerCase().endsWith('.mp4')) {
           return _VideoPreview(url: url);
         } else {
-          return Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: CachedNetworkImage(
-              imageUrl: url,
-              placeholder: (context, url) =>
-                  const Center(child: CircularProgressIndicator()),
-              errorWidget: (context, url, error) => const Icon(Icons.error),
-            ),
+          return CachedNetworkImage(
+            imageUrl: url,
+            placeholder: (context, url) =>
+                const Center(child: CircularProgressIndicator()),
+            errorWidget: (context, url, error) => const Icon(Icons.error),
+            fit: BoxFit.cover,
+            width: double.infinity,
           );
         }
       }).toList(),
@@ -445,9 +468,11 @@ class __VideoPreviewState extends State<_VideoPreview> {
     super.initState();
     _controller = VideoPlayerController.network(widget.url)
       ..initialize().then((_) {
-        setState(() {
-          _isInitialized = true;
-        });
+        if (mounted) {
+          setState(() {
+            _isInitialized = true;
+          });
+        }
       });
   }
 
@@ -478,9 +503,12 @@ class __VideoPreviewState extends State<_VideoPreview> {
       child: Stack(
         alignment: Alignment.center,
         children: [
-          AspectRatio(
-            aspectRatio: _controller.value.aspectRatio,
-            child: VideoPlayer(_controller),
+          SizedBox(
+            width: double.infinity,
+            child: AspectRatio(
+              aspectRatio: _controller.value.aspectRatio,
+              child: VideoPlayer(_controller),
+            ),
           ),
           if (!_controller.value.isPlaying)
             const Icon(
