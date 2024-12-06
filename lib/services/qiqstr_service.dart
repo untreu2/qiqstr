@@ -8,6 +8,7 @@ import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
 import 'package:uuid/uuid.dart';
+import 'dart:math';
 
 enum DataType { Feed, Profile }
 
@@ -77,6 +78,8 @@ class DataService {
   final Uuid _uuid = Uuid();
 
   final Duration profileCacheTTL = Duration(minutes: 10);
+  final Duration cacheCleanupInterval = Duration(hours: 1);
+  Timer? _cacheCleanupTimer;
 
   DataService({
     required this.npub,
@@ -100,6 +103,7 @@ class DataService {
       _isInitialized = true;
 
       await _initializeIsolate();
+      _startCacheCleanup();
     } catch (e) {
       rethrow;
     }
@@ -236,7 +240,10 @@ class DataService {
 
   void _reconnectRelay(String relayUrl, List<String> targetNpubs, [int attempt = 1]) {
     if (_isClosed) return;
-    final int delaySeconds = attempt > 5 ? 32 : (1 << attempt);
+    const int maxAttempts = 5;
+    if (attempt > maxAttempts) return;
+
+    final int delaySeconds = _calculateBackoffDelay(attempt);
     Timer(Duration(seconds: delaySeconds), () async {
       if (_isClosed) return;
       try {
@@ -263,6 +270,14 @@ class DataService {
         _reconnectRelay(relayUrl, targetNpubs, attempt + 1);
       }
     });
+  }
+
+  int _calculateBackoffDelay(int attempt) {
+    final int baseDelay = 2;
+    final int maxDelay = 32;
+    final int delay = (baseDelay * (1 << (attempt - 1))).clamp(1, maxDelay);
+    final int jitter = Random().nextInt(1000) ~/ 1000;
+    return delay + jitter;
   }
 
   Future<void> fetchNotes(List<String> targetNpubs, {bool initialLoad = false}) async {
@@ -734,21 +749,6 @@ class DataService {
           Filter(authors: [npub], kinds: [3], limit: 1000),
         ]);
         Completer<void> completer = Completer<void>();
-        webSocket.listen((event) {
-          final decodedEvent = jsonDecode(event);
-          if (decodedEvent[0] == 'EVENT') {
-            for (var tag in decodedEvent[2]['tags']) {
-              if (tag.isNotEmpty && tag[0] == 'p') {
-                followingNpubs.add(tag[1] as String);
-              }
-            }
-            completer.complete();
-          }
-        }, onDone: () {
-          if (!completer.isCompleted) completer.complete();
-        }, onError: (error) {
-          if (!completer.isCompleted) completer.complete();
-        });
         webSocket.add(request.serialize());
         await completer.future.timeout(Duration(seconds: 5), onTimeout: () {
           webSocket.close();
@@ -796,6 +796,7 @@ class DataService {
     if (_isClosed) return;
     _isClosed = true;
     _checkNewNotesTimer?.cancel();
+    _cacheCleanupTimer?.cancel();
 
     try {
       if (_sendPortReadyCompleter.isCompleted) {
@@ -890,5 +891,18 @@ class DataService {
     }
 
     await _fetchProfilesBatch(allAuthors.toList());
+  }
+
+  void _startCacheCleanup() {
+    _cacheCleanupTimer?.cancel();
+    _cacheCleanupTimer = Timer.periodic(cacheCleanupInterval, (timer) async {
+      if (_isClosed) {
+        timer.cancel();
+        return;
+      }
+      final now = DateTime.now();
+      profileCache.removeWhere((key, cachedProfile) =>
+          now.difference(cachedProfile.fetchedAt) > profileCacheTTL);
+    });
   }
 }
