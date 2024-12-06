@@ -46,7 +46,6 @@ class DataService {
   bool isConnecting = false;
   Timer? _checkNewNotesTimer;
   int currentLimit = 75;
-  int currentOffset = 0;
 
   final List<String> relayUrls = [
     'wss://relay.damus.io',
@@ -276,20 +275,25 @@ class DataService {
     final int baseDelay = 2;
     final int maxDelay = 32;
     final int delay = (baseDelay * (1 << (attempt - 1))).clamp(1, maxDelay);
-    final int jitter = Random().nextInt(1000) ~/ 1000;
+    final int jitter = Random().nextInt(2);
     return delay + jitter;
   }
 
   Future<void> fetchNotes(List<String> targetNpubs, {bool initialLoad = false}) async {
     if (_isClosed) return;
-    final request = Request(generateUUID(), [
-      Filter(
-        authors: targetNpubs,
-        kinds: [1, 6],
-        limit: currentLimit,
-        since: currentOffset,
-      ),
-    ]);
+    DateTime? sinceTimestamp;
+    if (!initialLoad && notes.isNotEmpty) {
+      sinceTimestamp = notes.first.timestamp;
+    }
+
+    final filter = Filter(
+      authors: targetNpubs,
+      kinds: [1, 6],
+      limit: currentLimit,
+      since: sinceTimestamp != null ? sinceTimestamp.millisecondsSinceEpoch ~/ 1000 : null,
+    );
+
+    final request = Request(generateUUID(), [filter]);
 
     await Future.wait(_webSockets.values.map((ws) async {
       if (ws.readyState == WebSocket.open) {
@@ -297,8 +301,7 @@ class DataService {
       }
     }));
 
-    if (initialLoad) {
-      currentOffset += currentLimit;
+    if (initialLoad && notes.isNotEmpty) {
     }
   }
 
@@ -742,16 +745,31 @@ class DataService {
       try {
         final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
         if (_isClosed) {
-          webSocket.close();
+          await webSocket.close();
           return;
         }
         final request = Request(generateUUID(), [
           Filter(authors: [npub], kinds: [3], limit: 1000),
         ]);
         Completer<void> completer = Completer<void>();
+        webSocket.listen((event) {
+          final decodedEvent = jsonDecode(event);
+          if (decodedEvent[0] == 'EVENT') {
+            for (var tag in decodedEvent[2]['tags']) {
+              if (tag.isNotEmpty && tag[0] == 'p') {
+                followingNpubs.add(tag[1] as String);
+              }
+            }
+            completer.complete();
+          }
+        }, onDone: () {
+          if (!completer.isCompleted) completer.complete();
+        }, onError: (error) {
+          if (!completer.isCompleted) completer.complete();
+        });
         webSocket.add(request.serialize());
-        await completer.future.timeout(Duration(seconds: 5), onTimeout: () {
-          webSocket.close();
+        await completer.future.timeout(Duration(seconds: 5), onTimeout: () async {
+          await webSocket.close();
         });
         await webSocket.close();
       } catch (e) {}
@@ -762,12 +780,13 @@ class DataService {
 
   Future<void> fetchOlderNotes(List<String> targetNpubs, Function(NoteModel) onOlderNote) async {
     if (_isClosed || notes.isEmpty) return;
+    final lastNote = notes.last;
     final request = Request(generateUUID(), [
       Filter(
         authors: targetNpubs,
         kinds: [1, 6],
         limit: currentLimit,
-        until: notes.last.timestamp.millisecondsSinceEpoch ~/ 1000,
+        until: lastNote.timestamp.millisecondsSinceEpoch ~/ 1000,
       ),
     ]);
 
@@ -780,13 +799,11 @@ class DataService {
 
   void _startCheckingForNewData(List<String> targetNpubs) {
     _checkNewNotesTimer?.cancel();
-    _checkNewNotesTimer = Timer.periodic(Duration(seconds: 5), (timer) {
+    _checkNewNotesTimer = Timer.periodic(Duration(seconds: 10), (timer) {
       if (_isClosed) {
         timer.cancel();
         return;
       }
-      Set<String> allParentIds = Set<String>.from(notes.map((note) => note.id));
-      allParentIds.addAll(repliesMap.keys);
       fetchNotes(targetNpubs);
       _fetchProfilesBatch(targetNpubs);
     });
@@ -826,26 +843,26 @@ class DataService {
       Filter(ids: [eventId], limit: 1),
     ]);
 
-    StreamSubscription? sub;
+    StreamSubscription? subscription;
     await Future.wait(_webSockets.values.map((webSocket) async {
       if (webSocket.readyState == WebSocket.open) {
-        sub = webSocket.listen((event) {
+        subscription = webSocket.listen((event) {
           final decodedEvent = jsonDecode(event);
           if (decodedEvent[0] == 'EVENT' && decodedEvent[1] == subscriptionId) {
             Map<String, dynamic> eventData = decodedEvent[2] as Map<String, dynamic>;
             completer.complete(eventData);
-            sub?.cancel();
+            subscription?.cancel();
           } else if (decodedEvent[0] == 'EOSE' && decodedEvent[1] == subscriptionId) {
             if (!completer.isCompleted) {
               completer.complete(null);
             }
-            sub?.cancel();
+            subscription?.cancel();
           }
         }, onError: (error) {
           if (!completer.isCompleted) {
             completer.complete(null);
           }
-          sub?.cancel();
+          subscription?.cancel();
         });
 
         webSocket.add(request.serialize());
