@@ -260,7 +260,11 @@ class _FeedPageState extends State<FeedPage> {
                                         child: Icon(Icons.person, size: 16),
                                       ),
                                 const SizedBox(width: 12),
-                                Text(item.authorName),
+                                Text(item.authorName,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),),
                               ],
                             ),
                           ),

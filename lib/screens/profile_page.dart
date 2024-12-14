@@ -329,7 +329,11 @@ class _ProfilePageState extends State<ProfilePage> {
                                                   Icon(Icons.person, size: 16),
                                             ),
                                       const SizedBox(width: 12),
-                                      Text(item.authorName),
+                                      Text(item.authorName,
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold
+                                      ),),
                                     ],
                                   ),
                                 ),
