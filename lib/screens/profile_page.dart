@@ -1,12 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:hive/hive.dart';
 import 'package:palette_generator/palette_generator.dart';
 import '../models/note_model.dart';
 import '../services/qiqstr_service.dart';
 import 'note_detail_page.dart';
-import 'login_page.dart';
 import 'package:video_player/video_player.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -156,18 +154,6 @@ class _ProfilePageState extends State<ProfilePage> {
         backgroundColor = Colors.blueAccent.withOpacity(0.1);
       });
     }
-  }
-
-  Future<void> _logoutAndClearData() async {
-    try {
-      await Hive.deleteFromDisk();
-      await _dataService.closeConnections();
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-        (Route<dynamic> route) => false,
-      );
-    } catch (e) {}
   }
 
   @override
