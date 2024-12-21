@@ -9,6 +9,7 @@ import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:math';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 enum DataType { Feed, Profile }
 
@@ -80,6 +81,8 @@ class DataService {
   final Duration cacheCleanupInterval = Duration(hours: 1);
   Timer? _cacheCleanupTimer;
 
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+
   DataService({
     required this.npub,
     required this.dataType,
@@ -87,6 +90,8 @@ class DataService {
     this.onReactionsUpdated,
     this.onRepliesUpdated,
   });
+
+  int get connectedRelaysCount => _webSockets.length;
 
   Future<void> initialize() async {
     try {
@@ -921,5 +926,34 @@ class DataService {
       profileCache.removeWhere((key, cachedProfile) =>
           now.difference(cachedProfile.fetchedAt) > profileCacheTTL);
     });
+  }
+
+  Future<void> shareNote(String noteContent) async {
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found. Please log in again.');
+      }
+
+      final event = Event.from(
+        kind: 1,
+        tags: [],
+        content: noteContent,
+        privkey: privateKey,
+      );
+
+      final serializedEvent = event.serialize();
+
+      for (var relayUrl in _webSockets.keys) {
+        final webSocket = _webSockets[relayUrl];
+        if (webSocket != null && webSocket.readyState == WebSocket.open) {
+          webSocket.add(serializedEvent);
+        }
+      }
+
+    } catch (e) {
+      print('Error sharing note: $e');
+      throw e;
+    }
   }
 }

@@ -1,7 +1,4 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:nostr/nostr.dart';
 import '../services/qiqstr_service.dart';
 
 class ShareNotePage extends StatefulWidget {
@@ -15,50 +12,31 @@ class ShareNotePage extends StatefulWidget {
 
 class _ShareNotePageState extends State<ShareNotePage> {
   final TextEditingController _noteController = TextEditingController();
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final FocusNode _noteFocusNode = FocusNode();
-  late Map<String, WebSocket> _relayConnections;
   String _connectionMessage = 'Connecting to relays...';
   bool _isPosting = false;
 
   @override
   void initState() {
     super.initState();
-    _relayConnections = {};
 
-    _connectToRelays();
+    widget.dataService.initializeConnections().then((_) {
+      setState(() {
+        if (widget.dataService.connectedRelaysCount == 0) {
+          _connectionMessage = 'No relay connections established.';
+        } else {
+          _connectionMessage = 'CONNECTED TO ${widget.dataService.connectedRelaysCount} RELAYS.';
+        }
+      });
+    }).catchError((e) {
+      setState(() {
+        _connectionMessage = 'Error connecting to relays: $e';
+      });
+    });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _noteFocusNode.requestFocus();
     });
-  }
-
-  Future<void> _connectToRelays() async {
-    try {
-      final relayUrls = widget.dataService.relayUrls;
-
-      for (var url in relayUrls) {
-        try {
-          final webSocket = await WebSocket.connect(url);
-          _relayConnections[url] = webSocket;
-          print('Connected to relay: $url');
-        } catch (e) {
-          print('Failed to connect to relay: $url, Error: $e');
-        }
-      }
-
-      setState(() {
-        if (_relayConnections.isEmpty) {
-          _connectionMessage = 'No relay connections established.';
-        } else {
-          _connectionMessage = 'CONNECTED TO ${_relayConnections.length} RELAYS.';
-        }
-      });
-    } catch (e) {
-      setState(() {
-        _connectionMessage = 'Error connecting to relays: $e';
-      });
-    }
   }
 
   Future<void> _shareNote() async {
@@ -68,35 +46,12 @@ class _ShareNotePageState extends State<ShareNotePage> {
     });
 
     try {
-      final privateKey = await _secureStorage.read(key: 'privateKey');
-      if (privateKey == null || privateKey.isEmpty) {
-        throw Exception('Private key not found. Please log in again.');
-      }
-
       final noteContent = _noteController.text.trim();
       if (noteContent.isEmpty) {
         throw Exception('Note content cannot be empty.');
       }
 
-      if (_relayConnections.isEmpty) {
-        throw Exception('No active relay connections. Note cannot be shared.');
-      }
-
-      final event = Event.from(
-        kind: 1,
-        tags: [],
-        content: noteContent,
-        privkey: privateKey,
-      );
-
-      for (var relayUrl in _relayConnections.keys) {
-        try {
-          _relayConnections[relayUrl]?.add(event.serialize());
-          print('Note shared with relay: $relayUrl');
-        } catch (e) {
-          print('Error sending note to relay $relayUrl: $e');
-        }
-      }
+      await widget.dataService.shareNote(noteContent);
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Note shared successfully!')),
@@ -176,9 +131,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   @override
   void dispose() {
-    for (var connection in _relayConnections.values) {
-      connection.close();
-    }
     _noteFocusNode.dispose();
     super.dispose();
   }
