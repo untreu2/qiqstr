@@ -1,13 +1,15 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart'; 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:palette_generator/palette_generator.dart';
+import 'package:video_player/video_player.dart';
+import '../providers/profile_service_provider.dart';
 import '../models/note_model.dart';
 import '../services/qiqstr_service.dart';
 import 'note_detail_page.dart';
-import 'package:video_player/video_player.dart';
 
-class ProfilePage extends StatefulWidget {
+class ProfilePage extends ConsumerStatefulWidget {
   final String npub;
 
   const ProfilePage({Key? key, required this.npub}) : super(key: key);
@@ -16,12 +18,13 @@ class ProfilePage extends StatefulWidget {
   _ProfilePageState createState() => _ProfilePageState();
 }
 
-class _ProfilePageState extends State<ProfilePage> {
+class _ProfilePageState extends ConsumerState<ProfilePage> {
   final List<NoteModel> profileNotes = [];
   final Set<String> cachedNoteIds = {};
+
   bool isLoadingOlderNotes = false;
-  bool isLoading = true;
-  late DataService _dataService;
+  bool isLoadingProfile = true;
+  Color backgroundColor = Colors.blueAccent.withOpacity(0.1);
 
   Map<String, String> userProfile = {
     'name': 'Loading...',
@@ -31,226 +34,130 @@ class _ProfilePageState extends State<ProfilePage> {
     'banner': '',
   };
 
-  Color backgroundColor = Colors.blueAccent.withOpacity(0.1);
-
   @override
   void initState() {
     super.initState();
-    _initializeDataService();
-  }
-
-  Future<void> _initializeDataService() async {
-    try {
-      _dataService = DataService(
-        npub: widget.npub,
-        dataType: DataType.Profile,
-        onNewNote: _handleNewNote,
-      );
-
-      await _dataService.initialize();
-      await _loadProfileFromCache();
-      await _dataService.initializeConnections();
-      await _updateUserProfile();
-
-      if (mounted) {
-        setState(() {
-          isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          isLoading = false;
-        });
-      }
-    }
   }
 
   @override
   void dispose() {
-    _dataService.closeConnections();
     super.dispose();
-  }
-
-  void _handleNewNote(NoteModel newNote) {
-    if (!cachedNoteIds.contains(newNote.id)) {
-      cachedNoteIds.add(newNote.id);
-      int insertIndex = profileNotes
-          .indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
-      if (insertIndex == -1) {
-        profileNotes.add(newNote);
-      } else {
-        profileNotes.insert(insertIndex, newNote);
-      }
-      _dataService.saveNotesToCache();
-      if (mounted) {
-        setState(() {});
-      }
-    }
-  }
-
-  Future<void> _loadProfileFromCache() async {
-    await _dataService.loadNotesFromCache((cachedNotes) {
-      for (var cachedNote in cachedNotes) {
-        if (!cachedNoteIds.contains(cachedNote.id)) {
-          cachedNoteIds.add(cachedNote.id);
-          profileNotes.add(cachedNote);
-        }
-      }
-    });
-    profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  Future<void> _updateUserProfile() async {
-    final profile = await _dataService.getCachedUserProfile(widget.npub);
-    if (!mounted) return;
-    setState(() {
-      userProfile = profile;
-    });
-    if (userProfile['profileImage']!.isNotEmpty) {
-      await _updateBackgroundColor(userProfile['profileImage']!);
-    }
-  }
-
-  Future<void> _loadOlderNotes() async {
-    if (isLoadingOlderNotes) return;
-    setState(() {
-      isLoadingOlderNotes = true;
-    });
-
-    await _dataService.fetchOlderNotes([widget.npub], (olderNote) {
-      if (!cachedNoteIds.contains(olderNote.id)) {
-        cachedNoteIds.add(olderNote.id);
-        profileNotes.add(olderNote);
-        if (mounted) {
-          setState(() {});
-        }
-      }
-    });
-
-    setState(() {
-      isLoadingOlderNotes = false;
-    });
-  }
-
-  Future<void> _updateBackgroundColor(String imageUrl) async {
-    try {
-      final PaletteGenerator paletteGenerator =
-          await PaletteGenerator.fromImageProvider(
-              CachedNetworkImageProvider(imageUrl));
-      if (!mounted) return;
-      setState(() {
-        backgroundColor = paletteGenerator.dominantColor?.color
-                .withOpacity(0.1) ??
-            Colors.blueAccent.withOpacity(0.1);
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        backgroundColor = Colors.blueAccent.withOpacity(0.1);
-      });
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading && profileNotes.isEmpty) {
-      return Scaffold(
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
+    final dataServiceAsync = ref.watch(profileServiceProvider(widget.npub));
 
-    return Scaffold(
-      body: SafeArea(
-        top: true,
-        bottom: false,
-        left: true,
-        right: true,
-        child: NotificationListener<ScrollNotification>(
-          onNotification: (scrollInfo) {
-            if (scrollInfo.metrics.pixels >=
-                    scrollInfo.metrics.maxScrollExtent - 200 &&
-                !isLoadingOlderNotes) {
-              _loadOlderNotes();
-            }
-            return false;
-          },
-          child: CustomScrollView(
-            slivers: [
-              if (userProfile['banner']!.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: CachedNetworkImage(
-                    imageUrl: userProfile['banner']!,
-                    width: double.infinity,
-                    height: 200,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(
-                      color: Colors.grey[300],
-                      child: const Center(child: CircularProgressIndicator()),
-                    ),
-                    errorWidget: (context, url, error) => Container(
-                      color: Colors.grey[300],
-                      child:
-                          const Center(child: Icon(Icons.broken_image, size: 50)),
-                    ),
-                  ),
-                ),
-              SliverToBoxAdapter(
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  color: backgroundColor,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      userProfile['profileImage']!.isNotEmpty
-                          ? CircleAvatar(
-                              radius: 30,
-                              backgroundImage: CachedNetworkImageProvider(
-                                  userProfile['profileImage']!),
-                            )
-                          : const CircleAvatar(
-                              radius: 30,
-                              child: Icon(Icons.person, size: 30),
-                            ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              userProfile['name']!,
-                              style: const TextStyle(
-                                  fontSize: 20, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 8),
-                            if (userProfile['about']!.isNotEmpty)
-                              Text(
-                                userProfile['about']!,
-                                style: const TextStyle(fontSize: 14),
-                              ),
-                            const SizedBox(height: 8),
-                            if (userProfile['nip05']!.isNotEmpty)
-                              Text(
-                                userProfile['nip05']!,
-                                style: const TextStyle(
-                                    fontSize: 12, color: Colors.grey),
-                              ),
-                          ],
+    return dataServiceAsync.when(
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (error, stack) => Scaffold(
+        body: Center(child: Text('Error: $error')),
+      ),
+      data: (dataService) {
+        for (var note in dataService.notes) {
+          if (!cachedNoteIds.contains(note.id)) {
+            cachedNoteIds.add(note.id);
+            profileNotes.add(note);
+          }
+        }
+        profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+        _updateUserProfile(dataService);
+
+        return Scaffold(
+          body: SafeArea(
+            child: NotificationListener<ScrollNotification>(
+              onNotification: (scrollInfo) {
+                if (scrollInfo.metrics.pixels >=
+                        scrollInfo.metrics.maxScrollExtent - 200 &&
+                    !isLoadingOlderNotes) {
+                  _loadOlderNotes(dataService);
+                }
+                return false;
+              },
+              child: CustomScrollView(
+                slivers: [
+                  if (userProfile['banner']!.isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: CachedNetworkImage(
+                        imageUrl: userProfile['banner']!,
+                        width: double.infinity,
+                        height: 200,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          color: Colors.grey[300],
+                          child: const Center(child: CircularProgressIndicator()),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          color: Colors.grey[300],
+                          child: const Center(
+                            child: Icon(Icons.broken_image, size: 50),
+                          ),
                         ),
                       ),
-                    ],
+                    ),
+
+                  SliverToBoxAdapter(
+                    child: Container(
+                      padding: const EdgeInsets.all(16),
+                      color: backgroundColor,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          userProfile['profileImage']!.isNotEmpty
+                              ? CircleAvatar(
+                                  radius: 30,
+                                  backgroundImage: CachedNetworkImageProvider(
+                                    userProfile['profileImage']!,
+                                  ),
+                                )
+                              : const CircleAvatar(
+                                  radius: 30,
+                                  child: Icon(Icons.person, size: 30),
+                                ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  userProfile['name']!,
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                if (userProfile['about']!.isNotEmpty)
+                                  Text(
+                                    userProfile['about']!,
+                                    style: const TextStyle(fontSize: 14),
+                                  ),
+                                const SizedBox(height: 8),
+                                if (userProfile['nip05']!.isNotEmpty)
+                                  Text(
+                                    userProfile['nip05']!,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              profileNotes.isEmpty
-                  ? const SliverFillRemaining(
+
+                  if (profileNotes.isEmpty)
+                    const SliverFillRemaining(
                       child: Center(child: Text('No notes available.')),
                     )
-                  : SliverList(
+                  else
+                    SliverList(
                       delegate: SliverChildBuilderDelegate(
                         (context, index) {
                           if (index == profileNotes.length) {
@@ -258,7 +165,8 @@ class _ProfilePageState extends State<ProfilePage> {
                                 ? const Padding(
                                     padding: EdgeInsets.all(16.0),
                                     child: Center(
-                                        child: CircularProgressIndicator()),
+                                      child: CircularProgressIndicator(),
+                                    ),
                                   )
                                 : const SizedBox.shrink();
                           }
@@ -271,8 +179,10 @@ class _ProfilePageState extends State<ProfilePage> {
                             children: [
                               if (item.isRepost)
                                 Padding(
-                                  padding:
-                                      const EdgeInsets.only(left: 16.0, top: 8.0),
+                                  padding: const EdgeInsets.only(
+                                    left: 16.0,
+                                    top: 8.0,
+                                  ),
                                   child: GestureDetector(
                                     onTap: () {
                                       Navigator.push(
@@ -307,13 +217,17 @@ class _ProfilePageState extends State<ProfilePage> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                        builder: (context) =>
-                                            ProfilePage(npub: item.author)),
+                                      builder: (context) => ProfilePage(
+                                        npub: item.author,
+                                      ),
+                                    ),
                                   );
                                 },
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(
-                                      vertical: 8.0, horizontal: 16.0),
+                                    vertical: 8.0,
+                                    horizontal: 16.0,
+                                  ),
                                   child: Row(
                                     children: [
                                       item.authorProfileImage.isNotEmpty
@@ -321,19 +235,21 @@ class _ProfilePageState extends State<ProfilePage> {
                                               radius: 18,
                                               backgroundImage:
                                                   CachedNetworkImageProvider(
-                                                      item.authorProfileImage),
+                                                item.authorProfileImage,
+                                              ),
                                             )
                                           : const CircleAvatar(
                                               radius: 12,
-                                              child:
-                                                  Icon(Icons.person, size: 16),
+                                              child: Icon(Icons.person, size: 16),
                                             ),
                                       const SizedBox(width: 12),
-                                      Text(item.authorName,
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold
-                                      ),),
+                                      Text(
+                                        item.authorName,
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),
@@ -360,27 +276,29 @@ class _ProfilePageState extends State<ProfilePage> {
                                         parsedContent['text'] != '')
                                       Padding(
                                         padding: const EdgeInsets.symmetric(
-                                            horizontal: 16.0),
+                                          horizontal: 16.0,
+                                        ),
                                         child: Text(parsedContent['text']),
                                       ),
                                     if (parsedContent['text'] != null &&
                                         parsedContent['text'] != '' &&
                                         parsedContent['mediaUrls'] != null &&
                                         parsedContent['mediaUrls'].isNotEmpty)
-                                      const SizedBox(
-                                          height:
-                                              16.0),
+                                      const SizedBox(height: 16.0),
                                     if (parsedContent['mediaUrls'] != null &&
                                         parsedContent['mediaUrls'].isNotEmpty)
-                                      _buildMediaPreviews(
-                                          parsedContent['mediaUrls']),
+                                      _buildMediaPreviews(parsedContent['mediaUrls']),
                                     Padding(
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 16.0, vertical: 8.0),
+                                        horizontal: 16.0,
+                                        vertical: 8.0,
+                                      ),
                                       child: Text(
                                         _formatTimestamp(item.timestamp),
                                         style: const TextStyle(
-                                            fontSize: 12, color: Colors.grey),
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -392,22 +310,86 @@ class _ProfilePageState extends State<ProfilePage> {
                         childCount: profileNotes.length + 1,
                       ),
                     ),
-            ],
+                ],
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
+  Future<void> _updateUserProfile(DataService dataService) async {
+    if (!isLoadingProfile && userProfile['name'] != 'Loading...') {
+      return;
+    }
+    try {
+      final profile = await dataService.getCachedUserProfile(widget.npub);
+      if (!mounted) return;
+      setState(() {
+        userProfile = profile;
+        isLoadingProfile = false;
+      });
+      if (userProfile['profileImage']!.isNotEmpty) {
+        await _updateBackgroundColor(userProfile['profileImage']!);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          isLoadingProfile = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadOlderNotes(DataService dataService) async {
+    if (isLoadingOlderNotes) return;
+    setState(() {
+      isLoadingOlderNotes = true;
+    });
+
+    await dataService.fetchOlderNotes([widget.npub], (olderNote) {
+      if (!cachedNoteIds.contains(olderNote.id)) {
+        cachedNoteIds.add(olderNote.id);
+        profileNotes.add(olderNote);
+      }
+    });
+
+    if (mounted) {
+      setState(() {
+        profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        isLoadingOlderNotes = false;
+      });
+    }
+  }
+
+  Future<void> _updateBackgroundColor(String imageUrl) async {
+    try {
+      final paletteGenerator = await PaletteGenerator.fromImageProvider(
+        CachedNetworkImageProvider(imageUrl),
+      );
+      if (!mounted) return;
+      setState(() {
+        backgroundColor = paletteGenerator.dominantColor?.color.withOpacity(0.1)
+            ?? Colors.blueAccent.withOpacity(0.1);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        backgroundColor = Colors.blueAccent.withOpacity(0.1);
+      });
+    }
+  }
+
   Map<String, dynamic> _parseContent(String content) {
-    final RegExp mediaRegExp = RegExp(
-        r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|mp4))',
-        caseSensitive: false);
-    final Iterable<RegExpMatch> matches = mediaRegExp.allMatches(content);
+    final mediaRegExp = RegExp(
+      r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|mp4))',
+      caseSensitive: false,
+    );
+    final matches = mediaRegExp.allMatches(content);
 
-    final List<String> mediaUrls = matches.map((m) => m.group(0)!).toList();
-
-    final String text = content.replaceAll(mediaRegExp, '').trim();
+    final mediaUrls = matches.map((m) => m.group(0)!).toList();
+    final text = content.replaceAll(mediaRegExp, '').trim();
 
     return {
       'text': text,
@@ -423,9 +405,10 @@ class _ProfilePageState extends State<ProfilePage> {
         } else {
           return CachedNetworkImage(
             imageUrl: url,
-            placeholder: (context, url) =>
-                const Center(child: CircularProgressIndicator()),
-            errorWidget: (context, url, error) => const Icon(Icons.error),
+            placeholder: (context, _) => const Center(
+              child: CircularProgressIndicator(),
+            ),
+            errorWidget: (context, _, __) => const Icon(Icons.error),
             fit: BoxFit.cover,
             width: double.infinity,
           );
@@ -435,14 +418,16 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   String _formatTimestamp(DateTime timestamp) {
-    return "${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} "
-        "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}:${timestamp.second.toString().padLeft(2, '0')}";
+    return "${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}"
+        "-${timestamp.day.toString().padLeft(2, '0')} "
+        "${timestamp.hour.toString().padLeft(2, '0')}:"
+        "${timestamp.minute.toString().padLeft(2, '0')}:"
+        "${timestamp.second.toString().padLeft(2, '0')}";
   }
 }
 
 class _VideoPreview extends StatefulWidget {
   final String url;
-
   const _VideoPreview({Key? key, required this.url}) : super(key: key);
 
   @override
@@ -458,11 +443,7 @@ class __VideoPreviewState extends State<_VideoPreview> {
     super.initState();
     _controller = VideoPlayerController.network(widget.url)
       ..initialize().then((_) {
-        if (mounted) {
-          setState(() {
-            _isInitialized = true;
-          });
-        }
+        if (mounted) setState(() => _isInitialized = true);
       });
   }
 

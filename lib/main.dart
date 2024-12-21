@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'models/note_model.dart';
 import 'models/reaction_model.dart';
 import 'models/reply_model.dart';
@@ -31,10 +32,14 @@ void main() async {
       await Hive.openBox<ReplyModel>('replies_Profile_$npub');
     }
 
-    runApp(Qiqstr(
-      isLoggedIn: privateKey != null && npub != null,
-      npub: npub,
-    ));
+    runApp(
+      ProviderScope(
+        child: Qiqstr(
+          isLoggedIn: privateKey != null && npub != null,
+          npub: npub,
+        ),
+      ),
+    );
   } catch (e) {
     print('Error initializing Hive: $e');
     runApp(const HiveErrorApp());
@@ -125,7 +130,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return const Scaffold(
       body: Center(child: CircularProgressIndicator()),
     );
   }
