@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:hive/hive.dart';
+import 'package:qiqstr/screens/share_note.dart';
+import '../models/note_model.dart';
+import '../services/qiqstr_service.dart';
+import 'note_detail_page.dart';
+import 'profile_page.dart';
+import 'login_page.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:video_player/video_player.dart';
 import 'dart:ui';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/data_service_provider.dart';
-import '../models/note_model.dart';
-import '../services/qiqstr_service.dart';
-import 'share_note.dart';
-import 'profile_page.dart';
-import 'login_page.dart';
-import '../widgets/note_widget.dart';
 
-class FeedPage extends ConsumerStatefulWidget {
+class FeedPage extends StatefulWidget {
   final String npub;
 
   const FeedPage({Key? key, required this.npub}) : super(key: key);
@@ -21,13 +20,11 @@ class FeedPage extends ConsumerStatefulWidget {
   _FeedPageState createState() => _FeedPageState();
 }
 
-class _FeedPageState extends ConsumerState<FeedPage> {
+class _FeedPageState extends State<FeedPage> {
   final List<NoteModel> feedItems = [];
   final Set<String> cachedNoteIds = {};
-
   bool isLoadingOlderNotes = false;
   bool isInitializing = true;
-
   late DataService _dataService;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ScrollController _scrollController = ScrollController();
@@ -35,11 +32,11 @@ class _FeedPageState extends ConsumerState<FeedPage> {
   @override
   void initState() {
     super.initState();
-
-    _dataService = ref.read(dataServiceProvider(widget.npub));
-
-    _dataService.onNewNote = _handleNewNote;
-
+    _dataService = DataService(
+      npub: widget.npub,
+      dataType: DataType.Feed,
+      onNewNote: _handleNewNote,
+    );
     _initializeFeed();
   }
 
@@ -72,15 +69,12 @@ class _FeedPageState extends ConsumerState<FeedPage> {
   void _handleNewNote(NoteModel newNote) {
     if (!cachedNoteIds.contains(newNote.id)) {
       cachedNoteIds.add(newNote.id);
-      int insertIndex =
-          feedItems.indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
-
+      int insertIndex = feedItems.indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
       if (insertIndex == -1) {
         feedItems.add(newNote);
       } else {
         feedItems.insert(insertIndex, newNote);
       }
-
       _dataService.saveNotesToCache();
       if (mounted) {
         setState(() {});
@@ -133,14 +127,12 @@ class _FeedPageState extends ConsumerState<FeedPage> {
       await secureStorage.deleteAll();
       await Hive.deleteFromDisk();
       await _dataService.closeConnections();
-
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const LoginPage()),
         (Route<dynamic> route) => false,
       );
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   @override
@@ -194,8 +186,7 @@ class _FeedPageState extends ConsumerState<FeedPage> {
             ? const Center(child: Text('No feed items available.'))
             : NotificationListener<ScrollNotification>(
                 onNotification: (scrollInfo) {
-                  if (scrollInfo.metrics.pixels >=
-                          scrollInfo.metrics.maxScrollExtent - 200 &&
+                  if (scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 200 &&
                       !isLoadingOlderNotes) {
                     _loadOlderNotes();
                   }
@@ -212,27 +203,114 @@ class _FeedPageState extends ConsumerState<FeedPage> {
                       );
                     }
                     final item = feedItems[index];
-                    return NoteWidget(
-                      key: ValueKey(item.id),
-                      note: item,
-                      onTapAuthor: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ProfilePage(npub: item.author),
-                          ),
-                        );
-                      },
-                      onTapRepost: () {
-                        if (item.repostedBy != null) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ProfilePage(npub: item.repostedBy!),
+                    final parsedContent = _parseContent(item.content);
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (item.isRepost)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 16.0, top: 8.0),
+                            child: GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => ProfilePage(npub: item.repostedBy!),
+                                  ),
+                                );
+                              },
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.repeat,
+                                    size: 16.0,
+                                    color: Colors.grey,
+                                  ),
+                                  const SizedBox(width: 4.0),
+                                  Text(
+                                    'Reposted by ${item.repostedByName}',
+                                    style: const TextStyle(
+                                      fontSize: 12.0,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          );
-                        }
-                      },
+                          ),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => ProfilePage(npub: item.author)),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+                            child: Row(
+                              children: [
+                                item.authorProfileImage.isNotEmpty
+                                    ? CircleAvatar(
+                                        radius: 18,
+                                        backgroundImage:
+                                            CachedNetworkImageProvider(item.authorProfileImage),
+                                      )
+                                    : const CircleAvatar(
+                                        radius: 12,
+                                        child: Icon(Icons.person, size: 16),
+                                      ),
+                                const SizedBox(width: 12),
+                                Text(item.authorName,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                ),),
+                              ],
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => NoteDetailPage(
+                                  note: item,
+                                  reactions: [],
+                                  replies: [],
+                                  reactionsMap: {},
+                                  repliesMap: {},
+                                ),
+                              ),
+                            );
+                          },
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (parsedContent['text'] != null && parsedContent['text'] != '')
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                                  child: Text(parsedContent['text']),
+                                ),
+                              if (parsedContent['text'] != null &&
+                                  parsedContent['text'] != '' &&
+                                  parsedContent['mediaUrls'] != null &&
+                                  parsedContent['mediaUrls'].isNotEmpty)
+                                const SizedBox(height: 16.0),
+                              if (parsedContent['mediaUrls'] != null &&
+                                  parsedContent['mediaUrls'].isNotEmpty)
+                                _buildMediaPreviews(parsedContent['mediaUrls']),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                                child: Text(
+                                  _formatTimestamp(item.timestamp),
+                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     );
                   },
                 ),
@@ -275,6 +353,39 @@ class _FeedPageState extends ConsumerState<FeedPage> {
     );
   }
 
+  Map<String, dynamic> _parseContent(String content) {
+    final RegExp mediaRegExp =
+        RegExp(r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|mp4))', caseSensitive: false);
+    final Iterable<RegExpMatch> matches = mediaRegExp.allMatches(content);
+
+    final List<String> mediaUrls = matches.map((m) => m.group(0)!).toList();
+
+    final String text = content.replaceAll(mediaRegExp, '').trim();
+
+    return {
+      'text': text,
+      'mediaUrls': mediaUrls,
+    };
+  }
+
+  Widget _buildMediaPreviews(List<String> mediaUrls) {
+    return Column(
+      children: mediaUrls.map((url) {
+        if (url.toLowerCase().endsWith('.mp4')) {
+          return _VideoPreview(url: url);
+        } else {
+          return CachedNetworkImage(
+            imageUrl: url,
+            placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+            errorWidget: (context, url, error) => const Icon(Icons.error),
+            fit: BoxFit.cover,
+            width: double.infinity,
+          );
+        }
+      }).toList(),
+    );
+  }
+
   Widget _buildSidebar() {
     return Drawer(
       child: ListView(
@@ -285,9 +396,7 @@ class _FeedPageState extends ConsumerState<FeedPage> {
             onTap: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (context) => ProfilePage(npub: widget.npub),
-                ),
+                MaterialPageRoute(builder: (context) => ProfilePage(npub: widget.npub)),
               );
             },
           ),
@@ -299,6 +408,11 @@ class _FeedPageState extends ConsumerState<FeedPage> {
         ],
       ),
     );
+  }
+
+  String _formatTimestamp(DateTime timestamp) {
+    return "${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} "
+        "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}:${timestamp.second.toString().padLeft(2, '0')}";
   }
 }
 
@@ -320,11 +434,9 @@ class __VideoPreviewState extends State<_VideoPreview> {
     super.initState();
     _controller = VideoPlayerController.network(widget.url)
       ..initialize().then((_) {
-        if (mounted) {
-          setState(() {
-            _isInitialized = true;
-          });
-        }
+        setState(() {
+          _isInitialized = true;
+        });
       });
   }
 
@@ -349,6 +461,7 @@ class __VideoPreviewState extends State<_VideoPreview> {
     if (!_isInitialized) {
       return const Center(child: CircularProgressIndicator());
     }
+
     return GestureDetector(
       onTap: _togglePlay,
       child: Stack(
