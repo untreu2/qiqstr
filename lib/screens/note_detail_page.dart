@@ -1,15 +1,15 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:nostr/nostr.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:video_player/video_player.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/note_detail_service_provider.dart';
-import '../models/note_model.dart';
+import '../models/note_model.dart'; 
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
 import '../services/qiqstr_service.dart';
-import 'profile_page.dart';
+import '../screens/profile_page.dart';
+import '../widgets/reply_widget.dart';
 
 class NoteDetailPage extends ConsumerStatefulWidget {
   final NoteModel note;
@@ -64,11 +64,37 @@ class _NoteDetailPageState extends ConsumerState<NoteDetailPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildHeader(),
-                  ..._buildParsedContent(widget.note.content),
-                  _buildTimestampAndCounts(replyCount),
+                  NoteWidget(
+                    key: ValueKey(widget.note.id),
+                    note: widget.note,
+                    onTapAuthor: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ProfilePage(npub: widget.note.author),
+                        ),
+                      );
+                    },
+                    onTapRepost: () {
+                      if (widget.note.repostedBy != null) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ProfilePage(npub: widget.note.repostedBy!),
+                          ),
+                        );
+                      }
+                    },
+                    isDetailPage: true, 
+                    showTimestamp: true,
+                  ),
+
+                  _buildCounts(replyCount),
+
                   const SizedBox(height: 16),
+
                   ReactionsSection(reactions: reactions),
+
                   _buildRepliesSection(),
                 ],
               ),
@@ -86,6 +112,7 @@ class _NoteDetailPageState extends ConsumerState<NoteDetailPage> {
 
   Future<void> _fetchReactionsAndReplies(DataService dataService) async {
     await dataService.fetchReactionsForNotes([widget.note.id]);
+
     await dataService.fetchRepliesForNotes([widget.note.id]);
   }
 
@@ -116,272 +143,70 @@ class _NoteDetailPageState extends ConsumerState<NoteDetailPage> {
     return replyTree;
   }
 
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: () => _navigateToProfile(widget.note.author),
-            child: widget.note.authorProfileImage.isNotEmpty
-                ? CircleAvatar(
-                    backgroundImage:
-                        CachedNetworkImageProvider(widget.note.authorProfileImage),
-                    radius: 24,
-                  )
-                : const CircleAvatar(
-                    child: Icon(Icons.person, size: 24),
-                    radius: 24,
-                  ),
-          ),
-          const SizedBox(width: 12),
-          Flexible(
-            child: GestureDetector(
-              onTap: () => _navigateToProfile(widget.note.author),
-              child: Text(
-                widget.note.authorName,
-                style: Theme.of(context).textTheme.titleMedium,
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.copy),
-            onPressed: () => _copyNoteId(context),
-          ),
-        ],
-      ),
-    );
-  }
+Widget _buildCounts(int replyCount) {
+  final reactionCount = reactions.length;
 
-  List<Widget> _buildParsedContent(String content) {
-    final parsedContent = _parseContent(content);
-    final widgets = <Widget>[];
-
-    if (parsedContent['text'] != null && (parsedContent['text'] as String).isNotEmpty) {
-      widgets.add(
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Text(
-            parsedContent['text'],
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-        ),
-      );
-      widgets.add(const SizedBox(height: 8));
-    }
-
-    if (parsedContent['mediaUrls'] != null && (parsedContent['mediaUrls'] as List).isNotEmpty) {
-      widgets.addAll(
-        _buildMediaPreviews(parsedContent['mediaUrls'] as List<String>),
-      );
-      widgets.add(const SizedBox(height: 8));
-    }
-
-    return widgets;
-  }
-
-  Widget _buildTimestampAndCounts(int replyCount) {
-    final reactionCount = reactions.length;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Row(
-        children: [
-          Flexible(
-            child: Text(
-              _formatTimestamp(widget.note.timestamp),
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Flexible(
-            child: Text(
-              'REACTIONS: $reactionCount',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Flexible(
-            child: Text(
-              'REPLIES: $replyCount',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRepliesSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  return Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+    child: Row(
       children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16.0),
+        Flexible(
           child: Text(
-            'REPLIES:',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            'REACTIONS: $reactionCount',
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
         ),
-        const SizedBox(height: 8),
-        replies.isEmpty
-            ? const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.0),
-                child: Text(
-                  'No replies yet.',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              )
-            : ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: replies.length,
-                itemBuilder: (context, index) {
-                  final reply = replies[index];
-                  return Padding(
-                    padding: EdgeInsets.only(
-                      left: 16.0 * _getReplyDepth(reply),
-                      top: 8.0,
-                      bottom: 8.0,
-                    ),
-                    child: InkWell(
-                      onTap: () => _navigateToReplyDetail(reply),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildReplyHeader(reply),
-                          const SizedBox(height: 4),
-                          ..._buildReplyContent(reply.content),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
+        const SizedBox(width: 16),
+        Flexible(
+          child: Text(
+            'REPLIES: $replyCount',
+            style: const TextStyle(fontSize: 12, color: Colors.grey),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+        ),
       ],
-    );
-  }
+    ),
+  );
+}
 
-  Widget _buildReplyHeader(ReplyModel reply) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: () => _navigateToProfile(reply.author),
-            child: reply.authorProfileImage.isNotEmpty
-                ? CircleAvatar(
-                    backgroundImage: CachedNetworkImageProvider(reply.authorProfileImage),
-                    radius: 16,
-                  )
-                : const CircleAvatar(
-                    child: Icon(Icons.person, size: 16),
-                    radius: 16,
-                  ),
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: GestureDetector(
-              onTap: () => _navigateToProfile(reply.author),
-              child: Text(
-                reply.authorName,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              _formatTimestamp(reply.timestamp),
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
-  List<Widget> _buildReplyContent(String content) {
-    final parsedContent = _parseContent(content);
-    final widgets = <Widget>[];
-
-    if (parsedContent['text'] != null && (parsedContent['text'] as String).isNotEmpty) {
-      widgets.add(
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Text(
-            parsedContent['text'],
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-        ),
+Widget _buildRepliesSection() {
+  return ListView.builder(
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    padding: EdgeInsets.zero,
+    itemCount: replies.length,
+    itemBuilder: (context, index) {
+      final reply = replies[index];
+      return ReplyWidget(
+        key: ValueKey(reply.id),
+        reply: reply,
+        reactions: [],
       );
-      widgets.add(const SizedBox(height: 8));
-    }
+    },
+  );
+}
 
-    if (parsedContent['mediaUrls'] != null && (parsedContent['mediaUrls'] as List).isNotEmpty) {
-      widgets.addAll(
-        _buildMediaPreviews(parsedContent['mediaUrls'] as List<String>),
-      );
-      widgets.add(const SizedBox(height: 8));
-    }
+}
 
-    return widgets;
-  }
+class NoteWidget extends StatelessWidget {
+  final NoteModel note;
+  final VoidCallback? onTapAuthor;
+  final VoidCallback? onTapRepost;
+  final bool isDetailPage;
+  final bool showTimestamp;
 
-  void _navigateToProfile(String authorNpub) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ProfilePage(npub: authorNpub),
-      ),
-    );
-  }
-
-  void _navigateToReplyDetail(ReplyModel reply) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => NoteDetailPage(
-          note: NoteModel(
-            id: reply.id,
-            content: reply.content,
-            author: reply.author,
-            authorName: reply.authorName,
-            authorProfileImage: reply.authorProfileImage,
-            timestamp: reply.timestamp,
-          ),
-          reactions: [],
-          replies: [],
-          reactionsMap: {},
-          repliesMap: {},
-        ),
-      ),
-    );
-  }
-
-  int _getReplyDepth(ReplyModel reply) {
-    return 0;
-  }
-
-  void _copyNoteId(BuildContext context) {
-    final formattedNoteId = Nip19.encodeNote(widget.note.id);
-    Clipboard.setData(ClipboardData(text: formattedNoteId));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Note ID copied.")),
-    );
-  }
+  const NoteWidget({
+    Key? key,
+    required this.note,
+    this.onTapAuthor,
+    this.onTapRepost,
+    this.isDetailPage = false,
+    this.showTimestamp = true, 
+  }) : super(key: key);
 
   Map<String, dynamic> _parseContent(String content) {
     final mediaRegExp = RegExp(
@@ -395,20 +220,23 @@ class _NoteDetailPageState extends ConsumerState<NoteDetailPage> {
     return {'text': text, 'mediaUrls': mediaUrls};
   }
 
-  List<Widget> _buildMediaPreviews(List<String> mediaUrls) {
-    return mediaUrls.map((url) {
-      if (url.toLowerCase().endsWith('.mp4')) {
-        return _VideoPreview(url: url);
-      } else {
-        return CachedNetworkImage(
-          imageUrl: url,
-          placeholder: (_, __) => const Center(child: CircularProgressIndicator()),
-          errorWidget: (_, __, ___) => const Icon(Icons.error),
-          fit: BoxFit.cover,
-          width: double.infinity,
-        );
-      }
-    }).toList();
+  Widget _buildMediaPreviews(List<String> mediaUrls) {
+    return Column(
+      children: mediaUrls.map((url) {
+        if (url.toLowerCase().endsWith('.mp4')) {
+          return _VideoPreview(url: url);
+        } else {
+          return CachedNetworkImage(
+            imageUrl: url,
+            placeholder: (context, url) =>
+                const Center(child: CircularProgressIndicator()),
+            errorWidget: (context, url, error) => const Icon(Icons.error),
+            fit: BoxFit.cover,
+            width: double.infinity,
+          );
+        }
+      }).toList(),
+    );
   }
 
   String _formatTimestamp(DateTime timestamp) {
@@ -418,145 +246,133 @@ class _NoteDetailPageState extends ConsumerState<NoteDetailPage> {
         "${timestamp.minute.toString().padLeft(2, '0')}:"
         "${timestamp.second.toString().padLeft(2, '0')}";
   }
-}
-
-class ReactionsSection extends StatelessWidget {
-  final List<ReactionModel> reactions;
-
-  const ReactionsSection({Key? key, required this.reactions}) : super(key: key);
-
-  Map<String, List<ReactionModel>> _groupReactions(List<ReactionModel> reactions) {
-    final grouped = <String, List<ReactionModel>>{};
-    for (var r in reactions) {
-      grouped.putIfAbsent(r.content, () => []).add(r);
-    }
-    return grouped;
-  }
 
   @override
   Widget build(BuildContext context) {
-    if (reactions.isEmpty) return const SizedBox.shrink();
-    final groupedReactions = _groupReactions(reactions);
+    final parsedContent = _parseContent(note.content);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16.0),
-          child: Text(
-            'REACTIONS:',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: groupedReactions.entries.map((entry) {
-              final reactionContent = entry.key;
-              final reactionList = entry.value;
-              final reactionCount = reactionList.length;
-
-              return GestureDetector(
-                onTap: () =>
-                    _showReactionDetails(context, reactionContent, reactionList),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(reactionContent, style: const TextStyle(fontSize: 16)),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$reactionCount',
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-        const SizedBox(height: 16),
-      ],
-    );
-  }
-
-  void _showReactionDetails(BuildContext context, String reactionContent, List<ReactionModel> reactionList) {
-    showModalBottomSheet(
-      context: context,
-      builder: (_) {
-        return ReactionDetailsModal(
-          reactionContent: reactionContent,
-          reactions: reactionList,
-        );
-      },
-    );
-  }
-}
-
-class ReactionDetailsModal extends StatelessWidget {
-  final String reactionContent;
-  final List<ReactionModel> reactions;
-
-  const ReactionDetailsModal({
-    Key? key,
-    required this.reactionContent,
-    required this.reactions,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        children: [
-          const SizedBox(height: 16),
-          Text(
-            'Reactions: $reactionContent',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const Divider(),
-          Expanded(
-            child: ListView.builder(
-              itemCount: reactions.length,
-              itemBuilder: (context, index) {
-                final reaction = reactions[index];
-                return ListTile(
-                  leading: reaction.authorProfileImage.isNotEmpty
-                      ? CircleAvatar(
-                          backgroundImage: CachedNetworkImageProvider(
-                            reaction.authorProfileImage,
-                          ),
-                        )
-                      : const CircleAvatar(
-                          child: Icon(Icons.person),
-                        ),
-                  title: Text(reaction.authorName),
-                  trailing: Text(
-                    reaction.content.isNotEmpty ? reaction.content : '+',
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
+        if (note.repostedBy != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 16.0, top: 8.0),
+            child: GestureDetector(
+              onTap: onTapRepost ??
+                  () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => ProfilePage(npub: reaction.author),
+                        builder: (context) => ProfilePage(npub: note.repostedBy!),
                       ),
                     );
                   },
-                );
-              },
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.repeat,
+                    size: 16.0,
+                    color: Colors.grey,
+                  ),
+                  const SizedBox(width: 4.0),
+                  Text(
+                    'Reposted by ${note.repostedByName}',
+                    style: const TextStyle(
+                      fontSize: 12.0,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ],
-      ),
+        GestureDetector(
+          onTap: onTapAuthor ??
+              () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ProfilePage(npub: note.author),
+                  ),
+                );
+              },
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+            child: Row(
+              children: [
+                note.authorProfileImage.isNotEmpty
+                    ? CircleAvatar(
+                        radius: 18,
+                        backgroundImage:
+                            CachedNetworkImageProvider(note.authorProfileImage),
+                      )
+                    : const CircleAvatar(
+                        radius: 12,
+                        child: Icon(Icons.person, size: 16),
+                      ),
+                const SizedBox(width: 12),
+                Text(
+                  note.authorName,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        GestureDetector(
+          onTap: () {
+            if (isDetailPage) {
+              return;
+            }
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => NoteDetailPage(
+                  note: note,
+                  reactions: [], 
+                  replies: [], 
+                  reactionsMap: {},
+                  repliesMap: {},
+                ),
+              ),
+            );
+          },
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (parsedContent['text'] != null &&
+                  parsedContent['text'] != '')
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Text(parsedContent['text']),
+                ),
+              if (parsedContent['text'] != null &&
+                      parsedContent['text'] != '' &&
+                      parsedContent['mediaUrls'] != null &&
+                      parsedContent['mediaUrls'].isNotEmpty
+                  ? true
+                  : false)
+                const SizedBox(height: 16.0),
+              if (parsedContent['mediaUrls'] != null &&
+                  parsedContent['mediaUrls'].isNotEmpty)
+                _buildMediaPreviews(parsedContent['mediaUrls']),
+              if (showTimestamp)
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: Text(
+                    _formatTimestamp(note.timestamp),
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -578,7 +394,11 @@ class __VideoPreviewState extends State<_VideoPreview> {
     super.initState();
     _controller = VideoPlayerController.network(widget.url)
       ..initialize().then((_) {
-        if (mounted) setState(() => _isInitialized = true);
+        if (mounted) {
+          setState(() {
+            _isInitialized = true;
+          });
+        }
       });
   }
 
@@ -603,7 +423,6 @@ class __VideoPreviewState extends State<_VideoPreview> {
     if (!_isInitialized) {
       return const Center(child: CircularProgressIndicator());
     }
-
     return GestureDetector(
       onTap: _togglePlay,
       child: Stack(
