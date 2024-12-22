@@ -202,45 +202,49 @@ class DataService {
     await fetchNotes(targetNpubs, initialLoad: true);
   }
 
-  Future<void> connectToRelays(List<String> relayList, List<String> targetNpubs) async {
-    if (isConnecting || _isClosed) return;
-    isConnecting = true;
+Future<void> connectToRelays(List<String> relayList, List<String> targetNpubs) async {
+  if (isConnecting || _isClosed) return;
+  isConnecting = true;
 
-    await Future.wait(relayList.map((relayUrl) async {
-      if (_isClosed) return;
-      if (!_webSockets.containsKey(relayUrl) || _webSockets[relayUrl]?.readyState == WebSocket.closed) {
-        try {
-          final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
-          if (_isClosed) {
-            webSocket.close();
-            return;
-          }
-          _webSockets[relayUrl] = webSocket;
-          webSocket.listen(
-            (event) => _handleEvent(event, targetNpubs),
-            onDone: () {
-              _webSockets.remove(relayUrl);
-              _reconnectRelay(relayUrl, targetNpubs);
-            },
-            onError: (error) {
-              _webSockets.remove(relayUrl);
-              _reconnectRelay(relayUrl, targetNpubs);
-            },
-          );
-          await _fetchProfilesBatch(targetNpubs);
-          await _fetchReplies(webSocket, targetNpubs);
-        } catch (e) {
-          _webSockets.remove(relayUrl);
+  for (final relayUrl in relayList) {
+    if (_isClosed) break;
+
+    if (!_webSockets.containsKey(relayUrl) || _webSockets[relayUrl]?.readyState == WebSocket.closed) {
+      try {
+        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 1));
+        if (_isClosed) {
+          webSocket.close();
+          continue;
         }
+        _webSockets[relayUrl] = webSocket;
+
+        webSocket.listen(
+          (event) => _handleEvent(event, targetNpubs),
+          onDone: () {
+            _webSockets.remove(relayUrl);
+            _reconnectRelay(relayUrl, targetNpubs);
+          },
+          onError: (error) {
+            _webSockets.remove(relayUrl);
+            _reconnectRelay(relayUrl, targetNpubs);
+          },
+        );
+
+        await _fetchProfilesBatch(targetNpubs);
+        await _fetchReplies(webSocket, targetNpubs);
+      } catch (e) {
+        _webSockets.remove(relayUrl);
       }
-    }));
-
-    isConnecting = false;
-
-    if (_webSockets.isNotEmpty) {
-      _startCheckingForNewData(targetNpubs);
     }
   }
+
+  isConnecting = false;
+
+  if (_webSockets.isNotEmpty) {
+    _startCheckingForNewData(targetNpubs);
+  }
+}
+
 
   void _reconnectRelay(String relayUrl, List<String> targetNpubs, [int attempt = 1]) {
     if (_isClosed) return;
@@ -251,7 +255,7 @@ class DataService {
     Timer(Duration(seconds: delaySeconds), () async {
       if (_isClosed) return;
       try {
-        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
+        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 1));
         if (_isClosed) {
           webSocket.close();
           return;
@@ -470,38 +474,45 @@ class DataService {
     }));
   }
 
-  Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {
-    if (_isClosed) return;
-    try {
-      final decodedEvent = jsonDecode(event);
-      if (decodedEvent[0] == 'EVENT') {
-        Map<String, dynamic> eventData = decodedEvent[2] as Map<String, dynamic>;
-        final kind = eventData['kind'] as int;
-        if (kind == 1 || kind == 6) {
-          await _processNoteEvent(eventData, targetNpubs);
-        } else if (kind == 7) {
-          await _handleReactionEvent(eventData);
-        } else if (kind == 0) {
-          await _handleProfileEvent(eventData);
-        }
-      } else if (decodedEvent[0] == 'EOSE') {
-        final subscriptionId = decodedEvent[1] as String;
-        final npub = _profileSubscriptionIds[subscriptionId];
-        if (npub != null && _pendingProfileRequests.containsKey(npub)) {
-          profileCache[npub] = CachedProfile({
-            'name': 'Anonymous',
-            'profileImage': '',
-            'about': '',
-            'nip05': '',
-            'banner': '',
-          }, DateTime.now());
-          _pendingProfileRequests[npub]?.complete(profileCache[npub]!.data);
-          _pendingProfileRequests.remove(npub);
-          _profileSubscriptionIds.remove(subscriptionId);
-        }
+Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {
+  if (_isClosed) return;
+
+  try {
+    final decodedEvent = jsonDecode(event);
+
+    if (decodedEvent[0] == 'EVENT') {
+      Map<String, dynamic> eventData = decodedEvent[2] as Map<String, dynamic>;
+      final kind = eventData['kind'] as int;
+
+      if (kind == 1 || kind == 6) {
+        await _processNoteEvent(eventData, targetNpubs);
+      } else if (kind == 7) {
+        await _handleReactionEvent(eventData);
+      } else if (kind == 0) {
+        await _handleProfileEvent(eventData);
       }
-    } catch (e) {}
+    } else if (decodedEvent[0] == 'EOSE') {
+      final subscriptionId = decodedEvent[1] as String;
+      final npub = _profileSubscriptionIds[subscriptionId];
+
+      if (npub != null && _pendingProfileRequests.containsKey(npub)) {
+        profileCache[npub] = CachedProfile({
+          'name': 'Anonymous',
+          'profileImage': '',
+          'about': '',
+          'nip05': '',
+          'banner': '',
+        }, DateTime.now());
+
+        _pendingProfileRequests[npub]?.complete(profileCache[npub]!.data);
+        _pendingProfileRequests.remove(npub);
+        _profileSubscriptionIds.remove(subscriptionId);
+      }
+    }
+  } catch (e) {
   }
+}
+
 
   Future<void> _processNoteEvent(Map<String, dynamic> eventData, List<String> targetNpubs) async {
     final kind = eventData['kind'] as int;
@@ -726,7 +737,7 @@ class DataService {
       }
     }));
 
-    Future.delayed(Duration(seconds: 5), () {
+    Future.delayed(Duration(seconds: 1), () {
       if (!completer.isCompleted) {
         profileCache[npub] = CachedProfile({
           'name': 'Anonymous',
@@ -748,7 +759,7 @@ class DataService {
     List<String> followingNpubs = [];
     await Future.wait(relayUrls.map((relayUrl) async {
       try {
-        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
+        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 1));
         if (_isClosed) {
           await webSocket.close();
           return;
@@ -773,7 +784,7 @@ class DataService {
           if (!completer.isCompleted) completer.complete();
         });
         webSocket.add(request.serialize());
-        await completer.future.timeout(Duration(seconds: 5), onTimeout: () async {
+        await completer.future.timeout(Duration(seconds: 1), onTimeout: () async {
           await webSocket.close();
         });
         await webSocket.close();
@@ -874,7 +885,7 @@ class DataService {
       }
     }));
 
-    return completer.future.timeout(Duration(seconds: 5), onTimeout: () {
+    return completer.future.timeout(Duration(seconds: 1), onTimeout: () {
       return null;
     });
   }
