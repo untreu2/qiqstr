@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nostr/nostr.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:video_player/video_player.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
 import '../services/qiqstr_service.dart';
 import 'profile_page.dart';
+import '../widgets/reply_widget.dart';
+import '../widgets/video_preview.dart';
 
 class NoteDetailPage extends StatefulWidget {
   final NoteModel note;
@@ -140,7 +141,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
   List<Widget> _buildMediaPreviews(List<String> mediaUrls) {
     return mediaUrls.map((url) {
       if (url.toLowerCase().endsWith('.mp4')) {
-        return _VideoPreview(url: url);
+        return VideoPreview(url: url);
       } else {
         return CachedNetworkImage(
           imageUrl: url,
@@ -203,7 +204,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                   ),
           ),
           const SizedBox(width: 12),
-          Flexible(
+          Expanded(
             child: GestureDetector(
               onTap: () => _navigateToProfile(widget.note.author),
               child: Text(
@@ -286,94 +287,40 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                 itemCount: replies.length,
                 itemBuilder: (context, index) {
                   final reply = replies[index];
-                  return Padding(
-                    padding: EdgeInsets.only(
-                      left: 16.0 * _getReplyDepth(reply),
-                      top: 8.0,
-                      bottom: 8.0,
-                    ),
-                    child: InkWell(
-                      onTap: () => _navigateToReplyDetail(reply),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildReplyHeader(reply),
-                          const SizedBox(height: 4),
-                          ..._buildReplyContent(reply.content),
-                        ],
-                      ),
-                    ),
+                  return ReplyWidget(
+                    reply: reply,
+                    onAuthorTap: () {
+                      _navigateToProfile(reply.author);
+                    },
+                    onReplyTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => NoteDetailPage(
+                            note: NoteModel(
+                              id: reply.id,
+                              content: reply.content,
+                              author: reply.author,
+                              authorName: reply.authorName,
+                              authorProfileImage: reply.authorProfileImage,
+                              timestamp: reply.timestamp,
+                              isRepost: false,
+                              repostedBy: null,
+                              repostedByName: '',
+                            ),
+                            reactions: [],
+                            replies: [],
+                            reactionsMap: {},
+                            repliesMap: {},
+                          ),
+                        ),
+                      );
+                    },
                   );
                 },
               ),
       ],
     );
-  }
-
-  Widget _buildReplyHeader(ReplyModel reply) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: () => _navigateToProfile(reply.author),
-            child: reply.authorProfileImage.isNotEmpty
-                ? CircleAvatar(
-                    backgroundImage:
-                        CachedNetworkImageProvider(reply.authorProfileImage),
-                    radius: 16,
-                  )
-                : const CircleAvatar(
-                    child: Icon(Icons.person, size: 16),
-                    radius: 16,
-                  ),
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: GestureDetector(
-              onTap: () => _navigateToProfile(reply.author),
-              child: Text(
-                reply.authorName,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              _formatTimestamp(reply.timestamp),
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _buildReplyContent(String content) {
-    final parsedContent = _parseContent(content);
-    List<Widget> widgets = [];
-    if (parsedContent['text'] != null &&
-        (parsedContent['text'] as String).isNotEmpty) {
-      widgets.add(Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-        child: Text(
-          parsedContent['text'],
-          style: Theme.of(context).textTheme.bodyLarge,
-        ),
-      ));
-      widgets.add(const SizedBox(height: 8));
-    }
-    if (parsedContent['mediaUrls'] != null &&
-        (parsedContent['mediaUrls'] as List).isNotEmpty) {
-      widgets.addAll(_buildMediaPreviews(parsedContent['mediaUrls'] as List<String>));
-      widgets.add(const SizedBox(height: 8));
-    }
-    return widgets;
   }
 
   void _navigateToProfile(String authorNpub) {
@@ -383,32 +330,6 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
         builder: (context) => ProfilePage(npub: authorNpub),
       ),
     );
-  }
-
-  void _navigateToReplyDetail(ReplyModel reply) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => NoteDetailPage(
-          note: NoteModel(
-            id: reply.id,
-            content: reply.content,
-            author: reply.author,
-            authorName: reply.authorName,
-            authorProfileImage: reply.authorProfileImage,
-            timestamp: reply.timestamp,
-          ),
-          reactions: [],
-          replies: [],
-          reactionsMap: {},
-          repliesMap: {},
-        ),
-      ),
-    );
-  }
-
-  int _getReplyDepth(ReplyModel reply) {
-    return 0;
   }
 }
 
@@ -520,7 +441,8 @@ class ReactionDetailsModal extends StatelessWidget {
                 return ListTile(
                   leading: reaction.authorProfileImage.isNotEmpty
                       ? CircleAvatar(
-                          backgroundImage: CachedNetworkImageProvider(reaction.authorProfileImage),
+                          backgroundImage:
+                              CachedNetworkImageProvider(reaction.authorProfileImage),
                         )
                       : const CircleAvatar(
                           child: Icon(Icons.person),
@@ -540,77 +462,6 @@ class ReactionDetailsModal extends StatelessWidget {
               },
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _VideoPreview extends StatefulWidget {
-  final String url;
-
-  const _VideoPreview({Key? key, required this.url}) : super(key: key);
-
-  @override
-  __VideoPreviewState createState() => __VideoPreviewState();
-}
-
-class __VideoPreviewState extends State<_VideoPreview> {
-  late VideoPlayerController _controller;
-  bool _isInitialized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = VideoPlayerController.network(widget.url)
-      ..initialize().then((_) {
-        if (mounted) {
-          setState(() {
-            _isInitialized = true;
-          });
-        }
-      });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _togglePlay() {
-    setState(() {
-      if (_controller.value.isPlaying) {
-        _controller.pause();
-      } else {
-        _controller.play();
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_isInitialized) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    return GestureDetector(
-      onTap: _togglePlay,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          SizedBox(
-            width: double.infinity,
-            child: AspectRatio(
-              aspectRatio: _controller.value.aspectRatio,
-              child: VideoPlayer(_controller),
-            ),
-          ),
-          if (!_controller.value.isPlaying)
-            const Icon(
-              Icons.play_circle_outline,
-              size: 64.0,
-              color: Colors.white70,
-            ),
         ],
       ),
     );
