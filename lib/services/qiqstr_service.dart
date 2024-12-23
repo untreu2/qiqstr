@@ -998,4 +998,33 @@ Future<void> sendReaction(String noteId, String reactionContent) async {
   }
 }
 
+  Future<void> sendReply(String noteId, String replyContent) async {
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found. Please log in again.');
+      }
+
+      final event = Event.from(
+        kind: 1,
+        tags: [
+          ['e', noteId],
+        ],
+        content: replyContent,
+        privkey: privateKey,
+      );
+
+      final serializedEvent = event.serialize();
+      for (var relayUrl in _webSockets.keys) {
+        final webSocket = _webSockets[relayUrl];
+        if (webSocket != null && webSocket.readyState == WebSocket.open) {
+          webSocket.add(serializedEvent);
+        }
+      }
+    } catch (e) {
+      print('Error sending reply: $e');
+      throw e;
+    }
+  }
+
 }

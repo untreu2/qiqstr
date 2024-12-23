@@ -5,6 +5,7 @@ import 'package:palette_generator/palette_generator.dart';
 import '../models/note_model.dart';
 import '../services/qiqstr_service.dart';
 import 'note_detail_page.dart';
+import 'send_reply.dart';
 import '../widgets/note_widget.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -20,6 +21,7 @@ class _ProfilePageState extends State<ProfilePage> {
   final List<NoteModel> profileNotes = [];
   final Set<String> cachedNoteIds = {};
   final Set<String> glowingNotes = {};
+  final Set<String> swipedNotes = {};
   bool isLoadingOlderNotes = false;
   bool isLoading = true;
   late DataService _dataService;
@@ -76,8 +78,7 @@ class _ProfilePageState extends State<ProfilePage> {
   void _handleNewNote(NoteModel newNote) {
     if (!cachedNoteIds.contains(newNote.id)) {
       cachedNoteIds.add(newNote.id);
-      int insertIndex = profileNotes
-          .indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
+      int insertIndex = profileNotes.indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
       if (insertIndex == -1) {
         profileNotes.add(newNote);
       } else {
@@ -129,8 +130,21 @@ class _ProfilePageState extends State<ProfilePage> {
           glowingNotes.remove(noteId);
         });
       });
-    } catch (e) {
-    }
+    } catch (e) {}
+  }
+
+  void _showReplyDialog(String noteId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
+      ),
+      builder: (context) => SendReplyDialog(
+        dataService: _dataService,
+        noteId: noteId,
+      ),
+    );
   }
 
   Future<void> _loadOlderNotes() async {
@@ -157,12 +171,10 @@ class _ProfilePageState extends State<ProfilePage> {
   Future<void> _updateBackgroundColor(String imageUrl) async {
     try {
       final PaletteGenerator paletteGenerator =
-          await PaletteGenerator.fromImageProvider(
-              CachedNetworkImageProvider(imageUrl));
+          await PaletteGenerator.fromImageProvider(CachedNetworkImageProvider(imageUrl));
       if (!mounted) return;
       setState(() {
-        backgroundColor = paletteGenerator.dominantColor?.color
-                .withOpacity(0.1) ??
+        backgroundColor = paletteGenerator.dominantColor?.color.withOpacity(0.1) ??
             Colors.blueAccent.withOpacity(0.1);
       });
     } catch (e) {
@@ -189,8 +201,7 @@ class _ProfilePageState extends State<ProfilePage> {
         right: true,
         child: NotificationListener<ScrollNotification>(
           onNotification: (scrollInfo) {
-            if (scrollInfo.metrics.pixels >=
-                    scrollInfo.metrics.maxScrollExtent - 200 &&
+            if (scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 200 &&
                 !isLoadingOlderNotes) {
               _loadOlderNotes();
             }
@@ -211,8 +222,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     ),
                     errorWidget: (context, url, error) => Container(
                       color: Colors.grey[300],
-                      child:
-                          const Center(child: Icon(Icons.broken_image, size: 50)),
+                      child: const Center(child: Icon(Icons.broken_image, size: 50)),
                     ),
                   ),
                 ),
@@ -226,8 +236,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       userProfile['profileImage']!.isNotEmpty
                           ? CircleAvatar(
                               radius: 30,
-                              backgroundImage: CachedNetworkImageProvider(
-                                  userProfile['profileImage']!),
+                              backgroundImage: CachedNetworkImageProvider(userProfile['profileImage']!),
                             )
                           : const CircleAvatar(
                               radius: 30,
@@ -240,8 +249,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           children: [
                             Text(
                               userProfile['name']!,
-                              style: const TextStyle(
-                                  fontSize: 20, fontWeight: FontWeight.bold),
+                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 8),
                             if (userProfile['about']!.isNotEmpty)
@@ -253,8 +261,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             if (userProfile['nip05']!.isNotEmpty)
                               Text(
                                 userProfile['nip05']!,
-                                style: const TextStyle(
-                                    fontSize: 12, color: Colors.grey),
+                                style: const TextStyle(fontSize: 12, color: Colors.grey),
                               ),
                           ],
                         ),
@@ -274,8 +281,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             return isLoadingOlderNotes
                                 ? const Padding(
                                     padding: EdgeInsets.all(16.0),
-                                    child: Center(
-                                        child: CircularProgressIndicator()),
+                                    child: Center(child: CircularProgressIndicator()),
                                   )
                                 : const SizedBox.shrink();
                           }
@@ -285,12 +291,27 @@ class _ProfilePageState extends State<ProfilePage> {
                             onDoubleTap: () {
                               _sendReaction(item.id);
                             },
+                            onHorizontalDragEnd: (details) {
+                              if (details.primaryVelocity! > 0) {
+                                setState(() {
+                                  swipedNotes.add(item.id);
+                                });
+                                _showReplyDialog(item.id);
+                                Timer(const Duration(milliseconds: 500), () {
+                                  setState(() {
+                                    swipedNotes.remove(item.id);
+                                  });
+                                });
+                              }
+                            },
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 300),
                               decoration: BoxDecoration(
                                 border: glowingNotes.contains(item.id)
                                     ? Border.all(color: Colors.white, width: 4.0)
-                                    : null,
+                                    : swipedNotes.contains(item.id)
+                                        ? Border.all(color: Colors.white, width: 4.0)
+                                        : null,
                                 borderRadius: BorderRadius.circular(12.0),
                               ),
                               child: NoteWidget(
@@ -299,8 +320,8 @@ class _ProfilePageState extends State<ProfilePage> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                        builder: (context) =>
-                                            ProfilePage(npub: item.author)),
+                                      builder: (context) => ProfilePage(npub: item.author),
+                                    ),
                                   );
                                 },
                                 onRepostedByTap: item.isRepost
@@ -308,8 +329,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (context) =>
-                                                ProfilePage(npub: item.repostedBy!),
+                                            builder: (context) => ProfilePage(npub: item.repostedBy!),
                                           ),
                                         );
                                       }

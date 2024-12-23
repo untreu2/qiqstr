@@ -7,6 +7,7 @@ import '../services/qiqstr_service.dart';
 import 'note_detail_page.dart';
 import 'profile_page.dart';
 import 'login_page.dart';
+import 'send_reply.dart';
 import '../widgets/note_widget.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -23,6 +24,7 @@ class _FeedPageState extends State<FeedPage> {
   final List<NoteModel> feedItems = [];
   final Set<String> cachedNoteIds = {};
   final Set<String> glowingNotes = {};
+  final Set<String> swipedNotes = {};
   bool isLoadingOlderNotes = false;
   bool isInitializing = true;
   late DataService _dataService;
@@ -130,23 +132,21 @@ class _FeedPageState extends State<FeedPage> {
           glowingNotes.remove(noteId);
         });
       });
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
-  Future<void> _logoutAndClearData() async {
-    try {
-      const secureStorage = FlutterSecureStorage();
-      await secureStorage.deleteAll();
-      await Hive.deleteFromDisk();
-      await _dataService.closeConnections();
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-        (Route<dynamic> route) => false,
-      );
-    } catch (e) {
-    }
+  void _showReplyDialog(String noteId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
+      ),
+      builder: (context) => SendReplyDialog(
+        dataService: _dataService,
+        noteId: noteId,
+      ),
+    );
   }
 
   @override
@@ -212,12 +212,27 @@ class _FeedPageState extends State<FeedPage> {
                       onDoubleTap: () {
                         _sendReaction(item.id);
                       },
+                      onHorizontalDragEnd: (details) {
+                        if (details.primaryVelocity! > 0) {
+                          setState(() {
+                            swipedNotes.add(item.id);
+                          });
+                          _showReplyDialog(item.id);
+                          Timer(const Duration(milliseconds: 500), () {
+                            setState(() {
+                              swipedNotes.remove(item.id);
+                            });
+                          });
+                        }
+                      },
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 300),
                         decoration: BoxDecoration(
                           border: glowingNotes.contains(item.id)
                               ? Border.all(color: Colors.white, width: 4.0)
-                              : null,
+                              : swipedNotes.contains(item.id)
+                                  ? Border.all(color: Colors.white, width: 4.0)
+                                  : null,
                           borderRadius: BorderRadius.circular(12.0),
                         ),
                         child: NoteWidget(
@@ -301,4 +316,26 @@ class _FeedPageState extends State<FeedPage> {
       ),
     );
   }
+  Future<void> _logoutAndClearData() async {
+  try {
+    const secureStorage = FlutterSecureStorage();
+    await secureStorage.deleteAll();
+
+    await Hive.deleteFromDisk();
+
+    await _dataService.closeConnections();
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => const LoginPage()),
+      (Route<dynamic> route) => false,
+    );
+  } catch (e) {
+    print('Error during logout: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error during logout: $e')),
+    );
+  }
+}
+
 }

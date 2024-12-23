@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nostr/nostr.dart';
@@ -11,6 +10,7 @@ import '../services/qiqstr_service.dart';
 import 'profile_page.dart';
 import '../widgets/reply_widget.dart';
 import '../widgets/video_preview.dart';
+import 'send_reply.dart';
 
 class NoteDetailPage extends StatefulWidget {
   final NoteModel note;
@@ -41,7 +41,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
 
   final Set<String> glowingNotes = {};
   final Set<String> glowingReplies = {};
-
+  final Set<String> swipedNotes = {};
   @override
   void initState() {
     super.initState();
@@ -189,6 +189,20 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     }).toList();
   }
 
+  void _showReplyDialog(String noteId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
+      ),
+      builder: (context) => SendReplyDialog(
+        dataService: _dataService,
+        noteId: noteId,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     _organizeReplies(replies);
@@ -197,36 +211,66 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
       body: SafeArea(
         child: isLoading
             ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onDoubleTap: () {
-                        _sendReaction(widget.note.id);
-                      },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        decoration: BoxDecoration(
-                          border: glowingNotes.contains(widget.note.id)
-                              ? Border.all(color: Colors.white, width: 4.0)
-                              : null,
-                          borderRadius: BorderRadius.circular(12.0),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildHeader(),
-                            ..._buildParsedContent(widget.note.content),
-                            _buildTimestampAndCounts(replyCount),
-                            const SizedBox(height: 16),
-                          ],
+            : GestureDetector(
+                onHorizontalDragEnd: (details) {
+                  if (details.primaryVelocity! > 0) {
+                    setState(() {
+                      swipedNotes.add(widget.note.id);
+                    });
+                    _showReplyDialog(widget.note.id);
+                    Timer(const Duration(milliseconds: 500), () {
+                      setState(() {
+                        swipedNotes.remove(widget.note.id);
+                      });
+                    });
+                  }
+                },
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      GestureDetector(
+                        onDoubleTap: () {
+                          _sendReaction(widget.note.id);
+                        },
+                        onHorizontalDragEnd: (details) {
+                          if (details.primaryVelocity! > 0) {
+                            setState(() {
+                              swipedNotes.add(widget.note.id);
+                            });
+                            _showReplyDialog(widget.note.id);
+                            Timer(const Duration(milliseconds: 500), () {
+                              setState(() {
+                                swipedNotes.remove(widget.note.id);
+                              });
+                            });
+                          }
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          decoration: BoxDecoration(
+                            border: glowingNotes.contains(widget.note.id)
+                                ? Border.all(color: Colors.white, width: 4.0)
+                                : swipedNotes.contains(widget.note.id)
+                                    ? Border.all(color: Colors.white, width: 4.0)
+                                    : null,
+                            borderRadius: BorderRadius.circular(12.0),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildHeader(),
+                              ..._buildParsedContent(widget.note.content),
+                              _buildTimestampAndCounts(replyCount),
+                              const SizedBox(height: 16),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    ReactionsSection(reactions: reactions),
-                    _buildRepliesSection(),
-                  ],
+                      ReactionsSection(reactions: reactions),
+                      _buildRepliesSection(),
+                    ],
+                  ),
                 ),
               ),
       ),
@@ -356,12 +400,27 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                     onDoubleTap: () {
                       _sendReplyReaction(reply.id);
                     },
+                    onHorizontalDragEnd: (details) {
+                      if (details.primaryVelocity! > 0) {
+                        setState(() {
+                          swipedNotes.add(reply.id);
+                        });
+                        _showReplyDialog(reply.id);
+                        Timer(const Duration(milliseconds: 500), () {
+                          setState(() {
+                            swipedNotes.remove(reply.id);
+                          });
+                        });
+                      }
+                    },
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 300),
                       decoration: BoxDecoration(
                         border: glowingReplies.contains(reply.id)
                             ? Border.all(color: Colors.white, width: 4.0)
-                            : null,
+                            : swipedNotes.contains(reply.id)
+                                ? Border.all(color: Colors.white, width: 4.0)
+                                : null,
                         borderRadius: BorderRadius.circular(12.0),
                       ),
                       child: ReplyWidget(
