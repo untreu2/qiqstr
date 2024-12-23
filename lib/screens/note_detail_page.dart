@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:nostr/nostr.dart';
@@ -36,6 +38,9 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
   Map<String, List<ReplyModel>> repliesMap = {};
   bool isLoading = true;
   late DataService _dataService;
+
+  final Set<String> glowingNotes = {};
+  final Set<String> glowingReplies = {};
 
   @override
   void initState() {
@@ -90,12 +95,36 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     }
   }
 
-  void _copyNoteId(BuildContext context) {
-    final formattedNoteId = Nip19.encodeNote(widget.note.id);
-    Clipboard.setData(ClipboardData(text: formattedNoteId));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Note ID copied.")),
-    );
+  Future<void> _sendReaction(String noteId) async {
+    try {
+      await _dataService.sendReaction(noteId, '💜');
+      setState(() {
+        glowingNotes.add(noteId);
+      });
+
+      Timer(const Duration(seconds: 1), () {
+        setState(() {
+          glowingNotes.remove(noteId);
+        });
+      });
+    } catch (e) {
+    }
+  }
+
+  Future<void> _sendReplyReaction(String replyId) async {
+    try {
+      await _dataService.sendReaction(replyId, '💜');
+      setState(() {
+        glowingReplies.add(replyId);
+      });
+
+      Timer(const Duration(seconds: 1), () {
+        setState(() {
+          glowingReplies.remove(replyId);
+        });
+      });
+    } catch (e) {
+    }
   }
 
   Map<String, List<ReplyModel>> _organizeReplies(List<ReplyModel> replies) {
@@ -106,6 +135,11 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
       }
     }
     return replyTree;
+  }
+
+  String _formatTimestamp(DateTime timestamp) {
+    return "${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} "
+        "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}";
   }
 
   Map<String, dynamic> _parseContent(String content) {
@@ -155,11 +189,6 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     }).toList();
   }
 
-  String _formatTimestamp(DateTime timestamp) {
-    return "${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} "
-        "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}:${timestamp.second.toString().padLeft(2, '0')}";
-  }
-
   @override
   Widget build(BuildContext context) {
     _organizeReplies(replies);
@@ -172,10 +201,29 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildHeader(),
-                    ..._buildParsedContent(widget.note.content),
-                    _buildTimestampAndCounts(replyCount),
-                    const SizedBox(height: 16),
+                    GestureDetector(
+                      onDoubleTap: () {
+                        _sendReaction(widget.note.id);
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        decoration: BoxDecoration(
+                          border: glowingNotes.contains(widget.note.id)
+                              ? Border.all(color: Colors.white, width: 4.0)
+                              : null,
+                          borderRadius: BorderRadius.circular(12.0),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildHeader(),
+                            ..._buildParsedContent(widget.note.content),
+                            _buildTimestampAndCounts(replyCount),
+                            const SizedBox(height: 16),
+                          ],
+                        ),
+                      ),
+                    ),
                     ReactionsSection(reactions: reactions),
                     _buildRepliesSection(),
                   ],
@@ -220,6 +268,23 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
             onPressed: () => _copyNoteId(context),
           ),
         ],
+      ),
+    );
+  }
+
+  void _copyNoteId(BuildContext context) {
+    final formattedNoteId = Nip19.encodeNote(widget.note.id);
+    Clipboard.setData(ClipboardData(text: formattedNoteId));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Note ID copied.")),
+    );
+  }
+
+  void _navigateToProfile(String authorNpub) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProfilePage(npub: authorNpub),
       ),
     );
   }
@@ -287,48 +352,53 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                 itemCount: replies.length,
                 itemBuilder: (context, index) {
                   final reply = replies[index];
-                  return ReplyWidget(
-                    reply: reply,
-                    onAuthorTap: () {
-                      _navigateToProfile(reply.author);
+                  return GestureDetector(
+                    onDoubleTap: () {
+                      _sendReplyReaction(reply.id);
                     },
-                    onReplyTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => NoteDetailPage(
-                            note: NoteModel(
-                              id: reply.id,
-                              content: reply.content,
-                              author: reply.author,
-                              authorName: reply.authorName,
-                              authorProfileImage: reply.authorProfileImage,
-                              timestamp: reply.timestamp,
-                              isRepost: false,
-                              repostedBy: null,
-                              repostedByName: '',
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      decoration: BoxDecoration(
+                        border: glowingReplies.contains(reply.id)
+                            ? Border.all(color: Colors.white, width: 4.0)
+                            : null,
+                        borderRadius: BorderRadius.circular(12.0),
+                      ),
+                      child: ReplyWidget(
+                        reply: reply,
+                        onAuthorTap: () {
+                          _navigateToProfile(reply.author);
+                        },
+                        onReplyTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => NoteDetailPage(
+                                note: NoteModel(
+                                  id: reply.id,
+                                  content: reply.content,
+                                  author: reply.author,
+                                  authorName: reply.authorName,
+                                  authorProfileImage: reply.authorProfileImage,
+                                  timestamp: reply.timestamp,
+                                  isRepost: false,
+                                  repostedBy: null,
+                                  repostedByName: '',
+                                ),
+                                reactions: [],
+                                replies: [],
+                                reactionsMap: {},
+                                repliesMap: {},
+                              ),
                             ),
-                            reactions: [],
-                            replies: [],
-                            reactionsMap: {},
-                            repliesMap: {},
-                          ),
-                        ),
-                      );
-                    },
+                          );
+                        },
+                      ),
+                    ),
                   );
                 },
               ),
       ],
-    );
-  }
-
-  void _navigateToProfile(String authorNpub) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ProfilePage(npub: authorNpub),
-      ),
     );
   }
 }

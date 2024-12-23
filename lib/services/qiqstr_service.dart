@@ -967,4 +967,35 @@ Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {
       throw e;
     }
   }
+
+Future<void> sendReaction(String noteId, String reactionContent) async {
+  try {
+    final privateKey = await _secureStorage.read(key: 'privateKey');
+    if (privateKey == null || privateKey.isEmpty) {
+      throw Exception('Private key not found. Please log in again.');
+    }
+
+    final event = Event.from(
+      kind: 7, 
+      tags: [
+        ['e', noteId],
+      ],
+      content: reactionContent, 
+      privkey: privateKey,
+    );
+
+    final serializedEvent = event.serialize();
+
+    for (var relayUrl in _webSockets.keys) {
+      final webSocket = _webSockets[relayUrl];
+      if (webSocket != null && webSocket.readyState == WebSocket.open) {
+        webSocket.add(serializedEvent);
+      }
+    }
+  } catch (e) {
+    print('Error sending reaction: $e');
+    throw e;
+  }
+}
+
 }

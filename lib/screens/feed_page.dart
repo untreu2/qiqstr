@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'package:qiqstr/screens/share_note.dart';
@@ -6,9 +7,8 @@ import '../services/qiqstr_service.dart';
 import 'note_detail_page.dart';
 import 'profile_page.dart';
 import 'login_page.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'dart:ui';
 import '../widgets/note_widget.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -22,6 +22,7 @@ class FeedPage extends StatefulWidget {
 class _FeedPageState extends State<FeedPage> {
   final List<NoteModel> feedItems = [];
   final Set<String> cachedNoteIds = {};
+  final Set<String> glowingNotes = {};
   bool isLoadingOlderNotes = false;
   bool isInitializing = true;
   late DataService _dataService;
@@ -93,9 +94,6 @@ class _FeedPageState extends State<FeedPage> {
         feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       });
     });
-    if (mounted) {
-      setState(() {});
-    }
   }
 
   Future<void> _loadOlderNotes() async {
@@ -120,6 +118,22 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
+  Future<void> _sendReaction(String noteId) async {
+    try {
+      await _dataService.sendReaction(noteId, '💜');
+      setState(() {
+        glowingNotes.add(noteId);
+      });
+
+      Timer(const Duration(seconds: 1), () {
+        setState(() {
+          glowingNotes.remove(noteId);
+        });
+      });
+    } catch (e) {
+    }
+  }
+
   Future<void> _logoutAndClearData() async {
     try {
       const secureStorage = FlutterSecureStorage();
@@ -131,7 +145,8 @@ class _FeedPageState extends State<FeedPage> {
         MaterialPageRoute(builder: (context) => const LoginPage()),
         (Route<dynamic> route) => false,
       );
-    } catch (e) {}
+    } catch (e) {
+    }
   }
 
   @override
@@ -144,110 +159,123 @@ class _FeedPageState extends State<FeedPage> {
       );
     }
 
-return Scaffold(
-  key: _scaffoldKey,
-  drawer: _buildSidebar(),
-  body: NestedScrollView(
-    controller: _scrollController,
-    headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
-      return [
-        SliverAppBar(
-          leading: IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () {
-              _scaffoldKey.currentState?.openDrawer();
-            },
-          ),
-          title: const Text(
-            'FOLLOWING',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 24.0,
+    return Scaffold(
+      key: _scaffoldKey,
+      drawer: _buildSidebar(),
+      body: NestedScrollView(
+        controller: _scrollController,
+        headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
+          return [
+            SliverAppBar(
+              leading: IconButton(
+                icon: const Icon(Icons.menu),
+                onPressed: () {
+                  _scaffoldKey.currentState?.openDrawer();
+                },
+              ),
+              title: const Text(
+                'FOLLOWING',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 24.0,
+                ),
+              ),
+              floating: true,
+              pinned: false,
+              elevation: 4.0,
+              flexibleSpace: const FlexibleSpaceBar(),
             ),
-          ),
-          floating: true, 
-          pinned: false,
-          elevation: 4.0,
-          flexibleSpace: const FlexibleSpaceBar(),
-        ),
-      ];
-    },
-    body: feedItems.isEmpty
-        ? const Center(child: Text('No feed items available.'))
-        : NotificationListener<ScrollNotification>(
-            onNotification: (scrollInfo) {
-              if (scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 200 &&
-                  !isLoadingOlderNotes) {
-                _loadOlderNotes();
-              }
-              return false;
-            },
-            child: ListView.builder(
-              padding: EdgeInsets.zero,
-              itemCount: feedItems.length + (isLoadingOlderNotes ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index == feedItems.length) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                final item = feedItems[index];
-                return NoteWidget(
-                  note: item,
-                  onAuthorTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ProfilePage(npub: item.author),
-                      ),
-                    );
-                  },
-                  onRepostedByTap: item.isRepost
-                      ? () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ProfilePage(npub: item.repostedBy!),
-                            ),
-                          );
-                        }
-                      : null,
-                  onNoteTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => NoteDetailPage(
+          ];
+        },
+        body: feedItems.isEmpty
+            ? const Center(child: Text('No feed items available.'))
+            : NotificationListener<ScrollNotification>(
+                onNotification: (scrollInfo) {
+                  if (scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 200 &&
+                      !isLoadingOlderNotes) {
+                    _loadOlderNotes();
+                  }
+                  return false;
+                },
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  itemCount: feedItems.length + (isLoadingOlderNotes ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == feedItems.length) {
+                      return const Padding(
+                        padding: EdgeInsets.all(16.0),
+                        child: Center(child: CircularProgressIndicator()),
+                      );
+                    }
+                    final item = feedItems[index];
+                    return GestureDetector(
+                      onDoubleTap: () {
+                        _sendReaction(item.id);
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        decoration: BoxDecoration(
+                          border: glowingNotes.contains(item.id)
+                              ? Border.all(color: Colors.white, width: 4.0)
+                              : null,
+                          borderRadius: BorderRadius.circular(12.0),
+                        ),
+                        child: NoteWidget(
                           note: item,
-                          reactions: [],
-                          replies: [],
-                          reactionsMap: {},
-                          repliesMap: {},
+                          onAuthorTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ProfilePage(npub: item.author),
+                              ),
+                            );
+                          },
+                          onRepostedByTap: item.isRepost
+                              ? () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ProfilePage(npub: item.repostedBy!),
+                                    ),
+                                  );
+                                }
+                              : null,
+                          onNoteTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => NoteDetailPage(
+                                  note: item,
+                                  reactions: [],
+                                  replies: [],
+                                  reactionsMap: {},
+                                  repliesMap: {},
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ),
                     );
                   },
-                );
-              },
-            ),
-          ),
-  ),
- floatingActionButton: FloatingActionButton(
-  onPressed: () {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
+                ),
+              ),
       ),
-      builder: (context) => ShareNoteDialog(dataService: _dataService),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
+            ),
+            builder: (context) => ShareNoteDialog(dataService: _dataService),
+          );
+        },
+        child: const Icon(Icons.add),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
-  },
-  child: const Icon(Icons.add),
-),
-floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-);
-
   }
 
   Widget _buildSidebar() {

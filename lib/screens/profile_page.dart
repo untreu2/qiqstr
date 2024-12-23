@@ -19,6 +19,7 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   final List<NoteModel> profileNotes = [];
   final Set<String> cachedNoteIds = {};
+  final Set<String> glowingNotes = {};
   bool isLoadingOlderNotes = false;
   bool isLoading = true;
   late DataService _dataService;
@@ -113,6 +114,22 @@ class _ProfilePageState extends State<ProfilePage> {
     });
     if (userProfile['profileImage']!.isNotEmpty) {
       await _updateBackgroundColor(userProfile['profileImage']!);
+    }
+  }
+
+  Future<void> _sendReaction(String noteId) async {
+    try {
+      await _dataService.sendReaction(noteId, '💜');
+      setState(() {
+        glowingNotes.add(noteId);
+      });
+
+      Timer(const Duration(seconds: 1), () {
+        setState(() {
+          glowingNotes.remove(noteId);
+        });
+      });
+    } catch (e) {
     }
   }
 
@@ -264,41 +281,55 @@ class _ProfilePageState extends State<ProfilePage> {
                           }
 
                           final item = profileNotes[index];
-                          return NoteWidget(
-                            note: item,
-                            onAuthorTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (context) =>
-                                        ProfilePage(npub: item.author)),
-                              );
+                          return GestureDetector(
+                            onDoubleTap: () {
+                              _sendReaction(item.id);
                             },
-                            onRepostedByTap: item.isRepost
-                                ? () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              decoration: BoxDecoration(
+                                border: glowingNotes.contains(item.id)
+                                    ? Border.all(color: Colors.white, width: 4.0)
+                                    : null,
+                                borderRadius: BorderRadius.circular(12.0),
+                              ),
+                              child: NoteWidget(
+                                note: item,
+                                onAuthorTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
                                         builder: (context) =>
-                                            ProfilePage(npub: item.repostedBy!),
+                                            ProfilePage(npub: item.author)),
+                                  );
+                                },
+                                onRepostedByTap: item.isRepost
+                                    ? () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                ProfilePage(npub: item.repostedBy!),
+                                          ),
+                                        );
+                                      }
+                                    : null,
+                                onNoteTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => NoteDetailPage(
+                                        note: item,
+                                        reactions: [],
+                                        replies: [],
+                                        reactionsMap: {},
+                                        repliesMap: {},
                                       ),
-                                    );
-                                  }
-                                : null,
-                            onNoteTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => NoteDetailPage(
-                                    note: item,
-                                    reactions: [],
-                                    replies: [],
-                                    reactionsMap: {},
-                                    repliesMap: {},
-                                  ),
-                                ),
-                              );
-                            },
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
                           );
                         },
                         childCount: profileNotes.length + 1,
