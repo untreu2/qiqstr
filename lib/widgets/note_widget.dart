@@ -138,10 +138,6 @@ class NoteWidget extends StatelessWidget {
                   MaterialPageRoute(
                     builder: (context) => NoteDetailPage(
                       note: note,
-                      reactions: [],
-                      replies: [],
-                      reactionsMap: {},
-                      repliesMap: {},
                     ),
                   ),
                 );

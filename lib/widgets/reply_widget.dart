@@ -68,10 +68,6 @@ class ReplyWidget extends StatelessWidget {
                 MaterialPageRoute(
                   builder: (context) => NoteDetailPage(
                     note: ReplyToNoteModel(reply: reply),
-                    reactions: [],
-                    replies: [],
-                    reactionsMap: {},
-                    repliesMap: {},
                   ),
                 ),
               );

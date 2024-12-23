@@ -69,6 +69,35 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  Future<void> _loadProfileFromCache() async {
+    await _dataService.loadNotesFromCache((cachedNotes) {
+      setState(() {
+        for (var cachedNote in cachedNotes) {
+          if (!cachedNoteIds.contains(cachedNote.id)) {
+            cachedNoteIds.add(cachedNote.id);
+            profileNotes.add(cachedNote);
+          }
+        }
+      });
+      profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    });
+
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _updateUserProfile() async {
+    final profile = await _dataService.getCachedUserProfile(widget.npub);
+    if (!mounted) return;
+    setState(() {
+      userProfile = profile;
+    });
+    if (userProfile['profileImage']!.isNotEmpty) {
+      await _updateBackgroundColor(userProfile['profileImage']!);
+    }
+  }
+
   @override
   void dispose() {
     _dataService.closeConnections();
@@ -91,33 +120,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  Future<void> _loadProfileFromCache() async {
-    await _dataService.loadNotesFromCache((cachedNotes) {
-      for (var cachedNote in cachedNotes) {
-        if (!cachedNoteIds.contains(cachedNote.id)) {
-          cachedNoteIds.add(cachedNote.id);
-          profileNotes.add(cachedNote);
-        }
-      }
-    });
-    profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  Future<void> _updateUserProfile() async {
-    final profile = await _dataService.getCachedUserProfile(widget.npub);
-    if (!mounted) return;
-    setState(() {
-      userProfile = profile;
-    });
-    if (userProfile['profileImage']!.isNotEmpty) {
-      await _updateBackgroundColor(userProfile['profileImage']!);
-    }
-  }
-
   Future<void> _sendReaction(String noteId) async {
     try {
       await _dataService.sendReaction(noteId, '💜');
@@ -130,7 +132,8 @@ class _ProfilePageState extends State<ProfilePage> {
           glowingNotes.remove(noteId);
         });
       });
-    } catch (e) {}
+    } catch (e) {
+    }
   }
 
   void _showReplyDialog(String noteId) {
@@ -184,6 +187,7 @@ class _ProfilePageState extends State<ProfilePage> {
       });
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -340,10 +344,6 @@ class _ProfilePageState extends State<ProfilePage> {
                                     MaterialPageRoute(
                                       builder: (context) => NoteDetailPage(
                                         note: item,
-                                        reactions: [],
-                                        replies: [],
-                                        reactionsMap: {},
-                                        repliesMap: {},
                                       ),
                                     ),
                                   );

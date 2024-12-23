@@ -21,32 +21,38 @@ class FeedPage extends StatefulWidget {
 }
 
 class _FeedPageState extends State<FeedPage> {
-  final List<NoteModel> feedItems = [];
-  final Set<String> cachedNoteIds = {};
-  final Set<String> glowingNotes = {};
-  final Set<String> swipedNotes = {};
-  bool isLoadingOlderNotes = false;
-  bool isInitializing = true;
-  late DataService _dataService;
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final ScrollController _scrollController = ScrollController();
+  static final List<NoteModel> feedItems = [];
+  static final Set<String> cachedNoteIds = {};
+  static final Set<String> glowingNotes = {};
+  static final Set<String> swipedNotes = {};
+  static bool isLoadingOlderNotes = false;
+  static bool isInitializing = true;
+  static DataService? _dataService;
+  static final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  static final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _dataService = DataService(
-      npub: widget.npub,
-      dataType: DataType.Feed,
-      onNewNote: _handleNewNote,
-    );
-    _initializeFeed();
+    if (_dataService == null) {
+      _dataService = DataService(
+        npub: widget.npub,
+        dataType: DataType.Feed,
+        onNewNote: _handleNewNote,
+      );
+      _initializeFeed();
+    } else {
+      setState(() {
+        isInitializing = false;
+      });
+    }
   }
 
   Future<void> _initializeFeed() async {
     try {
-      await _dataService.initialize();
+      await _dataService!.initialize();
       await _loadFeedFromCache();
-      await _dataService.initializeConnections();
+      await _dataService!.initializeConnections();
       if (mounted) {
         setState(() {
           isInitializing = false;
@@ -61,31 +67,8 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    _dataService.closeConnections();
-    super.dispose();
-  }
-
-  void _handleNewNote(NoteModel newNote) {
-    if (!cachedNoteIds.contains(newNote.id)) {
-      cachedNoteIds.add(newNote.id);
-      int insertIndex = feedItems.indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
-      if (insertIndex == -1) {
-        feedItems.add(newNote);
-      } else {
-        feedItems.insert(insertIndex, newNote);
-      }
-      _dataService.saveNotesToCache();
-      if (mounted) {
-        setState(() {});
-      }
-    }
-  }
-
   Future<void> _loadFeedFromCache() async {
-    await _dataService.loadNotesFromCache((cachedNotes) {
+    await _dataService!.loadNotesFromCache((cachedNotes) {
       setState(() {
         for (var cachedNote in cachedNotes) {
           if (!cachedNoteIds.contains(cachedNote.id)) {
@@ -98,13 +81,34 @@ class _FeedPageState extends State<FeedPage> {
     });
   }
 
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
+  void _handleNewNote(NoteModel newNote) {
+    if (!cachedNoteIds.contains(newNote.id)) {
+      cachedNoteIds.add(newNote.id);
+      int insertIndex = feedItems.indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
+      if (insertIndex == -1) {
+        feedItems.add(newNote);
+      } else {
+        feedItems.insert(insertIndex, newNote);
+      }
+      _dataService!.saveNotesToCache();
+      if (mounted) {
+        setState(() {});
+      }
+    }
+  }
+
   Future<void> _loadOlderNotes() async {
     if (isLoadingOlderNotes) return;
     setState(() {
       isLoadingOlderNotes = true;
     });
-    final followingList = await _dataService.getFollowingList(widget.npub);
-    await _dataService.fetchOlderNotes(followingList, (olderNote) {
+    final followingList = await _dataService!.getFollowingList(widget.npub);
+    await _dataService!.fetchOlderNotes(followingList, (olderNote) {
       if (!cachedNoteIds.contains(olderNote.id)) {
         cachedNoteIds.add(olderNote.id);
         feedItems.add(olderNote);
@@ -122,7 +126,7 @@ class _FeedPageState extends State<FeedPage> {
 
   Future<void> _sendReaction(String noteId) async {
     try {
-      await _dataService.sendReaction(noteId, '💜');
+      await _dataService!.sendReaction(noteId, '💜');
       setState(() {
         glowingNotes.add(noteId);
       });
@@ -132,7 +136,8 @@ class _FeedPageState extends State<FeedPage> {
           glowingNotes.remove(noteId);
         });
       });
-    } catch (e) {}
+    } catch (e) {
+    }
   }
 
   void _showReplyDialog(String noteId) {
@@ -143,7 +148,7 @@ class _FeedPageState extends State<FeedPage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
       ),
       builder: (context) => SendReplyDialog(
-        dataService: _dataService,
+        dataService: _dataService!,
         noteId: noteId,
       ),
     );
@@ -261,10 +266,6 @@ class _FeedPageState extends State<FeedPage> {
                               MaterialPageRoute(
                                 builder: (context) => NoteDetailPage(
                                   note: item,
-                                  reactions: [],
-                                  replies: [],
-                                  reactionsMap: {},
-                                  repliesMap: {},
                                 ),
                               ),
                             );
@@ -284,7 +285,7 @@ class _FeedPageState extends State<FeedPage> {
             shape: const RoundedRectangleBorder(
               borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
             ),
-            builder: (context) => ShareNoteDialog(dataService: _dataService),
+            builder: (context) => ShareNoteDialog(dataService: _dataService!),
           );
         },
         child: const Icon(Icons.add),
@@ -316,26 +317,32 @@ class _FeedPageState extends State<FeedPage> {
       ),
     );
   }
+
   Future<void> _logoutAndClearData() async {
-  try {
-    const secureStorage = FlutterSecureStorage();
-    await secureStorage.deleteAll();
+    try {
+      const secureStorage = FlutterSecureStorage();
+      await secureStorage.deleteAll();
 
-    await Hive.deleteFromDisk();
+      await Hive.deleteFromDisk();
 
-    await _dataService.closeConnections();
+      await _dataService?.closeConnections();
 
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginPage()),
-      (Route<dynamic> route) => false,
-    );
-  } catch (e) {
-    print('Error during logout: $e');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Error during logout: $e')),
-    );
+      feedItems.clear();
+      cachedNoteIds.clear();
+      glowingNotes.clear();
+      swipedNotes.clear();
+      isInitializing = true;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginPage()),
+        (Route<dynamic> route) => false,
+      );
+    } catch (e) {
+      print('Error during logout: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error during logout: $e')),
+      );
+    }
   }
-}
-
 }

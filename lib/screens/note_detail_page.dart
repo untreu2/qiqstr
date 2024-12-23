@@ -12,20 +12,291 @@ import '../widgets/reply_widget.dart';
 import '../widgets/video_preview.dart';
 import 'send_reply.dart';
 
+class ThreeDotsLoading extends StatefulWidget {
+  final double size;
+  final Color color;
+  final Duration duration;
+
+  const ThreeDotsLoading({
+    Key? key,
+    this.size = 8.0,
+    this.color = Colors.grey,
+    this.duration = const Duration(milliseconds: 500),
+  }) : super(key: key);
+
+  @override
+  _ThreeDotsLoadingState createState() => _ThreeDotsLoadingState();
+}
+
+class _ThreeDotsLoadingState extends State<ThreeDotsLoading>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: widget.duration,
+    )..repeat(reverse: true);
+
+    _animation = Tween<double>(begin: 0.0, end: 1.0).animate(_controller);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Widget _buildDot(int index) {
+    return FadeTransition(
+      opacity: _animation,
+      child: Container(
+        width: widget.size,
+        height: widget.size,
+        margin: const EdgeInsets.symmetric(horizontal: 2.0),
+        decoration: BoxDecoration(
+          color: widget.color,
+          shape: BoxShape.circle,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(3, (index) {
+        return DelayAnimation(
+          delay: Duration(milliseconds: index * 200),
+          child: _buildDot(index),
+        );
+      }),
+    );
+  }
+}
+
+class DelayAnimation extends StatelessWidget {
+  final Widget child;
+  final Duration delay;
+
+  const DelayAnimation({Key? key, required this.child, required this.delay})
+      : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder(
+      future: Future.delayed(delay),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.done) {
+          return child;
+        } else {
+          return Opacity(opacity: 0.0, child: child);
+        }
+      },
+    );
+  }
+}
+
+class ReactionsSection extends StatelessWidget {
+  final List<ReactionModel> reactions;
+  final bool isLoading;
+
+  const ReactionsSection({
+    Key? key,
+    required this.reactions,
+    required this.isLoading,
+  }) : super(key: key);
+
+  Map<String, List<ReactionModel>> _groupReactions(
+      List<ReactionModel> reactions) {
+    Map<String, List<ReactionModel>> grouped = {};
+    for (var reaction in reactions) {
+      grouped.putIfAbsent(reaction.content, () => []).add(reaction);
+    }
+    return grouped;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.0),
+          child: Text(
+            'REACTIONS:',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (isLoading)
+          const Padding(
+            padding:
+                EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
+            child: ThreeDotsLoading(),
+          )
+        else if (reactions.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16.0),
+            child: Text(
+              'No reactions yet.',
+              style: TextStyle(color: Colors.grey),
+            ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: _groupReactions(reactions).entries.map((entry) {
+                final reactionContent = entry.key;
+                final reactionList = entry.value;
+                final reactionCount = reactionList.length;
+                return GestureDetector(
+                  onTap: () => _showReactionDetails(
+                      context, reactionContent, reactionList),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          reactionContent,
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$reactionCount',
+                          style:
+                              const TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  void _showReactionDetails(
+      BuildContext context, String reactionContent, List<ReactionModel> reactionList) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return ReactionDetailsModal(
+            reactionContent: reactionContent, reactions: reactionList);
+      },
+    );
+  }
+}
+
+class RepliesSection extends StatelessWidget {
+  final List<ReplyModel> replies;
+  final bool isLoading;
+  final Function(String) onSendReplyReaction;
+  final Function(String) onShowReplyDialog;
+  final Function(String) onNavigateToProfile;
+
+  RepliesSection({
+    Key? key,
+    required this.replies,
+    required this.isLoading,
+    required this.onSendReplyReaction,
+    required this.onShowReplyDialog,
+    required this.onNavigateToProfile,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.0),
+          child: Text(
+            'REPLIES:',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (isLoading)
+          const Padding(
+            padding:
+                EdgeInsets.symmetric(vertical: 16.0, horizontal: 16.0),
+            child: ThreeDotsLoading(),
+          )
+        else if (replies.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16.0),
+            child: Text(
+              'No replies yet.',
+              style: TextStyle(color: Colors.grey),
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: replies.length,
+            itemBuilder: (context, index) {
+              final reply = replies[index];
+              return GestureDetector(
+                onDoubleTap: () {
+                  onSendReplyReaction(reply.id);
+                },
+                onHorizontalDragEnd: (details) {
+                  if (details.primaryVelocity! > 0) {
+                    onShowReplyDialog(reply.id);
+                  }
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  decoration: BoxDecoration(
+                    border: _glowingReplies.contains(reply.id)
+                        ? Border.all(color: Colors.white, width: 4.0)
+                        : null,
+                    borderRadius: BorderRadius.circular(12.0),
+                  ),
+                  child: ReplyWidget(
+                    reply: reply,
+                    onAuthorTap: () {
+                      onNavigateToProfile(reply.author);
+                    },
+                    onReplyTap: () {
+                    },
+                  ),
+                ),
+              );
+            },
+          ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  final Set<String> _glowingReplies = {};
+}
+
 class NoteDetailPage extends StatefulWidget {
   final NoteModel note;
-  final List<ReactionModel> reactions;
-  final List<ReplyModel> replies;
-  final Map<String, List<ReactionModel>> reactionsMap;
-  final Map<String, List<ReplyModel>> repliesMap;
 
   const NoteDetailPage({
     Key? key,
     required this.note,
-    required this.reactions,
-    required this.replies,
-    required this.reactionsMap,
-    required this.repliesMap,
   }) : super(key: key);
 
   @override
@@ -35,13 +306,14 @@ class NoteDetailPage extends StatefulWidget {
 class _NoteDetailPageState extends State<NoteDetailPage> {
   List<ReactionModel> reactions = [];
   List<ReplyModel> replies = [];
-  Map<String, List<ReplyModel>> repliesMap = {};
-  bool isLoading = true;
+  bool isReactionsLoading = true;
+  bool isRepliesLoading = true; 
   late DataService _dataService;
 
   final Set<String> glowingNotes = {};
   final Set<String> glowingReplies = {};
   final Set<String> swipedNotes = {};
+
   @override
   void initState() {
     super.initState();
@@ -58,24 +330,33 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
       );
       await _dataService.initialize();
       await _dataService.initializeConnections();
-      await _fetchReactionsAndReplies();
-      if (mounted) {
-        setState(() {
-          isLoading = false;
-        });
-      }
+      _fetchReactionsAndReplies();
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          isLoading = false;
-        });
-      }
+      print('Error initializing NoteDetailPage: $e');
+      setState(() {
+        isReactionsLoading = false;
+        isRepliesLoading = false;
+      });
     }
   }
 
   Future<void> _fetchReactionsAndReplies() async {
-    await _dataService.fetchReactionsForNotes([widget.note.id]);
-    await _dataService.fetchRepliesForNotes([widget.note.id]);
+    try {
+      await _dataService.fetchReactionsForNotes([widget.note.id]);
+      setState(() {
+        isReactionsLoading = false;
+      });
+      await _dataService.fetchRepliesForNotes([widget.note.id]);
+      setState(() {
+        isRepliesLoading = false;
+      });
+    } catch (e) {
+      print('Error fetching reactions and replies: $e');
+      setState(() {
+        isReactionsLoading = false;
+        isRepliesLoading = false;
+      });
+    }
   }
 
   void _handleReactionsUpdated(String noteId, List<ReactionModel> updatedReactions) {
@@ -90,7 +371,6 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     if (noteId == widget.note.id) {
       setState(() {
         replies = updatedReplies;
-        repliesMap = _organizeReplies(replies);
       });
     }
   }
@@ -108,6 +388,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
         });
       });
     } catch (e) {
+      print('Error sending reaction: $e');
     }
   }
 
@@ -124,22 +405,8 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
         });
       });
     } catch (e) {
+      print('Error sending reply reaction: $e');
     }
-  }
-
-  Map<String, List<ReplyModel>> _organizeReplies(List<ReplyModel> replies) {
-    Map<String, List<ReplyModel>> replyTree = {};
-    for (var reply in replies) {
-      if (reply.parentId.isNotEmpty) {
-        replyTree.putIfAbsent(reply.parentId, () => []).add(reply);
-      }
-    }
-    return replyTree;
-  }
-
-  String _formatTimestamp(DateTime timestamp) {
-    return "${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} "
-        "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}";
   }
 
   Map<String, dynamic> _parseContent(String content) {
@@ -203,76 +470,80 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     );
   }
 
+  String _formatTimestamp(DateTime timestamp) {
+    return "${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} "
+        "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}";
+  }
+
+  void _navigateToProfile(String authorNpub) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProfilePage(npub: authorNpub),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    _organizeReplies(replies);
-    final replyCount = replies.length;
+    final int reactionCount = reactions.length;
+    final int replyCount = replies.length;
+
     return Scaffold(
       body: SafeArea(
-        child: isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : GestureDetector(
-                onHorizontalDragEnd: (details) {
-                  if (details.primaryVelocity! > 0) {
-                    setState(() {
-                      swipedNotes.add(widget.note.id);
-                    });
-                    _showReplyDialog(widget.note.id);
-                    Timer(const Duration(milliseconds: 500), () {
-                      setState(() {
-                        swipedNotes.remove(widget.note.id);
-                      });
-                    });
-                  }
-                },
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      GestureDetector(
-                        onDoubleTap: () {
-                          _sendReaction(widget.note.id);
-                        },
-                        onHorizontalDragEnd: (details) {
-                          if (details.primaryVelocity! > 0) {
-                            setState(() {
-                              swipedNotes.add(widget.note.id);
-                            });
-                            _showReplyDialog(widget.note.id);
-                            Timer(const Duration(milliseconds: 500), () {
-                              setState(() {
-                                swipedNotes.remove(widget.note.id);
-                              });
-                            });
-                          }
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          decoration: BoxDecoration(
-                            border: glowingNotes.contains(widget.note.id)
-                                ? Border.all(color: Colors.white, width: 4.0)
-                                : swipedNotes.contains(widget.note.id)
-                                    ? Border.all(color: Colors.white, width: 4.0)
-                                    : null,
-                            borderRadius: BorderRadius.circular(12.0),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildHeader(),
-                              ..._buildParsedContent(widget.note.content),
-                              _buildTimestampAndCounts(replyCount),
-                              const SizedBox(height: 16),
-                            ],
-                          ),
-                        ),
-                      ),
-                      ReactionsSection(reactions: reactions),
-                      _buildRepliesSection(),
-                    ],
+        child: GestureDetector(
+          onHorizontalDragEnd: (details) {
+            if (details.primaryVelocity! > 0) {
+              _showReplyDialog(widget.note.id);
+            }
+          },
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(),
+                GestureDetector(
+                  onDoubleTap: () {
+                    _sendReaction(widget.note.id);
+                  },
+                  onHorizontalDragEnd: (details) {
+                    if (details.primaryVelocity! > 0) {
+                      _showReplyDialog(widget.note.id);
+                    }
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    decoration: BoxDecoration(
+                      border: glowingNotes.contains(widget.note.id)
+                          ? Border.all(color: Colors.white, width: 4.0)
+                          : null,
+                      borderRadius: BorderRadius.circular(12.0),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ..._buildParsedContent(widget.note.content),
+                        _buildTimestampAndCounts(reactionCount, replyCount),
+                        const SizedBox(height: 16),
+                      ],
+                    ),
                   ),
                 ),
-              ),
+                ReactionsSection(
+                  reactions: reactions,
+                  isLoading: isReactionsLoading,
+                ),
+                RepliesSection(
+                  replies: replies,
+                  isLoading: isRepliesLoading,
+                  onSendReplyReaction: _sendReplyReaction,
+                  onShowReplyDialog: _showReplyDialog,
+                  onNavigateToProfile: _navigateToProfile,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -324,17 +595,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     );
   }
 
-  void _navigateToProfile(String authorNpub) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ProfilePage(npub: authorNpub),
-      ),
-    );
-  }
-
-  Widget _buildTimestampAndCounts(int replyCount) {
-    final reactionCount = reactions.length;
+  Widget _buildTimestampAndCounts(int reactionCount, int replyCount) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Row(
@@ -367,176 +628,6 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildRepliesSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16.0),
-          child: Text(
-            'REPLIES:',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-        ),
-        const SizedBox(height: 8),
-        replies.isEmpty
-            ? const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.0),
-                child: Text(
-                  'No replies yet.',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              )
-            : ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: replies.length,
-                itemBuilder: (context, index) {
-                  final reply = replies[index];
-                  return GestureDetector(
-                    onDoubleTap: () {
-                      _sendReplyReaction(reply.id);
-                    },
-                    onHorizontalDragEnd: (details) {
-                      if (details.primaryVelocity! > 0) {
-                        setState(() {
-                          swipedNotes.add(reply.id);
-                        });
-                        _showReplyDialog(reply.id);
-                        Timer(const Duration(milliseconds: 500), () {
-                          setState(() {
-                            swipedNotes.remove(reply.id);
-                          });
-                        });
-                      }
-                    },
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 300),
-                      decoration: BoxDecoration(
-                        border: glowingReplies.contains(reply.id)
-                            ? Border.all(color: Colors.white, width: 4.0)
-                            : swipedNotes.contains(reply.id)
-                                ? Border.all(color: Colors.white, width: 4.0)
-                                : null,
-                        borderRadius: BorderRadius.circular(12.0),
-                      ),
-                      child: ReplyWidget(
-                        reply: reply,
-                        onAuthorTap: () {
-                          _navigateToProfile(reply.author);
-                        },
-                        onReplyTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => NoteDetailPage(
-                                note: NoteModel(
-                                  id: reply.id,
-                                  content: reply.content,
-                                  author: reply.author,
-                                  authorName: reply.authorName,
-                                  authorProfileImage: reply.authorProfileImage,
-                                  timestamp: reply.timestamp,
-                                  isRepost: false,
-                                  repostedBy: null,
-                                  repostedByName: '',
-                                ),
-                                reactions: [],
-                                replies: [],
-                                reactionsMap: {},
-                                repliesMap: {},
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  );
-                },
-              ),
-      ],
-    );
-  }
-}
-
-class ReactionsSection extends StatelessWidget {
-  final List<ReactionModel> reactions;
-
-  const ReactionsSection({Key? key, required this.reactions}) : super(key: key);
-
-  Map<String, List<ReactionModel>> _groupReactions(List<ReactionModel> reactions) {
-    Map<String, List<ReactionModel>> grouped = {};
-    for (var reaction in reactions) {
-      grouped.putIfAbsent(reaction.content, () => []).add(reaction);
-    }
-    return grouped;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (reactions.isEmpty) return const SizedBox.shrink();
-    final groupedReactions = _groupReactions(reactions);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16.0),
-          child: Text(
-            'REACTIONS:',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: groupedReactions.entries.map((entry) {
-              final reactionContent = entry.key;
-              final reactionList = entry.value;
-              final reactionCount = reactionList.length;
-              return GestureDetector(
-                onTap: () => _showReactionDetails(context, reactionContent, reactionList),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        reactionContent,
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$reactionCount',
-                        style: const TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-        const SizedBox(height: 16),
-      ],
-    );
-  }
-
-  void _showReactionDetails(BuildContext context, String reactionContent, List<ReactionModel> reactionList) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) {
-        return ReactionDetailsModal(reactionContent: reactionContent, reactions: reactionList);
-      },
     );
   }
 }
@@ -577,7 +668,8 @@ class ReactionDetailsModal extends StatelessWidget {
                           child: Icon(Icons.person),
                         ),
                   title: Text(reaction.authorName),
-                  trailing: Text(reaction.content.isNotEmpty ? reaction.content : '+'),
+                  trailing: Text(
+                      reaction.content.isNotEmpty ? reaction.content : '+'),
                   onTap: () {
                     Navigator.pop(context);
                     Navigator.push(
