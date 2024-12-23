@@ -75,60 +75,48 @@ class _ShareNoteDialogState extends State<ShareNoteDialog> {
   }
 
   @override
-Widget build(BuildContext context) {
-  return FractionallySizedBox(
-    heightFactor: 0.75,
-    child: Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _noteController,
-            focusNode: _noteFocusNode,
-            decoration: const InputDecoration(
-              labelText: 'ENTER YOUR NOTE...',
-            ),
-            maxLines: 4,
-          ),
-          const SizedBox(height: 20),
-          Text(
-            _connectionMessage,
-            style: const TextStyle(color: Colors.grey),
-          ),
-          const Spacer(),
-          SizedBox(
-            width: double.infinity, 
-            child: ElevatedButton(
-              onPressed: _isPosting ? null : _shareNote,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 12.0),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24.0),
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        FractionallySizedBox(
+          heightFactor: 0.75,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _noteController,
+                  focusNode: _noteFocusNode,
+                  decoration: const InputDecoration(
+                    labelText: 'ENTER YOUR NOTE...',
+                  ),
+                  maxLines: 4,
                 ),
-                elevation: 2.0,
-              ),
-              child: _isPosting
-                  ? const CircularProgressIndicator(
-                      color: Colors.black,
-                    )
-                  : const Text(
-                      'POST',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16.0,
-                      ),
-                    ),
+                const SizedBox(height: 20),
+                Text(
+                  _connectionMessage,
+                  style: const TextStyle(color: Colors.grey),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 16),
-        ],
-      ),
-    ),
-  );
-}
+        ),
+        Positioned(
+          right: 16,
+          top: 16,
+          child: _isPosting
+              ? const CircularProgressIndicator(color: Colors.black)
+              : IconButton(
+                  icon: const Icon(Icons.arrow_upward, color: Colors.white),
+                  onPressed: _shareNote,
+                  tooltip: 'Send Note',
+                  color: Colors.white,
+                ),
+        ),
+      ],
+    );
+  }
 
   @override
   void dispose() {
