@@ -144,138 +144,110 @@ class _FeedPageState extends State<FeedPage> {
       );
     }
 
-    return Scaffold(
-      key: _scaffoldKey,
-      drawer: _buildSidebar(),
-      body: NestedScrollView(
-        controller: _scrollController,
-        headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
-          return [
-            SliverAppBar(
-              leading: IconButton(
-                icon: const Icon(Icons.menu),
-                onPressed: () {
-                  _scaffoldKey.currentState?.openDrawer();
-                },
-              ),
-              title: const Text(
-                'FOLLOWING',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 24.0,
-                ),
-              ),
-              floating: true,
-              snap: false,
-              pinned: false,
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              flexibleSpace: ClipRect(
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                  child: Container(
-                    color: Colors.black.withOpacity(0.3),
-                  ),
-                ),
-              ),
-            ),
-          ];
-        },
-        body: feedItems.isEmpty
-            ? const Center(child: Text('No feed items available.'))
-            : NotificationListener<ScrollNotification>(
-                onNotification: (scrollInfo) {
-                  if (scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 200 &&
-                      !isLoadingOlderNotes) {
-                    _loadOlderNotes();
-                  }
-                  return false;
-                },
-                child: ListView.builder(
-                  padding: EdgeInsets.zero,
-                  itemCount: feedItems.length + (isLoadingOlderNotes ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index == feedItems.length) {
-                      return const Padding(
-                        padding: EdgeInsets.all(16.0),
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    }
-                    final item = feedItems[index];
-                    return NoteWidget(
-                      note: item,
-                      onAuthorTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ProfilePage(npub: item.author),
-                          ),
-                        );
-                      },
-                      onRepostedByTap: item.isRepost
-                          ? () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ProfilePage(npub: item.repostedBy!),
-                                ),
-                              );
-                            }
-                          : null,
-                      onNoteTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => NoteDetailPage(
-                              note: item,
-                              reactions: [],
-                              replies: [],
-                              reactionsMap: {},
-                              repliesMap: {},
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-      ),
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-        child: SizedBox(
-          width: double.infinity,
-          height: 48.0,
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24.0),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.2),
-                  blurRadius: 20.0,
-                  spreadRadius: 2.0,
-                ),
-              ],
-            ),
-            child: FloatingActionButton.extended(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ShareNotePage(dataService: _dataService),
-                  ),
-                );
-              },
-              label: const Text(
-                'COMPOSE A NOTE',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
+return Scaffold(
+  key: _scaffoldKey,
+  drawer: _buildSidebar(),
+  body: NestedScrollView(
+    controller: _scrollController,
+    headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
+      return [
+        SliverAppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () {
+              _scaffoldKey.currentState?.openDrawer();
+            },
+          ),
+          title: const Text(
+            'FOLLOWING',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 24.0,
             ),
           ),
+          floating: true, 
+          pinned: false,
+          elevation: 4.0,
+          flexibleSpace: const FlexibleSpaceBar(),
         ),
+      ];
+    },
+    body: feedItems.isEmpty
+        ? const Center(child: Text('No feed items available.'))
+        : NotificationListener<ScrollNotification>(
+            onNotification: (scrollInfo) {
+              if (scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 200 &&
+                  !isLoadingOlderNotes) {
+                _loadOlderNotes();
+              }
+              return false;
+            },
+            child: ListView.builder(
+              padding: EdgeInsets.zero,
+              itemCount: feedItems.length + (isLoadingOlderNotes ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index == feedItems.length) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                final item = feedItems[index];
+                return NoteWidget(
+                  note: item,
+                  onAuthorTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ProfilePage(npub: item.author),
+                      ),
+                    );
+                  },
+                  onRepostedByTap: item.isRepost
+                      ? () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ProfilePage(npub: item.repostedBy!),
+                            ),
+                          );
+                        }
+                      : null,
+                  onNoteTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => NoteDetailPage(
+                          note: item,
+                          reactions: [],
+                          replies: [],
+                          reactionsMap: {},
+                          repliesMap: {},
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+  ),
+ floatingActionButton: FloatingActionButton(
+  onPressed: () {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      builder: (context) => ShareNoteDialog(dataService: _dataService),
     );
+  },
+  child: const Icon(Icons.add),
+),
+floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+);
+
   }
 
   Widget _buildSidebar() {

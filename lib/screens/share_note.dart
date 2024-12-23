@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import '../services/qiqstr_service.dart';
 
-class ShareNotePage extends StatefulWidget {
+class ShareNoteDialog extends StatefulWidget {
   final DataService dataService;
 
-  const ShareNotePage({Key? key, required this.dataService}) : super(key: key);
+  const ShareNoteDialog({Key? key, required this.dataService}) : super(key: key);
 
   @override
-  _ShareNotePageState createState() => _ShareNotePageState();
+  _ShareNoteDialogState createState() => _ShareNoteDialogState();
 }
 
-class _ShareNotePageState extends State<ShareNotePage> {
+class _ShareNoteDialogState extends State<ShareNoteDialog> {
   final TextEditingController _noteController = TextEditingController();
   final FocusNode _noteFocusNode = FocusNode();
   String _connectionMessage = 'Connecting to relays...';
@@ -21,17 +21,21 @@ class _ShareNotePageState extends State<ShareNotePage> {
     super.initState();
 
     widget.dataService.initializeConnections().then((_) {
-      setState(() {
-        if (widget.dataService.connectedRelaysCount == 0) {
-          _connectionMessage = 'No relay connections established.';
-        } else {
-          _connectionMessage = 'CONNECTED TO ${widget.dataService.connectedRelaysCount} RELAYS.';
-        }
-      });
+      if (mounted) {
+        setState(() {
+          if (widget.dataService.connectedRelaysCount == 0) {
+            _connectionMessage = 'No relay connections established.';
+          } else {
+            _connectionMessage = 'CONNECTED TO ${widget.dataService.connectedRelaysCount} RELAYS.';
+          }
+        });
+      }
     }).catchError((e) {
-      setState(() {
-        _connectionMessage = 'Error connecting to relays: $e';
-      });
+      if (mounted) {
+        setState(() {
+          _connectionMessage = 'Error connecting to relays: $e';
+        });
+      }
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -71,63 +75,60 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Scaffold(
-        body: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              TextField(
-                controller: _noteController,
-                focusNode: _noteFocusNode,
-                decoration: const InputDecoration(
-                  labelText: 'ENTER YOUR NOTE...',
-                ),
-                maxLines: 4,
-              ),
-              const SizedBox(height: 20),
-              Text(
-                _connectionMessage,
-                style: const TextStyle(color: Colors.grey),
-              ),
-            ],
+Widget build(BuildContext context) {
+  return FractionallySizedBox(
+    heightFactor: 0.75,
+    child: Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _noteController,
+            focusNode: _noteFocusNode,
+            decoration: const InputDecoration(
+              labelText: 'ENTER YOUR NOTE...',
+            ),
+            maxLines: 4,
           ),
-        ),
-        floatingActionButton: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: SizedBox(
-            width: double.infinity,
-            height: 48.0,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(24.0),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
-                    blurRadius: 20.0,
-                    spreadRadius: 2.0,
-                  ),
-                ],
+          const SizedBox(height: 20),
+          Text(
+            _connectionMessage,
+            style: const TextStyle(color: Colors.grey),
+          ),
+          const Spacer(),
+          SizedBox(
+            width: double.infinity, 
+            child: ElevatedButton(
+              onPressed: _isPosting ? null : _shareNote,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(vertical: 12.0),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24.0),
+                ),
+                elevation: 2.0,
               ),
-              child: FloatingActionButton.extended(
-                onPressed: _shareNote,
-                label: _isPosting
-                    ? const CircularProgressIndicator(
-                        color: Colors.white,
-                      )
-                    : const Text(
-                        'POST',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+              child: _isPosting
+                  ? const CircularProgressIndicator(
+                      color: Colors.black,
+                    )
+                  : const Text(
+                      'POST',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16.0,
                       ),
-              ),
+                    ),
             ),
           ),
-        ),
-        floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+          const SizedBox(height: 16),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   @override
   void dispose() {
