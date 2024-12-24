@@ -359,13 +359,17 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     }
   }
 
-  void _handleReactionsUpdated(String noteId, List<ReactionModel> updatedReactions) {
-    if (noteId == widget.note.id) {
+void _handleReactionsUpdated(String noteId, List<ReactionModel> updatedReactions) {
+  if (noteId == widget.note.id) {
+    final newReactions = updatedReactions.where((reaction) => !reactions.contains(reaction)).toList();
+    if (newReactions.isNotEmpty) {
       setState(() {
-        reactions = updatedReactions;
+        reactions.addAll(newReactions);
       });
     }
   }
+}
+
 
   void _handleRepliesUpdated(String noteId, List<ReplyModel> updatedReplies) {
     if (noteId == widget.note.id) {
