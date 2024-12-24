@@ -108,16 +108,29 @@ class NoteWidget extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
             child: Row(
               children: [
-                note.authorProfileImage.isNotEmpty
-                    ? CircleAvatar(
-                        radius: 18,
-                        backgroundImage:
-                            CachedNetworkImageProvider(note.authorProfileImage),
-                      )
-                    : const CircleAvatar(
-                        radius: 12,
-                        child: Icon(Icons.person, size: 16),
-                      ),
+note.authorProfileImage.isNotEmpty
+    ? CircleAvatar(
+        radius: 18,
+        child: CachedNetworkImage(
+          imageUrl: note.authorProfileImage,
+          placeholder: (context, url) =>
+              const Center(child: CircularProgressIndicator()),
+          errorWidget: (context, url, error) => const Icon(Icons.error),
+          imageBuilder: (context, imageProvider) => ClipOval(
+            child: Image(
+              image: imageProvider,
+              width: 36, 
+              height: 36,
+              fit: BoxFit.cover,
+            ),
+          ),
+        ),
+      )
+    : const CircleAvatar(
+        radius: 12,
+        child: Icon(Icons.person, size: 16),
+      ),
+
                 const SizedBox(width: 12),
                 Text(
                   note.authorName,

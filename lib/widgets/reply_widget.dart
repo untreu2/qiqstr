@@ -121,17 +121,29 @@ class ReplyWidget extends StatelessWidget {
                     ),
                   );
                 },
-            child: reply.authorProfileImage.isNotEmpty
-                ? CircleAvatar(
-                    backgroundImage:
-                        CachedNetworkImageProvider(reply.authorProfileImage),
-                    radius: 16,
-                  )
-                : const CircleAvatar(
-                    child: Icon(Icons.person, size: 16),
-                    radius: 16,
+           child: reply.authorProfileImage.isNotEmpty
+              ? CircleAvatar(
+                  radius: 16,
+                  child: CachedNetworkImage(
+                    imageUrl: reply.authorProfileImage,
+                    placeholder: (context, url) =>
+                        const Center(child: CircularProgressIndicator()),
+                    errorWidget: (context, url, error) => const Icon(Icons.error),
+                    imageBuilder: (context, imageProvider) => ClipOval(
+                      child: Image(
+                        image: imageProvider,
+                        width: 32, 
+                        height: 32,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
                   ),
-          ),
+                )
+              : const CircleAvatar(
+                  radius: 16,
+                  child: Icon(Icons.person, size: 16),
+                ),
+        ),
           const SizedBox(width: 8),
           Flexible(
             child: GestureDetector(
