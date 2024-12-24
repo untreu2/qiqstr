@@ -69,13 +69,10 @@ class _FeedPageState extends State<FeedPage> {
 
   Future<void> _loadFeedFromCache() async {
     await _dataService!.loadNotesFromCache((cachedNotes) {
+      final newNotes = cachedNotes.where((note) => !cachedNoteIds.contains(note.id)).toList();
       setState(() {
-        for (var cachedNote in cachedNotes) {
-          if (!cachedNoteIds.contains(cachedNote.id)) {
-            cachedNoteIds.add(cachedNote.id);
-            feedItems.add(cachedNote);
-          }
-        }
+        cachedNoteIds.addAll(newNotes.map((note) => note.id));
+        feedItems.addAll(newNotes);
         feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       });
     });
@@ -136,8 +133,7 @@ class _FeedPageState extends State<FeedPage> {
           glowingNotes.remove(noteId);
         });
       });
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   void _showReplyDialog(String noteId) {

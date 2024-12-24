@@ -71,14 +71,9 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _loadProfileFromCache() async {
     await _dataService.loadNotesFromCache((cachedNotes) {
-      setState(() {
-        for (var cachedNote in cachedNotes) {
-          if (!cachedNoteIds.contains(cachedNote.id)) {
-            cachedNoteIds.add(cachedNote.id);
-            profileNotes.add(cachedNote);
-          }
-        }
-      });
+      final newNotes = cachedNotes.where((note) => !cachedNoteIds.contains(note.id)).toList();
+      cachedNoteIds.addAll(newNotes.map((note) => note.id));
+      profileNotes.addAll(newNotes);
       profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
     });
 
@@ -132,8 +127,7 @@ class _ProfilePageState extends State<ProfilePage> {
           glowingNotes.remove(noteId);
         });
       });
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   void _showReplyDialog(String noteId) {
@@ -187,7 +181,6 @@ class _ProfilePageState extends State<ProfilePage> {
       });
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
