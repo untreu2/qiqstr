@@ -210,14 +210,18 @@ class RepliesSection extends StatelessWidget {
   final Function(String) onSendReplyReaction;
   final Function(String) onShowReplyDialog;
   final Function(String) onNavigateToProfile;
+  final Set<String> glowingReplies;
+  final Set<String> swipedReplies;
 
-  RepliesSection({
+  const RepliesSection({
     Key? key,
     required this.replies,
     required this.isLoading,
     required this.onSendReplyReaction,
     required this.onShowReplyDialog,
     required this.onNavigateToProfile,
+    required this.glowingReplies,
+    required this.swipedReplies,
   }) : super(key: key);
 
   @override
@@ -266,9 +270,11 @@ class RepliesSection extends StatelessWidget {
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 300),
                   decoration: BoxDecoration(
-                    border: _glowingReplies.contains(reply.id)
+                    border: glowingReplies.contains(reply.id)
                         ? Border.all(color: Colors.white, width: 4.0)
-                        : null,
+                        : swipedReplies.contains(reply.id)
+                            ? Border.all(color: Colors.white, width: 4.0)
+                            : null,
                     borderRadius: BorderRadius.circular(12.0),
                   ),
                   child: ReplyWidget(
@@ -287,8 +293,6 @@ class RepliesSection extends StatelessWidget {
       ],
     );
   }
-
-  final Set<String> _glowingReplies = {};
 }
 
 class NoteDetailPage extends StatefulWidget {
@@ -307,12 +311,13 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
   List<ReactionModel> reactions = [];
   List<ReplyModel> replies = [];
   bool isReactionsLoading = true;
-  bool isRepliesLoading = true; 
+  bool isRepliesLoading = true;
   late DataService _dataService;
 
   final Set<String> glowingNotes = {};
   final Set<String> glowingReplies = {};
-  final Set<String> swipedNotes = {};
+  final Set<String> swipedNotes = {}; 
+  final Set<String> swipedReplies = {};
 
   @override
   void initState() {
@@ -359,17 +364,16 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     }
   }
 
-void _handleReactionsUpdated(String noteId, List<ReactionModel> updatedReactions) {
-  if (noteId == widget.note.id) {
-    final newReactions = updatedReactions.where((reaction) => !reactions.contains(reaction)).toList();
-    if (newReactions.isNotEmpty) {
-      setState(() {
-        reactions.addAll(newReactions);
-      });
+  void _handleReactionsUpdated(String noteId, List<ReactionModel> updatedReactions) {
+    if (noteId == widget.note.id) {
+      final newReactions = updatedReactions.where((reaction) => !reactions.contains(reaction)).toList();
+      if (newReactions.isNotEmpty) {
+        setState(() {
+          reactions.addAll(newReactions);
+        });
+      }
     }
   }
-}
-
 
   void _handleRepliesUpdated(String noteId, List<ReplyModel> updatedReplies) {
     if (noteId == widget.note.id) {
@@ -393,6 +397,9 @@ void _handleReactionsUpdated(String noteId, List<ReactionModel> updatedReactions
       });
     } catch (e) {
       print('Error sending reaction: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Reaction could not be sent: $e')),
+      );
     }
   }
 
@@ -410,6 +417,9 @@ void _handleReactionsUpdated(String noteId, List<ReactionModel> updatedReactions
       });
     } catch (e) {
       print('Error sending reply reaction: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Reaction could not be sent: $e')),
+      );
     }
   }
 
@@ -461,6 +471,16 @@ void _handleReactionsUpdated(String noteId, List<ReactionModel> updatedReactions
   }
 
   void _showReplyDialog(String noteId) {
+    setState(() {
+      swipedNotes.add(noteId);
+    });
+
+    Timer(const Duration(milliseconds: 300), () {
+      setState(() {
+        swipedNotes.remove(noteId);
+      });
+    });
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -498,6 +518,14 @@ void _handleReactionsUpdated(String noteId, List<ReactionModel> updatedReactions
         child: GestureDetector(
           onHorizontalDragEnd: (details) {
             if (details.primaryVelocity! > 0) {
+              setState(() {
+                swipedNotes.add(widget.note.id);
+              });
+              Timer(const Duration(milliseconds: 300), () {
+                setState(() {
+                  swipedNotes.remove(widget.note.id);
+                });
+              });
               _showReplyDialog(widget.note.id);
             }
           },
@@ -512,6 +540,14 @@ void _handleReactionsUpdated(String noteId, List<ReactionModel> updatedReactions
                   },
                   onHorizontalDragEnd: (details) {
                     if (details.primaryVelocity! > 0) {
+                      setState(() {
+                        swipedNotes.add(widget.note.id);
+                      });
+                      Timer(const Duration(milliseconds: 300), () {
+                        setState(() {
+                          swipedNotes.remove(widget.note.id);
+                        });
+                      });
                       _showReplyDialog(widget.note.id);
                     }
                   },
@@ -520,7 +556,9 @@ void _handleReactionsUpdated(String noteId, List<ReactionModel> updatedReactions
                     decoration: BoxDecoration(
                       border: glowingNotes.contains(widget.note.id)
                           ? Border.all(color: Colors.white, width: 4.0)
-                          : null,
+                          : swipedNotes.contains(widget.note.id)
+                              ? Border.all(color: Colors.white, width: 4.0)
+                              : null,
                       borderRadius: BorderRadius.circular(12.0),
                     ),
                     child: Column(
@@ -543,6 +581,8 @@ void _handleReactionsUpdated(String noteId, List<ReactionModel> updatedReactions
                   onSendReplyReaction: _sendReplyReaction,
                   onShowReplyDialog: _showReplyDialog,
                   onNavigateToProfile: _navigateToProfile,
+                  glowingReplies: glowingReplies,
+                  swipedReplies: swipedReplies,
                 ),
               ],
             ),
