@@ -77,8 +77,8 @@ class DataService {
 
   final Uuid _uuid = Uuid();
 
-  final Duration profileCacheTTL = Duration(minutes: 10);
-  final Duration cacheCleanupInterval = Duration(hours: 1);
+  final Duration profileCacheTTL = Duration(hours: 100);
+  final Duration cacheCleanupInterval = Duration(hours: 100);
   Timer? _cacheCleanupTimer;
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
@@ -410,22 +410,31 @@ Future<void> connectToRelays(List<String> relayList, List<String> targetNpubs) a
     return _uuid.v4().replaceAll('-', '');
   }
 
-  Future<void> _fetchProfilesBatch(List<String> npubs) async {
-    if (_isClosed) return;
+Future<void> _fetchProfilesBatch(List<String> npubs) async {
+  if (_isClosed) return;
 
-    final uniqueNpubs = npubs.toSet().difference(profileCache.keys.toSet()).toList();
-    if (uniqueNpubs.isEmpty) return;
+  final uniqueNpubs = npubs.toSet().difference(profileCache.keys.toSet()).toList();
+  if (uniqueNpubs.isEmpty) return;
 
-    final request = Request(generateUUID(), [
-      Filter(authors: uniqueNpubs, kinds: [0], limit: uniqueNpubs.length),
-    ]);
+  final request = Request(generateUUID(), [
+    Filter(authors: uniqueNpubs, kinds: [0], limit: uniqueNpubs.length),
+  ]);
 
+  for (var attempt = 0; attempt < 3; attempt++) {
     await Future.wait(_webSockets.values.map((ws) async {
       if (ws.readyState == WebSocket.open) {
         ws.add(request.serialize());
       }
     }));
+
+    if (uniqueNpubs.every((npub) => profileCache.containsKey(npub))) {
+      break;
+    }
+
+    await Future.delayed(Duration(seconds: 1));
   }
+}
+
 
   Future<void> _fetchReplies(WebSocket webSocket, List<String> targetNpubs) async {
     if (_isClosed) return;
@@ -697,13 +706,7 @@ Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {
 
   Future<Map<String, String>> getCachedUserProfile(String npub) async {
     if (_isClosed) {
-      return {
-        'name': 'Anonymous',
-        'profileImage': '',
-        'about': '',
-        'nip05': '',
-        'banner': '',
-      };
+    return _defaultProfile();
     }
 
     final now = DateTime.now();
@@ -737,23 +740,38 @@ Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {
       }
     }));
 
-    Future.delayed(Duration(seconds: 1), () {
-      if (!completer.isCompleted) {
-        profileCache[npub] = CachedProfile({
-          'name': 'Anonymous',
-          'profileImage': '',
-          'about': '',
-          'nip05': '',
-          'banner': '',
-        }, DateTime.now());
-        completer.complete(profileCache[npub]!.data);
-        _pendingProfileRequests.remove(npub);
-        _profileSubscriptionIds.remove(subscriptionId);
+  int retries = 3;
+  while (!completer.isCompleted && retries > 0) {
+    await Future.delayed(Duration(seconds: 1));
+    retries--;
+    await Future.wait(_webSockets.values.map((ws) async {
+      if (ws.readyState == WebSocket.open) {
+        ws.add(request.serialize());
       }
-    });
-
-    return completer.future;
+    }));
   }
+
+
+
+if (!completer.isCompleted) {
+    profileCache[npub] = CachedProfile(_defaultProfile(), DateTime.now());
+    completer.complete(profileCache[npub]!.data);
+    _pendingProfileRequests.remove(npub);
+    _profileSubscriptionIds.remove(subscriptionId);
+  }
+
+  return completer.future;
+}
+
+Map<String, String> _defaultProfile() {
+  return {
+    'name': 'Anonymous',
+    'profileImage': '',
+    'about': '',
+    'nip05': '',
+    'banner': '',
+  };
+}
 
   Future<List<String>> getFollowingList(String npub) async {
     List<String> followingNpubs = [];
