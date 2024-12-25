@@ -283,6 +283,12 @@ class RepliesSection extends StatelessWidget {
                       onNavigateToProfile(reply.author);
                     },
                     onReplyTap: () {
+                      Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                      builder: (context) => NoteDetailPage(note: convertReplyToNote(reply)),
+                         ),
+                         );
                     },
                   ),
                 ),
@@ -293,6 +299,21 @@ class RepliesSection extends StatelessWidget {
       ],
     );
   }
+}
+
+NoteModel convertReplyToNote(ReplyModel reply) {
+  return NoteModel(
+    id: reply.id,
+    content: reply.content,
+    author: reply.author,
+    authorName: reply.authorName,
+    authorProfileImage: reply.authorProfileImage,
+    timestamp: reply.timestamp,
+    isRepost: false,
+    repostedBy: null,
+    repostedByName: null,
+    repostedByProfileImage: null,
+  );
 }
 
 class NoteDetailPage extends StatefulWidget {
