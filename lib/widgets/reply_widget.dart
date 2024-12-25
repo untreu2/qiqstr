@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:any_link_preview/any_link_preview.dart';
 import 'package:qiqstr/models/note_model.dart';
 import '../models/reply_model.dart';
 import '../screens/note_detail_page.dart';
@@ -21,10 +22,28 @@ class ReplyWidget extends StatelessWidget {
   Map<String, dynamic> _parseContent(String content) {
     final RegExp mediaRegExp =
         RegExp(r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|mp4))', caseSensitive: false);
-    final Iterable<RegExpMatch> matches = mediaRegExp.allMatches(content);
-    final List<String> mediaUrls = matches.map((m) => m.group(0)!).toList();
-    final String text = content.replaceAll(mediaRegExp, '').trim();
-    return {'text': text, 'mediaUrls': mediaUrls};
+    final Iterable<RegExpMatch> mediaMatches = mediaRegExp.allMatches(content);
+
+    final List<String> mediaUrls = mediaMatches.map((m) => m.group(0)!).toList();
+
+    final RegExp linkRegExp = RegExp(r'(https?:\/\/\S+)', caseSensitive: false);
+    final Iterable<RegExpMatch> linkMatches = linkRegExp.allMatches(content);
+
+    final List<String> linkUrls = linkMatches
+        .map((m) => m.group(0)!)
+        .where((url) => !mediaUrls.contains(url) && !url.toLowerCase().endsWith('.mp4'))
+        .toList();
+
+    final String text = content
+        .replaceAll(mediaRegExp, '')
+        .replaceAll(linkRegExp, '')
+        .trim();
+
+    return {
+      'text': text,
+      'mediaUrls': mediaUrls,
+      'linkUrls': linkUrls,
+    };
   }
 
   Widget _buildMediaPreviews(List<String> mediaUrls) {
@@ -41,6 +60,34 @@ class ReplyWidget extends StatelessWidget {
             width: double.infinity,
           );
         }
+      }).toList(),
+    );
+  }
+
+  Widget _buildLinkPreviews(List<String> linkUrls) {
+    return Column(
+      children: linkUrls.map((url) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+          child: AnyLinkPreview(
+            link: url,
+            displayDirection: UIDirection.uiDirectionVertical,
+            cache: Duration(days: 7),
+            backgroundColor: Colors.black87,
+            errorWidget: Container(),
+            bodyMaxLines: 5,
+            bodyTextOverflow: TextOverflow.ellipsis,
+            titleStyle: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: Colors.white,
+            ),
+            bodyStyle: const TextStyle(
+              fontSize: 14,
+              color: Colors.grey,
+            ),
+          ),
+        );
       }).toList(),
     );
   }
@@ -79,20 +126,19 @@ class ReplyWidget extends StatelessWidget {
             const SizedBox(height: 4),
             if (parsedContent['text'] != null && parsedContent['text'] != '')
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                 child: Text(
                   parsedContent['text'],
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
               ),
-            if (parsedContent['text'] != null &&
-                parsedContent['text'] != '' &&
-                parsedContent['mediaUrls'] != null &&
-                parsedContent['mediaUrls'].isNotEmpty)
-              const SizedBox(height: 16.0),
-            if (parsedContent['mediaUrls'] != null &&
-                parsedContent['mediaUrls'].isNotEmpty)
-              _buildMediaPreviews(parsedContent['mediaUrls']),
+            if (parsedContent['mediaUrls'] != null && parsedContent['mediaUrls'].isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: _buildMediaPreviews(parsedContent['mediaUrls']),
+              ),
+            if (parsedContent['linkUrls'] != null && parsedContent['linkUrls'].isNotEmpty)
+              _buildLinkPreviews(parsedContent['linkUrls']),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Text(
