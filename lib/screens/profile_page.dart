@@ -1,14 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:hive/hive.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:palette_generator/palette_generator.dart';
 import '../models/note_model.dart';
 import '../services/qiqstr_service.dart';
-import '../widgets/note_widget.dart';
 import 'note_detail_page.dart';
-import 'share_note.dart';
 import 'send_reply.dart';
-import 'login_page.dart';
+import '../widgets/note_widget.dart';
 
 class ProfilePage extends StatefulWidget {
   final String npub;
@@ -20,28 +18,31 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  final List<NoteModel> profileItems = [];
+  final List<NoteModel> profileNotes = [];
   final Set<String> cachedNoteIds = {};
   final Set<String> glowingNotes = {};
   final Set<String> swipedNotes = {};
   bool isLoadingOlderNotes = false;
-  bool isInitializing = true;
-  DataService? _dataService;
-  final ScrollController _scrollController = ScrollController();
+  bool isLoading = true;
+  late DataService _dataService;
 
-  String bio = "";
-  String nip05 = "";
-  String name = "";
-  String profileImageUrl = "";
-  String bannerImageUrl = "";
+  Map<String, String> userProfile = {
+    'name': 'Loading...',
+    'profileImage': '',
+    'about': '',
+    'nip05': '',
+    'banner': '',
+  };
+
+  Color backgroundColor = Colors.blueAccent.withOpacity(0.1);
 
   @override
   void initState() {
     super.initState();
-    _initializeProfile();
+    _initializeDataService();
   }
 
-  Future<void> _initializeProfile() async {
+  Future<void> _initializeDataService() async {
     try {
       _dataService = DataService(
         npub: widget.npub,
@@ -49,88 +50,77 @@ class _ProfilePageState extends State<ProfilePage> {
         onNewNote: _handleNewNote,
       );
 
-      await _dataService!.initialize();
-      await _dataService!.initializeConnections();
+      await _dataService.initialize();
       await _loadProfileFromCache();
-      await _loadUserInfo();
+      await _dataService.initializeConnections();
+      await _updateUserProfile();
 
-      setState(() {
-        isInitializing = false;
-      });
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     } catch (e) {
-      print('Profile initialization error: $e');
-      setState(() {
-        isInitializing = false;
-      });
-    }
-  }
-
-  Future<void> _loadProfileFromCache() async {
-    await _dataService!.loadNotesFromCache((cachedNotes) {
-      final newNotes = cachedNotes.where((note) => !cachedNoteIds.contains(note.id)).toList();
-      setState(() {
-        cachedNoteIds.addAll(newNotes.map((note) => note.id));
-        profileItems.addAll(newNotes);
-        profileItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      });
-    });
-  }
-
-  Future<void> _loadUserInfo() async {
-    try {
-      final userInfo = await _dataService!.getCachedUserProfile(widget.npub);
-      setState(() {
-        bio = userInfo['about'] ?? '';
-        nip05 = userInfo['nip05'] ?? '';
-        name = userInfo['name'] ?? 'Anonymous';
-        profileImageUrl = userInfo['profileImage'] ?? '';
-        bannerImageUrl = userInfo['banner'] ?? '';
-      });
-    } catch (e) {
-      print('Error loading user info: $e');
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
     }
   }
 
   @override
   void dispose() {
-    _dataService?.closeConnections();
+    _dataService.closeConnections();
     super.dispose();
   }
 
   void _handleNewNote(NoteModel newNote) {
     if (!cachedNoteIds.contains(newNote.id)) {
       cachedNoteIds.add(newNote.id);
-      int insertIndex = profileItems.indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
+      int insertIndex = profileNotes.indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
       if (insertIndex == -1) {
-        profileItems.add(newNote);
+        profileNotes.add(newNote);
       } else {
-        profileItems.insert(insertIndex, newNote);
+        profileNotes.insert(insertIndex, newNote);
       }
-      _dataService!.saveNotesToCache();
+      _dataService.saveNotesToCache();
+      if (mounted) {
+        setState(() {});
+      }
+    }
+  }
+
+  Future<void> _loadProfileFromCache() async {
+    await _dataService.loadNotesFromCache((cachedNotes) {
+      for (var cachedNote in cachedNotes) {
+        if (!cachedNoteIds.contains(cachedNote.id)) {
+          cachedNoteIds.add(cachedNote.id);
+          profileNotes.add(cachedNote);
+        }
+      }
+    });
+    profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+    if (mounted) {
       setState(() {});
     }
   }
 
-  Future<void> _loadOlderNotes() async {
-    if (isLoadingOlderNotes) return;
+  Future<void> _updateUserProfile() async {
+    final profile = await _dataService.getCachedUserProfile(widget.npub);
+    if (!mounted) return;
     setState(() {
-      isLoadingOlderNotes = true;
+      userProfile = profile;
     });
-    await _dataService!.fetchOlderNotes(widget.npub as List<String>, (olderNote) {
-      if (!cachedNoteIds.contains(olderNote.id)) {
-        cachedNoteIds.add(olderNote.id);
-        profileItems.add(olderNote);
-        setState(() {});
-      }
-    });
-    setState(() {
-      isLoadingOlderNotes = false;
-    });
+    if (userProfile['profileImage']!.isNotEmpty) {
+      await _updateBackgroundColor(userProfile['profileImage']!);
+    }
   }
 
   Future<void> _sendReaction(String noteId) async {
     try {
-      await _dataService!.sendReaction(noteId, '💜');
+      await _dataService.sendReaction(noteId, '💜');
       setState(() {
         glowingNotes.add(noteId);
       });
@@ -140,9 +130,7 @@ class _ProfilePageState extends State<ProfilePage> {
           glowingNotes.remove(noteId);
         });
       });
-    } catch (e) {
-      print('Error sending reaction: $e');
-    }
+    } catch (e) {}
   }
 
   void _showReplyDialog(String noteId) {
@@ -153,218 +141,220 @@ class _ProfilePageState extends State<ProfilePage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
       ),
       builder: (context) => SendReplyDialog(
-        dataService: _dataService!,
+        dataService: _dataService,
         noteId: noteId,
       ),
     );
   }
 
-  Future<void> _logoutAndClearData() async {
+  Future<void> _loadOlderNotes() async {
+    if (isLoadingOlderNotes) return;
+    setState(() {
+      isLoadingOlderNotes = true;
+    });
+
+    await _dataService.fetchOlderNotes([widget.npub], (olderNote) {
+      if (!cachedNoteIds.contains(olderNote.id)) {
+        cachedNoteIds.add(olderNote.id);
+        profileNotes.add(olderNote);
+        if (mounted) {
+          setState(() {});
+        }
+      }
+    });
+
+    setState(() {
+      isLoadingOlderNotes = false;
+    });
+  }
+
+  Future<void> _updateBackgroundColor(String imageUrl) async {
     try {
-      const secureStorage = FlutterSecureStorage();
-      await secureStorage.deleteAll();
-
-      await Hive.deleteFromDisk();
-
-      await _dataService?.closeConnections();
-
-      profileItems.clear();
-      cachedNoteIds.clear();
-      glowingNotes.clear();
-      swipedNotes.clear();
+      final PaletteGenerator paletteGenerator =
+          await PaletteGenerator.fromImageProvider(CachedNetworkImageProvider(imageUrl));
+      if (!mounted) return;
       setState(() {
-        isInitializing = true;
+        backgroundColor = paletteGenerator.dominantColor?.color.withOpacity(0.1) ??
+            Colors.blueAccent.withOpacity(0.1);
       });
-
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-        (Route<dynamic> route) => false,
-      );
     } catch (e) {
-      print('Error during logout: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error during logout: $e')),
-      );
+      if (!mounted) return;
+      setState(() {
+        backgroundColor = Colors.blueAccent.withOpacity(0.1);
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading && profileNotes.isEmpty) {
+      return Scaffold(
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       body: SafeArea(
-        child: isInitializing && profileItems.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : NotificationListener<ScrollNotification>(
-                onNotification: (scrollInfo) {
-                  if (scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 200 &&
-                      !isLoadingOlderNotes) {
-                    _loadOlderNotes();
-                  }
-                  return false;
-                },
-                child: CustomScrollView(
-                  controller: _scrollController,
-                  slivers: [
-                    SliverToBoxAdapter(
-                      child: Column(
-                        children: [
-                          bannerImageUrl.isNotEmpty
-                              ? Image.network(
-                                  bannerImageUrl,
-                                  width: double.infinity,
-                                  height: 150,
-                                  fit: BoxFit.cover,
-                                )
-                              : Container(
-                                  width: double.infinity,
-                                  height: 150,
-                                  color: Colors.grey[300],
-                                  child: const Icon(Icons.scanner, size: 50, color: Colors.white),
-                                ),
-                          Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 40,
-                                  backgroundImage: profileImageUrl.isNotEmpty
-                                      ? NetworkImage(profileImageUrl)
-                                      : null,
-                                  child: profileImageUrl.isEmpty
-                                      ? const Icon(Icons.person, size: 40)
-                                      : null,
-                                ),
-                                const SizedBox(width: 16.0),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        name.isNotEmpty ? name : 'Username',
-                                        style: const TextStyle(
-                                          fontSize: 20.0,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4.0),
-                                      Text(
-                                        bio.isNotEmpty ? bio : 'No bio available.',
-                                        style: const TextStyle(fontSize: 14.0),
-                                      ),
-                                      const SizedBox(height: 4.0),
-                                      Text(
-                                        nip05.isNotEmpty ? 'NIP-05: $nip05' : 'No NIP-05 information.',
-                                        style: const TextStyle(fontSize: 12.0, color: Colors.grey),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.logout),
-                                  onPressed: _logoutAndClearData,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Divider(),
-                        ],
-                      ),
+        top: true,
+        bottom: false,
+        left: true,
+        right: true,
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (scrollInfo) {
+            if (scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 200 &&
+                !isLoadingOlderNotes) {
+              _loadOlderNotes();
+            }
+            return false;
+          },
+          child: CustomScrollView(
+            slivers: [
+              if (userProfile['banner']!.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: CachedNetworkImage(
+                    imageUrl: userProfile['banner']!,
+                    width: double.infinity,
+                    height: 200,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      color: Colors.grey[300],
+                      child: const Center(child: CircularProgressIndicator()),
                     ),
-                    profileItems.isEmpty
-                        ? const SliverFillRemaining(
-                            child: Center(child: Text('You have not shared anything yet.')),
-                          )
-                        : SliverList(
-                            delegate: SliverChildBuilderDelegate(
-                              (context, index) {
-                                if (index == profileItems.length) {
-                                  return const Padding(
-                                    padding: EdgeInsets.all(16.0),
-                                    child: Center(child: CircularProgressIndicator()),
-                                  );
-                                }
-                                final item = profileItems[index];
-                                return GestureDetector(
-                                  onDoubleTap: () {
-                                    _sendReaction(item.id);
-                                  },
-                                  onHorizontalDragEnd: (details) {
-                                    if (details.primaryVelocity! > 0) {
-                                      setState(() {
-                                        swipedNotes.add(item.id);
-                                      });
-                                      _showReplyDialog(item.id);
-                                      Timer(const Duration(milliseconds: 500), () {
-                                        setState(() {
-                                          swipedNotes.remove(item.id);
-                                        });
-                                      });
-                                    }
-                                  },
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 300),
-                                    decoration: BoxDecoration(
-                                      border: glowingNotes.contains(item.id)
-                                          ? Border.all(color: Colors.white, width: 4.0)
-                                          : swipedNotes.contains(item.id)
-                                              ? Border.all(color: Colors.white, width: 4.0)
-                                              : null,
-                                      borderRadius: BorderRadius.circular(12.0),
-                                    ),
-                                    child: NoteWidget(
-                                      note: item,
-                                      onAuthorTap: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => ProfilePage(npub: item.author),
-                                          ),
-                                        );
-                                      },
-                                      onRepostedByTap: item.isRepost
-                                          ? () {
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (context) => ProfilePage(npub: item.repostedBy!),
-                                                ),
-                                              );
-                                            }
-                                          : null,
-                                      onNoteTap: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => NoteDetailPage(note: item),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                );
-                              },
-                              childCount: profileItems.length + (isLoadingOlderNotes ? 1 : 0),
+                    errorWidget: (context, url, error) => Container(
+                      color: Colors.grey[300],
+                      child: const Center(child: Icon(Icons.broken_image, size: 50)),
+                    ),
+                  ),
+                ),
+              SliverToBoxAdapter(
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  color: backgroundColor,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      userProfile['profileImage']!.isNotEmpty
+                          ? CircleAvatar(
+                              radius: 30,
+                              backgroundImage: CachedNetworkImageProvider(userProfile['profileImage']!),
+                            )
+                          : const CircleAvatar(
+                              radius: 30,
+                              child: Icon(Icons.person, size: 30),
                             ),
-                          ),
-                  ],
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              userProfile['name']!,
+                              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 8),
+                            if (userProfile['about']!.isNotEmpty)
+                              Text(
+                                userProfile['about']!,
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            const SizedBox(height: 8),
+                            if (userProfile['nip05']!.isNotEmpty)
+                              Text(
+                                userProfile['nip05']!,
+                                style: const TextStyle(fontSize: 12, color: Colors.grey),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
+              profileNotes.isEmpty
+                  ? const SliverFillRemaining(
+                      child: Center(child: Text('No notes available.')),
+                    )
+                  : SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          if (index == profileNotes.length) {
+                            return isLoadingOlderNotes
+                                ? const Padding(
+                                    padding: EdgeInsets.all(16.0),
+                                    child: Center(child: CircularProgressIndicator()),
+                                  )
+                                : const SizedBox.shrink();
+                          }
+
+                          final item = profileNotes[index];
+                          return GestureDetector(
+                            onDoubleTap: () {
+                              _sendReaction(item.id);
+                            },
+                            onHorizontalDragEnd: (details) {
+                              if (details.primaryVelocity! > 0) {
+                                setState(() {
+                                  swipedNotes.add(item.id);
+                                });
+                                _showReplyDialog(item.id);
+                                Timer(const Duration(milliseconds: 500), () {
+                                  setState(() {
+                                    swipedNotes.remove(item.id);
+                                  });
+                                });
+                              }
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              decoration: BoxDecoration(
+                                border: glowingNotes.contains(item.id)
+                                    ? Border.all(color: Colors.white, width: 4.0)
+                                    : swipedNotes.contains(item.id)
+                                        ? Border.all(color: Colors.white, width: 4.0)
+                                        : null,
+                                borderRadius: BorderRadius.circular(12.0),
+                              ),
+                              child: NoteWidget(
+                                note: item,
+                                onAuthorTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ProfilePage(npub: item.author),
+                                    ),
+                                  );
+                                },
+                                onRepostedByTap: item.isRepost
+                                    ? () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => ProfilePage(npub: item.repostedBy!),
+                                          ),
+                                        );
+                                      }
+                                    : null,
+                                onNoteTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => NoteDetailPage(
+                                        note: item,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          );
+                        },
+                        childCount: profileNotes.length + 1,
+                      ),
+                    ),
+            ],
+          ),
+        ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
-            ),
-            builder: (context) => ShareNoteDialog(dataService: _dataService!),
-          );
-        },
-        child: const Icon(Icons.add),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 }
