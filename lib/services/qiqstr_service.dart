@@ -420,21 +420,12 @@ Future<void> _fetchProfilesBatch(List<String> npubs) async {
     Filter(authors: uniqueNpubs, kinds: [0], limit: uniqueNpubs.length),
   ]);
 
-  for (var attempt = 0; attempt < 3; attempt++) {
-    await Future.wait(_webSockets.values.map((ws) async {
-      if (ws.readyState == WebSocket.open) {
-        ws.add(request.serialize());
-      }
-    }));
-
-    if (uniqueNpubs.every((npub) => profileCache.containsKey(npub))) {
-      break;
+  for (final ws in _webSockets.values) {
+    if (ws.readyState == WebSocket.open) {
+      ws.add(request.serialize());
     }
-
-    await Future.delayed(Duration(seconds: 1));
   }
 }
-
 
   Future<void> _fetchReplies(WebSocket webSocket, List<String> targetNpubs) async {
     if (_isClosed) return;
@@ -493,35 +484,18 @@ Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {
       Map<String, dynamic> eventData = decodedEvent[2] as Map<String, dynamic>;
       final kind = eventData['kind'] as int;
 
-      if (kind == 1 || kind == 6) {
+      if (kind == 0) {
+        await _handleProfileEvent(eventData);
+      } else if (kind == 1 || kind == 6) {
         await _processNoteEvent(eventData, targetNpubs);
       } else if (kind == 7) {
         await _handleReactionEvent(eventData);
-      } else if (kind == 0) {
-        await _handleProfileEvent(eventData);
-      }
-    } else if (decodedEvent[0] == 'EOSE') {
-      final subscriptionId = decodedEvent[1] as String;
-      final npub = _profileSubscriptionIds[subscriptionId];
-
-      if (npub != null && _pendingProfileRequests.containsKey(npub)) {
-        profileCache[npub] = CachedProfile({
-          'name': 'Anonymous',
-          'profileImage': '',
-          'about': '',
-          'nip05': '',
-          'banner': '',
-        }, DateTime.now());
-
-        _pendingProfileRequests[npub]?.complete(profileCache[npub]!.data);
-        _pendingProfileRequests.remove(npub);
-        _profileSubscriptionIds.remove(subscriptionId);
       }
     }
   } catch (e) {
+    print('Error handling event: $e');
   }
 }
-
 
   Future<void> _processNoteEvent(Map<String, dynamic> eventData, List<String> targetNpubs) async {
     final kind = eventData['kind'] as int;
@@ -667,100 +641,84 @@ Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {
     } catch (e) {}
   }
 
-  Future<void> _handleProfileEvent(Map<String, dynamic> eventData) async {
-    if (_isClosed) return;
-    try {
-      final author = eventData['pubkey'] as String;
-      final contentRaw = eventData['content'];
-      Map<String, dynamic> profileContent;
-      if (contentRaw is String) {
-        try {
-          profileContent = jsonDecode(contentRaw) as Map<String, dynamic>;
-        } catch (e) {
-          profileContent = {};
-        }
-      } else {
+Future<void> _handleProfileEvent(Map<String, dynamic> eventData) async {
+  if (_isClosed) return;
+
+  try {
+    final author = eventData['pubkey'] as String;
+    final contentRaw = eventData['content'];
+    Map<String, dynamic> profileContent;
+
+    if (contentRaw is String && contentRaw.isNotEmpty) {
+      try {
+        profileContent = jsonDecode(contentRaw) as Map<String, dynamic>;
+      } catch (e) {
         profileContent = {};
       }
+    } else {
+      profileContent = {};
+    }
 
-      final userName = profileContent['name'] as String? ?? 'Anonymous';
-      final profileImage = profileContent['picture'] as String? ?? '';
-      final about = profileContent['about'] as String? ?? '';
-      final nip05 = profileContent['nip05'] as String? ?? '';
-      final banner = profileContent['banner'] as String? ?? '';
+    final userName = profileContent['name'] as String? ?? 'Anonymous';
+    final profileImage = profileContent['picture'] as String? ?? '';
+    final about = profileContent['about'] as String? ?? '';
+    final nip05 = profileContent['nip05'] as String? ?? '';
+    final banner = profileContent['banner'] as String? ?? '';
 
-      profileCache[author] = CachedProfile({
-        'name': userName,
-        'profileImage': profileImage,
-        'about': about,
-        'nip05': nip05,
-        'banner': banner,
-      }, DateTime.now());
+    profileCache[author] = CachedProfile({
+      'name': userName,
+      'profileImage': profileImage,
+      'about': about,
+      'nip05': nip05,
+      'banner': banner,
+    }, DateTime.now());
 
-      if (_pendingProfileRequests.containsKey(author)) {
-        _pendingProfileRequests[author]?.complete(profileCache[author]!.data);
-        _pendingProfileRequests.remove(author);
-      }
-    } catch (e) {}
+    if (_pendingProfileRequests.containsKey(author)) {
+      _pendingProfileRequests[author]?.complete(profileCache[author]!.data);
+      _pendingProfileRequests.remove(author);
+    }
+  } catch (e) {
+    print('Error handling profile event: $e');
   }
+}
 
-  Future<Map<String, String>> getCachedUserProfile(String npub) async {
-    if (_isClosed) {
+Future<Map<String, String>> getCachedUserProfile(String npub) async {
+  if (_isClosed) {
     return _defaultProfile();
-    }
-
-    final now = DateTime.now();
-
-    if (profileCache.containsKey(npub)) {
-      final cachedProfile = profileCache[npub]!;
-      if (now.difference(cachedProfile.fetchedAt) < profileCacheTTL) {
-        return cachedProfile.data;
-      } else {
-        profileCache.remove(npub);
-      }
-    }
-
-    if (_pendingProfileRequests.containsKey(npub)) {
-      return await _pendingProfileRequests[npub]!.future;
-    }
-
-    Completer<Map<String, String>> completer = Completer<Map<String, String>>();
-    _pendingProfileRequests[npub] = completer;
-    String subscriptionId = generateUUID();
-
-    _profileSubscriptionIds[subscriptionId] = npub;
-
-    final request = Request(subscriptionId, [
-      Filter(authors: [npub], kinds: [0], limit: 1),
-    ]);
-
-    await Future.wait(_webSockets.values.map((ws) async {
-      if (ws.readyState == WebSocket.open) {
-        ws.add(request.serialize());
-      }
-    }));
-
-  int retries = 3;
-  while (!completer.isCompleted && retries > 0) {
-    await Future.delayed(Duration(seconds: 1));
-    retries--;
-    await Future.wait(_webSockets.values.map((ws) async {
-      if (ws.readyState == WebSocket.open) {
-        ws.add(request.serialize());
-      }
-    }));
   }
 
+  final now = DateTime.now();
 
-
-if (!completer.isCompleted) {
-    profileCache[npub] = CachedProfile(_defaultProfile(), DateTime.now());
-    completer.complete(profileCache[npub]!.data);
-    _pendingProfileRequests.remove(npub);
-    _profileSubscriptionIds.remove(subscriptionId);
+  if (profileCache.containsKey(npub)) {
+    final cachedProfile = profileCache[npub]!;
+    if (now.difference(cachedProfile.fetchedAt) < profileCacheTTL) {
+      return cachedProfile.data;
+    } else {
+      profileCache.remove(npub);
+    }
   }
 
-  return completer.future;
+  if (_pendingProfileRequests.containsKey(npub)) {
+    return await _pendingProfileRequests[npub]!.future;
+  }
+
+  Completer<Map<String, String>> completer = Completer<Map<String, String>>();
+  _pendingProfileRequests[npub] = completer;
+
+  String subscriptionId = generateUUID();
+  _profileSubscriptionIds[subscriptionId] = npub;
+
+  final request = Request(subscriptionId, [
+    Filter(authors: [npub], kinds: [0], limit: 1),
+  ]);
+
+  for (var ws in _webSockets.values) {
+    if (ws.readyState == WebSocket.open) {
+      ws.add(request.serialize());
+    }
+  }
+
+  return completer.future.then((profile) => profile).catchError((_) => _defaultProfile());
 }
 
 Map<String, String> _defaultProfile() {
