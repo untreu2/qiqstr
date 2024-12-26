@@ -98,129 +98,138 @@ class NoteWidget extends StatelessWidget {
         "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}:${timestamp.second.toString().padLeft(2, '0')}";
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final parsedContent = _parseContent(note.content);
+ @override
+Widget build(BuildContext context) {
+  final parsedContent = _parseContent(note.content);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (note.isRepost)
-          Padding(
-            padding: const EdgeInsets.only(left: 16.0, top: 8.0),
-            child: GestureDetector(
-              onTap: onRepostedByTap ??
-                  () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ProfilePage(npub: note.repostedBy!),
-                      ),
-                    );
-                  },
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.repeat,
-                    size: 16.0,
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      if (note.isRepost)
+        Padding(
+          padding: const EdgeInsets.only(left: 16.0, top: 8.0),
+          child: GestureDetector(
+            onTap: onRepostedByTap ??
+                () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ProfilePage(npub: note.repostedBy!),
+                    ),
+                  );
+                },
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.repeat,
+                  size: 16.0,
+                  color: Colors.grey,
+                ),
+                SizedBox(width: 4.0),
+                Text(
+                  'Reposted by ${note.repostedByName ?? "Unknown"}',
+                  style: const TextStyle(
+                    fontSize: 12.0,
                     color: Colors.grey,
                   ),
-                  const SizedBox(width: 4.0),
+                ),
+                const SizedBox(width: 8.0),
+                if (note.repostTimestamp != null)
                   Text(
-                    'Reposted by ${note.repostedByName}',
+                    'on ${_formatTimestamp(note.repostTimestamp!)}',
                     style: const TextStyle(
                       fontSize: 12.0,
                       color: Colors.grey,
                     ),
                   ),
-                ],
-              ),
-            ),
-          ),
-        GestureDetector(
-          onTap: onAuthorTap ??
-              () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => ProfilePage(npub: note.author)),
-                );
-              },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-            child: Row(
-              children: [
-                note.authorProfileImage.isNotEmpty
-                    ? CircleAvatar(
-                        radius: 18,
-                        child: CachedNetworkImage(
-                          imageUrl: note.authorProfileImage,
-                          placeholder: (context, url) =>
-                              const Center(child: CircularProgressIndicator()),
-                          errorWidget: (context, url, error) => const Icon(Icons.error),
-                          imageBuilder: (context, imageProvider) => ClipOval(
-                            child: Image(
-                              image: imageProvider,
-                              width: 36,
-                              height: 36,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        ),
-                      )
-                    : const CircleAvatar(
-                        radius: 12,
-                        child: Icon(Icons.person, size: 16),
-                      ),
-                const SizedBox(width: 12),
-                Text(
-                  note.authorName,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
               ],
             ),
           ),
         ),
-        GestureDetector(
-          onTap: onNoteTap ??
-              () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => NoteDetailPage(
-                      note: note,
-                    ),
-                  ),
-                );
-              },
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      GestureDetector(
+        onTap: onAuthorTap ??
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => ProfilePage(npub: note.author)),
+              );
+            },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+          child: Row(
             children: [
-              if (parsedContent['text'] != null && parsedContent['text'] != '')
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  child: Text(parsedContent['text']),
-                ),
-              if (parsedContent['mediaUrls'] != null && parsedContent['mediaUrls'].isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                  child: _buildMediaPreviews(parsedContent['mediaUrls']),
-                ),
-              if (parsedContent['linkUrls'] != null && parsedContent['linkUrls'].isNotEmpty)
-                _buildLinkPreviews(parsedContent['linkUrls']),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                child: Text(
-                  _formatTimestamp(note.timestamp),
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+              note.authorProfileImage.isNotEmpty
+                  ? CircleAvatar(
+                      radius: 18,
+                      child: CachedNetworkImage(
+                        imageUrl: note.authorProfileImage,
+                        placeholder: (context, url) =>
+                            const Center(child: CircularProgressIndicator()),
+                        errorWidget: (context, url, error) => const Icon(Icons.error),
+                        imageBuilder: (context, imageProvider) => ClipOval(
+                          child: Image(
+                            image: imageProvider,
+                            width: 36,
+                            height: 36,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    )
+                  : const CircleAvatar(
+                      radius: 12,
+                      child: Icon(Icons.person, size: 16),
+                    ),
+              const SizedBox(width: 12),
+              Text(
+                note.authorName,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],
           ),
         ),
-      ],
-    );
-  }
+      ),
+      GestureDetector(
+        onTap: onNoteTap ??
+            () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => NoteDetailPage(
+                    note: note,
+                  ),
+                ),
+              );
+            },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (parsedContent['text'] != null && parsedContent['text'] != '')
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                child: Text(parsedContent['text']),
+              ),
+            if (parsedContent['mediaUrls'] != null && parsedContent['mediaUrls'].isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: _buildMediaPreviews(parsedContent['mediaUrls']),
+              ),
+            if (parsedContent['linkUrls'] != null && parsedContent['linkUrls'].isNotEmpty)
+              _buildLinkPreviews(parsedContent['linkUrls']),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Text(
+                _formatTimestamp(note.timestamp),
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+}
 }

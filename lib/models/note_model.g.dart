@@ -17,13 +17,18 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       authorName: fields[3] as String,
       authorProfileImage: fields[4] as String,
       timestamp: fields[5] as DateTime,
+      isRepost: fields[6] as bool? ?? false,
+      repostedBy: fields[7] as String?,
+      repostedByName: fields[8] as String?,
+      repostedByProfileImage: fields[9] as String?,
+      repostTimestamp: fields[10] as DateTime?,
     );
   }
 
   @override
   void write(BinaryWriter writer, NoteModel obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -35,14 +40,24 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       ..writeByte(4)
       ..write(obj.authorProfileImage)
       ..writeByte(5)
-      ..write(obj.timestamp);
+      ..write(obj.timestamp)
+      ..writeByte(6)
+      ..write(obj.isRepost)
+      ..writeByte(7)
+      ..write(obj.repostedBy)
+      ..writeByte(8)
+      ..write(obj.repostedByName)
+      ..writeByte(9)
+      ..write(obj.repostedByProfileImage)
+      ..writeByte(10)
+      ..write(obj.repostTimestamp);
   }
 
   @override
   int get hashCode => typeId.hashCode;
 
   @override
-  bool operator ==(Object other) => 
+  bool operator ==(Object other) =>
       identical(this, other) ||
       other is NoteModelAdapter &&
           runtimeType == other.runtimeType &&

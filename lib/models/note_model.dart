@@ -34,6 +34,9 @@ class NoteModel extends HiveObject {
   @HiveField(9)
   final String? repostedByProfileImage;
 
+  @HiveField(10)
+  final DateTime? repostTimestamp;
+
   NoteModel({
     required this.id,
     required this.content,
@@ -45,6 +48,7 @@ class NoteModel extends HiveObject {
     this.repostedBy,
     this.repostedByName,
     this.repostedByProfileImage,
+    this.repostTimestamp,
   });
 
   factory NoteModel.fromJson(Map<String, dynamic> json) {
@@ -59,6 +63,9 @@ class NoteModel extends HiveObject {
       repostedBy: json['repostedBy'] as String?,
       repostedByName: json['repostedByName'] as String?,
       repostedByProfileImage: json['repostedByProfileImage'] as String?,
+      repostTimestamp: json['repostTimestamp'] != null
+          ? DateTime.fromMillisecondsSinceEpoch((json['repostTimestamp'] as int) * 1000)
+          : null,
     );
   }
 
@@ -74,6 +81,7 @@ class NoteModel extends HiveObject {
       'repostedBy': repostedBy,
       'repostedByName': repostedByName,
       'repostedByProfileImage': repostedByProfileImage,
+      'repostTimestamp': repostTimestamp!.millisecondsSinceEpoch ~/ 1000,
     };
   }
 }

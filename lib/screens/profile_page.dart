@@ -75,37 +75,45 @@ class _ProfilePageState extends State<ProfilePage> {
     super.dispose();
   }
 
-  void _handleNewNote(NoteModel newNote) {
-    if (!cachedNoteIds.contains(newNote.id)) {
-      cachedNoteIds.add(newNote.id);
-      int insertIndex = profileNotes.indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
-      if (insertIndex == -1) {
-        profileNotes.add(newNote);
-      } else {
-        profileNotes.insert(insertIndex, newNote);
-      }
-      _dataService.saveNotesToCache();
-      if (mounted) {
-        setState(() {});
-      }
-    }
-  }
+void _handleNewNote(NoteModel newNote) {
+  if (!cachedNoteIds.contains(newNote.id)) {
+    cachedNoteIds.add(newNote.id);
+    profileNotes.add(newNote);
 
-  Future<void> _loadProfileFromCache() async {
-    await _dataService.loadNotesFromCache((cachedNotes) {
-      for (var cachedNote in cachedNotes) {
-        if (!cachedNoteIds.contains(cachedNote.id)) {
-          cachedNoteIds.add(cachedNote.id);
-          profileNotes.add(cachedNote);
-        }
-      }
+    profileNotes.sort((a, b) {
+      final aTimestamp = a.isRepost ? a.repostTimestamp ?? a.timestamp : a.timestamp;
+      final bTimestamp = b.isRepost ? b.repostTimestamp ?? b.timestamp : b.timestamp;
+      return bTimestamp.compareTo(aTimestamp);
     });
-    profileNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
+    _dataService.saveNotesToCache();
     if (mounted) {
       setState(() {});
     }
   }
+}
+
+
+Future<void> _loadProfileFromCache() async {
+  await _dataService.loadNotesFromCache((cachedNotes) {
+    for (var cachedNote in cachedNotes) {
+      if (!cachedNoteIds.contains(cachedNote.id)) {
+        cachedNoteIds.add(cachedNote.id);
+        profileNotes.add(cachedNote);
+      }
+    }
+  });
+  profileNotes.sort((a, b) {
+    final aTimestamp = a.isRepost ? a.repostTimestamp ?? a.timestamp : a.timestamp;
+    final bTimestamp = b.isRepost ? b.repostTimestamp ?? b.timestamp : b.timestamp;
+    return bTimestamp.compareTo(aTimestamp);
+  });
+
+  if (mounted) {
+    setState(() {});
+  }
+}
+
 
   Future<void> _updateUserProfile() async {
     final profile = await _dataService.getCachedUserProfile(widget.npub);
@@ -147,26 +155,34 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Future<void> _loadOlderNotes() async {
-    if (isLoadingOlderNotes) return;
-    setState(() {
-      isLoadingOlderNotes = true;
-    });
+Future<void> _loadOlderNotes() async {
+  if (isLoadingOlderNotes) return;
+  setState(() {
+    isLoadingOlderNotes = true;
+  });
 
-    await _dataService.fetchOlderNotes([widget.npub], (olderNote) {
-      if (!cachedNoteIds.contains(olderNote.id)) {
-        cachedNoteIds.add(olderNote.id);
-        profileNotes.add(olderNote);
-        if (mounted) {
-          setState(() {});
-        }
+  await _dataService.fetchOlderNotes([widget.npub], (olderNote) {
+    if (!cachedNoteIds.contains(olderNote.id)) {
+      cachedNoteIds.add(olderNote.id);
+      profileNotes.add(olderNote);
+
+      profileNotes.sort((a, b) {
+        final aTimestamp = a.isRepost ? a.repostTimestamp ?? a.timestamp : a.timestamp;
+        final bTimestamp = b.isRepost ? b.repostTimestamp ?? b.timestamp : b.timestamp;
+        return bTimestamp.compareTo(aTimestamp);
+      });
+
+      if (mounted) {
+        setState(() {});
       }
-    });
+    }
+  });
 
-    setState(() {
-      isLoadingOlderNotes = false;
-    });
-  }
+  setState(() {
+    isLoadingOlderNotes = false;
+  });
+}
+
 
   Future<void> _updateBackgroundColor(String imageUrl) async {
     try {

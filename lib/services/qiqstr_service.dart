@@ -314,37 +314,42 @@ Future<void> connectToRelays(List<String> relayList, List<String> targetNpubs) a
     }
   }
 
-  Future<void> saveNotesToCache() async {
-    if (notesBox.isOpen) {
-      try {
-        final notesJson = notes.map((note) => note.toJson()).toList();
-        await notesBox.put('notes_json', json.encode(notesJson));
-      } catch (e) {}
+Future<void> saveNotesToCache() async {
+  if (notesBox.isOpen) {
+    try {
+      final notesJson = notes.map((note) => note.toJson()).toList();
+      await notesBox.put('notes_json', json.encode(notesJson));
+    } catch (e) {
+      print('Error saving notes to cache: $e');
     }
   }
+}
 
-  Future<void> loadNotesFromCache(Function(List<NoteModel>) onLoad) async {
-    if (!notesBox.isOpen) return;
-    var cachedData = notesBox.get('notes_json', defaultValue: '');
-    if (cachedData is! String) {
-      try {
-        String jsonString = json.encode(cachedData);
-        _onCacheLoad = onLoad;
-        await _sendPortReadyCompleter.future;
-        _sendPort.send(IsolateMessage(MessageType.CacheLoad, jsonString));
-      } catch (e) {}
-    } else {
-      String jsonString = cachedData;
-      if (jsonString.isEmpty) return;
+Future<void> loadNotesFromCache(Function(List<NoteModel>) onLoad) async {
+  if (!notesBox.isOpen) return;
+
+  var cachedData = notesBox.get('notes_json', defaultValue: '');
+  if (cachedData is! String) {
+    try {
+      String jsonString = json.encode(cachedData);
       _onCacheLoad = onLoad;
-
       await _sendPortReadyCompleter.future;
-
       _sendPort.send(IsolateMessage(MessageType.CacheLoad, jsonString));
+    } catch (e) {
+      print('Error loading notes from cache: $e');
     }
+  } else {
+    String jsonString = cachedData;
+    if (jsonString.isEmpty) return;
 
-    await _fetchProfilesForAllData();
+    _onCacheLoad = onLoad;
+    await _sendPortReadyCompleter.future;
+    _sendPort.send(IsolateMessage(MessageType.CacheLoad, jsonString));
   }
+
+  await _fetchProfilesForAllData();
+}
+
 
   Future<void> saveReactionsToCache() async {
     if (reactionsBox.isOpen) {
@@ -497,95 +502,101 @@ Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {
   }
 }
 
-  Future<void> _processNoteEvent(Map<String, dynamic> eventData, List<String> targetNpubs) async {
-    final kind = eventData['kind'] as int;
-    final author = eventData['pubkey'] as String;
-    bool isRepost = kind == 6;
+Future<void> _processNoteEvent(Map<String, dynamic> eventData, List<String> targetNpubs) async {
+  final kind = eventData['kind'] as int;
+  final author = eventData['pubkey'] as String;
+  bool isRepost = kind == 6;
 
-    Map<String, dynamic>? originalEventData;
-    if (isRepost) {
-      final contentRaw = eventData['content'];
-      if (contentRaw is String && contentRaw.isNotEmpty) {
-        try {
-          originalEventData = jsonDecode(contentRaw) as Map<String, dynamic>;
-        } catch (e) {}
-      }
+  Map<String, dynamic>? originalEventData;
+  DateTime? repostTimestamp;
 
-      if (originalEventData == null) {
-        String? originalEventId;
-        for (var tag in eventData['tags']) {
-          if (tag.length >= 2 && tag[0] == 'e') {
-            originalEventId = tag[1] as String;
-            break;
-          }
-        }
-        if (originalEventId != null) {
-          originalEventData = await _fetchEventById(originalEventId);
-        }
-      }
+  if (isRepost) {
+    repostTimestamp = DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000);
 
-      if (originalEventData == null) {
-        return;
-      }
-
-      eventData = originalEventData;
+    final contentRaw = eventData['content'];
+    if (contentRaw is String && contentRaw.isNotEmpty) {
+      try {
+        originalEventData = jsonDecode(contentRaw) as Map<String, dynamic>;
+      } catch (e) {}
     }
 
-    final noteId = eventData['id'] as String;
-    final noteAuthor = eventData['pubkey'] as String;
-    final noteContentRaw = eventData['content'];
-    String noteContent = '';
-
-    if (noteContentRaw is String) {
-      noteContent = noteContentRaw;
-    } else if (noteContentRaw is Map<String, dynamic>) {
-      noteContent = jsonEncode(noteContentRaw);
+    if (originalEventData == null) {
+      String? originalEventId;
+      for (var tag in eventData['tags']) {
+        if (tag.length >= 2 && tag[0] == 'e') {
+          originalEventId = tag[1] as String;
+          break;
+        }
+      }
+      if (originalEventId != null) {
+        originalEventData = await _fetchEventById(originalEventId);
+      }
     }
 
-    final tags = eventData['tags'] as List<dynamic>;
-    bool isReply = tags.any((tag) => tag.length >= 2 && tag[0] == 'e');
-
-    if (eventIds.contains(noteId) || noteContent.trim().isEmpty) {
+    if (originalEventData == null) {
       return;
     }
 
-    if (!isReply) {
-      if (dataType == DataType.Feed &&
-          targetNpubs.isNotEmpty &&
-          !targetNpubs.contains(noteAuthor) &&
-          (!isRepost || !targetNpubs.contains(author))) {
-        return;
-      }
-    }
+    eventData = originalEventData;
+  }
 
-    if (isReply) {
-      await _handleReplyEvent(eventData);
-    } else {
-      final authorProfile = await getCachedUserProfile(noteAuthor);
-      Map<String, String>? repostedByProfile = isRepost ? await getCachedUserProfile(author) : null;
-      final timestamp = DateTime.fromMillisecondsSinceEpoch(
-          ((isRepost ? originalEventData!['created_at'] : eventData['created_at']) as int) * 1000);
+  final noteId = eventData['id'] as String;
+  final noteAuthor = eventData['pubkey'] as String;
+  final noteContentRaw = eventData['content'];
+  String noteContent = '';
 
-      final newEvent = NoteModel(
-        id: noteId,
-        content: noteContent,
-        author: noteAuthor,
-        authorName: authorProfile['name'] ?? 'Anonymous',
-        authorProfileImage: authorProfile['profileImage'] ?? '',
-        timestamp: timestamp,
-        isRepost: isRepost,
-        repostedBy: isRepost ? author : null,
-        repostedByName: isRepost ? (repostedByProfile?['name'] ?? 'Anonymous') : null,
-        repostedByProfileImage: isRepost ? (repostedByProfile?['profileImage'] ?? '') : null,
-      );
+  if (noteContentRaw is String) {
+    noteContent = noteContentRaw;
+  } else if (noteContentRaw is Map<String, dynamic>) {
+    noteContent = jsonEncode(noteContentRaw);
+  }
 
-      notes.add(newEvent);
-      notes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      eventIds.add(noteId);
-      await saveNotesToCache();
-      onNewNote?.call(newEvent);
+  final tags = eventData['tags'] as List<dynamic>;
+  bool isReply = tags.any((tag) => tag.length >= 2 && tag[0] == 'e');
+
+  if (eventIds.contains(noteId) || noteContent.trim().isEmpty) {
+    return;
+  }
+
+  if (!isReply) {
+    if (dataType == DataType.Feed &&
+        targetNpubs.isNotEmpty &&
+        !targetNpubs.contains(noteAuthor) &&
+        (!isRepost || !targetNpubs.contains(author))) {
+      return;
     }
   }
+
+  if (isReply) {
+    await _handleReplyEvent(eventData);
+  } else {
+    final authorProfile = await getCachedUserProfile(noteAuthor);
+    Map<String, String>? repostedByProfile = isRepost ? await getCachedUserProfile(author) : null;
+    final timestamp = DateTime.fromMillisecondsSinceEpoch(
+        (eventData['created_at'] as int) * 1000);
+
+    final newEvent = NoteModel(
+      id: noteId,
+      content: noteContent,
+      author: noteAuthor,
+      authorName: authorProfile['name'] ?? 'Anonymous',
+      authorProfileImage: authorProfile['profileImage'] ?? '',
+      timestamp: timestamp,
+      isRepost: isRepost,
+      repostedBy: isRepost ? author : null,
+      repostedByName: isRepost ? (repostedByProfile?['name'] ?? 'Anonymous') : null,
+      repostedByProfileImage: isRepost ? (repostedByProfile?['profileImage'] ?? '') : null,
+      repostTimestamp: repostTimestamp,
+    );
+
+    notes.add(newEvent);
+    notes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    eventIds.add(noteId);
+    await saveNotesToCache();
+    onNewNote?.call(newEvent);
+  }
+}
+
 
   Future<void> _handleReactionEvent(Map<String, dynamic> eventData) async {
     if (_isClosed) return;

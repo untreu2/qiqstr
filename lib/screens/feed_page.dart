@@ -73,7 +73,11 @@ class _FeedPageState extends State<FeedPage> {
       setState(() {
         cachedNoteIds.addAll(newNotes.map((note) => note.id));
         feedItems.addAll(newNotes);
-        feedItems.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+feedItems.sort((a, b) {
+  final aTimestamp = a.isRepost ? a.repostTimestamp ?? a.timestamp : a.timestamp;
+  final bTimestamp = b.isRepost ? b.repostTimestamp ?? b.timestamp : b.timestamp;
+  return bTimestamp.compareTo(aTimestamp);
+});
       });
     });
   }
@@ -83,43 +87,52 @@ class _FeedPageState extends State<FeedPage> {
     super.dispose();
   }
 
-  void _handleNewNote(NoteModel newNote) {
-    if (!cachedNoteIds.contains(newNote.id)) {
-      cachedNoteIds.add(newNote.id);
-      int insertIndex = feedItems.indexWhere((note) => note.timestamp.isBefore(newNote.timestamp));
-      if (insertIndex == -1) {
-        feedItems.add(newNote);
-      } else {
-        feedItems.insert(insertIndex, newNote);
-      }
-      _dataService!.saveNotesToCache();
+void _handleNewNote(NoteModel newNote) {
+  if (!cachedNoteIds.contains(newNote.id)) {
+    cachedNoteIds.add(newNote.id);
+    feedItems.add(newNote);
+
+    feedItems.sort((a, b) {
+      final aTimestamp = a.isRepost ? a.repostTimestamp ?? a.timestamp : a.timestamp;
+      final bTimestamp = b.isRepost ? b.repostTimestamp ?? b.timestamp : b.timestamp;
+      return bTimestamp.compareTo(aTimestamp);
+    });
+
+    _dataService!.saveNotesToCache();
+    if (mounted) {
+      setState(() {});
+    }
+  }
+}
+
+Future<void> _loadOlderNotes() async {
+  if (isLoadingOlderNotes) return;
+  setState(() {
+    isLoadingOlderNotes = true;
+  });
+  final followingList = await _dataService!.getFollowingList(widget.npub);
+  await _dataService!.fetchOlderNotes(followingList, (olderNote) {
+    if (!cachedNoteIds.contains(olderNote.id)) {
+      cachedNoteIds.add(olderNote.id);
+      feedItems.add(olderNote);
+
+      feedItems.sort((a, b) {
+        final aTimestamp = a.isRepost ? a.repostTimestamp ?? a.timestamp : a.timestamp;
+        final bTimestamp = b.isRepost ? b.repostTimestamp ?? b.timestamp : b.timestamp;
+        return bTimestamp.compareTo(aTimestamp);
+      });
+
       if (mounted) {
         setState(() {});
       }
     }
-  }
-
-  Future<void> _loadOlderNotes() async {
-    if (isLoadingOlderNotes) return;
+  });
+  if (mounted) {
     setState(() {
-      isLoadingOlderNotes = true;
+      isLoadingOlderNotes = false;
     });
-    final followingList = await _dataService!.getFollowingList(widget.npub);
-    await _dataService!.fetchOlderNotes(followingList, (olderNote) {
-      if (!cachedNoteIds.contains(olderNote.id)) {
-        cachedNoteIds.add(olderNote.id);
-        feedItems.add(olderNote);
-        if (mounted) {
-          setState(() {});
-        }
-      }
-    });
-    if (mounted) {
-      setState(() {
-        isLoadingOlderNotes = false;
-      });
-    }
   }
+}
 
   Future<void> _sendReaction(String noteId) async {
     try {
