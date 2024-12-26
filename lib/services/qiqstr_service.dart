@@ -43,26 +43,23 @@ class DataService {
 
   final Map<String, CachedProfile> profileCache = {};
 
+  final List<String> relayUrls = [
+    'wss://relay.damus.io',
+    'wss://nos.lol',
+    'wss://untreu.me',
+    'wss://vitor.nostr1.com',
+    'wss://eu.purplerelay.com/',
+  ];
   final Map<String, WebSocket> _webSockets = {};
+
   bool isConnecting = false;
   Timer? _checkNewNotesTimer;
   int currentLimit = 75;
 
-  final List<String> relayUrls = [
-    'wss://relay.damus.io',
-    'wss://relay.snort.social',
-    'wss://nos.lol',
-    'wss://untreu.me',
-    'wss://vitor.nostr1.com',
-    'wss://nostr.mom'
-  ];
-
   final Map<String, Completer<Map<String, String>>> _pendingProfileRequests = {};
   final Map<String, String> _profileSubscriptionIds = {};
 
-  late Box notesBox;
-  late Box reactionsBox;
-  late Box repliesBox;
+  Box<NoteModel>? notesBox;
 
   bool _isInitialized = false;
   bool _isClosed = false;
@@ -77,8 +74,8 @@ class DataService {
 
   final Uuid _uuid = Uuid();
 
-  final Duration profileCacheTTL = Duration(hours: 100);
-  final Duration cacheCleanupInterval = Duration(hours: 100);
+  final Duration profileCacheTTL = Duration(hours: 24);
+  final Duration cacheCleanupInterval = Duration(hours: 12);
   Timer? _cacheCleanupTimer;
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
@@ -95,20 +92,18 @@ class DataService {
 
   Future<void> initialize() async {
     try {
-      await Future.wait([
-        Hive.openBox('notes_${dataType.toString()}_$npub'),
-        Hive.openBox('reactions_${dataType.toString()}_$npub'),
-        Hive.openBox('replies_${dataType.toString()}_$npub'),
-      ]).then((boxes) {
-        notesBox = boxes[0];
-        reactionsBox = boxes[1];
-        repliesBox = boxes[2];
+      await Hive.openBox<NoteModel>('notes_${dataType.toString()}_$npub').then((box) {
+        notesBox = box as Box<NoteModel>?;
+        print('Hive notes box opened successfully.');
       });
+
       _isInitialized = true;
 
       await _initializeIsolate();
       _startCacheCleanup();
     } catch (e) {
+      print('Error during DataService initialization: $e');
+      _isInitialized = false;
       rethrow;
     }
   }
@@ -133,11 +128,15 @@ class DataService {
               _handleCacheLoad(message.data);
               break;
             case MessageType.Error:
+              print('Isolate error: ${message.data}');
               break;
           }
         }
       });
+
+      print('Isolate initialized successfully.');
     } catch (e) {
+      print('Error initializing isolate: $e');
       rethrow;
     }
   }
@@ -189,7 +188,8 @@ class DataService {
 
   Future<void> initializeConnections() async {
     if (!_isInitialized) {
-      await initialize();
+      print('DataService is not initialized. Call initialize() first.');
+      return;
     }
 
     List<String> targetNpubs = dataType == DataType.Feed
@@ -202,49 +202,52 @@ class DataService {
     await fetchNotes(targetNpubs, initialLoad: true);
   }
 
-Future<void> connectToRelays(List<String> relayList, List<String> targetNpubs) async {
-  if (isConnecting || _isClosed) return;
-  isConnecting = true;
+  Future<void> connectToRelays(List<String> relayList, List<String> targetNpubs) async {
+    if (isConnecting || _isClosed) return;
+    isConnecting = true;
 
-  for (final relayUrl in relayList) {
-    if (_isClosed) break;
+    for (final relayUrl in relayList) {
+      if (_isClosed) break;
 
-    if (!_webSockets.containsKey(relayUrl) || _webSockets[relayUrl]?.readyState == WebSocket.closed) {
-      try {
-        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 1));
-        if (_isClosed) {
-          webSocket.close();
-          continue;
+      if (!_webSockets.containsKey(relayUrl) ||
+          _webSockets[relayUrl]?.readyState == WebSocket.closed) {
+        try {
+          final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 1));
+          if (_isClosed) {
+            await webSocket.close();
+            continue;
+          }
+          _webSockets[relayUrl] = webSocket;
+
+          webSocket.listen(
+            (event) => _handleEvent(event, targetNpubs),
+            onDone: () {
+              _webSockets.remove(relayUrl);
+              _reconnectRelay(relayUrl, targetNpubs);
+            },
+            onError: (error) {
+              _webSockets.remove(relayUrl);
+              _reconnectRelay(relayUrl, targetNpubs);
+            },
+          );
+
+          await _fetchProfilesBatch(targetNpubs);
+          await _fetchReplies(webSocket, targetNpubs);
+
+          print('Connected to relay: $relayUrl');
+        } catch (e) {
+          print('Error connecting to relay $relayUrl: $e');
+          _webSockets.remove(relayUrl);
         }
-        _webSockets[relayUrl] = webSocket;
-
-        webSocket.listen(
-          (event) => _handleEvent(event, targetNpubs),
-          onDone: () {
-            _webSockets.remove(relayUrl);
-            _reconnectRelay(relayUrl, targetNpubs);
-          },
-          onError: (error) {
-            _webSockets.remove(relayUrl);
-            _reconnectRelay(relayUrl, targetNpubs);
-          },
-        );
-
-        await _fetchProfilesBatch(targetNpubs);
-        await _fetchReplies(webSocket, targetNpubs);
-      } catch (e) {
-        _webSockets.remove(relayUrl);
       }
     }
+
+    isConnecting = false;
+
+    if (_webSockets.isNotEmpty) {
+      _startCheckingForNewData(targetNpubs);
+    }
   }
-
-  isConnecting = false;
-
-  if (_webSockets.isNotEmpty) {
-    _startCheckingForNewData(targetNpubs);
-  }
-}
-
 
   void _reconnectRelay(String relayUrl, List<String> targetNpubs, [int attempt = 1]) {
     if (_isClosed) return;
@@ -257,7 +260,7 @@ Future<void> connectToRelays(List<String> relayList, List<String> targetNpubs) a
       try {
         final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 1));
         if (_isClosed) {
-          webSocket.close();
+          await webSocket.close();
           return;
         }
         _webSockets[relayUrl] = webSocket;
@@ -274,7 +277,10 @@ Future<void> connectToRelays(List<String> relayList, List<String> targetNpubs) a
         );
         await _fetchProfilesBatch(targetNpubs);
         await _fetchReplies(webSocket, targetNpubs);
+
+        print('Reconnected to relay: $relayUrl');
       } catch (e) {
+        print('Error reconnecting to relay $relayUrl (Attempt $attempt): $e');
         _reconnectRelay(relayUrl, targetNpubs, attempt + 1);
       }
     });
@@ -283,7 +289,7 @@ Future<void> connectToRelays(List<String> relayList, List<String> targetNpubs) a
   int _calculateBackoffDelay(int attempt) {
     final int baseDelay = 2;
     final int maxDelay = 32;
-    final int delay = (baseDelay * (1 << (attempt - 1))).clamp(1, maxDelay);
+    final int delay = (baseDelay * pow(2, attempt - 1)).toInt().clamp(1, maxDelay);
     final int jitter = Random().nextInt(2);
     return delay + jitter;
   }
@@ -310,103 +316,43 @@ Future<void> connectToRelays(List<String> relayList, List<String> targetNpubs) a
       }
     }));
 
-    if (initialLoad && notes.isNotEmpty) {
+    print('Fetched notes with filter: $filter');
+  }
+
+  Future<void> saveNotesToCache() async {
+    if (notesBox != null && notesBox!.isOpen) {
+      try {
+        await notesBox!.clear();
+        for (var note in notes) {
+          await notesBox!.put(note.id, note);
+        }
+        print('Notes saved to cache successfully.');
+      } catch (e) {
+        print('Error saving notes to cache: $e');
+      }
+    } else {
+      print('Error saving notes to cache: notesBox is not initialized or not open.');
     }
   }
 
-Future<void> saveNotesToCache() async {
-  if (notesBox.isOpen) {
-    try {
-      final notesJson = notes.map((note) => note.toJson()).toList();
-      await notesBox.put('notes_json', json.encode(notesJson));
-    } catch (e) {
-      print('Error saving notes to cache: $e');
+  Future<void> loadNotesFromCache(Function(List<NoteModel>) onLoad) async {
+    if (notesBox == null || !notesBox!.isOpen) {
+      print('Notes box is not initialized or not open.');
+      return;
     }
-  }
-}
 
-Future<void> loadNotesFromCache(Function(List<NoteModel>) onLoad) async {
-  if (!notesBox.isOpen) return;
-
-  var cachedData = notesBox.get('notes_json', defaultValue: '');
-  if (cachedData is! String) {
     try {
-      String jsonString = json.encode(cachedData);
-      _onCacheLoad = onLoad;
-      await _sendPortReadyCompleter.future;
-      _sendPort.send(IsolateMessage(MessageType.CacheLoad, jsonString));
+      final allNotes = notesBox!.values.cast<NoteModel>().toList();
+      if (allNotes.isEmpty) {
+        print('No notes found in cache.');
+        return;
+      }
+
+      onLoad(allNotes);
+      print('Cache loaded with ${allNotes.length} notes.');
     } catch (e) {
       print('Error loading notes from cache: $e');
     }
-  } else {
-    String jsonString = cachedData;
-    if (jsonString.isEmpty) return;
-
-    _onCacheLoad = onLoad;
-    await _sendPortReadyCompleter.future;
-    _sendPort.send(IsolateMessage(MessageType.CacheLoad, jsonString));
-  }
-
-  await _fetchProfilesForAllData();
-}
-
-
-  Future<void> saveReactionsToCache() async {
-    if (reactionsBox.isOpen) {
-      try {
-        Map<String, dynamic> reactionsJson = reactionsMap.map((key, value) {
-          return MapEntry(key, value.map((reaction) => reaction.toJson()).toList());
-        });
-        await reactionsBox.put('reactions', json.encode(reactionsJson));
-      } catch (e) {}
-    }
-  }
-
-  Future<void> loadReactionsFromCache() async {
-    if (!reactionsBox.isOpen) return;
-    try {
-      String? cachedReactionsString = reactionsBox.get('reactions');
-      if (cachedReactionsString != null && cachedReactionsString.isNotEmpty) {
-        Map<String, dynamic> cachedReactionsJson = json.decode(cachedReactionsString);
-        cachedReactionsJson.forEach((key, value) {
-          String noteId = key;
-          List<dynamic> reactionsList = value as List<dynamic>;
-          reactionsMap[noteId] = reactionsList
-              .map((reactionJson) => ReactionModel.fromJson(Map<String, dynamic>.from(reactionJson as Map)))
-              .toList();
-        });
-      }
-    } catch (e) {}
-
-    await _fetchProfilesForAllData();
-  }
-
-  Future<void> saveRepliesToCache() async {
-    if (repliesBox.isOpen) {
-      try {
-        Map<String, dynamic> repliesJson = repliesMap.map((key, value) {
-          return MapEntry(key, value.map((reply) => reply.toJson()).toList());
-        });
-        await repliesBox.put('replies', json.encode(repliesJson));
-      } catch (e) {}
-    }
-  }
-
-  Future<void> loadRepliesFromCache() async {
-    if (!repliesBox.isOpen) return;
-    try {
-      String? cachedRepliesString = repliesBox.get('replies');
-      if (cachedRepliesString != null && cachedRepliesString.isNotEmpty) {
-        Map<String, dynamic> cachedRepliesJson = json.decode(cachedRepliesString);
-        cachedRepliesJson.forEach((key, value) {
-          String noteId = key;
-          List<dynamic> repliesList = value as List<dynamic>;
-          repliesMap[noteId] = repliesList
-              .map((replyJson) => ReplyModel.fromJson(Map<String, dynamic>.from(replyJson as Map)))
-              .toList();
-        });
-      }
-    } catch (e) {}
 
     await _fetchProfilesForAllData();
   }
@@ -415,26 +361,30 @@ Future<void> loadNotesFromCache(Function(List<NoteModel>) onLoad) async {
     return _uuid.v4().replaceAll('-', '');
   }
 
-Future<void> _fetchProfilesBatch(List<String> npubs) async {
-  if (_isClosed) return;
+  Future<void> _fetchProfilesBatch(List<String> npubs) async {
+    if (_isClosed) return;
 
-  final uniqueNpubs = npubs.toSet().difference(profileCache.keys.toSet()).toList();
-  if (uniqueNpubs.isEmpty) return;
+    final uniqueNpubs = npubs.toSet().difference(profileCache.keys.toSet()).toList();
+    if (uniqueNpubs.isEmpty) return;
 
-  final request = Request(generateUUID(), [
-    Filter(authors: uniqueNpubs, kinds: [0], limit: uniqueNpubs.length),
-  ]);
+    final request = Request(generateUUID(), [
+      Filter(authors: uniqueNpubs, kinds: [0], limit: uniqueNpubs.length),
+    ]);
 
-  for (final ws in _webSockets.values) {
-    if (ws.readyState == WebSocket.open) {
-      ws.add(request.serialize());
+    for (final ws in _webSockets.values) {
+      if (ws.readyState == WebSocket.open) {
+        ws.add(request.serialize());
+      }
     }
+
+    print('Sent profile fetch request for ${uniqueNpubs.length} authors.');
   }
-}
 
   Future<void> _fetchReplies(WebSocket webSocket, List<String> targetNpubs) async {
     if (_isClosed) return;
-    final parentIds = notes.map((note) => note.id).toSet().union(repliesMap.keys.toSet()).toList();
+    final parentIds = notes.map((note) => note.id).toSet().toList();
+    if (parentIds.isEmpty) return;
+
     final request = Request(generateUUID(), [
       Filter(
         kinds: [1],
@@ -443,160 +393,139 @@ Future<void> _fetchProfilesBatch(List<String> npubs) async {
       ),
     ]);
     webSocket.add(request.serialize());
+
+    print('Sent reply fetch request for ${parentIds.length} parent IDs.');
   }
 
-  Future<void> fetchReactionsForNotes(List<String> noteIds) async {
+  Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {
     if (_isClosed) return;
-    final request = Request(generateUUID(), [
-      Filter(
-        kinds: [7],
-        e: noteIds,
-        limit: 1000,
-      ),
-    ]);
 
-    await Future.wait(_webSockets.values.map((ws) async {
-      if (ws.readyState == WebSocket.open) {
-        ws.add(request.serialize());
-      }
-    }));
-  }
+    try {
+      final decodedEvent = jsonDecode(event);
+      if (decodedEvent[0] == 'EVENT') {
+        Map<String, dynamic> eventData = decodedEvent[2] as Map<String, dynamic>;
+        final kind = eventData['kind'] as int;
 
-  Future<void> fetchRepliesForNotes(List<String> parentIds) async {
-    if (_isClosed) return;
-    final request = Request(generateUUID(), [
-      Filter(
-        kinds: [1],
-        e: parentIds,
-        limit: 1000,
-      ),
-    ]);
-
-    await Future.wait(_webSockets.values.map((ws) async {
-      if (ws.readyState == WebSocket.open) {
-        ws.add(request.serialize());
-      }
-    }));
-  }
-
-Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {
-  if (_isClosed) return;
-
-  try {
-    final decodedEvent = jsonDecode(event);
-
-    if (decodedEvent[0] == 'EVENT') {
-      Map<String, dynamic> eventData = decodedEvent[2] as Map<String, dynamic>;
-      final kind = eventData['kind'] as int;
-
-      if (kind == 0) {
-        await _handleProfileEvent(eventData);
-      } else if (kind == 1 || kind == 6) {
-        await _processNoteEvent(eventData, targetNpubs);
-      } else if (kind == 7) {
-        await _handleReactionEvent(eventData);
-      }
-    }
-  } catch (e) {
-    print('Error handling event: $e');
-  }
-}
-
-Future<void> _processNoteEvent(Map<String, dynamic> eventData, List<String> targetNpubs) async {
-  final kind = eventData['kind'] as int;
-  final author = eventData['pubkey'] as String;
-  bool isRepost = kind == 6;
-
-  Map<String, dynamic>? originalEventData;
-  DateTime? repostTimestamp;
-
-  if (isRepost) {
-    repostTimestamp = DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000);
-
-    final contentRaw = eventData['content'];
-    if (contentRaw is String && contentRaw.isNotEmpty) {
-      try {
-        originalEventData = jsonDecode(contentRaw) as Map<String, dynamic>;
-      } catch (e) {}
-    }
-
-    if (originalEventData == null) {
-      String? originalEventId;
-      for (var tag in eventData['tags']) {
-        if (tag.length >= 2 && tag[0] == 'e') {
-          originalEventId = tag[1] as String;
-          break;
+        if (kind == 0) {
+          await _handleProfileEvent(eventData);
+        } else if (kind == 1 || kind == 6) {
+          await _processNoteEvent(eventData, targetNpubs);
+        } else if (kind == 7) {
+          await _handleReactionEvent(eventData);
         }
       }
-      if (originalEventId != null) {
-        originalEventData = await _fetchEventById(originalEventId);
+    } catch (e) {
+      print('Error handling event: $e');
+    }
+  }
+
+  Future<void> _processNoteEvent(Map<String, dynamic> eventData, List<String> targetNpubs) async {
+    final kind = eventData['kind'] as int;
+    final author = eventData['pubkey'] as String;
+    bool isRepost = kind == 6;
+
+    Map<String, dynamic>? originalEventData;
+    DateTime? repostTimestamp;
+
+    if (isRepost) {
+      repostTimestamp = DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000);
+
+      final contentRaw = eventData['content'];
+      if (contentRaw is String && contentRaw.isNotEmpty) {
+        try {
+          originalEventData = jsonDecode(contentRaw) as Map<String, dynamic>;
+        } catch (e) {
+          originalEventData = null;
+        }
+      }
+
+      if (originalEventData == null) {
+        String? originalEventId;
+        for (var tag in eventData['tags']) {
+          if (tag.length >= 2 && tag[0] == 'e') {
+            originalEventId = tag[1] as String;
+            break;
+          }
+        }
+        if (originalEventId != null) {
+          originalEventData = await _fetchEventById(originalEventId);
+        }
+      }
+
+      if (originalEventData == null) {
+        return;
+      }
+
+      eventData = originalEventData;
+    }
+
+    final noteId = eventData['id'] as String?;
+    if (noteId == null) {
+      print('Note ID is null.');
+      return;
+    }
+    final noteAuthor = eventData['pubkey'] as String;
+    final noteContentRaw = eventData['content'];
+    String noteContent = '';
+
+    if (noteContentRaw is String) {
+      noteContent = noteContentRaw;
+    } else if (noteContentRaw is Map<String, dynamic>) {
+      noteContent = jsonEncode(noteContentRaw);
+    }
+
+    final tags = eventData['tags'] as List<dynamic>;
+    bool isReply = tags.any((tag) => tag.length >= 2 && tag[0] == 'e');
+
+    if (eventIds.contains(noteId) || noteContent.trim().isEmpty) {
+      return;
+    }
+
+    if (!isReply) {
+      if (dataType == DataType.Feed &&
+          targetNpubs.isNotEmpty &&
+          !targetNpubs.contains(noteAuthor) &&
+          (!isRepost || !targetNpubs.contains(author))) {
+        return;
       }
     }
 
-    if (originalEventData == null) {
-      return;
+    if (isReply) {
+      await _handleReplyEvent(eventData);
+    } else {
+      final authorProfile = await getCachedUserProfile(noteAuthor);
+      Map<String, String>? repostedByProfile = isRepost ? await getCachedUserProfile(author) : null;
+      final timestamp = DateTime.fromMillisecondsSinceEpoch(
+          (eventData['created_at'] as int) * 1000);
+
+      final newEvent = NoteModel(
+        id: noteId,
+        content: noteContent,
+        author: noteAuthor,
+        authorName: authorProfile['name'] ?? 'Anonymous',
+        authorProfileImage: authorProfile['profileImage'] ?? '',
+        timestamp: timestamp,
+        isRepost: isRepost,
+        repostedBy: isRepost ? author : null,
+        repostedByName: isRepost ? (repostedByProfile?['name'] ?? 'Anonymous') : null,
+        repostedByProfileImage: isRepost ? (repostedByProfile?['profileImage'] ?? '') : null,
+        repostTimestamp: repostTimestamp,
+      );
+
+      if (!eventIds.contains(newEvent.id)) {
+        notes.add(newEvent);
+        eventIds.add(newEvent.id);
+        notesBox!.put(newEvent.id, newEvent);
+        _sortNotes();
+        onNewNote?.call(newEvent);
+        print('New note added and saved to cache: ${newEvent.id}');
+      }
     }
-
-    eventData = originalEventData;
   }
 
-  final noteId = eventData['id'] as String;
-  final noteAuthor = eventData['pubkey'] as String;
-  final noteContentRaw = eventData['content'];
-  String noteContent = '';
-
-  if (noteContentRaw is String) {
-    noteContent = noteContentRaw;
-  } else if (noteContentRaw is Map<String, dynamic>) {
-    noteContent = jsonEncode(noteContentRaw);
-  }
-
-  final tags = eventData['tags'] as List<dynamic>;
-  bool isReply = tags.any((tag) => tag.length >= 2 && tag[0] == 'e');
-
-  if (eventIds.contains(noteId) || noteContent.trim().isEmpty) {
-    return;
-  }
-
-  if (!isReply) {
-    if (dataType == DataType.Feed &&
-        targetNpubs.isNotEmpty &&
-        !targetNpubs.contains(noteAuthor) &&
-        (!isRepost || !targetNpubs.contains(author))) {
-      return;
-    }
-  }
-
-  if (isReply) {
-    await _handleReplyEvent(eventData);
-  } else {
-    final authorProfile = await getCachedUserProfile(noteAuthor);
-    Map<String, String>? repostedByProfile = isRepost ? await getCachedUserProfile(author) : null;
-    final timestamp = DateTime.fromMillisecondsSinceEpoch(
-        (eventData['created_at'] as int) * 1000);
-
-    final newEvent = NoteModel(
-      id: noteId,
-      content: noteContent,
-      author: noteAuthor,
-      authorName: authorProfile['name'] ?? 'Anonymous',
-      authorProfileImage: authorProfile['profileImage'] ?? '',
-      timestamp: timestamp,
-      isRepost: isRepost,
-      repostedBy: isRepost ? author : null,
-      repostedByName: isRepost ? (repostedByProfile?['name'] ?? 'Anonymous') : null,
-      repostedByProfileImage: isRepost ? (repostedByProfile?['profileImage'] ?? '') : null,
-      repostTimestamp: repostTimestamp,
-    );
-
-    notes.add(newEvent);
+  void _sortNotes() {
     notes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-    eventIds.add(noteId);
-    await saveNotesToCache();
-    onNewNote?.call(newEvent);
   }
-}
-
 
   Future<void> _handleReactionEvent(Map<String, dynamic> eventData) async {
     if (_isClosed) return;
@@ -612,16 +541,16 @@ Future<void> _processNoteEvent(Map<String, dynamic> eventData, List<String> targ
       }
       if (noteId == null) return;
       final reaction = ReactionModel.fromEvent(eventData, reactionProfile);
+
       reactionsMap.putIfAbsent(noteId, () => []);
       if (!reactionsMap[noteId]!.any((r) => r.id == reaction.id)) {
         reactionsMap[noteId]!.add(reaction);
-        await saveReactionsToCache();
         onReactionsUpdated?.call(noteId, reactionsMap[noteId]!);
-        if (repliesMap.containsKey(noteId)) {
-          fetchReactionsForNotes([noteId]);
-        }
+        print('Reaction updated for note $noteId: ${reaction.content}');
       }
-    } catch (e) {}
+    } catch (e) {
+      print('Error handling reaction event: $e');
+    }
   }
 
   Future<void> _handleReplyEvent(Map<String, dynamic> eventData) async {
@@ -644,109 +573,117 @@ Future<void> _processNoteEvent(Map<String, dynamic> eventData, List<String> targ
       repliesMap.putIfAbsent(parentId, () => []);
       if (!repliesMap[parentId]!.any((r) => r.id == reply.id)) {
         repliesMap[parentId]!.add(reply);
-        await saveRepliesToCache();
         onRepliesUpdated?.call(parentId, repliesMap[parentId]!);
-        fetchRepliesForNotes([reply.id]);
-        fetchReactionsForNotes([reply.id]);
+        print('Reply updated for note $parentId: ${reply.content}');
       }
-    } catch (e) {}
+    } catch (e) {
+      print('Error handling reply event: $e');
+    }
   }
 
-Future<void> _handleProfileEvent(Map<String, dynamic> eventData) async {
-  if (_isClosed) return;
+  Future<void> _handleProfileEvent(Map<String, dynamic> eventData) async {
+    if (_isClosed) return;
 
-  try {
-    final author = eventData['pubkey'] as String;
-    final contentRaw = eventData['content'];
-    Map<String, dynamic> profileContent;
+    try {
+      final author = eventData['pubkey'] as String;
+      final contentRaw = eventData['content'];
+      Map<String, dynamic> profileContent;
 
-    if (contentRaw is String && contentRaw.isNotEmpty) {
-      try {
-        profileContent = jsonDecode(contentRaw) as Map<String, dynamic>;
-      } catch (e) {
+      if (contentRaw is String && contentRaw.isNotEmpty) {
+        try {
+          profileContent = jsonDecode(contentRaw) as Map<String, dynamic>;
+        } catch (e) {
+          profileContent = {};
+        }
+      } else {
         profileContent = {};
       }
-    } else {
-      profileContent = {};
-    }
 
-    final userName = profileContent['name'] as String? ?? 'Anonymous';
-    final profileImage = profileContent['picture'] as String? ?? '';
-    final about = profileContent['about'] as String? ?? '';
-    final nip05 = profileContent['nip05'] as String? ?? '';
-    final banner = profileContent['banner'] as String? ?? '';
+      final userName = profileContent['name'] as String? ?? 'Anonymous';
+      final profileImage = profileContent['picture'] as String? ?? '';
+      final about = profileContent['about'] as String? ?? '';
+      final nip05 = profileContent['nip05'] as String? ?? '';
+      final banner = profileContent['banner'] as String? ?? '';
 
-    profileCache[author] = CachedProfile({
-      'name': userName,
-      'profileImage': profileImage,
-      'about': about,
-      'nip05': nip05,
-      'banner': banner,
-    }, DateTime.now());
+      profileCache[author] = CachedProfile({
+        'name': userName,
+        'profileImage': profileImage,
+        'about': about,
+        'nip05': nip05,
+        'banner': banner,
+      }, DateTime.now());
 
-    if (_pendingProfileRequests.containsKey(author)) {
-      _pendingProfileRequests[author]?.complete(profileCache[author]!.data);
-      _pendingProfileRequests.remove(author);
-    }
-  } catch (e) {
-    print('Error handling profile event: $e');
-  }
-}
-
-Future<Map<String, String>> getCachedUserProfile(String npub) async {
-  if (_isClosed) {
-    return _defaultProfile();
-  }
-
-  final now = DateTime.now();
-
-  if (profileCache.containsKey(npub)) {
-    final cachedProfile = profileCache[npub]!;
-    if (now.difference(cachedProfile.fetchedAt) < profileCacheTTL) {
-      return cachedProfile.data;
-    } else {
-      profileCache.remove(npub);
+      if (_pendingProfileRequests.containsKey(author)) {
+        _pendingProfileRequests[author]?.complete(profileCache[author]!.data);
+        _pendingProfileRequests.remove(author);
+      }
+    } catch (e) {
+      print('Error handling profile event: $e');
     }
   }
 
-  if (_pendingProfileRequests.containsKey(npub)) {
-    return await _pendingProfileRequests[npub]!.future;
-  }
+  Future<Map<String, String>> getCachedUserProfile(String npub) async {
+    if (_isClosed) {
+      return _defaultProfile();
+    }
 
-  Completer<Map<String, String>> completer = Completer<Map<String, String>>();
-  _pendingProfileRequests[npub] = completer;
+    final now = DateTime.now();
 
-  String subscriptionId = generateUUID();
-  _profileSubscriptionIds[subscriptionId] = npub;
+    if (profileCache.containsKey(npub)) {
+      final cachedProfile = profileCache[npub]!;
+      if (now.difference(cachedProfile.fetchedAt) < profileCacheTTL) {
+        return cachedProfile.data;
+      } else {
+        profileCache.remove(npub);
+      }
+    }
 
-  final request = Request(subscriptionId, [
-    Filter(authors: [npub], kinds: [0], limit: 1),
-  ]);
+    if (_pendingProfileRequests.containsKey(npub)) {
+      return await _pendingProfileRequests[npub]!.future;
+    }
 
-  for (var ws in _webSockets.values) {
-    if (ws.readyState == WebSocket.open) {
-      ws.add(request.serialize());
+    Completer<Map<String, String>> completer = Completer<Map<String, String>>();
+    _pendingProfileRequests[npub] = completer;
+
+    String subscriptionId = generateUUID();
+    _profileSubscriptionIds[subscriptionId] = npub;
+
+    final request = Request(subscriptionId, [
+      Filter(authors: [npub], kinds: [0], limit: 1),
+    ]);
+
+    for (var ws in _webSockets.values) {
+      if (ws.readyState == WebSocket.open) {
+        ws.add(request.serialize());
+      }
+    }
+
+    print('Sent profile fetch request for npub: $npub');
+
+    try {
+      return await completer.future.timeout(Duration(seconds: 1), onTimeout: () => _defaultProfile());
+    } catch (e) {
+      return _defaultProfile();
     }
   }
 
-  return completer.future.then((profile) => profile).catchError((_) => _defaultProfile());
-}
-
-Map<String, String> _defaultProfile() {
-  return {
-    'name': 'Anonymous',
-    'profileImage': '',
-    'about': '',
-    'nip05': '',
-    'banner': '',
-  };
-}
+  Map<String, String> _defaultProfile() {
+    return {
+      'name': 'Anonymous',
+      'profileImage': '',
+      'about': '',
+      'nip05': '',
+      'banner': '',
+    };
+  }
 
   Future<List<String>> getFollowingList(String npub) async {
     List<String> followingNpubs = [];
-    await Future.wait(relayUrls.map((relayUrl) async {
+    final limitedRelayUrls = relayUrls.take(3).toList();
+
+    await Future.wait(limitedRelayUrls.map((relayUrl) async {
       try {
-        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 1));
+        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
         if (_isClosed) {
           await webSocket.close();
           return;
@@ -775,9 +712,13 @@ Map<String, String> _defaultProfile() {
           await webSocket.close();
         });
         await webSocket.close();
-      } catch (e) {}
+      } catch (e) {
+        print('Error fetching following list from $relayUrl: $e');
+      }
     }));
+
     followingNpubs = followingNpubs.toSet().toList();
+    print('Fetched ${followingNpubs.length} following npubs.');
     return followingNpubs;
   }
 
@@ -798,11 +739,13 @@ Map<String, String> _defaultProfile() {
         ws.add(request.serialize());
       }
     }));
+
+    print('Sent older notes fetch request.');
   }
 
   void _startCheckingForNewData(List<String> targetNpubs) {
     _checkNewNotesTimer?.cancel();
-    _checkNewNotesTimer = Timer.periodic(Duration(seconds: 10), (timer) {
+    _checkNewNotesTimer = Timer.periodic(Duration(seconds: 30), (timer) {
       if (_isClosed) {
         timer.cancel();
         return;
@@ -810,6 +753,8 @@ Map<String, String> _defaultProfile() {
       fetchNotes(targetNpubs);
       _fetchProfilesBatch(targetNpubs);
     });
+
+    print('Started periodic data fetching every 30 seconds.');
   }
 
   Future<void> closeConnections() async {
@@ -822,7 +767,9 @@ Map<String, String> _defaultProfile() {
       if (_sendPortReadyCompleter.isCompleted) {
         _sendPort.send(IsolateMessage(MessageType.Error, 'close'));
       }
-    } catch (e) {}
+    } catch (e) {
+      print('Error sending close message to isolate: $e');
+    }
 
     _isolate.kill(priority: Isolate.immediate);
     _receivePort.close();
@@ -832,9 +779,9 @@ Map<String, String> _defaultProfile() {
     }));
     _webSockets.clear();
 
-    if (notesBox.isOpen) await notesBox.close();
-    if (reactionsBox.isOpen) await reactionsBox.close();
-    if (repliesBox.isOpen) await repliesBox.close();
+    await notesBox?.close();
+
+    print('All connections closed and boxes are closed.');
   }
 
   Future<Map<String, dynamic>?> _fetchEventById(String eventId) async {
@@ -873,6 +820,7 @@ Map<String, String> _defaultProfile() {
     }));
 
     return completer.future.timeout(Duration(seconds: 1), onTimeout: () {
+      print('Timeout while fetching event by ID: $eventId');
       return null;
     });
   }
@@ -880,10 +828,16 @@ Map<String, String> _defaultProfile() {
   void _handleNewNotes(dynamic data) {
     if (data is List<NoteModel>) {
       if (data.isNotEmpty) {
-        notes.addAll(data);
-        notes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        for (var note in data) {
+          if (!eventIds.contains(note.id)) {
+            notes.add(note);
+            eventIds.add(note.id);
+            notesBox!.put(note.id, note);
+          }
+        }
+        _sortNotes();
         onNewNote?.call(data.last);
-        saveNotesToCache();
+        print('Handled new notes: ${data.length} notes added.');
       }
     }
   }
@@ -893,6 +847,7 @@ Map<String, String> _defaultProfile() {
       if (_onCacheLoad != null) {
         _onCacheLoad!(data);
         _onCacheLoad = null;
+        print('Cache loaded with ${data.length} notes.');
       }
     }
   }
@@ -911,6 +866,7 @@ Map<String, String> _defaultProfile() {
     }
 
     await _fetchProfilesBatch(allAuthors.toList());
+    print('Fetched profiles for all authors.');
   }
 
   void _startCacheCleanup() {
@@ -923,10 +879,17 @@ Map<String, String> _defaultProfile() {
       final now = DateTime.now();
       profileCache.removeWhere((key, cachedProfile) =>
           now.difference(cachedProfile.fetchedAt) > profileCacheTTL);
+      print('Performed cache cleanup.');
     });
+
+    print('Started cache cleanup timer.');
   }
 
   Future<void> shareNote(String noteContent) async {
+    if (_isClosed) {
+      print('Cannot share note: DataService is closed.');
+      return;
+    }
     try {
       final privateKey = await _secureStorage.read(key: 'privateKey');
       if (privateKey == null || privateKey.isEmpty) {
@@ -942,50 +905,93 @@ Map<String, String> _defaultProfile() {
 
       final serializedEvent = event.serialize();
 
-      for (var relayUrl in _webSockets.keys) {
-        final webSocket = _webSockets[relayUrl];
-        if (webSocket != null && webSocket.readyState == WebSocket.open) {
-          webSocket.add(serializedEvent);
+      await Future.wait(_webSockets.values.map((ws) async {
+        if (ws.readyState == WebSocket.open) {
+          ws.add(serializedEvent);
         }
-      }
+      }));
 
+      print('Note shared successfully.');
     } catch (e) {
       print('Error sharing note: $e');
       throw e;
     }
   }
 
-Future<void> sendReaction(String noteId, String reactionContent) async {
-  try {
-    final privateKey = await _secureStorage.read(key: 'privateKey');
-    if (privateKey == null || privateKey.isEmpty) {
-      throw Exception('Private key not found. Please log in again.');
-    }
+  Future<void> fetchReactionsForNotes(List<String> noteIds) async {
+    if (_isClosed) return;
+    final request = Request(generateUUID(), [
+      Filter(
+        kinds: [7],
+        e: noteIds,
+        limit: 1000,
+      ),
+    ]);
 
-    final event = Event.from(
-      kind: 7, 
-      tags: [
-        ['e', noteId],
-      ],
-      content: reactionContent, 
-      privkey: privateKey,
-    );
-
-    final serializedEvent = event.serialize();
-
-    for (var relayUrl in _webSockets.keys) {
-      final webSocket = _webSockets[relayUrl];
-      if (webSocket != null && webSocket.readyState == WebSocket.open) {
-        webSocket.add(serializedEvent);
+    await Future.wait(_webSockets.values.map((ws) async {
+      if (ws.readyState == WebSocket.open) {
+        ws.add(request.serialize());
       }
-    }
-  } catch (e) {
-    print('Error sending reaction: $e');
-    throw e;
+    }));
   }
-}
+
+  Future<void> fetchRepliesForNotes(List<String> parentIds) async {
+    if (_isClosed) return;
+    final request = Request(generateUUID(), [
+      Filter(
+        kinds: [1],
+        e: parentIds,
+        limit: 1000,
+      ),
+    ]);
+
+    await Future.wait(_webSockets.values.map((ws) async {
+      if (ws.readyState == WebSocket.open) {
+        ws.add(request.serialize());
+      }
+    }));
+  }
+
+  Future<void> sendReaction(String noteId, String reactionContent) async {
+    if (_isClosed) {
+      print('Cannot send reaction: DataService is closed.');
+      return;
+    }
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found. Please log in again.');
+      }
+
+      final event = Event.from(
+        kind: 7,
+        tags: [
+          ['e', noteId],
+        ],
+        content: reactionContent,
+        privkey: privateKey,
+      );
+
+      final serializedEvent = event.serialize();
+
+      await Future.wait(_webSockets.values.map((ws) async {
+        if (ws.readyState == WebSocket.open) {
+          ws.add(serializedEvent);
+        }
+      }));
+
+      print('Reaction sent successfully.');
+    } catch (e) {
+      print('Error sending reaction: $e');
+      throw e;
+    }
+  }
 
   Future<void> sendReply(String noteId, String replyContent) async {
+    if (_isClosed) {
+      print('Cannot send reply: DataService is closed.');
+      return;
+    }
     try {
       final privateKey = await _secureStorage.read(key: 'privateKey');
       if (privateKey == null || privateKey.isEmpty) {
@@ -1002,16 +1008,16 @@ Future<void> sendReaction(String noteId, String reactionContent) async {
       );
 
       final serializedEvent = event.serialize();
-      for (var relayUrl in _webSockets.keys) {
-        final webSocket = _webSockets[relayUrl];
-        if (webSocket != null && webSocket.readyState == WebSocket.open) {
-          webSocket.add(serializedEvent);
+      await Future.wait(_webSockets.values.map((ws) async {
+        if (ws.readyState == WebSocket.open) {
+          ws.add(serializedEvent);
         }
-      }
+      }));
+
+      print('Reply sent successfully.');
     } catch (e) {
       print('Error sending reply: $e');
       throw e;
     }
   }
-
 }

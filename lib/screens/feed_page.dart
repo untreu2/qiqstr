@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
+import 'package:qiqstr/models/reaction_model.dart';
+import 'package:qiqstr/models/reply_model.dart';
 import 'package:qiqstr/screens/share_note.dart';
 import '../models/note_model.dart';
 import '../services/qiqstr_service.dart';
@@ -21,132 +23,168 @@ class FeedPage extends StatefulWidget {
 }
 
 class _FeedPageState extends State<FeedPage> {
-  static final List<NoteModel> feedItems = [];
-  static final Set<String> cachedNoteIds = {};
-  static final Set<String> glowingNotes = {};
-  static final Set<String> swipedNotes = {};
-  static bool isLoadingOlderNotes = false;
-  static bool isInitializing = true;
-  static DataService? _dataService;
-  static final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  static final ScrollController _scrollController = ScrollController();
+  final List<NoteModel> _feedItems = [];
+  final Set<String> _cachedNoteIds = {};
+  final Set<String> _glowingNotes = {};
+  final Set<String> _swipedNotes = {};
+  bool _isLoadingOlderNotes = false;
+  bool _isLoadingNewNotes = false;
+  bool _isInitializing = true;
+  late DataService _dataService;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    if (_dataService == null) {
-      _dataService = DataService(
-        npub: widget.npub,
-        dataType: DataType.Feed,
-        onNewNote: _handleNewNote,
-      );
-      _initializeFeed();
-    } else {
-      setState(() {
-        isInitializing = false;
-      });
-    }
+    _dataService = DataService(
+      npub: widget.npub,
+      dataType: DataType.Feed,
+      onNewNote: _handleNewNote,
+      onReactionsUpdated: _handleReactionsUpdated,
+      onRepliesUpdated: _handleRepliesUpdated,
+    );
+    _initializeFeed();
+    _scrollController.addListener(_onScroll);
   }
 
   Future<void> _initializeFeed() async {
     try {
-      await _dataService!.initialize();
+      await _dataService.initialize();
       await _loadFeedFromCache();
-      await _dataService!.initializeConnections();
+      await _dataService.initializeConnections();
+
       if (mounted) {
         setState(() {
-          isInitializing = false;
+          _isInitializing = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          isInitializing = false;
+          _isInitializing = false;
         });
       }
+      print('Error initializing feed: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading feed: $e')),
+      );
     }
   }
 
   Future<void> _loadFeedFromCache() async {
-    await _dataService!.loadNotesFromCache((cachedNotes) {
-      final newNotes = cachedNotes.where((note) => !cachedNoteIds.contains(note.id)).toList();
+    await _dataService.loadNotesFromCache((cachedNotes) {
+      final newNotes = cachedNotes.where((note) => !_cachedNoteIds.contains(note.id)).toList();
       setState(() {
-        cachedNoteIds.addAll(newNotes.map((note) => note.id));
-        feedItems.addAll(newNotes);
-feedItems.sort((a, b) {
-  final aTimestamp = a.isRepost ? a.repostTimestamp ?? a.timestamp : a.timestamp;
-  final bTimestamp = b.isRepost ? b.repostTimestamp ?? b.timestamp : b.timestamp;
-  return bTimestamp.compareTo(aTimestamp);
-});
+        _cachedNoteIds.addAll(newNotes.map((note) => note.id));
+        _feedItems.addAll(newNotes);
+        _sortFeedItems();
+        _isLoadingNewNotes = false;
       });
     });
   }
 
-  @override
-  void dispose() {
-    super.dispose();
+  void _handleNewNote(NoteModel newNote) {
+    if (!_cachedNoteIds.contains(newNote.id)) {
+      setState(() {
+        _cachedNoteIds.add(newNote.id);
+        _feedItems.insert(0, newNote);
+        _sortFeedItems();
+      });
+      _dataService.saveNotesToCache();
+    }
+
+    if (_isLoadingNewNotes) {
+      setState(() {
+        _isLoadingNewNotes = false;
+      });
+    }
   }
 
-void _handleNewNote(NoteModel newNote) {
-  if (!cachedNoteIds.contains(newNote.id)) {
-    cachedNoteIds.add(newNote.id);
-    feedItems.add(newNote);
+  void _handleReactionsUpdated(String noteId, List<ReactionModel> reactions) {
+    setState(() {
+      final index = _feedItems.indexWhere((note) => note.id == noteId);
+      if (index != -1) {
+      }
+    });
+  }
 
-    feedItems.sort((a, b) {
-      final aTimestamp = a.isRepost ? a.repostTimestamp ?? a.timestamp : a.timestamp;
-      final bTimestamp = b.isRepost ? b.repostTimestamp ?? b.timestamp : b.timestamp;
+  void _handleRepliesUpdated(String noteId, List<ReplyModel> replies) {
+    setState(() {
+      final index = _feedItems.indexWhere((note) => note.id == noteId);
+      if (index != -1) {
+      }
+    });
+  }
+
+  void _sortFeedItems() {
+    _feedItems.sort((a, b) {
+      final aTimestamp = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
+      final bTimestamp = b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
       return bTimestamp.compareTo(aTimestamp);
     });
+  }
 
-    _dataService!.saveNotesToCache();
-    if (mounted) {
-      setState(() {});
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200 &&
+        !_isLoadingOlderNotes &&
+        !_isInitializing) {
+      _loadOlderNotes();
     }
   }
-}
 
-Future<void> _loadOlderNotes() async {
-  if (isLoadingOlderNotes) return;
-  setState(() {
-    isLoadingOlderNotes = true;
-  });
-  final followingList = await _dataService!.getFollowingList(widget.npub);
-  await _dataService!.fetchOlderNotes(followingList, (olderNote) {
-    if (!cachedNoteIds.contains(olderNote.id)) {
-      cachedNoteIds.add(olderNote.id);
-      feedItems.add(olderNote);
-
-      feedItems.sort((a, b) {
-        final aTimestamp = a.isRepost ? a.repostTimestamp ?? a.timestamp : a.timestamp;
-        final bTimestamp = b.isRepost ? b.repostTimestamp ?? b.timestamp : b.timestamp;
-        return bTimestamp.compareTo(aTimestamp);
-      });
-
+  Future<void> _loadOlderNotes() async {
+    if (_isLoadingOlderNotes) return;
+    setState(() {
+      _isLoadingOlderNotes = true;
+    });
+    try {
+      final followingList = await _dataService.getFollowingList(widget.npub);
+      await _dataService.fetchOlderNotes(followingList, _handleOlderNote);
+    } catch (e) {
+      print('Error loading older notes: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading older notes: $e')),
+      );
+    } finally {
       if (mounted) {
-        setState(() {});
+        setState(() {
+          _isLoadingOlderNotes = false;
+        });
       }
     }
-  });
-  if (mounted) {
-    setState(() {
-      isLoadingOlderNotes = false;
-    });
   }
-}
+
+  void _handleOlderNote(NoteModel olderNote) {
+    if (!_cachedNoteIds.contains(olderNote.id)) {
+      setState(() {
+        _cachedNoteIds.add(olderNote.id);
+        _feedItems.add(olderNote);
+        _sortFeedItems();
+      });
+    }
+  }
 
   Future<void> _sendReaction(String noteId) async {
     try {
-      await _dataService!.sendReaction(noteId, '💜');
+      await _dataService.sendReaction(noteId, '💜');
       setState(() {
-        glowingNotes.add(noteId);
+        _glowingNotes.add(noteId);
       });
 
       Timer(const Duration(seconds: 1), () {
-        setState(() {
-          glowingNotes.remove(noteId);
-        });
+        if (mounted) {
+          setState(() {
+            _glowingNotes.remove(noteId);
+          });
+        }
       });
-    } catch (e) {}
+    } catch (e) {
+      print('Error sending reaction: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sending reaction: $e')),
+      );
+    }
   }
 
   void _showReplyDialog(String noteId) {
@@ -157,22 +195,79 @@ Future<void> _loadOlderNotes() async {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
       ),
       builder: (context) => SendReplyDialog(
-        dataService: _dataService!,
+        dataService: _dataService,
         noteId: noteId,
       ),
     );
   }
 
   @override
-  Widget build(BuildContext context) {
-    if (isInitializing && feedItems.isEmpty) {
-      return Scaffold(
-        key: _scaffoldKey,
-        drawer: _buildSidebar(),
-        body: const Center(child: CircularProgressIndicator()),
+  void dispose() {
+    _scrollController.dispose();
+    _dataService.closeConnections();
+    Hive.close();
+    super.dispose();
+  }
+
+  Widget _buildSidebar() {
+    return Drawer(
+      child: SafeArea(
+        child: ListView(
+          padding: EdgeInsets.zero,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('PROFILE'),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ProfilePage(npub: widget.npub)),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('LOGOUT'),
+              onTap: _logoutAndClearData,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _logoutAndClearData() async {
+    try {
+      const secureStorage = FlutterSecureStorage();
+      await secureStorage.deleteAll();
+
+      await Hive.deleteFromDisk();
+
+      await _dataService.closeConnections();
+
+      setState(() {
+        _feedItems.clear();
+        _cachedNoteIds.clear();
+        _glowingNotes.clear();
+        _swipedNotes.clear();
+        _isInitializing = true;
+      });
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginPage()),
+        (Route<dynamic> route) => false,
+      );
+    } catch (e) {
+      print('Logout error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Logout error: $e')),
       );
     }
+  }
 
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
       drawer: _buildSidebar(),
@@ -188,7 +283,7 @@ Future<void> _loadOlderNotes() async {
                 },
               ),
               title: const Text(
-                'FOLLOWING',
+                'qiqstr',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 24.0,
@@ -201,90 +296,43 @@ Future<void> _loadOlderNotes() async {
             ),
           ];
         },
-        body: feedItems.isEmpty
-            ? const Center(child: Text('No feed items available.'))
-            : NotificationListener<ScrollNotification>(
-                onNotification: (scrollInfo) {
-                  if (scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 200 &&
-                      !isLoadingOlderNotes) {
-                    _loadOlderNotes();
-                  }
-                  return false;
-                },
-                child: ListView.builder(
-                  padding: EdgeInsets.zero,
-                  itemCount: feedItems.length + (isLoadingOlderNotes ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (index == feedItems.length) {
-                      return const Padding(
-                        padding: EdgeInsets.all(16.0),
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    }
-                    final item = feedItems[index];
-                    return GestureDetector(
-                      onDoubleTap: () {
-                        _sendReaction(item.id);
-                      },
-                      onHorizontalDragEnd: (details) {
-                        if (details.primaryVelocity! > 0) {
-                          setState(() {
-                            swipedNotes.add(item.id);
-                          });
-                          _showReplyDialog(item.id);
-                          Timer(const Duration(milliseconds: 500), () {
-                            setState(() {
-                              swipedNotes.remove(item.id);
-                            });
-                          });
+        body: RefreshIndicator(
+          onRefresh: () async {
+            await _dataService.fetchNotes(await _dataService.getFollowingList(widget.npub), initialLoad: true);
+          },
+          child: _isInitializing
+              ? const Center(
+                  child: CircularProgressIndicator(),
+                )
+              : (_feedItems.isEmpty
+                  ? ListView(
+                      padding: EdgeInsets.zero,
+                      children: [
+                        SizedBox(height: 100),
+                        Center(
+                          child: Text(
+                            'No notes to display yet. They will appear here when new notes are loaded.',
+                            style: TextStyle(fontSize: 16, color: Colors.grey),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ],
+                    )
+                  : ListView.builder(
+                      padding: EdgeInsets.zero,
+                      itemCount: _feedItems.length + (_isLoadingOlderNotes ? 1 : 0),
+                      itemBuilder: (context, index) {
+                        if (index == _feedItems.length) {
+                          return const Padding(
+                            padding: EdgeInsets.all(16.0),
+                            child: Center(child: CircularProgressIndicator()),
+                          );
                         }
+                        final item = _feedItems[index];
+                        return _buildFeedItem(item);
                       },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        decoration: BoxDecoration(
-                          border: glowingNotes.contains(item.id)
-                              ? Border.all(color: Colors.white, width: 4.0)
-                              : swipedNotes.contains(item.id)
-                                  ? Border.all(color: Colors.white, width: 4.0)
-                                  : null,
-                          borderRadius: BorderRadius.circular(12.0),
-                        ),
-                        child: NoteWidget(
-                          note: item,
-                          onAuthorTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ProfilePage(npub: item.author),
-                              ),
-                            );
-                          },
-                          onRepostedByTap: item.isRepost
-                              ? () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => ProfilePage(npub: item.repostedBy!),
-                                    ),
-                                  );
-                                }
-                              : null,
-                          onNoteTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => NoteDetailPage(
-                                  note: item,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
+                    )),
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
@@ -294,7 +342,7 @@ Future<void> _loadOlderNotes() async {
             shape: const RoundedRectangleBorder(
               borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
             ),
-            builder: (context) => ShareNoteDialog(dataService: _dataService!),
+            builder: (context) => ShareNoteDialog(dataService: _dataService),
           );
         },
         child: const Icon(Icons.add),
@@ -303,55 +351,73 @@ Future<void> _loadOlderNotes() async {
     );
   }
 
-  Widget _buildSidebar() {
-    return Drawer(
-      child: ListView(
-        children: [
-          ListTile(
-            leading: const Icon(Icons.person),
-            title: const Text('PROFILE'),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => ProfilePage(npub: widget.npub)),
-              );
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('LOGOUT'),
-            onTap: _logoutAndClearData,
-          ),
-        ],
+  Widget _buildFeedItem(NoteModel item) {
+    return GestureDetector(
+      onDoubleTap: () {
+        _sendReaction(item.id);
+      },
+      onHorizontalDragEnd: (details) {
+        if (details.primaryVelocity != null && details.primaryVelocity! > 0) {
+          _swipeNoteForReply(item.id);
+        }
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        decoration: BoxDecoration(
+          border: _glowingNotes.contains(item.id)
+              ? Border.all(color: Colors.white, width: 4.0)
+              : _swipedNotes.contains(item.id)
+                  ? Border.all(color: Colors.white, width: 4.0)
+                  : null,
+          borderRadius: BorderRadius.circular(12.0),
+        ),
+        child: NoteWidget(
+          key: ValueKey(item.id),
+          note: item,
+          onAuthorTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ProfilePage(npub: item.author),
+              ),
+            );
+          },
+          onRepostedByTap: item.isRepost
+              ? () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ProfilePage(npub: item.repostedBy!),
+                    ),
+                  );
+                }
+              : null,
+          onNoteTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => NoteDetailPage(
+                  note: item,
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
 
-  Future<void> _logoutAndClearData() async {
-    try {
-      const secureStorage = FlutterSecureStorage();
-      await secureStorage.deleteAll();
-
-      await Hive.deleteFromDisk();
-
-      await _dataService?.closeConnections();
-
-      feedItems.clear();
-      cachedNoteIds.clear();
-      glowingNotes.clear();
-      swipedNotes.clear();
-      isInitializing = true;
-
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-        (Route<dynamic> route) => false,
-      );
-    } catch (e) {
-      print('Error during logout: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error during logout: $e')),
-      );
-    }
+  void _swipeNoteForReply(String noteId) {
+    setState(() {
+      _swipedNotes.add(noteId);
+    });
+    _showReplyDialog(noteId);
+    Timer(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        setState(() {
+          _swipedNotes.remove(noteId);
+        });
+      }
+    });
   }
 }
