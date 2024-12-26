@@ -1,4 +1,10 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
 part of 'reply_model.dart';
+
+// **************************************************************************
+// TypeAdapterGenerator
+// **************************************************************************
 
 class ReplyModelAdapter extends TypeAdapter<ReplyModel> {
   @override
@@ -8,7 +14,7 @@ class ReplyModelAdapter extends TypeAdapter<ReplyModel> {
   ReplyModel read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
-      for (var i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
     return ReplyModel(
       id: fields[0] as String,
@@ -45,7 +51,7 @@ class ReplyModelAdapter extends TypeAdapter<ReplyModel> {
   int get hashCode => typeId.hashCode;
 
   @override
-  bool operator ==(Object other) => 
+  bool operator ==(Object other) =>
       identical(this, other) ||
       other is ReplyModelAdapter &&
           runtimeType == other.runtimeType &&

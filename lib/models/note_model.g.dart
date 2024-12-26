@@ -1,4 +1,10 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
 part of 'note_model.dart';
+
+// **************************************************************************
+// TypeAdapterGenerator
+// **************************************************************************
 
 class NoteModelAdapter extends TypeAdapter<NoteModel> {
   @override
@@ -8,7 +14,7 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
   NoteModel read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
-      for (var i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
     return NoteModel(
       id: fields[0] as String,
@@ -17,7 +23,7 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       authorName: fields[3] as String,
       authorProfileImage: fields[4] as String,
       timestamp: fields[5] as DateTime,
-      isRepost: fields[6] as bool? ?? false,
+      isRepost: fields[6] as bool,
       repostedBy: fields[7] as String?,
       repostedByName: fields[8] as String?,
       repostedByProfileImage: fields[9] as String?,

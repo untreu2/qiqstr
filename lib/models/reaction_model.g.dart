@@ -1,4 +1,10 @@
+// GENERATED CODE - DO NOT MODIFY BY HAND
+
 part of 'reaction_model.dart';
+
+// **************************************************************************
+// TypeAdapterGenerator
+// **************************************************************************
 
 class ReactionModelAdapter extends TypeAdapter<ReactionModel> {
   @override
@@ -8,7 +14,7 @@ class ReactionModelAdapter extends TypeAdapter<ReactionModel> {
   ReactionModel read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
-      for (var i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
+      for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
     return ReactionModel(
       id: fields[0] as String,
@@ -42,7 +48,7 @@ class ReactionModelAdapter extends TypeAdapter<ReactionModel> {
   int get hashCode => typeId.hashCode;
 
   @override
-  bool operator ==(Object other) => 
+  bool operator ==(Object other) =>
       identical(this, other) ||
       other is ReactionModelAdapter &&
           runtimeType == other.runtimeType &&
