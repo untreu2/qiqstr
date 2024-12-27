@@ -282,65 +282,51 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Widget _buildFeedItem(NoteModel item) {
-    return GestureDetector(
-      onDoubleTap: () {
-        _sendReaction(item.id);
+    return NoteWidget(
+      key: ValueKey(item.id),
+      note: item,
+      onSendReaction: _sendReaction,
+      onShowReplyDialog: _showReplyDialog,
+      onAuthorTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProfilePage(npub: item.author),
+          ),
+        );
       },
-      onHorizontalDragEnd: (details) {
-        if (details.primaryVelocity != null && details.primaryVelocity! > 0) {
-          _swipeNoteForReply(item.id);
-        }
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        decoration: BoxDecoration(
-          border: _glowingNotes.contains(item.id)
-              ? Border.all(color: Colors.white, width: 4.0)
-              : _swipedNotes.contains(item.id)
-                  ? Border.all(color: Colors.white, width: 4.0)
-                  : null,
-          borderRadius: BorderRadius.circular(12.0),
-        ),
-        child: NoteWidget(
-          key: ValueKey(item.id),
-          note: item,
-          onAuthorTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ProfilePage(npub: item.author),
-              ),
-            );
-          },
-          onRepostedByTap: item.isRepost
-              ? () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ProfilePage(npub: item.repostedBy!),
-                    ),
-                  );
-                }
-              : null,
-          onNoteTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => NoteDetailPage(
-                  note: item,
+      onRepostedByTap: item.isRepost
+          ? () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ProfilePage(npub: item.repostedBy!),
                 ),
-              ),
-            );
-          },
-        ),
-      ),
+              );
+            }
+          : null,
+      onNoteTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => NoteDetailPage(
+              note: item,
+            ),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildNotesList() {
     if (_profileNotes.isEmpty) {
       return const SliverFillRemaining(
-        child: Center(child: Text('No notes available.')),
+        child: Center(
+          child: Text(
+            'No notes available.',
+            style: TextStyle(fontSize: 16, color: Colors.grey),
+          ),
+        ),
       );
     }
 
@@ -427,19 +413,6 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  void _swipeNoteForReply(String noteId) {
-    setState(() {
-      _swipedNotes.add(noteId);
-    });
-    _showReplyDialog(noteId);
-    Timer(const Duration(milliseconds: 500), () {
-      if (mounted) {
-        setState(() {
-          _swipedNotes.remove(noteId);
-        });
-      }
-    });
-  }
 
   @override
   Widget build(BuildContext context) {

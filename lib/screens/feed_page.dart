@@ -329,7 +329,40 @@ class _FeedPageState extends State<FeedPage> {
                           );
                         }
                         final item = _feedItems[index];
-                        return _buildFeedItem(item);
+                        return NoteWidget(
+                          key: ValueKey(item.id),
+                          note: item,
+                          onSendReaction: _sendReaction,
+                          onShowReplyDialog: _showReplyDialog,
+                          onAuthorTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ProfilePage(npub: item.author),
+                              ),
+                            );
+                          },
+                          onRepostedByTap: item.isRepost
+                              ? () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ProfilePage(npub: item.repostedBy!),
+                                    ),
+                                  );
+                                }
+                              : null,
+                          onNoteTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => NoteDetailPage(
+                                  note: item,
+                                ),
+                              ),
+                            );
+                          },
+                        );
                       },
                     )),
         ),
@@ -349,75 +382,5 @@ class _FeedPageState extends State<FeedPage> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
-  }
-
-  Widget _buildFeedItem(NoteModel item) {
-    return GestureDetector(
-      onDoubleTap: () {
-        _sendReaction(item.id);
-      },
-      onHorizontalDragEnd: (details) {
-        if (details.primaryVelocity != null && details.primaryVelocity! > 0) {
-          _swipeNoteForReply(item.id);
-        }
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        decoration: BoxDecoration(
-          border: _glowingNotes.contains(item.id)
-              ? Border.all(color: Colors.white, width: 4.0)
-              : _swipedNotes.contains(item.id)
-                  ? Border.all(color: Colors.white, width: 4.0)
-                  : null,
-          borderRadius: BorderRadius.circular(12.0),
-        ),
-        child: NoteWidget(
-          key: ValueKey(item.id),
-          note: item,
-          onAuthorTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ProfilePage(npub: item.author),
-              ),
-            );
-          },
-          onRepostedByTap: item.isRepost
-              ? () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ProfilePage(npub: item.repostedBy!),
-                    ),
-                  );
-                }
-              : null,
-          onNoteTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => NoteDetailPage(
-                  note: item,
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  void _swipeNoteForReply(String noteId) {
-    setState(() {
-      _swipedNotes.add(noteId);
-    });
-    _showReplyDialog(noteId);
-    Timer(const Duration(milliseconds: 500), () {
-      if (mounted) {
-        setState(() {
-          _swipedNotes.remove(noteId);
-        });
-      }
-    });
   }
 }

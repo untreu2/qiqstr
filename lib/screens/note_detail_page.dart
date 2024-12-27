@@ -6,7 +6,6 @@ import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
 import '../services/qiqstr_service.dart';
 import 'profile_page.dart';
-import '../widgets/reply_widget.dart';
 import 'send_reply.dart';
 import '../widgets/note_widget.dart';
 
@@ -256,41 +255,23 @@ class RepliesSection extends StatelessWidget {
             itemCount: replies.length,
             itemBuilder: (context, index) {
               final reply = replies[index];
-              return GestureDetector(
-                onDoubleTap: () {
-                  onSendReplyReaction(reply.id);
+              return NoteWidget(
+                key: ValueKey(reply.id),
+                note: convertReplyToNote(reply),
+                onSendReaction: onSendReplyReaction,
+                onShowReplyDialog: onShowReplyDialog,
+                onAuthorTap: () {
+                  onNavigateToProfile(reply.author);
                 },
-                onHorizontalDragEnd: (details) {
-                  if (details.primaryVelocity! > 0) {
-                    onShowReplyDialog(reply.id);
-                  }
+                onRepostedByTap: null,
+                onNoteTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => NoteDetailPage(note: convertReplyToNote(reply)),
+                    ),
+                  );
                 },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  decoration: BoxDecoration(
-                    border: glowingReplies.contains(reply.id)
-                        ? Border.all(color: Colors.white, width: 4.0)
-                        : swipedReplies.contains(reply.id)
-                            ? Border.all(color: Colors.white, width: 4.0)
-                            : null,
-                    borderRadius: BorderRadius.circular(12.0),
-                  ),
-                  child: ReplyWidget(
-                    reply: reply,
-                    onAuthorTap: () {
-                      onNavigateToProfile(reply.author);
-                    },
-                    onReplyTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => NoteDetailPage(
-                              note: convertReplyToNote(reply)),
-                        ),
-                      );
-                    },
-                  ),
-                ),
               );
             },
           ),
@@ -443,16 +424,6 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
   }
 
   void _showReplyDialog(String noteId) {
-    setState(() {
-      swipedNotes.add(noteId);
-    });
-
-    Timer(const Duration(milliseconds: 300), () {
-      setState(() {
-        swipedNotes.remove(noteId);
-      });
-    });
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -483,82 +454,42 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
         bottom: false,
         left: true,
         right: true,
-        child: GestureDetector(
-          onHorizontalDragEnd: (details) {
-            if (details.primaryVelocity != null && details.primaryVelocity! > 0) {
-              setState(() {
-                swipedNotes.add(widget.note.id);
-              });
-              Timer(const Duration(milliseconds: 300), () {
-                setState(() {
-                  swipedNotes.remove(widget.note.id);
-                });
-              });
-              _showReplyDialog(widget.note.id);
-            }
-          },
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                GestureDetector(
-                  onDoubleTap: () {
-                    _sendReaction(widget.note.id);
-                  },
-                  onHorizontalDragEnd: (details) {
-                    if (details.primaryVelocity != null && details.primaryVelocity! > 0) {
-                      setState(() {
-                        swipedNotes.add(widget.note.id);
-                      });
-                      Timer(const Duration(milliseconds: 300), () {
-                        setState(() {
-                          swipedNotes.remove(widget.note.id);
-                        });
-                      });
-                      _showReplyDialog(widget.note.id);
-                    }
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    decoration: BoxDecoration(
-                      border: glowingNotes.contains(widget.note.id)
-                          ? Border.all(color: Colors.white, width: 4.0)
-                          : swipedNotes.contains(widget.note.id)
-                              ? Border.all(color: Colors.white, width: 4.0)
-                              : null,
-                      borderRadius: BorderRadius.circular(12.0),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              NoteWidget(
+                note: widget.note,
+                onSendReaction: _sendReaction,
+                onShowReplyDialog: _showReplyDialog,
+                onAuthorTap: () => _navigateToProfile(widget.note.author),
+                onRepostedByTap: widget.note.isRepost
+                    ? () => _navigateToProfile(widget.note.repostedBy ?? '')
+                    : null,
+                onNoteTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => NoteDetailPage(note: widget.note),
                     ),
-                    child: NoteWidget(
-                      note: widget.note,
-                      onAuthorTap: () => _navigateToProfile(widget.note.author),
-                      onRepostedByTap: () => _navigateToProfile(widget.note.repostedBy ?? ''),
-                      onNoteTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => NoteDetailPage(note: widget.note),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ReactionsSection(
-                  reactions: reactions,
-                  isLoading: isReactionsLoading,
-                ),
-                RepliesSection(
-                  replies: replies,
-                  isLoading: isRepliesLoading,
-                  onSendReplyReaction: _sendReplyReaction,
-                  onShowReplyDialog: _showReplyDialog,
-                  onNavigateToProfile: _navigateToProfile,
-                  glowingReplies: glowingReplies,
-                  swipedReplies: swipedReplies,
-                ),
-              ],
-            ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              ReactionsSection(
+                reactions: reactions,
+                isLoading: isReactionsLoading,
+              ),
+              RepliesSection(
+                replies: replies,
+                isLoading: isRepliesLoading,
+                onSendReplyReaction: _sendReplyReaction,
+                onShowReplyDialog: _showReplyDialog,
+                onNavigateToProfile: _navigateToProfile,
+                glowingReplies: glowingReplies,
+                swipedReplies: swipedReplies,
+              ),
+            ],
           ),
         ),
       ),
