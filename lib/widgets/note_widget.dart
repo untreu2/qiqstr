@@ -155,7 +155,7 @@ Widget build(BuildContext context) {
               );
             },
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+          padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 16.0),
           child: Row(
             children: [
               note.authorProfileImage.isNotEmpty
@@ -207,11 +207,18 @@ Widget build(BuildContext context) {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (parsedContent['text'] != null && parsedContent['text'] != '')
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                child: Text(parsedContent['text']),
-              ),
+if (parsedContent['text'] != null && parsedContent['text'] != '')
+  Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+    child: Text(
+      parsedContent['text'],
+      style: TextStyle(
+        fontSize: parsedContent['text'].length < 34 ? 20.0 : 15.0,
+        fontWeight: FontWeight.normal,
+      ),
+    ),
+  ),
+
             if (parsedContent['mediaUrls'] != null && parsedContent['mediaUrls'].isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8.0),

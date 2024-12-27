@@ -637,7 +637,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
               onTap: () => _navigateToProfile(widget.note.author),
               child: Text(
                 widget.note.authorName,
-                style: Theme.of(context).textTheme.titleMedium,
+                style: Theme.of(context).textTheme.titleMedium!.copyWith(fontWeight: FontWeight.bold),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
               ),
