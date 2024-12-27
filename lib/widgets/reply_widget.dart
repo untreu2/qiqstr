@@ -167,29 +167,29 @@ class ReplyWidget extends StatelessWidget {
                     ),
                   );
                 },
-           child: reply.authorProfileImage.isNotEmpty
-              ? CircleAvatar(
-                  radius: 16,
-                  child: CachedNetworkImage(
-                    imageUrl: reply.authorProfileImage,
-                    placeholder: (context, url) =>
-                        const Center(child: CircularProgressIndicator()),
-                    errorWidget: (context, url, error) => const Icon(Icons.error),
-                    imageBuilder: (context, imageProvider) => ClipOval(
-                      child: Image(
-                        image: imageProvider,
-                        width: 32, 
-                        height: 32,
-                        fit: BoxFit.cover,
+            child: reply.authorProfileImage.isNotEmpty
+                ? CircleAvatar(
+                    radius: 16,
+                    child: CachedNetworkImage(
+                      imageUrl: reply.authorProfileImage,
+                      placeholder: (context, url) =>
+                          const Center(child: CircularProgressIndicator()),
+                      errorWidget: (context, url, error) => const Icon(Icons.error),
+                      imageBuilder: (context, imageProvider) => ClipOval(
+                        child: Image(
+                          image: imageProvider,
+                          width: 32, 
+                          height: 32,
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
+                  )
+                : const CircleAvatar(
+                    radius: 16,
+                    child: Icon(Icons.person, size: 16),
                   ),
-                )
-              : const CircleAvatar(
-                  radius: 16,
-                  child: Icon(Icons.person, size: 16),
-                ),
-        ),
+          ),
           const SizedBox(width: 8),
           Flexible(
             child: GestureDetector(
@@ -208,15 +208,6 @@ class ReplyWidget extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
               ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              _formatTimestamp(reply.timestamp),
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
             ),
           ),
         ],

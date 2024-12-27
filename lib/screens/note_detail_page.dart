@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:nostr/nostr.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
@@ -9,8 +7,8 @@ import '../models/reply_model.dart';
 import '../services/qiqstr_service.dart';
 import 'profile_page.dart';
 import '../widgets/reply_widget.dart';
-import '../widgets/video_preview.dart';
 import 'send_reply.dart';
+import '../widgets/note_widget.dart';
 
 class ThreeDotsLoading extends StatefulWidget {
   final double size;
@@ -284,11 +282,12 @@ class RepliesSection extends StatelessWidget {
                     },
                     onReplyTap: () {
                       Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                      builder: (context) => NoteDetailPage(note: convertReplyToNote(reply)),
-                         ),
-                         );
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => NoteDetailPage(
+                              note: convertReplyToNote(reply)),
+                        ),
+                      );
                     },
                   ),
                 ),
@@ -311,8 +310,7 @@ NoteModel convertReplyToNote(ReplyModel reply) {
     timestamp: reply.timestamp,
     isRepost: false,
     repostedBy: null,
-    repostedByName: null,
-    repostedByProfileImage: null,
+    repostedByName: '',
   );
 }
 
@@ -337,7 +335,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
 
   final Set<String> glowingNotes = {};
   final Set<String> glowingReplies = {};
-  final Set<String> swipedNotes = {}; 
+  final Set<String> swipedNotes = {};
   final Set<String> swipedReplies = {};
 
   @override
@@ -444,53 +442,6 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     }
   }
 
-  Map<String, dynamic> _parseContent(String content) {
-    final RegExp mediaRegExp = RegExp(
-        r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|mp4))',
-        caseSensitive: false);
-    final Iterable<RegExpMatch> matches = mediaRegExp.allMatches(content);
-    final List<String> mediaUrls = matches.map((m) => m.group(0)!).toList();
-    final String text = content.replaceAll(mediaRegExp, '').trim();
-    return {'text': text, 'mediaUrls': mediaUrls};
-  }
-
-  List<Widget> _buildParsedContent(String content) {
-    final parsedContent = _parseContent(content);
-    List<Widget> widgets = [];
-    if (parsedContent['text'] != null && (parsedContent['text'] as String).isNotEmpty) {
-      widgets.add(Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-        child: Text(
-          parsedContent['text'],
-          style: Theme.of(context).textTheme.bodyLarge,
-        ),
-      ));
-      widgets.add(const SizedBox(height: 8));
-    }
-    if (parsedContent['mediaUrls'] != null && (parsedContent['mediaUrls'] as List).isNotEmpty) {
-      widgets.addAll(_buildMediaPreviews(parsedContent['mediaUrls'] as List<String>));
-      widgets.add(const SizedBox(height: 8));
-    }
-    return widgets;
-  }
-
-  List<Widget> _buildMediaPreviews(List<String> mediaUrls) {
-    return mediaUrls.map((url) {
-      if (url.toLowerCase().endsWith('.mp4')) {
-        return VideoPreview(url: url);
-      } else {
-        return CachedNetworkImage(
-          imageUrl: url,
-          placeholder: (context, url) =>
-              const Center(child: CircularProgressIndicator()),
-          errorWidget: (context, url, error) => const Icon(Icons.error),
-          fit: BoxFit.cover,
-          width: double.infinity,
-        );
-      }
-    }).toList();
-  }
-
   void _showReplyDialog(String noteId) {
     setState(() {
       swipedNotes.add(noteId);
@@ -515,11 +466,6 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     );
   }
 
-  String _formatTimestamp(DateTime timestamp) {
-    return "${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} "
-        "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}";
-  }
-
   void _navigateToProfile(String authorNpub) {
     Navigator.push(
       context,
@@ -531,14 +477,15 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final int reactionCount = reactions.length;
-    final int replyCount = replies.length;
-
     return Scaffold(
       body: SafeArea(
+        top: true,
+        bottom: false,
+        left: true,
+        right: true,
         child: GestureDetector(
           onHorizontalDragEnd: (details) {
-            if (details.primaryVelocity! > 0) {
+            if (details.primaryVelocity != null && details.primaryVelocity! > 0) {
               setState(() {
                 swipedNotes.add(widget.note.id);
               });
@@ -554,13 +501,12 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildHeader(),
                 GestureDetector(
                   onDoubleTap: () {
                     _sendReaction(widget.note.id);
                   },
                   onHorizontalDragEnd: (details) {
-                    if (details.primaryVelocity! > 0) {
+                    if (details.primaryVelocity != null && details.primaryVelocity! > 0) {
                       setState(() {
                         swipedNotes.add(widget.note.id);
                       });
@@ -582,16 +528,22 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                               : null,
                       borderRadius: BorderRadius.circular(12.0),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ..._buildParsedContent(widget.note.content),
-                        _buildTimestampAndCounts(reactionCount, replyCount),
-                        const SizedBox(height: 16),
-                      ],
+                    child: NoteWidget(
+                      note: widget.note,
+                      onAuthorTap: () => _navigateToProfile(widget.note.author),
+                      onRepostedByTap: () => _navigateToProfile(widget.note.repostedBy ?? ''),
+                      onNoteTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => NoteDetailPage(note: widget.note),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),
+                const SizedBox(height: 12),
                 ReactionsSection(
                   reactions: reactions,
                   isLoading: isReactionsLoading,
@@ -609,89 +561,6 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: () => _navigateToProfile(widget.note.author),
-            child: widget.note.authorProfileImage.isNotEmpty
-                ? CircleAvatar(
-                    backgroundImage:
-                        CachedNetworkImageProvider(widget.note.authorProfileImage),
-                    radius: 24,
-                  )
-                : const CircleAvatar(
-                    child: Icon(Icons.person, size: 24),
-                    radius: 24,
-                  ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => _navigateToProfile(widget.note.author),
-              child: Text(
-                widget.note.authorName,
-                style: Theme.of(context).textTheme.titleMedium!.copyWith(fontWeight: FontWeight.bold),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.copy),
-            onPressed: () => _copyNoteId(context),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _copyNoteId(BuildContext context) {
-    final formattedNoteId = Nip19.encodeNote(widget.note.id);
-    Clipboard.setData(ClipboardData(text: formattedNoteId));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Note ID copied.")),
-    );
-  }
-
-  Widget _buildTimestampAndCounts(int reactionCount, int replyCount) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Row(
-        children: [
-          Flexible(
-            child: Text(
-              _formatTimestamp(widget.note.timestamp),
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Flexible(
-            child: Text(
-              'REACTIONS: $reactionCount',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Flexible(
-            child: Text(
-              'REPLIES: $replyCount',
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-            ),
-          ),
-        ],
       ),
     );
   }

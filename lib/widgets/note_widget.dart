@@ -236,10 +236,6 @@ if (parsedContent['text'] != null && parsedContent['text'] != '')
           ],
         ),
       ),
-      const Divider(
-        color: Color(0xFF616161),
-        thickness: 1.5,
-      ),
     ],
   );
 }
