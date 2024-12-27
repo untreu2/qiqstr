@@ -220,7 +220,7 @@ Widget build(BuildContext context) {
             if (parsedContent['linkUrls'] != null && parsedContent['linkUrls'].isNotEmpty)
               _buildLinkPreviews(parsedContent['linkUrls']),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
               child: Text(
                 _formatTimestamp(note.timestamp),
                 style: const TextStyle(fontSize: 12, color: Colors.grey),
@@ -228,6 +228,10 @@ Widget build(BuildContext context) {
             ),
           ],
         ),
+      ),
+      const Divider(
+        color: Color(0xFF616161),
+        thickness: 1.5,
       ),
     ],
   );

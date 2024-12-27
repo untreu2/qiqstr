@@ -48,7 +48,7 @@ class DataService {
     'wss://nos.lol',
     'wss://untreu.me',
     'wss://vitor.nostr1.com',
-    'wss://eu.purplerelay.com/',
+    'wss://eu.purplerelay.com',
   ];
   final Map<String, WebSocket> _webSockets = {};
 
