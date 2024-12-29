@@ -52,7 +52,7 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
 
   Map<String, dynamic> _parseContent(String content) {
     final RegExp mediaRegExp =
-        RegExp(r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|mp4))', caseSensitive: false);
+        RegExp(r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|mp4|mov))', caseSensitive: false);
     final Iterable<RegExpMatch> mediaMatches = mediaRegExp.allMatches(content);
 
     final List<String> mediaUrls = mediaMatches.map((m) => m.group(0)!).toList();
