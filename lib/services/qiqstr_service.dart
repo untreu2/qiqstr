@@ -348,6 +348,13 @@ class DataService {
         return;
       }
 
+      for (var note in allNotes) {
+        if (!eventIds.contains(note.id)) {
+          notes.add(note);
+          eventIds.add(note.id);
+        }
+      }
+
       onLoad(allNotes);
       print('Cache loaded with ${allNotes.length} notes.');
     } catch (e) {

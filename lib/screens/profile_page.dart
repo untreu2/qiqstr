@@ -4,8 +4,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive/hive.dart';
 import 'package:palette_generator/palette_generator.dart';
-import 'package:qiqstr/models/reaction_model.dart';
-import 'package:qiqstr/models/reply_model.dart';
 import 'package:qiqstr/screens/login_page.dart';
 import '../models/note_model.dart';
 import '../services/qiqstr_service.dart';
@@ -24,7 +22,6 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   final List<NoteModel> _profileNotes = [];
-  final Set<String> _cachedNoteIds = {};
   final Set<String> _glowingNotes = {};
   final Set<String> _swipedNotes = {};
   bool _isLoadingOlderNotes = false;
@@ -58,12 +55,15 @@ class _ProfilePageState extends State<ProfilePage> {
         npub: widget.npub,
         dataType: DataType.Profile,
         onNewNote: _handleNewNote,
-        onReactionsUpdated: _handleReactionsUpdated,
-        onRepliesUpdated: _handleRepliesUpdated,
       );
 
       await _dataService.initialize();
-      await _loadProfileFromCache();
+      await _dataService.loadNotesFromCache((cachedNotes) {
+        setState(() {
+          _profileNotes.addAll(cachedNotes);
+          _sortProfileNotes();
+        });
+      });
       await _dataService.initializeConnections();
       await _updateUserProfile();
 
@@ -79,34 +79,19 @@ class _ProfilePageState extends State<ProfilePage> {
         });
       }
       print('Profile initialization error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Profile initialization error: $e')),
+      );
     }
-  }
-
-  Future<void> _loadProfileFromCache() async {
-    await _dataService.loadNotesFromCache((cachedNotes) {
-      final newNotes = cachedNotes.where((note) => !_cachedNoteIds.contains(note.id)).toList();
-      setState(() {
-        _cachedNoteIds.addAll(newNotes.map((note) => note.id));
-        _profileNotes.addAll(newNotes);
-        _sortProfileNotes();
-      });
-    });
   }
 
   void _handleNewNote(NoteModel newNote) {
-    if (!_cachedNoteIds.contains(newNote.id)) {
-      setState(() {
-        _cachedNoteIds.add(newNote.id);
-        _profileNotes.insert(0, newNote);
-        _sortProfileNotes();
-      });
-      _dataService.saveNotesToCache();
-    }
+    setState(() {
+      _profileNotes.insert(0, newNote);
+      _sortProfileNotes();
+    });
+    _dataService.saveNotesToCache();
   }
-
-  void _handleReactionsUpdated(String noteId, List<ReactionModel> reactions) {}
-
-  void _handleRepliesUpdated(String noteId, List<ReplyModel> replies) {}
 
   void _sortProfileNotes() {
     _profileNotes.sort((a, b) {
@@ -137,6 +122,9 @@ class _ProfilePageState extends State<ProfilePage> {
       await _dataService.fetchOlderNotes([widget.npub], _handleOlderNote);
     } catch (e) {
       print('Error loading older notes: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading older notes: $e')),
+      );
     }
 
     if (mounted) {
@@ -147,13 +135,10 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _handleOlderNote(NoteModel olderNote) {
-    if (!_cachedNoteIds.contains(olderNote.id)) {
-      setState(() {
-        _cachedNoteIds.add(olderNote.id);
-        _profileNotes.add(olderNote);
-        _sortProfileNotes();
-      });
-    }
+    setState(() {
+      _profileNotes.add(olderNote);
+      _sortProfileNotes();
+    });
   }
 
   Future<void> _updateUserProfile() async {
@@ -201,6 +186,9 @@ class _ProfilePageState extends State<ProfilePage> {
       });
     } catch (e) {
       print('Error sending reaction: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sending reaction: $e')),
+      );
     }
   }
 
@@ -397,7 +385,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
       setState(() {
         _profileNotes.clear();
-        _cachedNoteIds.clear();
         _glowingNotes.clear();
         _swipedNotes.clear();
         _isLoading = true;
@@ -410,9 +397,11 @@ class _ProfilePageState extends State<ProfilePage> {
       );
     } catch (e) {
       print('Logout error: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Logout error: $e')),
+      );
     }
   }
-
 
   @override
   Widget build(BuildContext context) {

@@ -24,11 +24,9 @@ class FeedPage extends StatefulWidget {
 
 class _FeedPageState extends State<FeedPage> {
   final List<NoteModel> _feedItems = [];
-  final Set<String> _cachedNoteIds = {};
   final Set<String> _glowingNotes = {};
   final Set<String> _swipedNotes = {};
   bool _isLoadingOlderNotes = false;
-  bool _isLoadingNewNotes = false;
   bool _isInitializing = true;
   late DataService _dataService;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -51,7 +49,12 @@ class _FeedPageState extends State<FeedPage> {
   Future<void> _initializeFeed() async {
     try {
       await _dataService.initialize();
-      await _loadFeedFromCache();
+      await _dataService.loadNotesFromCache((cachedNotes) {
+        setState(() {
+          _feedItems.addAll(cachedNotes);
+          _sortFeedItems();
+        });
+      });
       await _dataService.initializeConnections();
 
       if (mounted) {
@@ -72,33 +75,12 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
-  Future<void> _loadFeedFromCache() async {
-    await _dataService.loadNotesFromCache((cachedNotes) {
-      final newNotes = cachedNotes.where((note) => !_cachedNoteIds.contains(note.id)).toList();
-      setState(() {
-        _cachedNoteIds.addAll(newNotes.map((note) => note.id));
-        _feedItems.addAll(newNotes);
-        _sortFeedItems();
-        _isLoadingNewNotes = false;
-      });
-    });
-  }
-
   void _handleNewNote(NoteModel newNote) {
-    if (!_cachedNoteIds.contains(newNote.id)) {
-      setState(() {
-        _cachedNoteIds.add(newNote.id);
-        _feedItems.insert(0, newNote);
-        _sortFeedItems();
-      });
-      _dataService.saveNotesToCache();
-    }
-
-    if (_isLoadingNewNotes) {
-      setState(() {
-        _isLoadingNewNotes = false;
-      });
-    }
+    setState(() {
+      _feedItems.insert(0, newNote);
+      _sortFeedItems();
+    });
+    _dataService.saveNotesToCache();
   }
 
   void _handleReactionsUpdated(String noteId, List<ReactionModel> reactions) {
@@ -156,13 +138,10 @@ class _FeedPageState extends State<FeedPage> {
   }
 
   void _handleOlderNote(NoteModel olderNote) {
-    if (!_cachedNoteIds.contains(olderNote.id)) {
-      setState(() {
-        _cachedNoteIds.add(olderNote.id);
-        _feedItems.add(olderNote);
-        _sortFeedItems();
-      });
-    }
+    setState(() {
+      _feedItems.add(olderNote);
+      _sortFeedItems();
+    });
   }
 
   Future<void> _sendReaction(String noteId) async {
@@ -247,7 +226,6 @@ class _FeedPageState extends State<FeedPage> {
 
       setState(() {
         _feedItems.clear();
-        _cachedNoteIds.clear();
         _glowingNotes.clear();
         _swipedNotes.clear();
         _isInitializing = true;
