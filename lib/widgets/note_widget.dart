@@ -321,10 +321,11 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
               ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: Divider(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Container(
+                width: double.infinity,
+                height: 0.3,
                 color: Colors.grey.shade400,
-                thickness: 1.0,
               ),
             ),
           ],
