@@ -18,30 +18,36 @@ class ReactionModelAdapter extends TypeAdapter<ReactionModel> {
     };
     return ReactionModel(
       id: fields[0] as String,
-      author: fields[1] as String,
-      content: fields[2] as String,
-      timestamp: fields[3] as DateTime,
-      authorName: fields[4] as String,
-      authorProfileImage: fields[5] as String,
+      noteId: fields[1] as String,
+      author: fields[2] as String,
+      content: fields[3] as String,
+      timestamp: fields[4] as DateTime,
+      authorName: fields[5] as String,
+      authorProfileImage: fields[6] as String,
+      fetchedAt: fields[7] as DateTime,
     );
   }
 
   @override
   void write(BinaryWriter writer, ReactionModel obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
-      ..write(obj.author)
+      ..write(obj.noteId)
       ..writeByte(2)
-      ..write(obj.content)
+      ..write(obj.author)
       ..writeByte(3)
-      ..write(obj.timestamp)
+      ..write(obj.content)
       ..writeByte(4)
-      ..write(obj.authorName)
+      ..write(obj.timestamp)
       ..writeByte(5)
-      ..write(obj.authorProfileImage);
+      ..write(obj.authorName)
+      ..writeByte(6)
+      ..write(obj.authorProfileImage)
+      ..writeByte(7)
+      ..write(obj.fetchedAt);
   }
 
   @override

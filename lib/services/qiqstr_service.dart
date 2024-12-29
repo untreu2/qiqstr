@@ -11,7 +11,7 @@ import 'package:uuid/uuid.dart';
 import 'dart:math';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-enum DataType { Feed, Profile }
+enum DataType { Feed, Profile, Note }
 
 enum MessageType { NewNotes, CacheLoad, Error }
 
@@ -35,6 +35,9 @@ class DataService {
   final Function(NoteModel)? onNewNote;
   final Function(String, List<ReactionModel>)? onReactionsUpdated;
   final Function(String, List<ReplyModel>)? onRepliesUpdated;
+
+  final Function(String, int)? onReactionCountUpdated;
+  final Function(String, int)? onReplyCountUpdated;
 
   List<NoteModel> notes = [];
   final Set<String> eventIds = {};
@@ -60,6 +63,8 @@ class DataService {
   final Map<String, String> _profileSubscriptionIds = {};
 
   Box<NoteModel>? notesBox;
+  Box<ReactionModel>? reactionsBox;
+  Box<ReplyModel>? repliesBox;
 
   bool _isInitialized = false;
   bool _isClosed = false;
@@ -86,6 +91,8 @@ class DataService {
     this.onNewNote,
     this.onReactionsUpdated,
     this.onRepliesUpdated,
+    this.onReactionCountUpdated,
+    this.onReplyCountUpdated,
   });
 
   int get connectedRelaysCount => _webSockets.length;
@@ -95,6 +102,16 @@ class DataService {
       await Hive.openBox<NoteModel>('notes_${dataType.toString()}_$npub').then((box) {
         notesBox = box as Box<NoteModel>?;
         print('Hive notes box opened successfully.');
+      });
+
+      await Hive.openBox<ReactionModel>('reactions_${dataType.toString()}_$npub').then((box) {
+        reactionsBox = box as Box<ReactionModel>?;
+        print('Hive reactions box opened successfully.');
+      });
+
+      await Hive.openBox<ReplyModel>('replies_${dataType.toString()}_$npub').then((box) {
+        repliesBox = box as Box<ReplyModel>?;
+        print('Hive replies box opened successfully.');
       });
 
       _isInitialized = true;
@@ -200,6 +217,14 @@ class DataService {
 
     await connectToRelays(relayUrls, targetNpubs);
     await fetchNotes(targetNpubs, initialLoad: true);
+
+    await loadReactionsFromCache((reactions) {});
+
+    await loadRepliesFromCache((replies) {
+      print('Loaded ${replies.length} replies from cache.');
+    });
+
+    await _subscribeToAllReactions();
   }
 
   Future<void> connectToRelays(List<String> relayList, List<String> targetNpubs) async {
@@ -212,7 +237,7 @@ class DataService {
       if (!_webSockets.containsKey(relayUrl) ||
           _webSockets[relayUrl]?.readyState == WebSocket.closed) {
         try {
-          final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 1));
+          final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
           if (_isClosed) {
             await webSocket.close();
             continue;
@@ -233,6 +258,7 @@ class DataService {
 
           await _fetchProfilesBatch(targetNpubs);
           await _fetchReplies(webSocket, targetNpubs);
+          await _fetchReactions(webSocket, targetNpubs);
 
           print('Connected to relay: $relayUrl');
         } catch (e) {
@@ -258,7 +284,7 @@ class DataService {
     Timer(Duration(seconds: delaySeconds), () async {
       if (_isClosed) return;
       try {
-        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 1));
+        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
         if (_isClosed) {
           await webSocket.close();
           return;
@@ -277,6 +303,7 @@ class DataService {
         );
         await _fetchProfilesBatch(targetNpubs);
         await _fetchReplies(webSocket, targetNpubs);
+        await _fetchReactions(webSocket, targetNpubs);
 
         print('Reconnected to relay: $relayUrl');
       } catch (e) {
@@ -357,6 +384,10 @@ class DataService {
 
       onLoad(allNotes);
       print('Cache loaded with ${allNotes.length} notes.');
+
+      List<String> cachedNoteIds = allNotes.map((note) => note.id).toList();
+      await fetchReactionsForNotes(cachedNoteIds);
+      await fetchRepliesForNotes(cachedNoteIds);
     } catch (e) {
       print('Error loading notes from cache: $e');
     }
@@ -385,6 +416,23 @@ class DataService {
     }
 
     print('Sent profile fetch request for ${uniqueNpubs.length} authors.');
+  }
+
+  Future<void> _fetchReactions(WebSocket webSocket, List<String> targetNpubs) async {
+    if (_isClosed) return;
+    final noteIds = notes.map((note) => note.id).toSet().toList();
+    if (noteIds.isEmpty) return;
+
+    final request = Request(generateUUID(), [
+      Filter(
+        kinds: [7],
+        e: noteIds,
+        limit: 1000,
+      ),
+    ]);
+    webSocket.add(request.serialize());
+
+    print('Sent reaction fetch request for ${noteIds.length} note IDs.');
   }
 
   Future<void> _fetchReplies(WebSocket webSocket, List<String> targetNpubs) async {
@@ -522,10 +570,15 @@ class DataService {
       if (!eventIds.contains(newEvent.id)) {
         notes.add(newEvent);
         eventIds.add(newEvent.id);
-        notesBox!.put(newEvent.id, newEvent);
+        await notesBox!.put(newEvent.id, newEvent);
         _sortNotes();
         onNewNote?.call(newEvent);
         print('New note added and saved to cache: ${newEvent.id}');
+
+        await fetchReactionsForNotes([newEvent.id]);
+        await fetchRepliesForNotes([newEvent.id]);
+
+        await _subscribeToAllReactions();
       }
     }
   }
@@ -554,6 +607,11 @@ class DataService {
         reactionsMap[noteId]!.add(reaction);
         onReactionsUpdated?.call(noteId, reactionsMap[noteId]!);
         print('Reaction updated for note $noteId: ${reaction.content}');
+
+        var reactionCount = reactionsMap[noteId]!.length;
+        onReactionCountUpdated?.call(noteId, reactionCount);
+
+        await reactionsBox?.put(reaction.id, reaction);
       }
     } catch (e) {
       print('Error handling reaction event: $e');
@@ -582,6 +640,11 @@ class DataService {
         repliesMap[parentId]!.add(reply);
         onRepliesUpdated?.call(parentId, repliesMap[parentId]!);
         print('Reply updated for note $parentId: ${reply.content}');
+
+        var replyCount = repliesMap[parentId]!.length;
+        onReplyCountUpdated?.call(parentId, replyCount);
+
+        await repliesBox?.put(reply.id, reply);
       }
     } catch (e) {
       print('Error handling reply event: $e');
@@ -668,7 +731,7 @@ class DataService {
     print('Sent profile fetch request for npub: $npub');
 
     try {
-      return await completer.future.timeout(Duration(seconds: 1), onTimeout: () => _defaultProfile());
+      return await completer.future.timeout(Duration(seconds: 5), onTimeout: () => _defaultProfile());
     } catch (e) {
       return _defaultProfile();
     }
@@ -715,7 +778,7 @@ class DataService {
           if (!completer.isCompleted) completer.complete();
         });
         webSocket.add(request.serialize());
-        await completer.future.timeout(Duration(seconds: 1), onTimeout: () async {
+        await completer.future.timeout(Duration(seconds: 5), onTimeout: () async {
           await webSocket.close();
         });
         await webSocket.close();
@@ -764,6 +827,36 @@ class DataService {
     print('Started periodic data fetching every 30 seconds.');
   }
 
+  Future<void> _subscribeToAllReactions() async {
+    if (_isClosed) return;
+
+    String subscriptionId = generateUUID();
+
+    List<String> allNoteIds = notes.map((note) => note.id).toList();
+
+    if (allNoteIds.isEmpty) return;
+
+    final filter = Filter(
+      kinds: [7],
+      e: allNoteIds,
+      limit: 1000,
+    );
+
+    final request = Request(subscriptionId, [filter]);
+
+    await Future.wait(_webSockets.values.map((ws) async {
+      if (ws.readyState == WebSocket.open) {
+        ws.add(request.serialize());
+      }
+    }));
+
+    print('Subscribed to reactions for ${allNoteIds.length} notes with subscription ID: $subscriptionId');
+  }
+
+  Future<void> _updateReactionSubscription() async {
+    await _subscribeToAllReactions();
+  }
+
   Future<void> closeConnections() async {
     if (_isClosed) return;
     _isClosed = true;
@@ -787,6 +880,8 @@ class DataService {
     _webSockets.clear();
 
     await notesBox?.close();
+    await reactionsBox?.close();
+    await repliesBox?.close();
 
     print('All connections closed and boxes are closed.');
   }
@@ -826,25 +921,31 @@ class DataService {
       }
     }));
 
-    return completer.future.timeout(Duration(seconds: 1), onTimeout: () {
+    return completer.future.timeout(Duration(seconds: 5), onTimeout: () {
       print('Timeout while fetching event by ID: $eventId');
       return null;
     });
   }
 
-  void _handleNewNotes(dynamic data) {
+  Future<void> _handleNewNotes(dynamic data) async {
     if (data is List<NoteModel>) {
       if (data.isNotEmpty) {
         for (var note in data) {
           if (!eventIds.contains(note.id)) {
             notes.add(note);
             eventIds.add(note.id);
-            notesBox!.put(note.id, note);
+            await notesBox!.put(note.id, note);
           }
         }
         _sortNotes();
         onNewNote?.call(data.last);
         print('Handled new notes: ${data.length} notes added.');
+
+        List<String> newNoteIds = data.map((note) => note.id).toList();
+        await fetchReactionsForNotes(newNoteIds);
+        await fetchRepliesForNotes(newNoteIds);
+
+        await _updateReactionSubscription();
       }
     }
   }
@@ -886,6 +987,27 @@ class DataService {
       final now = DateTime.now();
       profileCache.removeWhere((key, cachedProfile) =>
           now.difference(cachedProfile.fetchedAt) > profileCacheTTL);
+      
+      reactionsMap.forEach((noteId, reactions) {
+        reactions.removeWhere((reaction) =>
+            now.difference(reaction.fetchedAt) > profileCacheTTL);
+      });
+
+      repliesMap.forEach((noteId, replies) {
+        replies.removeWhere((reply) =>
+            now.difference(reply.fetchedAt) > profileCacheTTL);
+      });
+
+      await reactionsBox?.deleteAll(reactionsBox!.keys.where((key) {
+        final reaction = reactionsBox!.get(key);
+        return reaction != null && now.difference(reaction.fetchedAt) > profileCacheTTL;
+      }));
+
+      await repliesBox?.deleteAll(repliesBox!.keys.where((key) {
+        final reply = repliesBox!.get(key);
+        return reply != null && now.difference(reply.fetchedAt) > profileCacheTTL;
+      }));
+
       print('Performed cache cleanup.');
     });
 
@@ -988,6 +1110,25 @@ class DataService {
       }));
 
       print('Reaction sent successfully.');
+
+      final reaction = ReactionModel(
+        id: event.id,
+        noteId: noteId,
+        content: reactionContent,
+        author: npub,
+        authorName: 'You',
+        authorProfileImage: '',
+        timestamp: DateTime.now(),
+        fetchedAt: DateTime.now(),
+      );
+
+      reactionsMap.putIfAbsent(noteId, () => []);
+      reactionsMap[noteId]!.add(reaction);
+      await reactionsBox?.put(reaction.id, reaction);
+      onReactionsUpdated?.call(noteId, reactionsMap[noteId]!);
+
+      var reactionCount = reactionsMap[noteId]!.length;
+      onReactionCountUpdated?.call(noteId, reactionCount);
     } catch (e) {
       print('Error sending reaction: $e');
       throw e;
@@ -1022,9 +1163,80 @@ class DataService {
       }));
 
       print('Reply sent successfully.');
+
+      final reply = ReplyModel(
+        id: event.id,
+        parentId: noteId,
+        content: replyContent,
+        author: npub,
+        authorName: 'You',
+        authorProfileImage: '',
+        timestamp: DateTime.now(),
+        fetchedAt: DateTime.now(),
+      );
+
+      repliesMap.putIfAbsent(noteId, () => []);
+      repliesMap[noteId]!.add(reply);
+      await repliesBox?.put(reply.id, reply);
+      onRepliesUpdated?.call(noteId, repliesMap[noteId]!);
+
+      var replyCount = repliesMap[noteId]!.length;
+      onReplyCountUpdated?.call(noteId, replyCount);
     } catch (e) {
       print('Error sending reply: $e');
       throw e;
+    }
+  }
+
+  Future<void> loadReactionsFromCache(Null Function(dynamic reactions) param0) async {
+    if (reactionsBox == null || !reactionsBox!.isOpen) {
+      print('Reactions box is not initialized or not open.');
+      return;
+    }
+
+    try {
+      final allReactions = reactionsBox!.values.cast<ReactionModel>().toList();
+      if (allReactions.isEmpty) {
+        print('No reactions found in cache.');
+        return;
+      }
+
+      for (var reaction in allReactions) {
+        reactionsMap.putIfAbsent(reaction.noteId, () => []);
+        if (!reactionsMap[reaction.noteId]!.any((r) => r.id == reaction.id)) {
+          reactionsMap[reaction.noteId]!.add(reaction);
+          onReactionsUpdated?.call(reaction.noteId, reactionsMap[reaction.noteId]!);
+        }
+      }
+      print('Reactions cache loaded with ${allReactions.length} reactions.');
+    } catch (e) {
+      print('Error loading reactions from cache: $e');
+    }
+  }
+
+  Future<void> loadRepliesFromCache(Function(List<ReplyModel>) onLoad) async {
+    if (repliesBox == null || !repliesBox!.isOpen) {
+      print('Replies box is not initialized or not open.');
+      return;
+    }
+
+    try {
+      final allReplies = repliesBox!.values.cast<ReplyModel>().toList();
+      if (allReplies.isEmpty) {
+        print('No replies found in cache.');
+        return;
+      }
+
+      for (var reply in allReplies) {
+        repliesMap.putIfAbsent(reply.parentId, () => []);
+        if (!repliesMap[reply.parentId]!.any((r) => r.id == reply.id)) {
+          repliesMap[reply.parentId]!.add(reply);
+        }
+      }
+      onLoad(allReplies);
+      print('Replies cache loaded with ${allReplies.length} replies.');
+    } catch (e) {
+      print('Error loading replies from cache: $e');
     }
   }
 }

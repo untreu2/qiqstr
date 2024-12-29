@@ -25,6 +25,9 @@ class ReplyModel extends HiveObject {
   @HiveField(6)
   final String authorProfileImage;
 
+  @HiveField(7)
+  final DateTime fetchedAt;
+
   ReplyModel({
     required this.id,
     required this.author,
@@ -33,6 +36,7 @@ class ReplyModel extends HiveObject {
     required this.parentId,
     required this.authorName,
     required this.authorProfileImage,
+    required this.fetchedAt,
   });
 
   factory ReplyModel.fromEvent(Map<String, dynamic> eventData, Map<String, String> profile) {
@@ -44,14 +48,19 @@ class ReplyModel extends HiveObject {
       }
     }
 
+    if (parentId == null || parentId.isEmpty) {
+      throw Exception('ParentId not found for reply.');
+    }
+
     return ReplyModel(
       id: eventData['id'] as String,
       author: eventData['pubkey'] as String,
       content: eventData['content'] as String,
       timestamp: DateTime.fromMillisecondsSinceEpoch((eventData['created_at'] as int) * 1000),
-      parentId: parentId ?? '',
+      parentId: parentId,
       authorName: profile['name'] ?? 'Anonymous',
       authorProfileImage: profile['profileImage'] ?? '',
+      fetchedAt: DateTime.now(),
     );
   }
 
@@ -64,6 +73,7 @@ class ReplyModel extends HiveObject {
       parentId: json['parentId'],
       authorName: json['authorName'],
       authorProfileImage: json['authorProfileImage'],
+      fetchedAt: DateTime.parse(json['fetchedAt']),
     );
   }
 
@@ -76,6 +86,7 @@ class ReplyModel extends HiveObject {
       'parentId': parentId,
       'authorName': authorName,
       'authorProfileImage': authorProfileImage,
+      'fetchedAt': fetchedAt.toIso8601String(),
     };
   }
 }

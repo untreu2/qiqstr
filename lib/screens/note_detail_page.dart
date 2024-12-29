@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
@@ -209,6 +208,8 @@ class RepliesSection extends StatelessWidget {
   final Function(String) onNavigateToProfile;
   final Set<String> glowingReplies;
   final Set<String> swipedReplies;
+  final Map<String, int> reactionCounts;
+  final Map<String, int> replyCounts;
 
   const RepliesSection({
     Key? key,
@@ -219,6 +220,8 @@ class RepliesSection extends StatelessWidget {
     required this.onNavigateToProfile,
     required this.glowingReplies,
     required this.swipedReplies,
+    required this.reactionCounts,
+    required this.replyCounts,
   }) : super(key: key);
 
   @override
@@ -249,31 +252,36 @@ class RepliesSection extends StatelessWidget {
             ),
           )
         else
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: replies.length,
-            itemBuilder: (context, index) {
-              final reply = replies[index];
-              return NoteWidget(
-                key: ValueKey(reply.id),
-                note: convertReplyToNote(reply),
-                onSendReaction: onSendReplyReaction,
-                onShowReplyDialog: onShowReplyDialog,
-                onAuthorTap: () {
-                  onNavigateToProfile(reply.author);
-                },
-                onRepostedByTap: null,
-                onNoteTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => NoteDetailPage(note: convertReplyToNote(reply)),
-                    ),
-                  );
-                },
-              );
-            },
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: replies.length,
+              itemBuilder: (context, index) {
+                final reply = replies[index];
+                return NoteWidget(
+                  key: ValueKey(reply.id),
+                  note: convertReplyToNote(reply),
+                  reactionCount: reactionCounts[reply.id] ?? 0,
+                  replyCount: replyCounts[reply.id] ?? 0,
+                  onSendReaction: onSendReplyReaction,
+                  onShowReplyDialog: onShowReplyDialog,
+                  onAuthorTap: () {
+                    onNavigateToProfile(reply.author);
+                  },
+                  onRepostedByTap: null,
+                  onNoteTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => NoteDetailPage(note: convertReplyToNote(reply)),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
           ),
         const SizedBox(height: 16),
       ],
@@ -315,9 +323,10 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
   late DataService _dataService;
 
   final Set<String> glowingNotes = {};
-  final Set<String> glowingReplies = {};
   final Set<String> swipedNotes = {};
-  final Set<String> swipedReplies = {};
+
+  final Map<String, int> _reactionCounts = {};
+  final Map<String, int> _replyCounts = {};
 
   @override
   void initState() {
@@ -325,100 +334,166 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     _initializeDetail();
   }
 
+  @override
+  void dispose() {
+    dispose();
+    super.dispose();
+  }
+
   Future<void> _initializeDetail() async {
     try {
       _dataService = DataService(
         npub: widget.note.author,
-        dataType: DataType.Profile,
+        dataType: DataType.Note,
         onReactionsUpdated: _handleReactionsUpdated,
         onRepliesUpdated: _handleRepliesUpdated,
+        onReactionCountUpdated: _updateReactionCount,
+        onReplyCountUpdated: _updateReplyCount,
       );
       await _dataService.initialize();
       await _dataService.initializeConnections();
-      _fetchReactionsAndReplies();
+      await _fetchReactionsAndReplies();
+
+      if (mounted) {
+        setState(() {
+          isReactionsLoading = false;
+          isRepliesLoading = false;
+        });
+      }
     } catch (e) {
+      if (mounted) {
+        setState(() {
+          isReactionsLoading = false;
+          isRepliesLoading = false;
+        });
+      }
       print('Error initializing NoteDetailPage: $e');
-      setState(() {
-        isReactionsLoading = false;
-        isRepliesLoading = false;
-      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error initializing detail: $e')),
+        );
+      }
     }
   }
 
   Future<void> _fetchReactionsAndReplies() async {
     try {
+      print('Fetching reactions for note ID: ${widget.note.id}');
       await _dataService.fetchReactionsForNotes([widget.note.id]);
-      setState(() {
-        isReactionsLoading = false;
-      });
+      print('Reactions fetched: ${_dataService.reactionsMap[widget.note.id]?.length ?? 0}');
+
+      print('Fetching replies for note ID: ${widget.note.id}');
       await _dataService.fetchRepliesForNotes([widget.note.id]);
+      print('Replies fetched: ${_dataService.repliesMap[widget.note.id]?.length ?? 0}');
+
+      if (!mounted) return;
+
       setState(() {
-        isRepliesLoading = false;
+        reactions = _dataService.reactionsMap[widget.note.id] ?? [];
+        _reactionCounts[widget.note.id] = reactions.length;
+
+        replies = _dataService.repliesMap[widget.note.id] ?? [];
+        _replyCounts[widget.note.id] = replies.length;
       });
+
+      List<String> replyIds = replies.map((reply) => reply.id).toList();
+      if (replyIds.isNotEmpty) {
+        print('Fetching reactions for reply IDs: $replyIds');
+        await _dataService.fetchReactionsForNotes(replyIds);
+        if (!mounted) return;
+        setState(() {
+          for (var reply in replies) {
+            _reactionCounts[reply.id] = _dataService.reactionsMap[reply.id]?.length ?? 0;
+            print('Reactions for reply ID ${reply.id}: ${_reactionCounts[reply.id]}');
+          }
+        });
+      }
     } catch (e) {
       print('Error fetching reactions and replies: $e');
-      setState(() {
-        isReactionsLoading = false;
-        isRepliesLoading = false;
-      });
-    }
-  }
-
-  void _handleReactionsUpdated(String noteId, List<ReactionModel> updatedReactions) {
-    if (noteId == widget.note.id) {
-      final newReactions = updatedReactions.where((reaction) => !reactions.contains(reaction)).toList();
-      if (newReactions.isNotEmpty) {
+      if (mounted) {
         setState(() {
-          reactions.addAll(newReactions);
+          isReactionsLoading = false;
+          isRepliesLoading = false;
         });
       }
     }
   }
 
+  void _handleReactionsUpdated(String noteId, List<ReactionModel> updatedReactions) {
+    if (!mounted) return;
+    setState(() {
+      if (noteId == widget.note.id) {
+        reactions = updatedReactions;
+      }
+      _reactionCounts[noteId] = updatedReactions.length;
+      print('Reactions updated for note ID $noteId: ${updatedReactions.length}');
+    });
+  }
+
   void _handleRepliesUpdated(String noteId, List<ReplyModel> updatedReplies) {
     if (noteId == widget.note.id) {
+      if (!mounted) return;
       setState(() {
         replies = updatedReplies;
+        _replyCounts[noteId] = updatedReplies.length;
+        print('Replies updated for note ID $noteId: ${updatedReplies.length}');
       });
+
+      List<String> newReplyIds = updatedReplies.map((reply) => reply.id).toList();
+      if (newReplyIds.isNotEmpty) {
+        print('Fetching reactions for new reply IDs: $newReplyIds');
+        _dataService.fetchReactionsForNotes(newReplyIds).then((_) {
+          if (!mounted) return;
+          setState(() {
+            for (var reply in updatedReplies) {
+              _reactionCounts[reply.id] = _dataService.reactionsMap[reply.id]?.length ?? 0;
+              print('Reactions for new reply ID ${reply.id}: ${_reactionCounts[reply.id]}');
+            }
+          });
+        }).catchError((e) {
+          print('Error fetching reactions for new replies: $e');
+        });
+      }
     }
+  }
+
+  void _updateReactionCount(String noteId, int count) {
+    if (!mounted) return;
+    setState(() {
+      _reactionCounts[noteId] = count;
+      print('Reaction count updated for note ID $noteId: $count');
+    });
+  }
+
+  void _updateReplyCount(String noteId, int count) {
+    if (!mounted) return;
+    setState(() {
+      _replyCounts[noteId] = count;
+      print('Reply count updated for note ID $noteId: $count');
+    });
   }
 
   Future<void> _sendReaction(String noteId) async {
     try {
       await _dataService.sendReaction(noteId, '💜');
+      if (!mounted) return;
       setState(() {
         glowingNotes.add(noteId);
+        _reactionCounts[noteId] = (_reactionCounts[noteId] ?? 0) + 1;
+        print('Sent reaction to note ID $noteId. New reaction count: ${_reactionCounts[noteId]}');
       });
 
       Timer(const Duration(seconds: 1), () {
+        if (!mounted) return;
         setState(() {
           glowingNotes.remove(noteId);
         });
       });
     } catch (e) {
       print('Error sending reaction: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Reaction could not be sent: $e')),
-      );
-    }
-  }
-
-  Future<void> _sendReplyReaction(String replyId) async {
-    try {
-      await _dataService.sendReaction(replyId, '💜');
-      setState(() {
-        glowingReplies.add(replyId);
-      });
-
-      Timer(const Duration(seconds: 1), () {
-        setState(() {
-          glowingReplies.remove(replyId);
-        });
-      });
-    } catch (e) {
-      print('Error sending reply reaction: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Reaction could not be sent: $e')),
+        SnackBar(content: Text('Error sending reaction: $e')),
       );
     }
   }
@@ -446,109 +521,61 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     );
   }
 
+  Widget _buildReactionsSection() {
+    return ReactionsSection(
+      reactions: reactions,
+      isLoading: isReactionsLoading,
+    );
+  }
+
+  Widget _buildRepliesSection() {
+    return RepliesSection(
+      replies: replies,
+      isLoading: isRepliesLoading,
+      onSendReplyReaction: _sendReaction,
+      onShowReplyDialog: _showReplyDialog,
+      onNavigateToProfile: _navigateToProfile,
+      glowingReplies: glowingNotes,
+      swipedReplies: swipedNotes,
+      reactionCounts: _reactionCounts,
+      replyCounts: _replyCounts,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        top: true,
-        bottom: false,
-        left: true,
-        right: true,
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               NoteWidget(
                 note: widget.note,
+                reactionCount: _reactionCounts[widget.note.id] ?? 0,
+                replyCount: _replyCounts[widget.note.id] ?? 0,
                 onSendReaction: _sendReaction,
                 onShowReplyDialog: _showReplyDialog,
-                onAuthorTap: () => _navigateToProfile(widget.note.author),
+                onAuthorTap: () {
+                  _navigateToProfile(widget.note.author);
+                },
                 onRepostedByTap: widget.note.isRepost
-                    ? () => _navigateToProfile(widget.note.repostedBy ?? '')
+                    ? () {
+                        if (widget.note.repostedBy != null) {
+                          _navigateToProfile(widget.note.repostedBy!);
+                        }
+                      }
                     : null,
                 onNoteTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => NoteDetailPage(note: widget.note),
-                    ),
-                  );
+                  // Optionally handle tapping on the note again
                 },
               ),
               const SizedBox(height: 12),
-              ReactionsSection(
-                reactions: reactions,
-                isLoading: isReactionsLoading,
-              ),
-              RepliesSection(
-                replies: replies,
-                isLoading: isRepliesLoading,
-                onSendReplyReaction: _sendReplyReaction,
-                onShowReplyDialog: _showReplyDialog,
-                onNavigateToProfile: _navigateToProfile,
-                glowingReplies: glowingReplies,
-                swipedReplies: swipedReplies,
-              ),
+              _buildReactionsSection(),
+              _buildRepliesSection(),
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class ReactionDetailsModal extends StatelessWidget {
-  final String reactionContent;
-  final List<ReactionModel> reactions;
-
-  const ReactionDetailsModal({
-    Key? key,
-    required this.reactionContent,
-    required this.reactions,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        children: [
-          const SizedBox(height: 16),
-          Text(
-            'Reactions: $reactionContent',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const Divider(),
-          Expanded(
-            child: ListView.builder(
-              itemCount: reactions.length,
-              itemBuilder: (context, index) {
-                final reaction = reactions[index];
-                return ListTile(
-                  leading: reaction.authorProfileImage.isNotEmpty
-                      ? CircleAvatar(
-                          backgroundImage:
-                              CachedNetworkImageProvider(reaction.authorProfileImage),
-                        )
-                      : const CircleAvatar(
-                          child: Icon(Icons.person),
-                        ),
-                  title: Text(reaction.authorName),
-                  trailing: Text(
-                      reaction.content.isNotEmpty ? reaction.content : '+'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ProfilePage(npub: reaction.author),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-        ],
       ),
     );
   }

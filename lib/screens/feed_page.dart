@@ -32,6 +32,9 @@ class _FeedPageState extends State<FeedPage> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ScrollController _scrollController = ScrollController();
 
+  Map<String, int> _reactionCounts = {};
+  Map<String, int> _replyCounts = {};
+
   @override
   void initState() {
     super.initState();
@@ -41,6 +44,8 @@ class _FeedPageState extends State<FeedPage> {
       onNewNote: _handleNewNote,
       onReactionsUpdated: _handleReactionsUpdated,
       onRepliesUpdated: _handleRepliesUpdated,
+      onReactionCountUpdated: _updateReactionCount,
+      onReplyCountUpdated: _updateReplyCount,
     );
     _initializeFeed();
     _scrollController.addListener(_onScroll);
@@ -53,6 +58,10 @@ class _FeedPageState extends State<FeedPage> {
         setState(() {
           _feedItems.addAll(cachedNotes);
           _sortFeedItems();
+          for (var note in _feedItems) {
+            _reactionCounts[note.id] = _dataService.reactionsMap[note.id]?.length ?? 0;
+            _replyCounts[note.id] = _dataService.repliesMap[note.id]?.length ?? 0;
+          }
         });
       });
       await _dataService.initializeConnections();
@@ -79,23 +88,33 @@ class _FeedPageState extends State<FeedPage> {
     setState(() {
       _feedItems.insert(0, newNote);
       _sortFeedItems();
+      _reactionCounts[newNote.id] = _dataService.reactionsMap[newNote.id]?.length ?? 0;
+      _replyCounts[newNote.id] = _dataService.repliesMap[newNote.id]?.length ?? 0;
     });
     _dataService.saveNotesToCache();
   }
 
   void _handleReactionsUpdated(String noteId, List<ReactionModel> reactions) {
     setState(() {
-      final index = _feedItems.indexWhere((note) => note.id == noteId);
-      if (index != -1) {
-      }
+      _reactionCounts[noteId] = reactions.length;
     });
   }
 
   void _handleRepliesUpdated(String noteId, List<ReplyModel> replies) {
     setState(() {
-      final index = _feedItems.indexWhere((note) => note.id == noteId);
-      if (index != -1) {
-      }
+      _replyCounts[noteId] = replies.length;
+    });
+  }
+
+  void _updateReactionCount(String noteId, int count) {
+    setState(() {
+      _reactionCounts[noteId] = count;
+    });
+  }
+
+  void _updateReplyCount(String noteId, int count) {
+    setState(() {
+      _replyCounts[noteId] = count;
     });
   }
 
@@ -141,6 +160,8 @@ class _FeedPageState extends State<FeedPage> {
     setState(() {
       _feedItems.add(olderNote);
       _sortFeedItems();
+      _reactionCounts[olderNote.id] = _dataService.reactionsMap[olderNote.id]?.length ?? 0;
+      _replyCounts[olderNote.id] = _dataService.repliesMap[olderNote.id]?.length ?? 0;
     });
   }
 
@@ -228,6 +249,8 @@ class _FeedPageState extends State<FeedPage> {
         _feedItems.clear();
         _glowingNotes.clear();
         _swipedNotes.clear();
+        _reactionCounts.clear();
+        _replyCounts.clear();
         _isInitializing = true;
       });
 
@@ -307,9 +330,13 @@ class _FeedPageState extends State<FeedPage> {
                           );
                         }
                         final item = _feedItems[index];
+                        final reactionCount = _reactionCounts[item.id] ?? 0;
+                        final replyCount = _replyCounts[item.id] ?? 0;
                         return NoteWidget(
                           key: ValueKey(item.id),
                           note: item,
+                          reactionCount: reactionCount,
+                          replyCount: replyCount,
                           onSendReaction: _sendReaction,
                           onShowReplyDialog: _showReplyDialog,
                           onAuthorTap: () {
