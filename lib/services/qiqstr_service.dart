@@ -1108,119 +1108,83 @@ class DataService {
     print('Fetched replies for notes: ${parentIds.length}');
   }
 
-  Future<void> sendReaction(String noteId, String reactionContent) async {
-    if (_isClosed) {
-      print('Cannot send reaction: DataService is closed.');
-      return;
-    }
-    try {
-      final privateKey = await _secureStorage.read(key: 'privateKey');
-      if (privateKey == null || privateKey.isEmpty) {
-        throw Exception('Private key not found. Please log in again.');
-      }
-
-      final event = Event.from(
-        kind: 7,
-        tags: [
-          ['e', noteId],
-        ],
-        content: reactionContent,
-        privkey: privateKey,
-      );
-
-      final serializedEvent = event.serialize();
-
-      await Future.wait(_webSockets.values.map<Future<void>>((ws) async {
-        if (ws.readyState == WebSocket.open) {
-          ws.add(serializedEvent);
-        }
-      }));
-
-      print('Reaction sent successfully.');
-
-      final reaction = ReactionModel(
-        id: event.id,
-        noteId: noteId,
-        content: reactionContent,
-        author: npub,
-        authorName: 'You',
-        authorProfileImage: '',
-        timestamp: DateTime.now(),
-        fetchedAt: DateTime.now(),
-      );
-
-      reactionsMap.putIfAbsent(noteId, () => []);
-      reactionsMap[noteId]!.add(reaction);
-      await reactionsBox?.put(reaction.id, reaction);
-      onReactionsUpdated?.call(noteId, reactionsMap[noteId]!);
-
-      var reactionCount = reactionsMap[noteId]!.length;
-      onReactionCountUpdated?.call(noteId, reactionCount);
-    } catch (e) {
-      print('Error sending reaction: $e');
-      throw e;
-    }
+Future<void> sendReaction(String noteId, String reactionContent) async {
+  if (_isClosed) {
+    print('Cannot send reaction: DataService is closed.');
+    return;
   }
-
-  Future<void> sendReply(String noteId, String replyContent) async {
-    if (_isClosed) {
-      print('Cannot send reply: DataService is closed.');
-      return;
+  try {
+    final privateKey = await _secureStorage.read(key: 'privateKey');
+    if (privateKey == null || privateKey.isEmpty) {
+      throw Exception('Private key not found. Please log in again.');
     }
-    try {
-      final privateKey = await _secureStorage.read(key: 'privateKey');
-      if (privateKey == null || privateKey.isEmpty) {
-        throw Exception('Private key not found. Please log in again.');
+
+    final event = Event.from(
+      kind: 7,
+      tags: [
+        ['e', noteId],
+      ],
+      content: reactionContent,
+      privkey: privateKey,
+    );
+
+    final serializedEvent = event.serialize();
+
+    await Future.wait(_webSockets.values.map<Future<void>>((ws) async {
+      if (ws.readyState == WebSocket.open) {
+        ws.add(serializedEvent);
       }
+    }));
 
-      String? noteAuthor = notes.firstWhere(
-        (note) => note.id == noteId,
-        orElse: () => throw Exception('Note not found for reply.'),
-      ).author;
-
-      final event = Event.from(
-        kind: 1,
-        tags: [
-          ['e', noteId],
-          ['p', noteAuthor],
-          ['alt', 'reply'],
-        ],
-        content: replyContent,
-        privkey: privateKey,
-      );
-
-      final serializedEvent = event.serialize();
-      await Future.wait(_webSockets.values.map<Future<void>>((ws) async {
-        if (ws.readyState == WebSocket.open) {
-          ws.add(serializedEvent);
-        }
-      }));
-
-      print('Reply sent successfully.');
-
-      final reply = ReplyModel(
-        id: event.id,
-        parentId: noteId,
-        content: replyContent,
-        author: npub,
-        authorName: 'You',
-        authorProfileImage: '',
-        timestamp: DateTime.now(),
-        fetchedAt: DateTime.now(),
-      );
-
-      repliesMap.putIfAbsent(noteId, () => []);
-      repliesMap[noteId]!.add(reply);
-      await repliesBox?.put(reply.id, reply);
-      onRepliesUpdated?.call(noteId, repliesMap[noteId]!);
-
-      var replyCount = repliesMap[noteId]!.length;
-      onReplyCountUpdated?.call(noteId, replyCount);
-    } catch (e) {
-      print('Error sending reply: $e');
-      throw e;
-    }
+    print('Reaction event sent to WebSocket successfully.');
+  } catch (e) {
+    print('Error sending reaction: $e');
+    throw e;
   }
+}
+
+Future<void> sendReply(String noteId, String replyContent) async {
+  if (_isClosed) {
+    print('Cannot send reply: DataService is closed.');
+    return;
+  }
+  try {
+    final privateKey = await _secureStorage.read(key: 'privateKey');
+    if (privateKey == null || privateKey.isEmpty) {
+      throw Exception('Private key not found. Please log in again.');
+    }
+
+    String? noteAuthor = notes.firstWhere(
+      (note) => note.id == noteId,
+      orElse: () => throw Exception('Note not found for reply.'),
+    ).author;
+
+    final event = Event.from(
+      kind: 1,
+      tags: [
+        ['e', noteId],
+        ['p', noteAuthor],
+        ['alt', 'reply'],
+      ],
+      content: replyContent,
+      privkey: privateKey,
+    );
+
+    final serializedEvent = event.serialize();
+
+    await Future.wait(_webSockets.values.map<Future<void>>((ws) async {
+      if (ws.readyState == WebSocket.open) {
+        ws.add(serializedEvent);
+      }
+    }));
+
+    print('Reply event sent to WebSocket successfully.');
+  } catch (e) {
+    print('Error sending reply: $e');
+    throw e;
+  }
+}
+
 
   Future<void> loadReactionsFromCache() async {
     if (reactionsBox == null || !reactionsBox!.isOpen) {
