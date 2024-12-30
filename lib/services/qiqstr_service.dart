@@ -237,7 +237,7 @@ class DataService {
       if (!_webSockets.containsKey(relayUrl) ||
           _webSockets[relayUrl]?.readyState == WebSocket.closed) {
         try {
-          final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
+          final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 1));
           if (_isClosed) {
             await webSocket.close();
             continue;
@@ -277,14 +277,14 @@ class DataService {
 
   void _reconnectRelay(String relayUrl, List<String> targetNpubs, [int attempt = 1]) {
     if (_isClosed) return;
-    const int maxAttempts = 5;
+    const int maxAttempts = 3;
     if (attempt > maxAttempts) return;
 
     final int delaySeconds = _calculateBackoffDelay(attempt);
     Timer(Duration(seconds: delaySeconds), () async {
       if (_isClosed) return;
       try {
-        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
+        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 1));
         if (_isClosed) {
           await webSocket.close();
           return;
@@ -731,7 +731,7 @@ class DataService {
     print('Sent profile fetch request for npub: $npub');
 
     try {
-      return await completer.future.timeout(Duration(seconds: 5), onTimeout: () => _defaultProfile());
+      return await completer.future.timeout(Duration(seconds: 1), onTimeout: () => _defaultProfile());
     } catch (e) {
       return _defaultProfile();
     }
@@ -753,7 +753,7 @@ class DataService {
 
     await Future.wait(limitedRelayUrls.map((relayUrl) async {
       try {
-        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
+        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 1));
         if (_isClosed) {
           await webSocket.close();
           return;
@@ -778,7 +778,7 @@ class DataService {
           if (!completer.isCompleted) completer.complete();
         });
         webSocket.add(request.serialize());
-        await completer.future.timeout(Duration(seconds: 5), onTimeout: () async {
+        await completer.future.timeout(Duration(seconds: 1), onTimeout: () async {
           await webSocket.close();
         });
         await webSocket.close();
@@ -921,7 +921,7 @@ class DataService {
       }
     }));
 
-    return completer.future.timeout(Duration(seconds: 5), onTimeout: () {
+    return completer.future.timeout(Duration(seconds: 1), onTimeout: () {
       print('Timeout while fetching event by ID: $eventId');
       return null;
     });

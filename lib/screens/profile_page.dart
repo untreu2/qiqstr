@@ -760,6 +760,8 @@ class _ProfilePageState extends State<ProfilePage> {
       key: _scaffoldKey,
       drawer: _buildSidebar(),
       body: SafeArea(
+        top: true,
+        bottom: false,
         child: CustomScrollView(
           controller: _scrollController,
           slivers: [

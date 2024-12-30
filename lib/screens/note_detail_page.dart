@@ -567,7 +567,6 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
                       }
                     : null,
                 onNoteTap: () {
-                  // Optionally handle tapping on the note again
                 },
               ),
               const SizedBox(height: 12),

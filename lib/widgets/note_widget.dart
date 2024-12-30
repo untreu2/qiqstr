@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:any_link_preview/any_link_preview.dart';
+import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import '../models/note_model.dart';
 import '../screens/note_detail_page.dart';
 import '../screens/profile_page.dart';
@@ -38,6 +39,7 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
   bool _isGlowing = false;
   bool _isSwiped = false;
   late AnimationController _animationController;
+  final PageController _pageController = PageController();
 
   @override
   void initState() {
@@ -51,6 +53,7 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
   @override
   void dispose() {
     _animationController.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 
@@ -83,6 +86,10 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
   }
 
   Widget _buildMediaPreviews(List<String> mediaUrls) {
+    if (mediaUrls.isEmpty) {
+      return SizedBox.shrink();
+    }
+
     if (mediaUrls.length == 1) {
       String url = mediaUrls.first;
       if (url.toLowerCase().endsWith('.mp4')) {
@@ -97,35 +104,55 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
         );
       }
     } else {
-      return SizedBox(
-        height: 250,
-        child: ListView.builder(
-          scrollDirection: Axis.horizontal,
-          itemCount: mediaUrls.length,
-          itemBuilder: (context, index) {
-            String url = mediaUrls[index];
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0),
-              child: Container(
-                width: MediaQuery.of(context).size.width * 0.8,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12.0),
-                  color: Colors.black12,
-                ),
-                child: url.toLowerCase().endsWith('.mp4')
-                    ? VideoPreview(url: url)
-                    : CachedNetworkImage(
-                        imageUrl: url,
-                        placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                        errorWidget: (context, url, error) => const Icon(Icons.error),
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: double.infinity,
-                      ),
-              ),
-            );
-          },
-        ),
+      return Column(
+        children: [
+          SizedBox(
+            height: 500,
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: mediaUrls.length,
+              onPageChanged: (index) {
+                setState(() {
+                });
+              },
+              itemBuilder: (context, index) {
+                String url = mediaUrls[index];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12.0),
+                      color: Colors.black12,
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12.0),
+                      child: url.toLowerCase().endsWith('.mp4')
+                          ? VideoPreview(url: url)
+                          : CachedNetworkImage(
+                              imageUrl: url,
+                              placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
+                              errorWidget: (context, url, error) => const Icon(Icons.error),
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                            ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 8.0),
+          SmoothPageIndicator(
+            controller: _pageController,
+            count: mediaUrls.length,
+            effect: WormEffect(
+              activeDotColor: Colors.blueAccent,
+              dotHeight: 8.0,
+              dotWidth: 8.0,
+            ),
+          ),
+        ],
       );
     }
   }
