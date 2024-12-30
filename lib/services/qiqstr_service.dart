@@ -13,7 +13,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 enum DataType { Feed, Profile, Note }
 
-enum MessageType { NewNotes, CacheLoad, Error }
+enum MessageType { NewNotes, CacheLoad, Error, Close }
 
 class IsolateMessage {
   final MessageType type;
@@ -99,23 +99,22 @@ class DataService {
 
   Future<void> initialize() async {
     try {
-      await Hive.openBox<NoteModel>('notes_${dataType.toString()}_$npub').then((box) {
-        notesBox = box as Box<NoteModel>?;
-        print('Hive notes box opened successfully.');
-      });
-
-      await Hive.openBox<ReactionModel>('reactions_${dataType.toString()}_$npub').then((box) {
-        reactionsBox = box as Box<ReactionModel>?;
-        print('Hive reactions box opened successfully.');
-      });
-
-      await Hive.openBox<ReplyModel>('replies_${dataType.toString()}_$npub').then((box) {
-        repliesBox = box as Box<ReplyModel>?;
-        print('Hive replies box opened successfully.');
-      });
+      await Future.wait([
+        _openHiveBox<NoteModel>('notes_${dataType.toString()}_$npub').then((box) {
+          notesBox = box;
+          print('Hive notes box opened successfully.');
+        }),
+        _openHiveBox<ReactionModel>('reactions_${dataType.toString()}_$npub').then((box) {
+          reactionsBox = box;
+          print('Hive reactions box opened successfully.');
+        }),
+        _openHiveBox<ReplyModel>('replies_${dataType.toString()}_$npub').then((box) {
+          repliesBox = box;
+          print('Hive replies box opened successfully.');
+        }),
+      ]);
 
       _isInitialized = true;
-
       await _initializeIsolate();
       _startCacheCleanup();
     } catch (e) {
@@ -123,6 +122,10 @@ class DataService {
       _isInitialized = false;
       rethrow;
     }
+  }
+
+  Future<Box<T>> _openHiveBox<T>(String boxName) async {
+    return await Hive.openBox<T>(boxName);
   }
 
   Future<void> _initializeIsolate() async {
@@ -147,6 +150,9 @@ class DataService {
             case MessageType.Error:
               print('Isolate error: ${message.data}');
               break;
+            case MessageType.Close:
+              print('Isolate received close message.');
+              break;
           }
         }
       });
@@ -170,6 +176,9 @@ class DataService {
             break;
           case MessageType.NewNotes:
             _processNewNotes(message.data, sendPort);
+            break;
+          case MessageType.Close:
+            isolateReceivePort.close();
             break;
           case MessageType.Error:
             sendPort.send(IsolateMessage(MessageType.Error, message.data));
@@ -215,32 +224,33 @@ class DataService {
 
     if (_isClosed) return;
 
-    await connectToRelays(relayUrls, targetNpubs);
+    await _connectToRelays(relayUrls, targetNpubs);
     await fetchNotes(targetNpubs, initialLoad: true);
 
-    await loadReactionsFromCache((reactions) {});
-
-    await loadRepliesFromCache((replies) {
-      print('Loaded ${replies.length} replies from cache.');
-    });
+    await Future.wait([
+      loadReactionsFromCache(),
+      loadRepliesFromCache(),
+    ]);
 
     await _subscribeToAllReactions();
   }
 
-  Future<void> connectToRelays(List<String> relayList, List<String> targetNpubs) async {
+  Future<void> _connectToRelays(List<String> relayList, List<String> targetNpubs) async {
     if (isConnecting || _isClosed) return;
     isConnecting = true;
 
-    for (final relayUrl in relayList) {
-      if (_isClosed) break;
+    await Future.wait(relayList.map<Future<void>>((relayUrl) async {
+      if (_isClosed) {
+        return;
+      }
 
       if (!_webSockets.containsKey(relayUrl) ||
           _webSockets[relayUrl]?.readyState == WebSocket.closed) {
         try {
-          final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 1));
+          final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
           if (_isClosed) {
             await webSocket.close();
-            continue;
+            return;
           }
           _webSockets[relayUrl] = webSocket;
 
@@ -256,9 +266,11 @@ class DataService {
             },
           );
 
-          await _fetchProfilesBatch(targetNpubs);
-          await _fetchReplies(webSocket, targetNpubs);
-          await _fetchReactions(webSocket, targetNpubs);
+          await Future.wait([
+            _fetchProfilesBatch(targetNpubs),
+            _fetchReplies(webSocket, targetNpubs),
+            _fetchReactions(webSocket, targetNpubs),
+          ]);
 
           print('Connected to relay: $relayUrl');
         } catch (e) {
@@ -266,7 +278,7 @@ class DataService {
           _webSockets.remove(relayUrl);
         }
       }
-    }
+    }));
 
     isConnecting = false;
 
@@ -277,14 +289,14 @@ class DataService {
 
   void _reconnectRelay(String relayUrl, List<String> targetNpubs, [int attempt = 1]) {
     if (_isClosed) return;
-    const int maxAttempts = 3;
+    const int maxAttempts = 5;
     if (attempt > maxAttempts) return;
 
     final int delaySeconds = _calculateBackoffDelay(attempt);
     Timer(Duration(seconds: delaySeconds), () async {
       if (_isClosed) return;
       try {
-        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 1));
+        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
         if (_isClosed) {
           await webSocket.close();
           return;
@@ -301,9 +313,11 @@ class DataService {
             _reconnectRelay(relayUrl, targetNpubs, attempt + 1);
           },
         );
-        await _fetchProfilesBatch(targetNpubs);
-        await _fetchReplies(webSocket, targetNpubs);
-        await _fetchReactions(webSocket, targetNpubs);
+        await Future.wait([
+          _fetchProfilesBatch(targetNpubs),
+          _fetchReplies(webSocket, targetNpubs),
+          _fetchReactions(webSocket, targetNpubs),
+        ]);
 
         print('Reconnected to relay: $relayUrl');
       } catch (e) {
@@ -337,7 +351,7 @@ class DataService {
 
     final request = Request(generateUUID(), [filter]);
 
-    await Future.wait(_webSockets.values.map((ws) async {
+    await Future.wait(_webSockets.values.map<Future<void>>((ws) async {
       if (ws.readyState == WebSocket.open) {
         ws.add(request.serialize());
       }
@@ -349,10 +363,8 @@ class DataService {
   Future<void> saveNotesToCache() async {
     if (notesBox != null && notesBox!.isOpen) {
       try {
-        await notesBox!.clear();
-        for (var note in notes) {
-          await notesBox!.put(note.id, note);
-        }
+        final Map<String, NoteModel> notesMap = {for (var note in notes) note.id: note};
+        await notesBox!.putAll(notesMap);
         print('Notes saved to cache successfully.');
       } catch (e) {
         print('Error saving notes to cache: $e');
@@ -386,8 +398,10 @@ class DataService {
       print('Cache loaded with ${allNotes.length} notes.');
 
       List<String> cachedNoteIds = allNotes.map((note) => note.id).toList();
-      await fetchReactionsForNotes(cachedNoteIds);
-      await fetchRepliesForNotes(cachedNoteIds);
+      await Future.wait([
+        fetchReactionsForNotes(cachedNoteIds),
+        fetchRepliesForNotes(cachedNoteIds),
+      ]);
     } catch (e) {
       print('Error loading notes from cache: $e');
     }
@@ -409,11 +423,11 @@ class DataService {
       Filter(authors: uniqueNpubs, kinds: [0], limit: uniqueNpubs.length),
     ]);
 
-    for (final ws in _webSockets.values) {
+    await Future.wait(_webSockets.values.map<Future<void>>((ws) async {
       if (ws.readyState == WebSocket.open) {
         ws.add(request.serialize());
       }
-    }
+    }));
 
     print('Sent profile fetch request for ${uniqueNpubs.length} authors.');
   }
@@ -575,8 +589,10 @@ class DataService {
         onNewNote?.call(newEvent);
         print('New note added and saved to cache: ${newEvent.id}');
 
-        await fetchReactionsForNotes([newEvent.id]);
-        await fetchRepliesForNotes([newEvent.id]);
+        await Future.wait([
+          fetchReactionsForNotes([newEvent.id]),
+          fetchRepliesForNotes([newEvent.id]),
+        ]);
 
         await _subscribeToAllReactions();
       }
@@ -722,16 +738,16 @@ class DataService {
       Filter(authors: [npub], kinds: [0], limit: 1),
     ]);
 
-    for (var ws in _webSockets.values) {
+    await Future.wait(_webSockets.values.map<Future<void>>((ws) async {
       if (ws.readyState == WebSocket.open) {
         ws.add(request.serialize());
       }
-    }
+    }));
 
     print('Sent profile fetch request for npub: $npub');
 
     try {
-      return await completer.future.timeout(Duration(seconds: 1), onTimeout: () => _defaultProfile());
+      return await completer.future.timeout(Duration(seconds: 5), onTimeout: () => _defaultProfile());
     } catch (e) {
       return _defaultProfile();
     }
@@ -751,9 +767,9 @@ class DataService {
     List<String> followingNpubs = [];
     final limitedRelayUrls = relayUrls.take(3).toList();
 
-    await Future.wait(limitedRelayUrls.map((relayUrl) async {
+    await Future.wait(limitedRelayUrls.map<Future<void>>((relayUrl) async {
       try {
-        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 1));
+        final webSocket = await WebSocket.connect(relayUrl).timeout(Duration(seconds: 5));
         if (_isClosed) {
           await webSocket.close();
           return;
@@ -778,7 +794,7 @@ class DataService {
           if (!completer.isCompleted) completer.complete();
         });
         webSocket.add(request.serialize());
-        await completer.future.timeout(Duration(seconds: 1), onTimeout: () async {
+        await completer.future.timeout(Duration(seconds: 5), onTimeout: () async {
           await webSocket.close();
         });
         await webSocket.close();
@@ -804,7 +820,7 @@ class DataService {
       ),
     ]);
 
-    await Future.wait(_webSockets.values.map((ws) async {
+    await Future.wait(_webSockets.values.map<Future<void>>((ws) async {
       if (ws.readyState == WebSocket.open) {
         ws.add(request.serialize());
       }
@@ -844,7 +860,7 @@ class DataService {
 
     final request = Request(subscriptionId, [filter]);
 
-    await Future.wait(_webSockets.values.map((ws) async {
+    await Future.wait(_webSockets.values.map<Future<void>>((ws) async {
       if (ws.readyState == WebSocket.open) {
         ws.add(request.serialize());
       }
@@ -865,7 +881,7 @@ class DataService {
 
     try {
       if (_sendPortReadyCompleter.isCompleted) {
-        _sendPort.send(IsolateMessage(MessageType.Error, 'close'));
+        _sendPort.send(IsolateMessage(MessageType.Close, 'close'));
       }
     } catch (e) {
       print('Error sending close message to isolate: $e');
@@ -874,14 +890,16 @@ class DataService {
     _isolate.kill(priority: Isolate.immediate);
     _receivePort.close();
 
-    await Future.wait(_webSockets.values.map((ws) async {
+    await Future.wait(_webSockets.values.map<Future<void>>((ws) async {
       await ws.close();
     }));
     _webSockets.clear();
 
-    await notesBox?.close();
-    await reactionsBox?.close();
-    await repliesBox?.close();
+    await Future.wait([
+      if (notesBox != null && notesBox!.isOpen) notesBox!.close(),
+      if (reactionsBox != null && reactionsBox!.isOpen) reactionsBox!.close(),
+      if (repliesBox != null && repliesBox!.isOpen) repliesBox!.close(),
+    ]);
 
     print('All connections closed and boxes are closed.');
   }
@@ -896,7 +914,7 @@ class DataService {
     ]);
 
     StreamSubscription? subscription;
-    await Future.wait(_webSockets.values.map((webSocket) async {
+    await Future.wait(_webSockets.values.map<Future<void>>((webSocket) async {
       if (webSocket.readyState == WebSocket.open) {
         subscription = webSocket.listen((event) {
           final decodedEvent = jsonDecode(event);
@@ -921,7 +939,7 @@ class DataService {
       }
     }));
 
-    return completer.future.timeout(Duration(seconds: 1), onTimeout: () {
+    return completer.future.timeout(Duration(seconds: 5), onTimeout: () {
       print('Timeout while fetching event by ID: $eventId');
       return null;
     });
@@ -942,8 +960,10 @@ class DataService {
         print('Handled new notes: ${data.length} notes added.');
 
         List<String> newNoteIds = data.map((note) => note.id).toList();
-        await fetchReactionsForNotes(newNoteIds);
-        await fetchRepliesForNotes(newNoteIds);
+        await Future.wait([
+          fetchReactionsForNotes(newNoteIds),
+          fetchRepliesForNotes(newNoteIds),
+        ]);
 
         await _updateReactionSubscription();
       }
@@ -987,7 +1007,7 @@ class DataService {
       final now = DateTime.now();
       profileCache.removeWhere((key, cachedProfile) =>
           now.difference(cachedProfile.fetchedAt) > profileCacheTTL);
-      
+
       reactionsMap.forEach((noteId, reactions) {
         reactions.removeWhere((reaction) =>
             now.difference(reaction.fetchedAt) > profileCacheTTL);
@@ -998,15 +1018,18 @@ class DataService {
             now.difference(reply.fetchedAt) > profileCacheTTL);
       });
 
-      await reactionsBox?.deleteAll(reactionsBox!.keys.where((key) {
-        final reaction = reactionsBox!.get(key);
-        return reaction != null && now.difference(reaction.fetchedAt) > profileCacheTTL;
-      }));
-
-      await repliesBox?.deleteAll(repliesBox!.keys.where((key) {
-        final reply = repliesBox!.get(key);
-        return reply != null && now.difference(reply.fetchedAt) > profileCacheTTL;
-      }));
+      await Future.wait([
+        if (reactionsBox != null && reactionsBox!.isOpen)
+          reactionsBox!.deleteAll(reactionsBox!.keys.where((key) {
+            final reaction = reactionsBox!.get(key);
+            return reaction != null && now.difference(reaction.fetchedAt) > profileCacheTTL;
+          })),
+        if (repliesBox != null && repliesBox!.isOpen)
+          repliesBox!.deleteAll(repliesBox!.keys.where((key) {
+            final reply = repliesBox!.get(key);
+            return reply != null && now.difference(reply.fetchedAt) > profileCacheTTL;
+          })),
+      ]);
 
       print('Performed cache cleanup.');
     });
@@ -1034,7 +1057,7 @@ class DataService {
 
       final serializedEvent = event.serialize();
 
-      await Future.wait(_webSockets.values.map((ws) async {
+      await Future.wait(_webSockets.values.map<Future<void>>((ws) async {
         if (ws.readyState == WebSocket.open) {
           ws.add(serializedEvent);
         }
@@ -1057,11 +1080,13 @@ class DataService {
       ),
     ]);
 
-    await Future.wait(_webSockets.values.map((ws) async {
+    await Future.wait(_webSockets.values.map<Future<void>>((ws) async {
       if (ws.readyState == WebSocket.open) {
         ws.add(request.serialize());
       }
     }));
+
+    print('Fetched reactions for notes: ${noteIds.length}');
   }
 
   Future<void> fetchRepliesForNotes(List<String> parentIds) async {
@@ -1074,11 +1099,13 @@ class DataService {
       ),
     ]);
 
-    await Future.wait(_webSockets.values.map((ws) async {
+    await Future.wait(_webSockets.values.map<Future<void>>((ws) async {
       if (ws.readyState == WebSocket.open) {
         ws.add(request.serialize());
       }
     }));
+
+    print('Fetched replies for notes: ${parentIds.length}');
   }
 
   Future<void> sendReaction(String noteId, String reactionContent) async {
@@ -1103,7 +1130,7 @@ class DataService {
 
       final serializedEvent = event.serialize();
 
-      await Future.wait(_webSockets.values.map((ws) async {
+      await Future.wait(_webSockets.values.map<Future<void>>((ws) async {
         if (ws.readyState == WebSocket.open) {
           ws.add(serializedEvent);
         }
@@ -1135,67 +1162,67 @@ class DataService {
     }
   }
 
-Future<void> sendReply(String noteId, String replyContent) async {
-  if (_isClosed) {
-    print('Cannot send reply: DataService is closed.');
-    return;
-  }
-  try {
-    final privateKey = await _secureStorage.read(key: 'privateKey');
-    if (privateKey == null || privateKey.isEmpty) {
-      throw Exception('Private key not found. Please log in again.');
+  Future<void> sendReply(String noteId, String replyContent) async {
+    if (_isClosed) {
+      print('Cannot send reply: DataService is closed.');
+      return;
     }
-
-    String? noteAuthor = notes.firstWhere(
-      (note) => note.id == noteId,
-    ).author;
-
-    final event = Event.from(
-      kind: 1,
-      tags: [
-        ['e', noteId],
-        ['p', noteAuthor],
-        ['alt', 'reply'], 
-      ],
-      content: replyContent,
-      privkey: privateKey,
-    );
-
-    final serializedEvent = event.serialize();
-    await Future.wait(_webSockets.values.map((ws) async {
-      if (ws.readyState == WebSocket.open) {
-        ws.add(serializedEvent);
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found. Please log in again.');
       }
-    }));
 
-    print('Reply sent successfully.');
+      String? noteAuthor = notes.firstWhere(
+        (note) => note.id == noteId,
+        orElse: () => throw Exception('Note not found for reply.'),
+      ).author;
 
-    final reply = ReplyModel(
-      id: event.id,
-      parentId: noteId,
-      content: replyContent,
-      author: npub,
-      authorName: 'You',
-      authorProfileImage: '',
-      timestamp: DateTime.now(),
-      fetchedAt: DateTime.now(),
-    );
+      final event = Event.from(
+        kind: 1,
+        tags: [
+          ['e', noteId],
+          ['p', noteAuthor],
+          ['alt', 'reply'],
+        ],
+        content: replyContent,
+        privkey: privateKey,
+      );
 
-    repliesMap.putIfAbsent(noteId, () => []);
-    repliesMap[noteId]!.add(reply);
-    await repliesBox?.put(reply.id, reply);
-    onRepliesUpdated?.call(noteId, repliesMap[noteId]!);
+      final serializedEvent = event.serialize();
+      await Future.wait(_webSockets.values.map<Future<void>>((ws) async {
+        if (ws.readyState == WebSocket.open) {
+          ws.add(serializedEvent);
+        }
+      }));
 
-    var replyCount = repliesMap[noteId]!.length;
-    onReplyCountUpdated?.call(noteId, replyCount);
-  } catch (e) {
-    print('Error sending reply: $e');
-    throw e;
+      print('Reply sent successfully.');
+
+      final reply = ReplyModel(
+        id: event.id,
+        parentId: noteId,
+        content: replyContent,
+        author: npub,
+        authorName: 'You',
+        authorProfileImage: '',
+        timestamp: DateTime.now(),
+        fetchedAt: DateTime.now(),
+      );
+
+      repliesMap.putIfAbsent(noteId, () => []);
+      repliesMap[noteId]!.add(reply);
+      await repliesBox?.put(reply.id, reply);
+      onRepliesUpdated?.call(noteId, repliesMap[noteId]!);
+
+      var replyCount = repliesMap[noteId]!.length;
+      onReplyCountUpdated?.call(noteId, replyCount);
+    } catch (e) {
+      print('Error sending reply: $e');
+      throw e;
+    }
   }
-}
 
-
-  Future<void> loadReactionsFromCache(Null Function(dynamic reactions) param0) async {
+  Future<void> loadReactionsFromCache() async {
     if (reactionsBox == null || !reactionsBox!.isOpen) {
       print('Reactions box is not initialized or not open.');
       return;
@@ -1221,7 +1248,7 @@ Future<void> sendReply(String noteId, String replyContent) async {
     }
   }
 
-  Future<void> loadRepliesFromCache(Function(List<ReplyModel>) onLoad) async {
+  Future<void> loadRepliesFromCache() async {
     if (repliesBox == null || !repliesBox!.isOpen) {
       print('Replies box is not initialized or not open.');
       return;
@@ -1240,7 +1267,6 @@ Future<void> sendReply(String noteId, String replyContent) async {
           repliesMap[reply.parentId]!.add(reply);
         }
       }
-      onLoad(allReplies);
       print('Replies cache loaded with ${allReplies.length} replies.');
     } catch (e) {
       print('Error loading replies from cache: $e');
