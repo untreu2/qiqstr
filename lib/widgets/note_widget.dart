@@ -64,7 +64,9 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
     final Iterable<RegExpMatch> linkMatches = linkRegExp.allMatches(content);
     final List<String> linkUrls = linkMatches
         .map((m) => m.group(0)!)
-        .where((url) => !mediaUrls.contains(url) && !url.toLowerCase().endsWith('.mp4'))
+        .where((url) => !mediaUrls.contains(url) &&
+                        !url.toLowerCase().endsWith('.mp4') &&
+                        !url.toLowerCase().endsWith('.mov'))
         .toList();
 
     final String text = content
@@ -86,8 +88,8 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
 
     if (mediaUrls.length == 1) {
       String url = mediaUrls.first;
-      if (url.toLowerCase().endsWith('.mp4')) {
-        return VideoPreview(url: url);
+      if (url.toLowerCase().endsWith('.mp4') || url.toLowerCase().endsWith('.mov')) {
+        return VP(url: url);
       } else {
         return CachedNetworkImage(
           imageUrl: url,
@@ -119,8 +121,8 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(12.0),
-                      child: url.toLowerCase().endsWith('.mp4')
-                          ? VideoPreview(url: url)
+                      child: url.toLowerCase().endsWith('.mp4') || url.toLowerCase().endsWith('.mov')
+                          ? VP(url: url)
                           : CachedNetworkImage(
                               imageUrl: url,
                               placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
