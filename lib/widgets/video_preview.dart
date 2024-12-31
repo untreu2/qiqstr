@@ -4,12 +4,10 @@ import 'package:video_player/video_player.dart';
 class VP extends StatefulWidget {
   final String url;
 
-  const VP({Key? key, required this.url})
-      : super(key: key);
+  const VP({Key? key, required this.url}) : super(key: key);
 
   @override
-  _VPState createState() =>
-      _VPState();
+  _VPState createState() => _VPState();
 }
 
 class _VPState extends State<VP> {
@@ -26,17 +24,24 @@ class _VPState extends State<VP> {
   }
 
   Future<void> _initializeVideo() async {
-    await _controller.initialize();
-    setState(() {
-      _totalDuration = _controller.value.duration;
-    });
+    _controller = VideoPlayerController.network(widget.url);
 
-    _controller.addListener(() {
+    try {
+      await _controller.initialize();
       setState(() {
-        _currentPosition = _controller.value.position;
-        _isPlaying = _controller.value.isPlaying;
+        _totalDuration = _controller.value.duration;
       });
-    });
+
+      _controller.addListener(() {
+        setState(() {
+          _currentPosition = _controller.value.position;
+          _isPlaying = _controller.value.isPlaying;
+        });
+      });
+
+    } catch (e) {
+      print("Error initializing video: $e");
+    }
   }
 
   @override
