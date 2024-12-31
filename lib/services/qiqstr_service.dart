@@ -1162,9 +1162,8 @@ Future<void> sendReply(String noteId, String replyContent) async {
     final event = Event.from(
       kind: 1,
       tags: [
-        ['e', noteId],
-        ['p', noteAuthor],
-        ['alt', 'reply'],
+        ['e', noteId, '', 'root'],
+        ['pubkey', noteAuthor],
       ],
       content: replyContent,
       privkey: privateKey,
