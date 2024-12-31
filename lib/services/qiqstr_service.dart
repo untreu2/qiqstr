@@ -1163,7 +1163,7 @@ Future<void> sendReply(String noteId, String replyContent) async {
       kind: 1,
       tags: [
         ['e', noteId, '', 'root'],
-        ['pubkey', noteAuthor],
+        ['p', noteAuthor]
       ],
       content: replyContent,
       privkey: privateKey,
