@@ -8,7 +8,7 @@ class ReactionModel extends HiveObject {
   final String id;
 
   @HiveField(1)
-  final String noteId;
+  final String targetEventId;
 
   @HiveField(2)
   final String author;
@@ -30,7 +30,7 @@ class ReactionModel extends HiveObject {
 
   ReactionModel({
     required this.id,
-    required this.noteId,
+    required this.targetEventId,
     required this.author,
     required this.content,
     required this.timestamp,
@@ -40,24 +40,26 @@ class ReactionModel extends HiveObject {
   });
 
   factory ReactionModel.fromEvent(Map<String, dynamic> eventData, Map<String, String> profile) {
-    String? noteId;
+    String? targetEventId;
     for (var tag in eventData['tags']) {
       if (tag.length >= 2 && tag[0] == 'e') {
-        noteId = tag[1] as String;
+        targetEventId = tag[1] as String;
         break;
       }
     }
 
-    if (noteId == null) {
-      throw Exception('NoteId not found for reaction.');
+    if (targetEventId == null) {
+      throw Exception('targetEventId not found for reaction.');
     }
 
     return ReactionModel(
       id: eventData['id'] as String,
-      noteId: noteId,
+      targetEventId: targetEventId,
       author: eventData['pubkey'] as String,
       content: eventData['content'] as String,
-      timestamp: DateTime.fromMillisecondsSinceEpoch((eventData['created_at'] as int) * 1000),
+      timestamp: DateTime.fromMillisecondsSinceEpoch(
+        (eventData['created_at'] as int) * 1000,
+      ),
       authorName: profile['name'] ?? 'Anonymous',
       authorProfileImage: profile['profileImage'] ?? '',
       fetchedAt: DateTime.now(),
@@ -67,7 +69,7 @@ class ReactionModel extends HiveObject {
   factory ReactionModel.fromJson(Map<String, dynamic> json) {
     return ReactionModel(
       id: json['id'],
-      noteId: json['noteId'],
+      targetEventId: json['targetEventId'],
       author: json['author'],
       content: json['content'],
       timestamp: DateTime.parse(json['timestamp']),
@@ -80,7 +82,7 @@ class ReactionModel extends HiveObject {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'noteId': noteId,
+      'targetEventId': targetEventId,
       'author': author,
       'content': content,
       'timestamp': timestamp.toIso8601String(),

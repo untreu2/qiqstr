@@ -17,7 +17,7 @@ class ReplyModel extends HiveObject {
   final DateTime timestamp;
 
   @HiveField(4)
-  final String parentId;
+  final String parentEventId;
 
   @HiveField(5)
   final String authorName;
@@ -33,31 +33,33 @@ class ReplyModel extends HiveObject {
     required this.author,
     required this.content,
     required this.timestamp,
-    required this.parentId,
+    required this.parentEventId,
     required this.authorName,
     required this.authorProfileImage,
     required this.fetchedAt,
   });
 
   factory ReplyModel.fromEvent(Map<String, dynamic> eventData, Map<String, String> profile) {
-    String? parentId;
+    String? parentEventId;
     for (var tag in eventData['tags']) {
       if (tag.length >= 2 && tag[0] == 'e') {
-        parentId = tag[1] as String;
+        parentEventId = tag[1] as String;
         break;
       }
     }
 
-    if (parentId == null || parentId.isEmpty) {
-      throw Exception('ParentId not found for reply.');
+    if (parentEventId == null || parentEventId.isEmpty) {
+      throw Exception('parentEventId not found for reply.');
     }
 
     return ReplyModel(
       id: eventData['id'] as String,
       author: eventData['pubkey'] as String,
       content: eventData['content'] as String,
-      timestamp: DateTime.fromMillisecondsSinceEpoch((eventData['created_at'] as int) * 1000),
-      parentId: parentId,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(
+        (eventData['created_at'] as int) * 1000,
+      ),
+      parentEventId: parentEventId,
       authorName: profile['name'] ?? 'Anonymous',
       authorProfileImage: profile['profileImage'] ?? '',
       fetchedAt: DateTime.now(),
@@ -70,7 +72,7 @@ class ReplyModel extends HiveObject {
       author: json['author'],
       content: json['content'],
       timestamp: DateTime.parse(json['timestamp']),
-      parentId: json['parentId'],
+      parentEventId: json['parentEventId'],
       authorName: json['authorName'],
       authorProfileImage: json['authorProfileImage'],
       fetchedAt: DateTime.parse(json['fetchedAt']),
@@ -83,7 +85,7 @@ class ReplyModel extends HiveObject {
       'author': author,
       'content': content,
       'timestamp': timestamp.toIso8601String(),
-      'parentId': parentId,
+      'parentEventId': parentEventId,
       'authorName': authorName,
       'authorProfileImage': authorProfileImage,
       'fetchedAt': fetchedAt.toIso8601String(),

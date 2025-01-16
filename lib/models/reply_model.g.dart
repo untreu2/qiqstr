@@ -21,7 +21,7 @@ class ReplyModelAdapter extends TypeAdapter<ReplyModel> {
       author: fields[1] as String,
       content: fields[2] as String,
       timestamp: fields[3] as DateTime,
-      parentId: fields[4] as String,
+      parentEventId: fields[4] as String,
       authorName: fields[5] as String,
       authorProfileImage: fields[6] as String,
       fetchedAt: fields[7] as DateTime,
@@ -41,7 +41,7 @@ class ReplyModelAdapter extends TypeAdapter<ReplyModel> {
       ..writeByte(3)
       ..write(obj.timestamp)
       ..writeByte(4)
-      ..write(obj.parentId)
+      ..write(obj.parentEventId)
       ..writeByte(5)
       ..write(obj.authorName)
       ..writeByte(6)

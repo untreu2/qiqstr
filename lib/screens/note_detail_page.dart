@@ -379,11 +379,11 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
   Future<void> _fetchReactionsAndReplies() async {
     try {
       print('Fetching reactions for note ID: ${widget.note.id}');
-      await _dataService.fetchReactionsForNotes([widget.note.id]);
+      await _dataService.fetchReactionsForEvents([widget.note.id]);
       print('Reactions fetched: ${_dataService.reactionsMap[widget.note.id]?.length ?? 0}');
 
       print('Fetching replies for note ID: ${widget.note.id}');
-      await _dataService.fetchRepliesForNotes([widget.note.id]);
+      await _dataService.fetchRepliesForEvents([widget.note.id]);
       print('Replies fetched: ${_dataService.repliesMap[widget.note.id]?.length ?? 0}');
 
       if (!mounted) return;
@@ -399,7 +399,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
       List<String> replyIds = replies.map((reply) => reply.id).toList();
       if (replyIds.isNotEmpty) {
         print('Fetching reactions for reply IDs: $replyIds');
-        await _dataService.fetchReactionsForNotes(replyIds);
+        await _dataService.fetchReactionsForEvents(replyIds);
         if (!mounted) return;
         setState(() {
           for (var reply in replies) {
@@ -442,7 +442,7 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
       List<String> newReplyIds = updatedReplies.map((reply) => reply.id).toList();
       if (newReplyIds.isNotEmpty) {
         print('Fetching reactions for new reply IDs: $newReplyIds');
-        _dataService.fetchReactionsForNotes(newReplyIds).then((_) {
+        _dataService.fetchReactionsForEvents(newReplyIds).then((_) {
           if (!mounted) return;
           setState(() {
             for (var reply in updatedReplies) {
