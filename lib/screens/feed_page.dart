@@ -12,6 +12,7 @@ import 'login_page.dart';
 import 'send_reply.dart';
 import '../widgets/note_widget.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:qiqstr/models/user_model.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -19,10 +20,10 @@ class FeedPage extends StatefulWidget {
   const FeedPage({Key? key, required this.npub}) : super(key: key);
 
   @override
-  _FeedPageState createState() => _FeedPageState();
+  FeedPageState createState() => FeedPageState();
 }
 
-class _FeedPageState extends State<FeedPage> {
+class FeedPageState extends State<FeedPage> {
   final List<NoteModel> _feedItems = [];
   final Set<String> _glowingNotes = {};
   final Set<String> _swipedNotes = {};
@@ -31,9 +32,9 @@ class _FeedPageState extends State<FeedPage> {
   late DataService _dataService;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ScrollController _scrollController = ScrollController();
-
   Map<String, int> _reactionCounts = {};
   Map<String, int> _replyCounts = {};
+  UserModel? _currentUserProfile;
 
   @override
   void initState() {
@@ -49,6 +50,19 @@ class _FeedPageState extends State<FeedPage> {
     );
     _initializeFeed();
     _scrollController.addListener(_onScroll);
+    _loadCurrentUserProfile();
+  }
+
+  Future<void> _loadCurrentUserProfile() async {
+    try {
+      final usersBox = Hive.box<UserModel>('users');
+      final user = usersBox.get(widget.npub);
+      setState(() {
+        _currentUserProfile = user;
+      });
+    } catch (e) {
+      print('Error loading current user profile: $e');
+    }
   }
 
   Future<void> _initializeFeed() async {
@@ -65,7 +79,6 @@ class _FeedPageState extends State<FeedPage> {
         });
       });
       await _dataService.initializeConnections();
-
       if (mounted) {
         setState(() {
           _isInitializing = false;
@@ -171,7 +184,6 @@ class _FeedPageState extends State<FeedPage> {
       setState(() {
         _glowingNotes.add(noteId);
       });
-
       Timer(const Duration(seconds: 1), () {
         if (mounted) {
           setState(() {
@@ -215,6 +227,39 @@ class _FeedPageState extends State<FeedPage> {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
+            if (_currentUserProfile != null) ...[
+              UserAccountsDrawerHeader(
+                accountName: Text(_currentUserProfile!.name),
+                accountEmail: Text(_currentUserProfile!.nip05.isEmpty
+                    ? 'No nip05'
+                    : _currentUserProfile!.nip05),
+                currentAccountPicture: CircleAvatar(
+                  backgroundImage: _currentUserProfile!.profileImage.isNotEmpty
+                      ? NetworkImage(_currentUserProfile!.profileImage)
+                      : null,
+                  child: _currentUserProfile!.profileImage.isEmpty
+                      ? const Icon(Icons.person, size: 40)
+                      : null,
+                ),
+                decoration: BoxDecoration(
+                  image: _currentUserProfile!.banner.isNotEmpty
+                      ? DecorationImage(
+                          image: NetworkImage(_currentUserProfile!.banner),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
+                ),
+              ),
+            ] else ...[
+              const DrawerHeader(
+                child: Center(
+                  child: Text(
+                    'No user profile loaded',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+            ],
             ListTile(
               leading: const Icon(Icons.person),
               title: const Text('PROFILE'),
@@ -240,11 +285,8 @@ class _FeedPageState extends State<FeedPage> {
     try {
       const secureStorage = FlutterSecureStorage();
       await secureStorage.deleteAll();
-
       await Hive.deleteFromDisk();
-
       await _dataService.closeConnections();
-
       setState(() {
         _feedItems.clear();
         _glowingNotes.clear();
@@ -253,7 +295,6 @@ class _FeedPageState extends State<FeedPage> {
         _replyCounts.clear();
         _isInitializing = true;
       });
-
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => const LoginPage()),
@@ -299,7 +340,10 @@ class _FeedPageState extends State<FeedPage> {
         },
         body: RefreshIndicator(
           onRefresh: () async {
-            await _dataService.fetchNotes(await _dataService.getFollowingList(widget.npub), initialLoad: true);
+            await _dataService.fetchNotes(
+              await _dataService.getFollowingList(widget.npub),
+              initialLoad: true,
+            );
           },
           child: _isInitializing
               ? const Center(
@@ -308,7 +352,7 @@ class _FeedPageState extends State<FeedPage> {
               : (_feedItems.isEmpty
                   ? ListView(
                       padding: EdgeInsets.zero,
-                      children: [
+                      children: const [
                         SizedBox(height: 100),
                         Center(
                           child: Text(
@@ -361,9 +405,7 @@ class _FeedPageState extends State<FeedPage> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => NoteDetailPage(
-                                  note: item,
-                                ),
+                                builder: (context) => NoteDetailPage(note: item),
                               ),
                             );
                           },

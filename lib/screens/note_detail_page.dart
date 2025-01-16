@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
@@ -196,6 +197,63 @@ class ReactionsSection extends StatelessWidget {
         return ReactionDetailsModal(
             reactionContent: reactionContent, reactions: reactionList);
       },
+    );
+  }
+}
+
+class ReactionDetailsModal extends StatelessWidget {
+  final String reactionContent;
+  final List<ReactionModel> reactions;
+
+  const ReactionDetailsModal({
+    Key? key,
+    required this.reactionContent,
+    required this.reactions,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        children: [
+          const SizedBox(height: 16),
+          Text(
+            'Reactions: $reactionContent',
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const Divider(),
+          Expanded(
+            child: ListView.builder(
+              itemCount: reactions.length,
+              itemBuilder: (context, index) {
+                final reaction = reactions[index];
+                return ListTile(
+                  leading: reaction.authorProfileImage.isNotEmpty
+                      ? CircleAvatar(
+                          backgroundImage:
+                              CachedNetworkImageProvider(reaction.authorProfileImage),
+                        )
+                      : const CircleAvatar(
+                          child: Icon(Icons.person),
+                        ),
+                  title: Text(reaction.authorName),
+                  trailing: Text(
+                      reaction.content.isNotEmpty ? reaction.content : '+'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ProfilePage(npub: reaction.author),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

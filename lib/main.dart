@@ -4,6 +4,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'models/note_model.dart';
 import 'models/reaction_model.dart';
 import 'models/reply_model.dart';
+import 'models/user_model.dart';
 import 'screens/login_page.dart';
 import 'screens/feed_page.dart';
 
@@ -12,10 +13,10 @@ void main() async {
 
   try {
     await Hive.initFlutter();
-
     Hive.registerAdapter(NoteModelAdapter());
     Hive.registerAdapter(ReactionModelAdapter());
     Hive.registerAdapter(ReplyModelAdapter());
+    Hive.registerAdapter(UserModelAdapter());
 
     const FlutterSecureStorage secureStorage = FlutterSecureStorage();
     String? privateKey = await secureStorage.read(key: 'privateKey');
@@ -25,10 +26,10 @@ void main() async {
       await Hive.openBox<NoteModel>('notes_Feed_$npub');
       await Hive.openBox<ReactionModel>('reactions_Feed_$npub');
       await Hive.openBox<ReplyModel>('replies_Feed_$npub');
-
       await Hive.openBox<NoteModel>('notes_Profile_$npub');
       await Hive.openBox<ReactionModel>('reactions_Profile_$npub');
       await Hive.openBox<ReplyModel>('replies_Profile_$npub');
+      await Hive.openBox<UserModel>('users');
     }
 
     runApp(Qiqstr(
@@ -75,10 +76,10 @@ class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
 
   @override
-  _SplashScreenState createState() => _SplashScreenState();
+  SplashScreenState createState() => SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class SplashScreenState extends State<SplashScreen> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   @override
@@ -96,10 +97,10 @@ class _SplashScreenState extends State<SplashScreen> {
         await Hive.openBox<NoteModel>('notes_Feed_$npub');
         await Hive.openBox<ReactionModel>('reactions_Feed_$npub');
         await Hive.openBox<ReplyModel>('replies_Feed_$npub');
-
         await Hive.openBox<NoteModel>('notes_Profile_$npub');
         await Hive.openBox<ReactionModel>('reactions_Profile_$npub');
         await Hive.openBox<ReplyModel>('replies_Profile_$npub');
+        await Hive.openBox<UserModel>('users');
 
         Navigator.pushReplacement(
           context,
@@ -125,7 +126,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return const Scaffold(
       body: Center(child: CircularProgressIndicator()),
     );
   }
