@@ -25,20 +25,17 @@ class _VPState extends State<VP> {
 
   Future<void> _initializeVideo() async {
     _controller = VideoPlayerController.network(widget.url);
-
     try {
       await _controller.initialize();
       setState(() {
         _totalDuration = _controller.value.duration;
       });
-
       _controller.addListener(() {
         setState(() {
           _currentPosition = _controller.value.position;
           _isPlaying = _controller.value.isPlaying;
         });
       });
-
     } catch (e) {
       print("Error initializing video: $e");
     }
@@ -70,9 +67,14 @@ class _VPState extends State<VP> {
 
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
-    final twoDigitMinutes = twoDigits(duration.inMinutes.remainder(60));
-    final twoDigitSeconds = twoDigits(duration.inSeconds.remainder(60));
-    return "${twoDigits(duration.inHours)}:$twoDigitMinutes:$twoDigitSeconds";
+    final hours = duration.inHours;
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    if (hours > 0) {
+      return '$hours:$minutes:$seconds';
+    } else {
+      return '$minutes:$seconds';
+    }
   }
 
   @override
@@ -99,18 +101,7 @@ class _VPState extends State<VP> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          VideoProgressIndicator(
-            _controller,
-            allowScrubbing: true,
-            padding: const EdgeInsets.symmetric(horizontal: 10.0),
-            colors: VideoProgressColors(
-              playedColor: Colors.red,
-              bufferedColor: Colors.grey,
-              backgroundColor: Colors.black26,
-            ),
-          ),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               IconButton(
                 icon: Icon(
@@ -119,16 +110,35 @@ class _VPState extends State<VP> {
                 ),
                 onPressed: _togglePlayPause,
               ),
+              Expanded(
+                child: VideoProgressIndicator(
+                  _controller,
+                  allowScrubbing: true,
+                  padding: const EdgeInsets.symmetric(horizontal: 10.0),
+                  colors: const VideoProgressColors(
+                    playedColor: Colors.red,
+                    bufferedColor: Colors.grey,
+                    backgroundColor: Colors.black26,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               Text(
                 _formatDuration(_currentPosition),
                 style: const TextStyle(color: Colors.white),
+              ),
+              const Text(
+                ' / ',
+                style: TextStyle(color: Colors.white),
               ),
               Text(
                 _formatDuration(_totalDuration),
                 style: const TextStyle(color: Colors.white),
               ),
+              const SizedBox(width: 8),
             ],
           ),
+          const SizedBox(height: 8),
         ],
       ),
     );
