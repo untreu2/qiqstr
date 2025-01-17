@@ -5,7 +5,8 @@ import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import '../models/note_model.dart';
 import '../screens/note_detail_page.dart';
 import '../screens/profile_page.dart';
-import 'video_preview.dart';
+import '../widgets/video_preview.dart';
+import '../widgets/photo_viewer_widget.dart';
 
 class NoteWidget extends StatefulWidget {
   final NoteModel note;
@@ -45,7 +46,7 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
 
     _highlightController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 300),
     );
 
     _highlightAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
@@ -93,51 +94,119 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
       return const SizedBox.shrink();
     }
 
-    if (mediaUrls.length == 1) {
-      String url = mediaUrls.first;
-      if (url.toLowerCase().endsWith('.mp4') || url.toLowerCase().endsWith('.mov')) {
+    final List<String> imageUrls = mediaUrls
+        .where((url) =>
+            url.toLowerCase().endsWith('.jpg') ||
+            url.toLowerCase().endsWith('.jpeg') ||
+            url.toLowerCase().endsWith('.png') ||
+            url.toLowerCase().endsWith('.webp') ||
+            url.toLowerCase().endsWith('.gif'))
+        .toList();
+
+    final List<String> videoUrls = mediaUrls
+        .where((url) =>
+            url.toLowerCase().endsWith('.mp4') ||
+            url.toLowerCase().endsWith('.mov'))
+        .toList();
+
+    List<String> allImageUrls = imageUrls;
+
+    if (allImageUrls.isEmpty && videoUrls.isNotEmpty) {
+      allImageUrls = videoUrls;
+    }
+
+    if (allImageUrls.length == 1) {
+      String url = allImageUrls.first;
+      if (videoUrls.contains(url)) {
         return VP(url: url);
       } else {
-        return CachedNetworkImage(
-          imageUrl: url,
-          placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-          errorWidget: (context, url, error) => const Icon(Icons.error),
-          fit: BoxFit.cover,
-          width: double.infinity,
+        return GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => PhotoViewerWidget(
+                  imageUrls: imageUrls,
+                  initialIndex: 0,
+                ),
+              ),
+            );
+          },
+          child: AspectRatio(
+            aspectRatio: 1.0,
+            child: CachedNetworkImage(
+              imageUrl: url,
+              placeholder: (context, url) => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              errorWidget: (context, url, error) => const Icon(Icons.error, size: 20),
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+            ),
+          ),
         );
       }
     } else {
       return Column(
         children: [
           SizedBox(
-            height: 500,
+            height: 300,
             child: PageView.builder(
               controller: _pageController,
-              itemCount: mediaUrls.length,
+              itemCount: allImageUrls.length,
               onPageChanged: (index) {
                 setState(() {});
               },
               itemBuilder: (context, index) {
-                String url = mediaUrls[index];
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12.0),
-                      color: Colors.black12,
-                    ),
+                String url = allImageUrls[index];
+                bool isVideo = videoUrls.contains(url);
+                return GestureDetector(
+                  onTap: isVideo
+                      ? null
+                      : () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => PhotoViewerWidget(
+                                imageUrls: imageUrls,
+                                initialIndex: index,
+                              ),
+                            ),
+                          );
+                        },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4.0),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12.0),
-                      child: url.toLowerCase().endsWith('.mp4') ||
-                              url.toLowerCase().endsWith('.mov')
-                          ? VP(url: url)
-                          : CachedNetworkImage(
-                              imageUrl: url,
-                              placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-                              errorWidget: (context, url, error) => const Icon(Icons.error),
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                              height: double.infinity,
+                      borderRadius: BorderRadius.circular(8.0),
+                      child: isVideo
+                          ? Stack(
+                              children: [
+                                CachedNetworkImage(
+                                  imageUrl: url,
+                                  placeholder: (context, url) => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                  errorWidget: (context, url, error) => const Icon(Icons.error, size: 20),
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: double.infinity,
+                                ),
+                                const Center(
+                                  child: Icon(
+                                    Icons.play_circle_outline,
+                                    color: Colors.white70,
+                                    size: 50,
+                                  ),
+                                ),
+                              ],
+                            )
+                          : AspectRatio(
+                              aspectRatio: 1.0,
+                              child: CachedNetworkImage(
+                                imageUrl: url,
+                                placeholder: (context, url) => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                                errorWidget: (context, url, error) => const Icon(Icons.error, size: 20),
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                height: double.infinity,
+                              ),
                             ),
                     ),
                   ),
@@ -145,14 +214,14 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
               },
             ),
           ),
-          const SizedBox(height: 8.0),
+          const SizedBox(height: 4.0),
           SmoothPageIndicator(
             controller: _pageController,
-            count: mediaUrls.length,
+            count: allImageUrls.length,
             effect: const WormEffect(
-              activeDotColor: Colors.blueAccent,
-              dotHeight: 8.0,
-              dotWidth: 8.0,
+              activeDotColor: Colors.grey,
+              dotHeight: 6.0,
+              dotWidth: 6.0,
             ),
           ),
         ],
@@ -164,22 +233,22 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
     return Column(
       children: linkUrls.map((url) {
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+          padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 12.0),
           child: AnyLinkPreview(
             link: url,
             displayDirection: UIDirection.uiDirectionVertical,
             cache: const Duration(days: 7),
-            backgroundColor: Colors.black87,
+            backgroundColor: Colors.grey[900],
             errorWidget: Container(),
-            bodyMaxLines: 5,
+            bodyMaxLines: 3,
             bodyTextOverflow: TextOverflow.ellipsis,
             titleStyle: const TextStyle(
               fontWeight: FontWeight.bold,
-              fontSize: 16,
+              fontSize: 14,
               color: Colors.white,
             ),
             bodyStyle: const TextStyle(
-              fontSize: 14,
+              fontSize: 12,
               color: Colors.grey,
             ),
           ),
@@ -190,7 +259,7 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
 
   String _formatTimestamp(DateTime timestamp) {
     return "${timestamp.year}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.day.toString().padLeft(2, '0')} "
-        "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}:${timestamp.second.toString().padLeft(2, '0')}";
+        "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}";
   }
 
   void _showHighlight() {
@@ -213,6 +282,21 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
     }
   }
 
+  void _handleSingleTap() {
+    if (widget.onNoteTap != null) {
+      widget.onNoteTap!();
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => NoteDetailPage(
+            note: widget.note,
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final parsedContent = _parseContent(widget.note.content);
@@ -220,16 +304,17 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
     return GestureDetector(
       onDoubleTapDown: _handleDoubleTap,
       onHorizontalDragEnd: _handleHorizontalDragEnd,
+      onTap: _handleSingleTap,
       child: AnimatedBuilder(
         animation: _highlightAnimation,
         builder: (context, child) {
           return Container(
             decoration: BoxDecoration(
               border: Border.all(
-                color: Colors.white.withOpacity(_highlightAnimation.value),
-                width: 2.0,
+                color: Colors.white.withOpacity(_highlightAnimation.value * 0.8),
+                width: 1.5,
               ),
-              borderRadius: BorderRadius.circular(12.0),
+              borderRadius: BorderRadius.circular(10.0),
             ),
             child: child,
           );
@@ -238,7 +323,7 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
               child: Row(
                 children: [
                   GestureDetector(
@@ -251,16 +336,16 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                         },
                     child: widget.note.authorProfileImage.isNotEmpty
                         ? CircleAvatar(
-                            radius: 18,
+                            radius: 16,
                             backgroundImage: CachedNetworkImageProvider(widget.note.authorProfileImage),
                             backgroundColor: Colors.transparent,
                           )
                         : const CircleAvatar(
-                            radius: 18,
-                            child: Icon(Icons.person, size: 18),
+                            radius: 16,
+                            child: Icon(Icons.person, size: 16),
                           ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   GestureDetector(
                     onTap: widget.onAuthorTap ??
                         () {
@@ -272,7 +357,7 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                     child: Text(
                       widget.note.authorName,
                       style: const TextStyle(
-                        fontSize: 15,
+                        fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -282,33 +367,33 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                     children: [
                       const Icon(
                         Icons.favorite_border,
-                        size: 20.0,
-                        color: Colors.white,
+                        size: 16.0,
+                        color: Colors.grey,
                       ),
-                      const SizedBox(width: 4.0),
+                      const SizedBox(width: 2.0),
                       Text(
                         widget.reactionCount.toString(),
                         style: const TextStyle(
-                          fontSize: 14.0,
-                          color: Colors.white,
+                          fontSize: 12.0,
+                          color: Colors.grey,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(width: 16.0),
+                  const SizedBox(width: 8.0),
                   Row(
                     children: [
                       const Icon(
                         Icons.reply,
-                        size: 20.0,
-                        color: Colors.white,
+                        size: 16.0,
+                        color: Colors.grey,
                       ),
-                      const SizedBox(width: 4.0),
+                      const SizedBox(width: 2.0),
                       Text(
                         widget.replyCount.toString(),
                         style: const TextStyle(
-                          fontSize: 14.0,
-                          color: Colors.white,
+                          fontSize: 12.0,
+                          color: Colors.grey,
                         ),
                       ),
                     ],
@@ -316,96 +401,82 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                 ],
               ),
             ),
-
-            GestureDetector(
-              onTap: widget.onNoteTap ??
-                  () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => NoteDetailPage(
-                          note: widget.note,
-                        ),
-                      ),
-                    );
-                  },
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (widget.note.isRepost && widget.note.repostedBy != null)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 16.0, top: 4.0),
-                      child: GestureDetector(
-                        onTap: widget.onRepostedByTap ??
-                            () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ProfilePage(npub: widget.note.repostedBy!),
-                                ),
-                              );
-                            },
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.repeat,
-                              size: 16.0,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (widget.note.isRepost && widget.note.repostedBy != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                    child: GestureDetector(
+                      onTap: widget.onRepostedByTap ??
+                          () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ProfilePage(npub: widget.note.repostedBy!),
+                              ),
+                            );
+                          },
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.repeat,
+                            size: 14.0,
+                            color: Colors.grey,
+                          ),
+                          const SizedBox(width: 4.0),
+                          Text(
+                            'By ${widget.note.repostedByName ?? "Unknown"}',
+                            style: const TextStyle(
+                              fontSize: 12.0,
                               color: Colors.grey,
                             ),
-                            const SizedBox(width: 4.0),
+                          ),
+                          if (widget.note.repostTimestamp != null) ...[
+                            const SizedBox(width: 6.0),
                             Text(
-                              'Reposted by ${widget.note.repostedByName ?? "Unknown"}',
+                              '• ${_formatTimestamp(widget.note.repostTimestamp!)}',
                               style: const TextStyle(
                                 fontSize: 12.0,
                                 color: Colors.grey,
                               ),
                             ),
-                            const SizedBox(width: 8.0),
-                            if (widget.note.repostTimestamp != null)
-                              Text(
-                                'on ${_formatTimestamp(widget.note.repostTimestamp!)}',
-                                style: const TextStyle(
-                                  fontSize: 12.0,
-                                  color: Colors.grey,
-                                ),
-                              ),
                           ],
-                        ),
+                        ],
                       ),
-                    ),
-                  if (parsedContent['text'] != null && (parsedContent['text'] as String).isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                      child: Text(
-                        parsedContent['text'],
-                        style: TextStyle(
-                          fontSize: (parsedContent['text'] as String).length < 34 ? 20.0 : 16.0,
-                          fontWeight: FontWeight.normal,
-                        ),
-                      ),
-                    ),
-                  if (parsedContent['mediaUrls'] != null &&
-                      (parsedContent['mediaUrls'] as List).isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8.0),
-                      child: _buildMediaPreviews(parsedContent['mediaUrls'] as List<String>),
-                    ),
-                  if (parsedContent['linkUrls'] != null &&
-                      (parsedContent['linkUrls'] as List).isNotEmpty)
-                    _buildLinkPreviews(parsedContent['linkUrls'] as List<String>),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-                    child: Text(
-                      _formatTimestamp(widget.note.timestamp),
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
                     ),
                   ),
-                ],
-              ),
+                if (parsedContent['text'] != null && (parsedContent['text'] as String).isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                    child: Text(
+                      parsedContent['text'],
+                      style: TextStyle(
+                        fontSize: (parsedContent['text'] as String).length < 50 ? 16.0 : 14.0,
+                        fontWeight: FontWeight.normal,
+                      ),
+                    ),
+                  ),
+                if (parsedContent['mediaUrls'] != null &&
+                    (parsedContent['mediaUrls'] as List).isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: _buildMediaPreviews(parsedContent['mediaUrls'] as List<String>),
+                  ),
+                if (parsedContent['linkUrls'] != null &&
+                    (parsedContent['linkUrls'] as List).isNotEmpty)
+                  _buildLinkPreviews(parsedContent['linkUrls'] as List<String>),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 2.0),
+                  child: Text(
+                    _formatTimestamp(widget.note.timestamp),
+                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+                  ),
+                ),
+              ],
             ),
-
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8.0),
+              padding: EdgeInsets.symmetric(vertical: 6.0),
               child: Divider(height: 1, color: Colors.grey),
             ),
           ],
