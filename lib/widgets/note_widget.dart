@@ -136,8 +136,10 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
             aspectRatio: 1.0,
             child: CachedNetworkImage(
               imageUrl: url,
-              placeholder: (context, url) => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-              errorWidget: (context, url, error) => const Icon(Icons.error, size: 20),
+              placeholder: (context, url) =>
+                  const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              errorWidget: (context, url, error) =>
+                  const Icon(Icons.error, size: 20),
               fit: BoxFit.cover,
               width: double.infinity,
               height: double.infinity,
@@ -182,8 +184,11 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                               children: [
                                 CachedNetworkImage(
                                   imageUrl: url,
-                                  placeholder: (context, url) => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                                  errorWidget: (context, url, error) => const Icon(Icons.error, size: 20),
+                                  placeholder: (context, url) => const Center(
+                                      child:
+                                          CircularProgressIndicator(strokeWidth: 2)),
+                                  errorWidget: (context, url, error) =>
+                                      const Icon(Icons.error, size: 20),
                                   fit: BoxFit.cover,
                                   width: double.infinity,
                                   height: double.infinity,
@@ -201,8 +206,11 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                               aspectRatio: 1.0,
                               child: CachedNetworkImage(
                                 imageUrl: url,
-                                placeholder: (context, url) => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                                errorWidget: (context, url, error) => const Icon(Icons.error, size: 20),
+                                placeholder: (context, url) => const Center(
+                                    child:
+                                        CircularProgressIndicator(strokeWidth: 2)),
+                                errorWidget: (context, url, error) =>
+                                    const Icon(Icons.error, size: 20),
                                 fit: BoxFit.cover,
                                 width: double.infinity,
                                 height: double.infinity,
@@ -233,7 +241,8 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
     return Column(
       children: linkUrls.map((url) {
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 12.0),
+          padding:
+              const EdgeInsets.symmetric(vertical: 4.0, horizontal: 12.0),
           child: AnyLinkPreview(
             link: url,
             displayDirection: UIDirection.uiDirectionVertical,
@@ -308,15 +317,18 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
       child: AnimatedBuilder(
         animation: _highlightAnimation,
         builder: (context, child) {
-          return Container(
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: Colors.white.withOpacity(_highlightAnimation.value * 0.8),
-                width: 1.5,
+          return Transform.scale(
+            scale: 1 - (_highlightAnimation.value * 0.05),
+            child: Container(
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Colors.white.withOpacity(_highlightAnimation.value * 0.8),
+                  width: 1.5,
+                ),
+                borderRadius: BorderRadius.circular(10.0),
               ),
-              borderRadius: BorderRadius.circular(10.0),
+              child: child,
             ),
-            child: child,
           );
         },
         child: Column(
@@ -331,13 +343,16 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                         () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => ProfilePage(npub: widget.note.author)),
+                            MaterialPageRoute(
+                                builder: (context) =>
+                                    ProfilePage(npub: widget.note.author)),
                           );
                         },
                     child: widget.note.authorProfileImage.isNotEmpty
                         ? CircleAvatar(
                             radius: 16,
-                            backgroundImage: CachedNetworkImageProvider(widget.note.authorProfileImage),
+                            backgroundImage: CachedNetworkImageProvider(
+                                widget.note.authorProfileImage),
                             backgroundColor: Colors.transparent,
                           )
                         : const CircleAvatar(
@@ -351,7 +366,9 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                         () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => ProfilePage(npub: widget.note.author)),
+                            MaterialPageRoute(
+                                builder: (context) =>
+                                    ProfilePage(npub: widget.note.author)),
                           );
                         },
                     child: Text(
@@ -406,14 +423,16 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
               children: [
                 if (widget.note.isRepost && widget.note.repostedBy != null)
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
                     child: GestureDetector(
                       onTap: widget.onRepostedByTap ??
                           () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => ProfilePage(npub: widget.note.repostedBy!),
+                                builder: (context) =>
+                                    ProfilePage(npub: widget.note.repostedBy!),
                               ),
                             );
                           },
@@ -446,13 +465,18 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                       ),
                     ),
                   ),
-                if (parsedContent['text'] != null && (parsedContent['text'] as String).isNotEmpty)
+                if (parsedContent['text'] != null &&
+                    (parsedContent['text'] as String).isNotEmpty)
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
                     child: Text(
                       parsedContent['text'],
                       style: TextStyle(
-                        fontSize: (parsedContent['text'] as String).length < 50 ? 16.0 : 14.0,
+                        fontSize:
+                            (parsedContent['text'] as String).length < 50
+                                ? 16.0
+                                : 14.0,
                         fontWeight: FontWeight.normal,
                       ),
                     ),
@@ -461,13 +485,16 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                     (parsedContent['mediaUrls'] as List).isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4.0),
-                    child: _buildMediaPreviews(parsedContent['mediaUrls'] as List<String>),
+                    child: _buildMediaPreviews(
+                        parsedContent['mediaUrls'] as List<String>),
                   ),
                 if (parsedContent['linkUrls'] != null &&
                     (parsedContent['linkUrls'] as List).isNotEmpty)
-                  _buildLinkPreviews(parsedContent['linkUrls'] as List<String>),
+                  _buildLinkPreviews(
+                      parsedContent['linkUrls'] as List<String>),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 2.0),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12.0, vertical: 2.0),
                   child: Text(
                     _formatTimestamp(widget.note.timestamp),
                     style: const TextStyle(fontSize: 10, color: Colors.grey),
