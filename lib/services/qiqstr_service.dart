@@ -926,6 +926,46 @@ class DataService {
     }
   }
 
+    Future<void> sendRepost(String noteId, String relayUrl, String pubkey) async {
+    final privateKey = await _secureStorage.read(key: 'privateKey');
+    if (privateKey == null || privateKey.isEmpty) {
+      throw Exception('Private key not found. Please log in again.');
+    }
+
+    final event = Event.from(
+      kind: 6,
+      tags: [
+        ['e', noteId, relayUrl],
+        ['p', pubkey]
+      ],
+      content: '',
+      privkey: privateKey,
+    );
+
+    final serializedEvent = event.serialize();
+    print('Repost Event: $serializedEvent');
+  }
+
+  Future<void> sendQuote(String noteId, String relayUrl, String pubkey, String content) async {
+    final privateKey = await _secureStorage.read(key: 'privateKey');
+    if (privateKey == null || privateKey.isEmpty) {
+      throw Exception('Private key not found. Please log in again.');
+    }
+
+    final nip21Reference = 'nevent1${noteId}';
+    final event = Event.from(
+      kind: 1,
+      tags: [
+        ['q', noteId, relayUrl, pubkey],
+      ],
+      content: '$content\n$nip21Reference',
+      privkey: privateKey,
+    );
+
+    final serializedEvent = event.serialize();
+    print('Quote Event: $serializedEvent');
+  }
+
   Future<void> saveNotesToCache() async {
     if (notesBox != null && notesBox!.isOpen) {
       try {

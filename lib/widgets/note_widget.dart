@@ -474,9 +474,9 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                       parsedContent['text'],
                       style: TextStyle(
                         fontSize:
-                            (parsedContent['text'] as String).length < 50
-                                ? 16.0
-                                : 14.0,
+                            (parsedContent['text'] as String).length < 21
+                                ? 20.0
+                                : 15.0,
                         fontWeight: FontWeight.normal,
                       ),
                     ),
