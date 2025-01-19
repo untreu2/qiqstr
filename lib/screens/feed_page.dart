@@ -1,17 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
-import 'package:qiqstr/models/reaction_model.dart';
-import 'package:qiqstr/models/reply_model.dart';
-import 'package:qiqstr/screens/share_note.dart';
-import '../models/note_model.dart';
-import '../services/qiqstr_service.dart';
-import 'profile_page.dart';
-import 'login_page.dart';
-import 'send_reply.dart';
+import 'package:qiqstr/models/note_model.dart';
+import 'package:qiqstr/models/user_model.dart';
+import 'package:qiqstr/services/qiqstr_service.dart';
+import '../screens/profile_page.dart';
+import '../screens/login_page.dart';
+import '../screens/share_note.dart';
 import '../widgets/note_widget.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:qiqstr/models/user_model.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -106,13 +103,13 @@ class FeedPageState extends State<FeedPage> {
     _dataService.saveNotesToCache();
   }
 
-  void _handleReactionsUpdated(String noteId, List<ReactionModel> reactions) {
+  void _handleReactionsUpdated(String noteId, List<dynamic> reactions) {
     setState(() {
       _reactionCounts[noteId] = reactions.length;
     });
   }
 
-  void _handleRepliesUpdated(String noteId, List<ReplyModel> replies) {
+  void _handleRepliesUpdated(String noteId, List<dynamic> replies) {
     setState(() {
       _replyCounts[noteId] = replies.length;
     });
@@ -175,49 +172,6 @@ class FeedPageState extends State<FeedPage> {
       _reactionCounts[olderNote.id] = _dataService.reactionsMap[olderNote.id]?.length ?? 0;
       _replyCounts[olderNote.id] = _dataService.repliesMap[olderNote.id]?.length ?? 0;
     });
-  }
-
-  Future<void> _sendReaction(String noteId) async {
-    try {
-      await _dataService.sendReaction(noteId, '💜');
-      setState(() {
-        _glowingNotes.add(noteId);
-      });
-      Timer(const Duration(seconds: 1), () {
-        if (mounted) {
-          setState(() {
-            _glowingNotes.remove(noteId);
-          });
-        }
-      });
-    } catch (e) {
-      print('Error sending reaction: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sending reaction: $e')),
-      );
-    }
-  }
-
-  void _showReplyDialog(String noteId) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
-      ),
-      builder: (context) => SendReplyDialog(
-        dataService: _dataService,
-        noteId: noteId,
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    _dataService.closeConnections();
-    Hive.close();
-    super.dispose();
   }
 
   Widget _buildSidebar() {
@@ -308,6 +262,14 @@ class FeedPageState extends State<FeedPage> {
   }
 
   @override
+  void dispose() {
+    _scrollController.dispose();
+    _dataService.closeConnections();
+    Hive.close();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       key: _scaffoldKey,
@@ -380,28 +342,7 @@ class FeedPageState extends State<FeedPage> {
                           note: item,
                           reactionCount: reactionCount,
                           replyCount: replyCount,
-                          onSendReaction: _sendReaction,
-                          onShowReplyDialog: _showReplyDialog,
-                          onAuthorTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => ProfilePage(npub: item.author),
-                              ),
-                            );
-                          },
-                          onRepostedByTap: item.isRepost
-                              ? () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => ProfilePage(npub: item.repostedBy!),
-                                    ),
-                                  );
-                                }
-                              : null,
-                          onNoteTap: () {
-                          },
+                          dataService: _dataService,
                         );
                       },
                     )),

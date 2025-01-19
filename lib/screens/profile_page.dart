@@ -4,14 +4,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive/hive.dart';
 import 'package:palette_generator/palette_generator.dart';
-import 'package:qiqstr/screens/login_page.dart';
-import '../models/note_model.dart';
-import '../models/reaction_model.dart';
-import '../models/reply_model.dart';
-import '../services/qiqstr_service.dart';
-import 'send_reply.dart';
+import 'package:qiqstr/models/note_model.dart';
+import 'package:qiqstr/models/user_model.dart';
+import 'package:qiqstr/services/qiqstr_service.dart';
+import '../screens/login_page.dart';
 import '../widgets/note_widget.dart';
-import '../models/user_model.dart';
 
 class ProfilePage extends StatefulWidget {
   final String npub;
@@ -52,6 +49,8 @@ class ProfilePageState extends State<ProfilePage> {
         onNewNote: _handleNewNote,
         onReactionsUpdated: _handleReactionsUpdated,
         onRepliesUpdated: _handleRepliesUpdated,
+        onReactionCountUpdated: _updateReactionCount,
+        onReplyCountUpdated: _updateReplyCount,
       );
       await _dataService.initialize();
       await _dataService.loadNotesFromCache((cachedNotes) {
@@ -116,15 +115,27 @@ class ProfilePageState extends State<ProfilePage> {
     _dataService.saveNotesToCache();
   }
 
-  void _handleReactionsUpdated(String noteId, List<ReactionModel> reactions) {
+  void _handleReactionsUpdated(String noteId, List<dynamic> reactions) {
     setState(() {
       _reactionCounts[noteId] = reactions.length;
     });
   }
 
-  void _handleRepliesUpdated(String noteId, List<ReplyModel> replies) {
+  void _handleRepliesUpdated(String noteId, List<dynamic> replies) {
     setState(() {
       _replyCounts[noteId] = replies.length;
+    });
+  }
+
+  void _updateReactionCount(String noteId, int count) {
+    setState(() {
+      _reactionCounts[noteId] = count;
+    });
+  }
+
+  void _updateReplyCount(String noteId, int count) {
+    setState(() {
+      _replyCounts[noteId] = count;
     });
   }
 
@@ -167,42 +178,6 @@ class ProfilePageState extends State<ProfilePage> {
       });
       print('Error generating palette: $e');
     }
-  }
-
-  Future<void> _sendReaction(String noteId) async {
-    try {
-      await _dataService.sendReaction(noteId, '💜');
-      setState(() {
-        _glowingNotes.add(noteId);
-        _reactionCounts[noteId] = (_reactionCounts[noteId] ?? 0) + 1;
-      });
-      Timer(const Duration(seconds: 1), () {
-        if (mounted) {
-          setState(() {
-            _glowingNotes.remove(noteId);
-          });
-        }
-      });
-    } catch (e) {
-      print('Error sending reaction: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sending reaction: $e')),
-      );
-    }
-  }
-
-  void _showReplyDialog(String noteId) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
-      ),
-      builder: (context) => SendReplyDialog(
-        dataService: _dataService,
-        noteId: noteId,
-      ),
-    );
   }
 
   Widget _buildBannerImage() {
@@ -287,28 +262,7 @@ class ProfilePageState extends State<ProfilePage> {
       note: item,
       reactionCount: _reactionCounts[item.id] ?? 0,
       replyCount: _replyCounts[item.id] ?? 0,
-      onSendReaction: _sendReaction,
-      onShowReplyDialog: _showReplyDialog,
-      onAuthorTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ProfilePage(npub: item.author),
-          ),
-        );
-      },
-      onRepostedByTap: item.isRepost
-          ? () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ProfilePage(npub: item.repostedBy!),
-                ),
-              );
-            }
-          : null,
-      onNoteTap: () {
-      },
+      dataService: _dataService,
     );
   }
 
@@ -443,6 +397,14 @@ class ProfilePageState extends State<ProfilePage> {
         SnackBar(content: Text('Logout error: $e')),
       );
     }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _dataService.closeConnections();
+    Hive.close();
+    super.dispose();
   }
 
   @override

@@ -1,32 +1,28 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:any_link_preview/any_link_preview.dart';
+import 'package:qiqstr/screens/send_reply.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import '../models/note_model.dart';
 import '../screens/profile_page.dart';
 import '../widgets/video_preview.dart';
 import '../widgets/photo_viewer_widget.dart';
+import '../services/qiqstr_service.dart';
 
 class NoteWidget extends StatefulWidget {
   final NoteModel note;
   final int reactionCount;
   final int replyCount;
-  final Function(String)? onSendReaction;
-  final Function(String)? onShowReplyDialog;
-  final Function()? onAuthorTap;
-  final Function()? onRepostedByTap;
-  final Function()? onNoteTap;
+  final DataService dataService; 
 
   const NoteWidget({
     Key? key,
     required this.note,
     required this.reactionCount,
     required this.replyCount,
-    this.onSendReaction,
-    this.onShowReplyDialog,
-    this.onAuthorTap,
-    this.onRepostedByTap,
-    this.onNoteTap,
+    required this.dataService, 
   }) : super(key: key);
 
   @override
@@ -38,6 +34,8 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
   late Animation<double> _highlightAnimation;
 
   final PageController _pageController = PageController();
+
+  bool _isGlowing = false;
 
   @override
   void initState() {
@@ -274,20 +272,50 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
     _highlightController.forward(from: 0.0).then((_) => _highlightController.reverse());
   }
 
-  void _handleDoubleTap(TapDownDetails details) {
-    if (widget.onSendReaction != null) {
-      widget.onSendReaction!(widget.note.id);
+  void _handleDoubleTap(TapDownDetails details) async {
+    setState(() {
+      _isGlowing = true;
+    });
+    try {
+      await widget.dataService.sendReaction(widget.note.id, '💜');
+      setState(() {
+      });
+    } catch (e) {
+      print('Error sending reaction: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sending reaction: $e')),
+      );
+    } finally {
+      _showHighlight();
+      Timer(const Duration(seconds: 1), () {
+        if (mounted) {
+          setState(() {
+            _isGlowing = false;
+          });
+        }
+      });
     }
-    _showHighlight();
   }
 
   void _handleHorizontalDragEnd(DragEndDetails details) {
     if (details.primaryVelocity != null && details.primaryVelocity! > 0) {
-      if (widget.onShowReplyDialog != null) {
-        widget.onShowReplyDialog!(widget.note.id);
-      }
+      _showReplyDialog();
       _showHighlight();
     }
+  }
+
+  void _showReplyDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
+      ),
+      builder: (context) => SendReplyDialog(
+        dataService: widget.dataService,
+        noteId: widget.note.id,
+      ),
+    );
   }
 
   @override
@@ -322,15 +350,14 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
               child: Row(
                 children: [
                   GestureDetector(
-                    onTap: widget.onAuthorTap ??
-                        () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) =>
-                                    ProfilePage(npub: widget.note.author)),
-                          );
-                        },
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) =>
+                                ProfilePage(npub: widget.note.author)),
+                      );
+                    },
                     child: widget.note.authorProfileImage.isNotEmpty
                         ? CircleAvatar(
                             radius: 16,
@@ -345,15 +372,14 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                   ),
                   const SizedBox(width: 8),
                   GestureDetector(
-                    onTap: widget.onAuthorTap ??
-                        () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) =>
-                                    ProfilePage(npub: widget.note.author)),
-                          );
-                        },
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) =>
+                                ProfilePage(npub: widget.note.author)),
+                      );
+                    },
                     child: Text(
                       widget.note.authorName,
                       style: const TextStyle(
@@ -365,10 +391,10 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                   const Spacer(),
                   Row(
                     children: [
-                      const Icon(
-                        Icons.favorite_border,
+                      Icon(
+                        Icons.favorite,
                         size: 16.0,
-                        color: Colors.grey,
+                        color: _isGlowing ? Colors.red : Colors.grey,
                       ),
                       const SizedBox(width: 2.0),
                       Text(
@@ -409,16 +435,15 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
                     child: GestureDetector(
-                      onTap: widget.onRepostedByTap ??
-                          () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    ProfilePage(npub: widget.note.repostedBy!),
-                              ),
-                            );
-                          },
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                ProfilePage(npub: widget.note.repostedBy!),
+                          ),
+                        );
+                      },
                       child: Row(
                         children: [
                           const Icon(
