@@ -3,7 +3,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:any_link_preview/any_link_preview.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import '../models/note_model.dart';
-import '../screens/note_detail_page.dart';
 import '../screens/profile_page.dart';
 import '../widgets/video_preview.dart';
 import '../widgets/photo_viewer_widget.dart';
@@ -291,21 +290,6 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
     }
   }
 
-  void _handleSingleTap() {
-    if (widget.onNoteTap != null) {
-      widget.onNoteTap!();
-    } else {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => NoteDetailPage(
-            note: widget.note,
-          ),
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final parsedContent = _parseContent(widget.note.content);
@@ -313,7 +297,6 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
     return GestureDetector(
       onDoubleTapDown: _handleDoubleTap,
       onHorizontalDragEnd: _handleHorizontalDragEnd,
-      onTap: _handleSingleTap,
       child: AnimatedBuilder(
         animation: _highlightAnimation,
         builder: (context, child) {

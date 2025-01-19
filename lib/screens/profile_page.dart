@@ -5,7 +5,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive/hive.dart';
 import 'package:palette_generator/palette_generator.dart';
 import 'package:qiqstr/screens/login_page.dart';
-import 'package:qiqstr/screens/note_detail_page.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
@@ -309,12 +308,6 @@ class ProfilePageState extends State<ProfilePage> {
             }
           : null,
       onNoteTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => NoteDetailPage(note: item),
-          ),
-        );
       },
     );
   }

@@ -6,7 +6,6 @@ import 'package:qiqstr/models/reply_model.dart';
 import 'package:qiqstr/screens/share_note.dart';
 import '../models/note_model.dart';
 import '../services/qiqstr_service.dart';
-import 'note_detail_page.dart';
 import 'profile_page.dart';
 import 'login_page.dart';
 import 'send_reply.dart';
@@ -402,12 +401,6 @@ class FeedPageState extends State<FeedPage> {
                                 }
                               : null,
                           onNoteTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => NoteDetailPage(note: item),
-                              ),
-                            );
                           },
                         );
                       },
