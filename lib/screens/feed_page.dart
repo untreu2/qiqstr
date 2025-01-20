@@ -30,24 +30,32 @@ class FeedPageState extends State<FeedPage> {
   final ScrollController _scrollController = ScrollController();
   Map<String, int> _reactionCounts = {};
   Map<String, int> _replyCounts = {};
+  Map<String, int> _repostCounts = {};
   UserModel? _currentUserProfile;
 
   @override
   void initState() {
     super.initState();
-    _dataService = DataService(
-      npub: widget.npub,
-      dataType: DataType.Feed,
-      onNewNote: _handleNewNote,
-      onReactionsUpdated: _handleReactionsUpdated,
-      onRepliesUpdated: _handleRepliesUpdated,
-      onReactionCountUpdated: _updateReactionCount,
-      onReplyCountUpdated: _updateReplyCount,
-    );
+_dataService = DataService(
+  npub: widget.npub,
+  dataType: DataType.Feed,
+  onNewNote: _handleNewNote,
+  onReactionsUpdated: _handleReactionsUpdated,
+  onRepliesUpdated: _handleRepliesUpdated,
+  onReactionCountUpdated: _updateReactionCount,
+  onReplyCountUpdated: _updateReplyCount,
+  onRepostCountUpdated: _updateRepostCount,
+);
     _initializeFeed();
     _scrollController.addListener(_onScroll);
     _loadCurrentUserProfile();
   }
+
+void _updateRepostCount(String noteId, int count) {
+  setState(() {
+    _repostCounts[noteId] = count;
+  });
+}
 
   Future<void> _loadCurrentUserProfile() async {
     try {
@@ -64,16 +72,18 @@ class FeedPageState extends State<FeedPage> {
   Future<void> _initializeFeed() async {
     try {
       await _dataService.initialize();
-      await _dataService.loadNotesFromCache((cachedNotes) {
-        setState(() {
-          _feedItems.addAll(cachedNotes);
-          _sortFeedItems();
-          for (var note in _feedItems) {
-            _reactionCounts[note.id] = _dataService.reactionsMap[note.id]?.length ?? 0;
-            _replyCounts[note.id] = _dataService.repliesMap[note.id]?.length ?? 0;
-          }
-        });
-      });
+await _dataService.loadNotesFromCache((cachedNotes) {
+  setState(() {
+    _feedItems.addAll(cachedNotes);
+    _sortFeedItems();
+    for (var note in _feedItems) {
+      _reactionCounts[note.id] = _dataService.reactionsMap[note.id]?.length ?? 0;
+      _replyCounts[note.id] = _dataService.repliesMap[note.id]?.length ?? 0;
+      _repostCounts[note.id] = _dataService.repostsMap[note.id]?.length ?? 0;
+    }
+  });
+});
+
       await _dataService.initializeConnections();
       if (mounted) {
         setState(() {
@@ -142,37 +152,40 @@ class FeedPageState extends State<FeedPage> {
       _loadOlderNotes();
     }
   }
-
-  Future<void> _loadOlderNotes() async {
-    if (_isLoadingOlderNotes) return;
-    setState(() {
-      _isLoadingOlderNotes = true;
-    });
-    try {
-      final followingList = await _dataService.getFollowingList(widget.npub);
-      await _dataService.fetchOlderNotes(followingList, _handleOlderNote);
-    } catch (e) {
-      print('Error loading older notes: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading older notes: $e')),
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoadingOlderNotes = false;
-        });
-      }
+Future<void> _loadOlderNotes() async {
+  if (_isLoadingOlderNotes) return;
+  setState(() {
+    _isLoadingOlderNotes = true;
+  });
+  try {
+    final followingList = await _dataService.getFollowingList(widget.npub);
+    await _dataService.fetchOlderNotes(followingList, _handleOlderNote);
+    await _dataService.fetchRepostsForEvents(_feedItems.map((note) => note.id).toList());
+  } catch (e) {
+    print('Error loading older notes: $e');
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error loading older notes: $e')),
+    );
+  } finally {
+    if (mounted) {
+      setState(() {
+        _isLoadingOlderNotes = false;
+      });
     }
   }
+}
 
-  void _handleOlderNote(NoteModel olderNote) {
-    setState(() {
-      _feedItems.add(olderNote);
-      _sortFeedItems();
-      _reactionCounts[olderNote.id] = _dataService.reactionsMap[olderNote.id]?.length ?? 0;
-      _replyCounts[olderNote.id] = _dataService.repliesMap[olderNote.id]?.length ?? 0;
-    });
-  }
+
+void _handleOlderNote(NoteModel olderNote) {
+  setState(() {
+    _feedItems.add(olderNote);
+    _sortFeedItems();
+    _reactionCounts[olderNote.id] = _dataService.reactionsMap[olderNote.id]?.length ?? 0;
+    _replyCounts[olderNote.id] = _dataService.repliesMap[olderNote.id]?.length ?? 0;
+    _repostCounts[olderNote.id] = _dataService.repostsMap[olderNote.id]?.length ?? 0; 
+  });
+}
+
 
   Widget _buildSidebar() {
     return Drawer(
@@ -337,11 +350,13 @@ class FeedPageState extends State<FeedPage> {
                         final item = _feedItems[index];
                         final reactionCount = _reactionCounts[item.id] ?? 0;
                         final replyCount = _replyCounts[item.id] ?? 0;
+                        final repostCount = _repostCounts[item.id] ?? 0;
                         return NoteWidget(
                           key: ValueKey(item.id),
                           note: item,
                           reactionCount: reactionCount,
                           replyCount: replyCount,
+                          repostCount: repostCount,
                           dataService: _dataService,
                         );
                       },

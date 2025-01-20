@@ -1,47 +1,41 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive/hive.dart';
-import 'package:palette_generator/palette_generator.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/qiqstr_service.dart';
-import '../screens/login_page.dart';
 import '../widgets/note_widget.dart';
 
 class ProfilePage extends StatefulWidget {
   final String npub;
 
-  const ProfilePage({super.key, required this.npub});
+  const ProfilePage({Key? key, required this.npub}) : super(key: key);
 
   @override
   ProfilePageState createState() => ProfilePageState();
 }
 
 class ProfilePageState extends State<ProfilePage> {
-  final List<NoteModel> _profileNotes = [];
-  final Set<String> _glowingNotes = {};
-  final Set<String> _swipedNotes = {};
+  final List<NoteModel> _profileItems = [];
   bool _isLoadingOlderNotes = false;
-  bool _isLoading = true;
+  bool _isInitializing = true;
   late DataService _dataService;
   UserModel? _currentUserProfile;
-  Color _backgroundColor = Colors.blueAccent.withOpacity(0.1);
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final ScrollController _scrollController = ScrollController();
-  Timer? _debounce;
-  final Map<String, int> _reactionCounts = {};
-  final Map<String, int> _replyCounts = {};
+  Map<String, int> _reactionCounts = {};
+  Map<String, int> _replyCounts = {};
+  Map<String, int> _repostCounts = {};
 
   @override
   void initState() {
     super.initState();
-    _initializeDataService();
+    _initializeProfile();
     _scrollController.addListener(_onScroll);
   }
 
-  Future<void> _initializeDataService() async {
+  Future<void> _initializeProfile() async {
     try {
       _dataService = DataService(
         npub: widget.npub,
@@ -51,66 +45,58 @@ class ProfilePageState extends State<ProfilePage> {
         onRepliesUpdated: _handleRepliesUpdated,
         onReactionCountUpdated: _updateReactionCount,
         onReplyCountUpdated: _updateReplyCount,
+        onRepostCountUpdated: _updateRepostCount,
       );
+
       await _dataService.initialize();
       await _dataService.loadNotesFromCache((cachedNotes) {
         setState(() {
-          _profileNotes.addAll(cachedNotes);
-          _sortProfileNotes();
-          for (var note in _profileNotes) {
+          _profileItems.addAll(cachedNotes);
+          _sortProfileItems();
+          for (var note in _profileItems) {
             _reactionCounts[note.id] = _dataService.reactionsMap[note.id]?.length ?? 0;
             _replyCounts[note.id] = _dataService.repliesMap[note.id]?.length ?? 0;
+            _repostCounts[note.id] = _dataService.repostsMap[note.id]?.length ?? 0;
           }
         });
       });
+
       await _dataService.initializeConnections();
-      await _fetchCountsForNotes();
-      await _updateUserProfile();
+      await _loadUserProfile();
       if (mounted) {
         setState(() {
-          _isLoading = false;
+          _isInitializing = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _isLoading = false;
+          _isInitializing = false;
         });
       }
-      print('Profile initialization error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Profile initialization error: $e')),
-      );
+      print('Error initializing profile: $e');
     }
   }
 
-  Future<void> _fetchCountsForNotes() async {
+  Future<void> _loadUserProfile() async {
     try {
-      for (var note in _profileNotes) {
-        final reactionCount = _dataService.reactionsMap[note.id]?.length ?? 0;
-        final replyCount = _dataService.repliesMap[note.id]?.length ?? 0;
-        setState(() {
-          _reactionCounts[note.id] = reactionCount;
-          _replyCounts[note.id] = replyCount;
-        });
-      }
-    } catch (e) {
-      print('Error fetching counts: $e');
+      final usersBox = Hive.box<UserModel>('users');
+      final user = usersBox.get(widget.npub);
       setState(() {
-        for (var note in _profileNotes) {
-          _reactionCounts[note.id] = _reactionCounts[note.id] ?? 0;
-          _replyCounts[note.id] = _replyCounts[note.id] ?? 0;
-        }
+        _currentUserProfile = user;
       });
+    } catch (e) {
+      print('Error loading profile data: $e');
     }
   }
 
   void _handleNewNote(NoteModel newNote) {
     setState(() {
-      _profileNotes.insert(0, newNote);
-      _sortProfileNotes();
+      _profileItems.insert(0, newNote);
+      _sortProfileItems();
       _reactionCounts[newNote.id] = _dataService.reactionsMap[newNote.id]?.length ?? 0;
       _replyCounts[newNote.id] = _dataService.repliesMap[newNote.id]?.length ?? 0;
+      _repostCounts[newNote.id] = _dataService.repostsMap[newNote.id]?.length ?? 0;
     });
     _dataService.saveNotesToCache();
   }
@@ -139,172 +125,17 @@ class ProfilePageState extends State<ProfilePage> {
     });
   }
 
-  void _sortProfileNotes() {
-    _profileNotes.sort((a, b) {
-      final aTimestamp = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
-      final bTimestamp = b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
-      return bTimestamp.compareTo(aTimestamp);
+  void _updateRepostCount(String noteId, int count) {
+    setState(() {
+      _repostCounts[noteId] = count;
     });
   }
 
-  Future<void> _updateUserProfile() async {
-    try {
-      final usersBox = Hive.box<UserModel>('users');
-      final userModel = usersBox.get(widget.npub);
-      setState(() {
-        _currentUserProfile = userModel;
-      });
-      if (_currentUserProfile != null && _currentUserProfile!.profileImage.isNotEmpty) {
-        await _updateBackgroundColor(_currentUserProfile!.profileImage);
-      }
-    } catch (e) {
-      print('Error updating user profile: $e');
-    }
-  }
-
-  Future<void> _updateBackgroundColor(String imageUrl) async {
-    try {
-      final paletteGenerator =
-          await PaletteGenerator.fromImageProvider(CachedNetworkImageProvider(imageUrl));
-      if (!mounted) return;
-      setState(() {
-        _backgroundColor = paletteGenerator.dominantColor?.color.withOpacity(0.1) ??
-            Colors.blueAccent.withOpacity(0.1);
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _backgroundColor = Colors.blueAccent.withOpacity(0.1);
-      });
-      print('Error generating palette: $e');
-    }
-  }
-
-  Widget _buildBannerImage() {
-    if (_currentUserProfile == null) return const SizedBox.shrink();
-    final bannerUrl = _currentUserProfile!.banner;
-    if (bannerUrl.isEmpty) return const SizedBox.shrink();
-    return CachedNetworkImage(
-      imageUrl: bannerUrl,
-      width: double.infinity,
-      height: 200,
-      fit: BoxFit.cover,
-      placeholder: (context, url) => Container(
-        color: Colors.grey[300],
-        child: const Center(child: CircularProgressIndicator()),
-      ),
-      errorWidget: (context, url, error) => Container(
-        color: Colors.grey[300],
-        child: const Center(child: Icon(Icons.broken_image, size: 50)),
-      ),
-    );
-  }
-
-  Widget _buildProfileHeader() {
-    if (_currentUserProfile == null) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        color: _backgroundColor,
-        child: const Text('Loading profile...'),
-      );
-    }
-    final profileImage = _currentUserProfile!.profileImage;
-    final name = _currentUserProfile!.name;
-    final about = _currentUserProfile!.about;
-    final nip05 = _currentUserProfile!.nip05;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      color: _backgroundColor,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          profileImage.isNotEmpty
-              ? CircleAvatar(
-                  radius: 30,
-                  backgroundImage: CachedNetworkImageProvider(profileImage),
-                )
-              : const CircleAvatar(
-                  radius: 30,
-                  child: Icon(Icons.person, size: 30),
-                ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                if (about.isNotEmpty)
-                  Text(
-                    about,
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                const SizedBox(height: 8),
-                if (nip05.isNotEmpty)
-                  Text(
-                    nip05,
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFeedItem(NoteModel item) {
-    return NoteWidget(
-      key: ValueKey(item.id),
-      note: item,
-      reactionCount: _reactionCounts[item.id] ?? 0,
-      replyCount: _replyCounts[item.id] ?? 0,
-      dataService: _dataService,
-    );
-  }
-
-  Widget _buildNotesList() {
-    if (_profileNotes.isEmpty) {
-      return SliverFillRemaining(
-        child: Center(
-          child: Text(
-            'No notes available.',
-            style: TextStyle(fontSize: 16, color: Colors.grey),
-          ),
-        ),
-      );
-    }
-    return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          if (index == _profileNotes.length) {
-            return _isLoadingOlderNotes
-                ? const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                : const SizedBox.shrink();
-          }
-          final item = _profileNotes[index];
-          return _buildFeedItem(item);
-        },
-        childCount: _profileNotes.length + 1,
-      ),
-    );
-  }
-
-  void _onScroll() {
-    if (_debounce?.isActive ?? false) _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 200), () {
-      if (_scrollController.position.pixels >=
-              _scrollController.position.maxScrollExtent - 200 &&
-          !_isLoadingOlderNotes &&
-          !_isLoading) {
-        _loadOlderNotes();
-      }
+  void _sortProfileItems() {
+    _profileItems.sort((a, b) {
+      final aTimestamp = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
+      final bTimestamp = b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
+      return bTimestamp.compareTo(aTimestamp);
     });
   }
 
@@ -315,12 +146,8 @@ class ProfilePageState extends State<ProfilePage> {
     });
     try {
       await _dataService.fetchOlderNotes([widget.npub], _handleOlderNote);
-      await _fetchCountsForNotes();
     } catch (e) {
       print('Error loading older notes: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading older notes: $e')),
-      );
     } finally {
       if (mounted) {
         setState(() {
@@ -332,109 +159,92 @@ class ProfilePageState extends State<ProfilePage> {
 
   void _handleOlderNote(NoteModel olderNote) {
     setState(() {
-      _profileNotes.add(olderNote);
-      _sortProfileNotes();
+      _profileItems.add(olderNote);
+      _sortProfileItems();
       _reactionCounts[olderNote.id] = _dataService.reactionsMap[olderNote.id]?.length ?? 0;
       _replyCounts[olderNote.id] = _dataService.repliesMap[olderNote.id]?.length ?? 0;
+      _repostCounts[olderNote.id] = _dataService.repostsMap[olderNote.id]?.length ?? 0;
     });
   }
 
-  Widget _buildSidebar() {
-    return Drawer(
-      child: ListView(
-        children: [
-          const DrawerHeader(
-            decoration: BoxDecoration(
-              color: Colors.blue,
-            ),
-            child: Text(
-              'Menu',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-              ),
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.person),
-            title: const Text('PROFILE'),
-            onTap: () {
-              Navigator.pop(context);
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('LOGOUT'),
-            onTap: _logoutAndClearData,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _logoutAndClearData() async {
-    try {
-      const secureStorage = FlutterSecureStorage();
-      await secureStorage.deleteAll();
-      await Hive.deleteFromDisk();
-      await _dataService.closeConnections();
-      setState(() {
-        _profileNotes.clear();
-        _glowingNotes.clear();
-        _swipedNotes.clear();
-        _reactionCounts.clear();
-        _replyCounts.clear();
-        _isLoading = true;
-      });
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-        (Route<dynamic> route) => false,
-      );
-    } catch (e) {
-      print('Logout error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Logout error: $e')),
-      );
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent - 200 &&
+        !_isLoadingOlderNotes &&
+        !_isInitializing) {
+      _loadOlderNotes();
     }
   }
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    _dataService.closeConnections();
-    Hive.close();
-    super.dispose();
+  Widget _buildProfileHeader() {
+    if (_currentUserProfile == null) return const SizedBox.shrink();
+    return Column(
+      children: [
+        if (_currentUserProfile!.banner.isNotEmpty)
+          CachedNetworkImage(
+            imageUrl: _currentUserProfile!.banner,
+            width: double.infinity,
+            height: 200,
+            fit: BoxFit.cover,
+          ),
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 40,
+                backgroundImage: CachedNetworkImageProvider(_currentUserProfile!.profileImage),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_currentUserProfile!.name,
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    if (_currentUserProfile!.nip05.isNotEmpty)
+                      Text(_currentUserProfile!.nip05,
+                          style: const TextStyle(fontSize: 14, color: Colors.grey)),
+                    if (_currentUserProfile!.about.isNotEmpty)
+                      Text(_currentUserProfile!.about),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading && _profileNotes.isEmpty) {
-      return Scaffold(
-        key: _scaffoldKey,
-        drawer: _buildSidebar(),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
     return Scaffold(
       key: _scaffoldKey,
-      drawer: _buildSidebar(),
-      body: SafeArea(
-        top: true,
-        bottom: false,
-        child: CustomScrollView(
-          controller: _scrollController,
-          slivers: [
-            if (_currentUserProfile != null && _currentUserProfile!.banner.isNotEmpty)
-              SliverToBoxAdapter(
-                child: _buildBannerImage(),
-              ),
-            SliverToBoxAdapter(
-              child: _buildProfileHeader(),
-            ),
-            _buildNotesList(),
-          ],
-        ),
+      body: CustomScrollView(
+        controller: _scrollController,
+        slivers: [
+          SliverToBoxAdapter(child: _buildProfileHeader()),
+          _isInitializing
+              ? const SliverFillRemaining(
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final item = _profileItems[index];
+                      return NoteWidget(
+                        note: item,
+                        reactionCount: _reactionCounts[item.id] ?? 0,
+                        replyCount: _replyCounts[item.id] ?? 0,
+                        repostCount: _repostCounts[item.id] ?? 0,
+                        dataService: _dataService,
+                      );
+                    },
+                    childCount: _profileItems.length,
+                  ),
+                ),
+        ],
       ),
     );
   }

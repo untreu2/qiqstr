@@ -15,6 +15,7 @@ class NoteWidget extends StatefulWidget {
   final NoteModel note;
   final int reactionCount;
   final int replyCount;
+  final int repostCount;
   final DataService dataService; 
 
   const NoteWidget({
@@ -22,7 +23,7 @@ class NoteWidget extends StatefulWidget {
     required this.note,
     required this.reactionCount,
     required this.replyCount,
-    required this.dataService, 
+    required this.dataService, required this.repostCount, 
   }) : super(key: key);
 
   @override
@@ -420,8 +421,19 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                         style: const TextStyle(
                           fontSize: 12.0,
                           color: Colors.grey,
-                        ),
+                        ),  
                       ),
+                          const SizedBox(width: 8.0),
+    const Icon(
+      Icons.repeat,
+      size: 16.0,
+      color: Colors.grey,
+    ),
+    const SizedBox(width: 2.0),
+    Text(
+      widget.repostCount.toString(),
+      style: const TextStyle(fontSize: 12.0, color: Colors.grey),
+    ),
                     ],
                   ),
                 ],
