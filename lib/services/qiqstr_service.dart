@@ -37,16 +37,11 @@ class DataService {
   final Function(String, List<ReplyModel>)? onRepliesUpdated;
   final Function(String, int)? onReactionCountUpdated;
   final Function(String, int)? onReplyCountUpdated;
-  final Function(String, List<NoteModel>)? onRepostsUpdated;
-  final Function(String, int)? onRepostCountUpdated;
-
 
   List<NoteModel> notes = [];
   final Set<String> eventIds = {};
   final Map<String, List<ReactionModel>> reactionsMap = {};
   final Map<String, List<ReplyModel>> repliesMap = {};
-  final Map<String, List<NoteModel>> repostsMap = {};
-
   final Map<String, CachedProfile> profileCache = {};
   Box<UserModel>? usersBox;
   final List<String> relayUrls = [
@@ -55,7 +50,6 @@ class DataService {
     'wss://relay.primal.net',
     'wss://vitor.nostr1.com',
     'wss://eu.purplerelay.com',
-    'wss://relay.primal.net',
   ];
   final Map<String, WebSocket> _webSockets = {};
   bool isConnecting = false;
@@ -87,8 +81,6 @@ class DataService {
     this.onRepliesUpdated,
     this.onReactionCountUpdated,
     this.onReplyCountUpdated,
-    this.onRepostsUpdated, this.onRepostCountUpdated,
-
   });
 
   int get connectedRelaysCount => _webSockets.length;
@@ -226,10 +218,8 @@ class DataService {
     await Future.wait([
       loadReactionsFromCache(),
       loadRepliesFromCache(),
-      loadRepostsFromCache(),
     ]);
     await _subscribeToAllReactions();
-    await _subscribeToAllReposts();
   }
 
   Future<void> _connectToRelays(List<String> relayList, List<String> targetNpubs) async {
@@ -404,9 +394,6 @@ class DataService {
         } else if (kind == 7) {
           await _handleReactionEvent(eventData);
         }
-        if (kind == 6) {
-          await _handleRepostEvent(eventData);
-        }
       }
     } catch (e) {
       print('Error handling event: $e');
@@ -514,94 +501,11 @@ class DataService {
         await Future.wait([
           fetchReactionsForEvents([newEvent.id]),
           fetchRepliesForEvents([newEvent.id]),
-          fetchRepostsForEvents(newEvent.id as List<String>),
         ]);
         await _subscribeToAllReactions();
       }
     }
   }
-Future<void> loadRepostsFromCache() async {
-  if (notesBox == null || !notesBox!.isOpen) {
-    print('Notes box is not initialized or not open.');
-    return;
-  }
-
-  try {
-    final allNotes = notesBox!.values.cast<NoteModel>().toList();
-    final reposts = allNotes.where((note) => note.isRepost).toList();
-
-    for (var repost in reposts) {
-      repostsMap.putIfAbsent(repost.repostedBy!, () => []);
-      if (!repostsMap[repost.repostedBy]!.any((r) => r.id == repost.id)) {
-        repostsMap[repost.repostedBy]!.add(repost);
-      }
-    }
-
-    print('Loaded ${reposts.length} reposts from cache.');
-  } catch (e) {
-    print('Error loading reposts from cache: $e');
-  }
-}
-Future<void> _subscribeToAllReposts() async {
-  if (_isClosed) return;
-  
-  String subscriptionId = generateUUID();
-  List<String> allEventIds = notes.map((note) => note.id).toList();
-  if (allEventIds.isEmpty) return;
-
-  final filter = Filter(kinds: [6], e: allEventIds, limit: 1000);
-  final request = Request(subscriptionId, [filter]);
-
-  await Future.wait(_webSockets.values.map<Future<void>>((ws) async {
-    if (ws.readyState == WebSocket.open) {
-      ws.add(request.serialize());
-    }
-  }));
-
-  print('Subscribed to reposts for ${allEventIds.length} events.');
-}
-
-Future<void> _handleRepostEvent(Map<String, dynamic> eventData) async {
-  if (_isClosed) return;
-
-  final repostAuthor = eventData['pubkey'] as String;
-  final repostProfile = await getCachedUserProfile(repostAuthor);
-
-  String? targetEventId;
-  for (var tag in eventData['tags']) {
-    if (tag.length >= 2 && tag[0] == 'e') {
-      targetEventId = tag[1] as String;
-      break;
-    }
-  }
-  if (targetEventId == null) {
-    print("Invalid repost event, no target event found.");
-    return;
-  }
-
-  final repost = NoteModel(
-    id: eventData['id'],
-    content: eventData['content'],
-    author: repostAuthor,
-    authorName: repostProfile['name'] ?? 'Anonymous',
-    authorProfileImage: repostProfile['profileImage'] ?? '',
-    timestamp: DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000),
-    isRepost: true,
-    repostedBy: repostAuthor,
-    repostTimestamp: DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000),
-  );
-
-  repostsMap.putIfAbsent(targetEventId, () => []);
-  if (!repostsMap[targetEventId]!.any((r) => r.id == repost.id)) {
-    repostsMap[targetEventId]!.add(repost);
-    onRepostsUpdated?.call(targetEventId, repostsMap[targetEventId]!);
-    print('Repost added for event $targetEventId by ${repost.authorName}');
-    onRepostCountUpdated?.call(targetEventId, repostsMap[targetEventId]!.length);
-    await notesBox?.put(repost.id, repost);
-  }
-}
-
-
 
   void _sortNotes() {
     notes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
@@ -1021,58 +925,50 @@ Future<void> _handleRepostEvent(Map<String, dynamic> eventData) async {
       throw e;
     }
   }
-Future<void> saveNotesToCache() async {
-  if (notesBox != null && notesBox!.isOpen) {
-    try {
-      final Map<String, NoteModel> validNotes = {};
 
-      for (var note in notes) {
-        if (!note.isRepost || (note.isRepost && note.repostedBy != null && note.repostedBy!.isNotEmpty)) {
-          validNotes[note.id] = note;
+  Future<void> saveNotesToCache() async {
+    if (notesBox != null && notesBox!.isOpen) {
+      try {
+        final Map<String, NoteModel> notesMap = {for (var note in notes) note.id: note};
+        await notesBox!.putAll(notesMap);
+        print('Notes saved to cache successfully.');
+      } catch (e) {
+        print('Error saving notes to cache: $e');
+      }
+    } else {
+      print('Error saving notes to cache: notesBox is not initialized or not open.');
+    }
+  }
+
+  Future<void> loadNotesFromCache(Function(List<NoteModel>) onLoad) async {
+    if (notesBox == null || !notesBox!.isOpen) {
+      print('Notes box is not initialized or not open.');
+      return;
+    }
+    try {
+      final allNotes = notesBox!.values.cast<NoteModel>().toList();
+      if (allNotes.isEmpty) {
+        print('No notes found in cache.');
+        return;
+      }
+      for (var note in allNotes) {
+        if (!eventIds.contains(note.id)) {
+          notes.add(note);
+          eventIds.add(note.id);
         }
       }
-
-      await notesBox!.putAll(validNotes);
-
-      for (var entry in repostsMap.entries) {
-        await notesBox!.put('${entry.key}_repostCount', entry.value.length as NoteModel);
-      }
-
-      print('Notes and repost counts saved to cache successfully.');
+      onLoad(allNotes);
+      print('Cache loaded with ${allNotes.length} notes.');
+      List<String> cachedEventIds = allNotes.map((note) => note.id).toList();
+      await Future.wait([
+        fetchReactionsForEvents(cachedEventIds),
+        fetchRepliesForEvents(cachedEventIds),
+      ]);
     } catch (e) {
-      print('Error saving notes to cache: $e');
+      print('Error loading notes from cache: $e');
     }
-  } else {
-    print('Error: notesBox is not initialized or not open.');
+    await _fetchProfilesForAllData();
   }
-}
-
-
-
-
-Future<void> loadNotesFromCache(Function(List<NoteModel>) onLoad) async {
-  if (notesBox == null || !notesBox!.isOpen) {
-    print('Notes box is not initialized or not open.');
-    return;
-  }
-  try {
-    final allNotes = notesBox!.values.cast<NoteModel>().toList();
-    final validNotes = allNotes.where((note) => 
-      !note.isRepost || (note.repostedBy != null && note.repostedBy!.isNotEmpty)
-    ).toList();
-
-    for (var note in validNotes) {
-      final repostCount = notesBox!.get('${note.id}_repostCount', defaultValue: null) as int;
-      repostsMap[note.id] = List.generate(repostCount, (index) => note);
-    }
-
-    onLoad(validNotes);
-    print('Loaded ${validNotes.length} valid notes and repost counts from cache.');
-  } catch (e) {
-    print('Error loading notes from cache: $e');
-  }
-}
-
 
   Future<void> loadReactionsFromCache() async {
     if (reactionsBox == null || !reactionsBox!.isOpen) {
@@ -1140,7 +1036,6 @@ Future<void> loadNotesFromCache(Function(List<NoteModel>) onLoad) async {
         await Future.wait([
           fetchReactionsForEvents(newEventIds),
           fetchRepliesForEvents(newEventIds),
-          fetchRepostsForEvents(newEventIds)
         ]);
         await _updateReactionSubscription();
       }
@@ -1181,26 +1076,6 @@ Future<void> loadNotesFromCache(Function(List<NoteModel>) onLoad) async {
     print('Fetched replies for events: ${parentEventIds.length}');
   }
 
-  Future<void> fetchRepostsForEvents(List<String> eventIdsToFetch) async {
-  if (_isClosed) return;
-  
-  final request = Request(generateUUID(), [
-    Filter(
-      kinds: [6],
-      e: eventIdsToFetch,
-      limit: 1000,
-    ),
-  ]);
-
-  await Future.wait(_webSockets.values.map<Future<void>>((ws) async {
-    if (ws.readyState == WebSocket.open) {
-      ws.add(request.serialize());
-    }
-  }));
-  print('Fetched reposts for events: ${eventIdsToFetch.length}');
-}
-
-
   void _handleCacheLoad(dynamic data) {
     if (data is List<NoteModel>) {
       if (_onCacheLoad != null) {
@@ -1209,6 +1084,19 @@ Future<void> loadNotesFromCache(Function(List<NoteModel>) onLoad) async {
         print('Cache loaded with ${data.length} notes.');
       }
     }
+  }
+
+  Future<void> _fetchProfilesForAllData() async {
+    if (_isClosed) return;
+    Set<String> allAuthors = notes.map((note) => note.author).toSet();
+    for (var replies in repliesMap.values) {
+      allAuthors.addAll(replies.map((reply) => reply.author));
+    }
+    for (var reactions in reactionsMap.values) {
+      allAuthors.addAll(reactions.map((reaction) => reaction.author));
+    }
+    await _fetchProfilesBatch(allAuthors.toList());
+    print('Fetched profiles for all authors.');
   }
 
   Future<Map<String, dynamic>?> _fetchEventById(String eventId) async {
