@@ -36,7 +36,7 @@ class _FeedPageState extends State<FeedPage> {
       });
     } catch (e) {
       setState(() {
-        errorMessage = 'Profil yüklenirken bir hata oluştu.';
+        errorMessage = 'An error occurred while loading the profile.';
         isLoading = false;
       });
     }

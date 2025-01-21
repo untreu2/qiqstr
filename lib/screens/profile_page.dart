@@ -3,6 +3,7 @@ import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/services/qiqstr_service.dart';
 import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/models/user_model.dart';
+import 'package:qiqstr/widgets/profile_info_widget.dart';
 
 class ProfilePage extends StatefulWidget {
   final String npub;
@@ -39,7 +40,7 @@ class _ProfilePageState extends State<ProfilePage> {
       });
     } catch (e) {
       setState(() {
-        errorMessage = 'Profil yüklenirken bir hata oluştu.';
+        errorMessage = 'An error occurred while loading the profile.';
         isLoading = false;
       });
     }
@@ -64,85 +65,9 @@ class _ProfilePageState extends State<ProfilePage> {
                       (BuildContext context, bool innerBoxIsScrolled) {
                     return [
                       SliverToBoxAdapter(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            user?.banner.isNotEmpty == true
-                                ? Image.network(
-                                    user!.banner,
-                                    width: double.infinity,
-                                    height: 200.0,
-                                    fit: BoxFit.cover,
-                                  )
-                                : Container(
-                                    width: double.infinity,
-                                    height: 200.0,
-                                    color: Colors.black,
-                                  ),
-                            Container(
-                              width: double.infinity,
-                              color: Colors.black,
-                              padding: const EdgeInsets.all(16.0),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  CircleAvatar(
-                                    radius: 40.0,
-                                    backgroundImage: user?.profileImage.isNotEmpty == true
-                                        ? NetworkImage(user!.profileImage)
-                                        : null,
-                                    backgroundColor: user?.profileImage.isNotEmpty == false
-                                        ? Colors.grey
-                                        : null,
-                                    child: user?.profileImage.isEmpty == true
-                                        ? const Icon(
-                                            Icons.person,
-                                            size: 40.0,
-                                            color: Colors.white,
-                                          )
-                                        : null,
-                                  ),
-                                  const SizedBox(width: 16.0),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          user?.name ?? 'Anonymous',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 20.0,
-                                          ),
-                                        ),
-                                        if (user?.nip05.isNotEmpty == true)
-                                          Text(
-                                            user!.nip05,
-                                            style: const TextStyle(
-                                              color: Colors.white70,
-                                              fontSize: 14.0,
-                                            ),
-                                          ),
-                                        if (user?.about.isNotEmpty == true)
-                                          Padding(
-                                            padding: const EdgeInsets.only(top: 4.0),
-                                            child: Text(
-                                              user!.about,
-                                              style: const TextStyle(
-                                                color: Colors.white70,
-                                                fontSize: 14.0,
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 16.0),
-                          ],
-                        ),
+                        child: user != null
+                            ? ProfileInfoWidget(user: user!)
+                            : Container(),
                       ),
                     ];
                   },
