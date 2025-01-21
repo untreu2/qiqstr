@@ -16,6 +16,8 @@ class FeedPage extends StatefulWidget {
 class _FeedPageState extends State<FeedPage> {
   UserModel? user;
   late DataService dataService;
+  bool isLoading = true;
+  String? errorMessage;
 
   @override
   void initState() {
@@ -25,21 +27,54 @@ class _FeedPageState extends State<FeedPage> {
   }
 
   Future<void> _loadUserProfile() async {
-    await dataService.initialize();
-    final profileData = await dataService.getCachedUserProfile(widget.npub);
-    setState(() {
-      user = UserModel.fromCachedProfile(widget.npub, profileData);
-    });
+    try {
+      await dataService.initialize();
+      final profileData = await dataService.getCachedUserProfile(widget.npub);
+      setState(() {
+        user = UserModel.fromCachedProfile(widget.npub, profileData);
+        isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        errorMessage = 'Profil yüklenirken bir hata oluştu.';
+        isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       drawer: SidebarWidget(user: user),
-      body: NoteListWidget(
-        npub: widget.npub,
-        dataType: DataType.Feed,
-      ),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : errorMessage != null
+              ? Center(child: Text(errorMessage!))
+              : NestedScrollView(
+                  headerSliverBuilder:
+                      (BuildContext context, bool innerBoxIsScrolled) {
+                    return [
+                      SliverAppBar(
+                        title: Text(
+                          'qiqstr',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 20.0,
+                          ),
+                        ),
+                        pinned: false,
+                        snap: false,
+                        backgroundColor: Colors.black,
+                        iconTheme: const IconThemeData(color: Colors.white),
+                      ),
+                    ];
+                  },
+                  body: NoteListWidget(
+                    npub: widget.npub,
+                    dataType: DataType.Feed,
+                  ),
+                ),
     );
   }
 }

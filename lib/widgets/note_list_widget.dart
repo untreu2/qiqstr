@@ -22,7 +22,6 @@ class NoteListWidget extends StatefulWidget {
 class _NoteListWidgetState extends State<NoteListWidget> {
   final List<NoteModel> _items = [];
   late DataService _dataService;
-  final ScrollController _scrollController = ScrollController();
   bool _isInitializing = true;
   bool _isLoadingOlderNotes = false;
   Map<String, int> _reactionCounts = {};
@@ -41,7 +40,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       onReplyCountUpdated: _updateReplyCount,
     );
     _initialize();
-    _scrollController.addListener(_onScroll);
   }
 
   Future<void> _initialize() async {
@@ -116,15 +114,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     });
   }
 
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent - 200 &&
-        !_isLoadingOlderNotes) {
-      _loadOlderNotes();
-    }
-  }
-
   Future<void> _loadOlderNotes() async {
+    if (_isLoadingOlderNotes) return;
     setState(() => _isLoadingOlderNotes = true);
     try {
       await _dataService.fetchOlderNotes(widget.dataType == DataType.Feed
@@ -152,7 +143,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   @override
   void dispose() {
-    _scrollController.dispose();
     _dataService.closeConnections();
     super.dispose();
   }
@@ -163,27 +153,36 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return RefreshIndicator(
-      onRefresh: _initialize,
-      child: ListView.builder(
-        controller: _scrollController,
-        itemCount: _items.length + (_isLoadingOlderNotes ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index == _items.length && _isLoadingOlderNotes) {
-            return const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Center(child: CircularProgressIndicator()),
+    return NotificationListener<ScrollNotification>(
+      onNotification: (ScrollNotification scrollInfo) {
+        if (!_isLoadingOlderNotes &&
+            scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 200) {
+          _loadOlderNotes();
+        }
+        return false;
+      },
+      child: RefreshIndicator(
+        onRefresh: _initialize,
+        child: ListView.builder(
+          padding: EdgeInsets.zero,
+          itemCount: _items.length + (_isLoadingOlderNotes ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (index == _items.length && _isLoadingOlderNotes) {
+              return const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            final item = _items[index];
+            return NoteWidget(
+              key: ValueKey(item.id),
+              note: item,
+              reactionCount: _reactionCounts[item.id] ?? 0,
+              replyCount: _replyCounts[item.id] ?? 0,
+              dataService: _dataService,
             );
-          }
-          final item = _items[index];
-          return NoteWidget(
-            key: ValueKey(item.id),
-            note: item,
-            reactionCount: _reactionCounts[item.id] ?? 0,
-            replyCount: _replyCounts[item.id] ?? 0,
-            dataService: _dataService,
-          );
-        },
+          },
+        ),
       ),
     );
   }
