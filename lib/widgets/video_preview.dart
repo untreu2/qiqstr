@@ -10,7 +10,7 @@ class VP extends StatefulWidget {
   _VPState createState() => _VPState();
 }
 
-class _VPState extends State<VP> {
+class _VPState extends State<VP> with SingleTickerProviderStateMixin {
   late VideoPlayerController _controller;
   bool _isPlaying = false;
   bool _isControlsVisible = true;
@@ -34,6 +34,9 @@ class _VPState extends State<VP> {
         setState(() {
           _currentPosition = _controller.value.position;
           _isPlaying = _controller.value.isPlaying;
+          if (_isPlaying) {
+            _isControlsVisible = false;
+          }
         });
       });
     } catch (e) {
@@ -51,17 +54,24 @@ class _VPState extends State<VP> {
     setState(() {
       if (_controller.value.isPlaying) {
         _controller.pause();
-        _isPlaying = false;
+        _isControlsVisible = true;
       } else {
         _controller.play();
-        _isPlaying = true;
+        _isControlsVisible = false;
       }
     });
   }
 
   void _toggleControlsVisibility() {
     setState(() {
-      _isControlsVisible = !_isControlsVisible;
+      _isControlsVisible = true;
+    });
+    Future.delayed(const Duration(seconds: 3), () {
+      if (_controller.value.isPlaying) {
+        setState(() {
+          _isControlsVisible = false;
+        });
+      }
     });
   }
 
@@ -83,11 +93,18 @@ class _VPState extends State<VP> {
         ? AspectRatio(
             aspectRatio: _controller.value.aspectRatio,
             child: GestureDetector(
-              onTap: _toggleControlsVisibility,
+              onTap: () {
+                _togglePlayPause();
+                _toggleControlsVisibility();
+              },
               child: Stack(
                 children: [
                   VideoPlayer(_controller),
-                  if (_isControlsVisible) _buildControlsOverlay(),
+                  AnimatedOpacity(
+                    opacity: _isControlsVisible ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 300),
+                    child: _buildControlsOverlay(),
+                  ),
                 ],
               ),
             ),
@@ -116,7 +133,7 @@ class _VPState extends State<VP> {
                   allowScrubbing: true,
                   padding: const EdgeInsets.symmetric(horizontal: 10.0),
                   colors: const VideoProgressColors(
-                    playedColor: Colors.red,
+                    playedColor: Colors.white,
                     bufferedColor: Colors.grey,
                     backgroundColor: Colors.black26,
                   ),

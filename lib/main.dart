@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'models/note_model.dart';
 import 'models/reaction_model.dart';
 import 'models/reply_model.dart';
@@ -52,22 +53,40 @@ class Qiqstr extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Qiqstr',
-      theme: ThemeData.dark().copyWith(
+      theme: ThemeData(
         scaffoldBackgroundColor: Colors.black,
+        textTheme: GoogleFonts.interTextTheme(
+          Theme.of(context).textTheme.apply(
+                bodyColor: Colors.white,
+                displayColor: Colors.white,
+              ),
+        ),
         colorScheme: const ColorScheme.dark(
           primary: Colors.white,
           secondary: Colors.grey,
           surface: Colors.black,
-          error: Colors.grey,
+          error: Colors.redAccent,
           onPrimary: Colors.black,
           onSecondary: Colors.white,
           onSurface: Colors.white,
           onError: Colors.black,
         ),
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.black,
+          elevation: 0,
+          centerTitle: true,
+          titleTextStyle: GoogleFonts.inter(
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
+        buttonTheme: const ButtonThemeData(
+          buttonColor: Colors.deepPurpleAccent,
+          textTheme: ButtonTextTheme.primary,
+        ),
       ),
-      home: isLoggedIn
-          ? FeedPage(npub: npub!)
-          : const SplashScreen(),
+      home: isLoggedIn ? FeedPage(npub: npub!) : const SplashScreen(),
     );
   }
 }
@@ -127,7 +146,11 @@ class SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      body: Center(child: CircularProgressIndicator()),
+      body: Center(
+        child: CircularProgressIndicator(
+          color: Colors.deepPurpleAccent,
+        ),
+      ),
     );
   }
 }
@@ -138,14 +161,21 @@ class HiveErrorApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: Colors.black,
+        textTheme: GoogleFonts.interTextTheme(),
+      ),
       home: Scaffold(
         appBar: AppBar(
           title: const Text('Initialization Error'),
         ),
-        body: const Center(
+        body: Center(
           child: Text(
             'An error occurred while initializing the application.',
-            style: TextStyle(fontSize: 18),
+            style: GoogleFonts.inter(
+              fontSize: 18,
+              color: Colors.white,
+            ),
             textAlign: TextAlign.center,
           ),
         ),
