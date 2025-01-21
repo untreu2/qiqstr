@@ -40,24 +40,24 @@ abstract class BaseFeedPageState<T extends BaseFeedPage> extends State<T> {
     _scrollController.addListener(_onScroll);
   }
 
-  Future<void> _initialize() async {
-    try {
-      await _dataService.initialize();
-      await _dataService.loadNotesFromCache((cachedNotes) {
-        setState(() {
-          _items.addAll(cachedNotes);
-          _updateNoteCounts();
-        });
+Future<void> _initialize() async {
+  try {
+    await _dataService.initialize();
+    await _dataService.loadNotesFromCache((cachedNotes) {
+      setState(() {
+        _items.clear();
+        _items.addAll(cachedNotes);
+        _sortNotes();
       });
-      await _dataService.initializeConnections();
-    } catch (e) {
-      _showErrorSnackBar('Failed to initialize: $e');
-    } finally {
-      if (mounted) {
-        setState(() => _isInitializing = false);
-      }
-    }
+    });
+    await _dataService.initializeConnections();
+  } catch (e) {
+    _showErrorSnackBar('Failed to initialize: $e');
+  } finally {
+    setState(() => _isInitializing = false);
   }
+}
+
 
   void _handleNewNote(NoteModel newNote) {
     setState(() {
@@ -68,13 +68,19 @@ abstract class BaseFeedPageState<T extends BaseFeedPage> extends State<T> {
     });
   }
 
-  void _sortNotes() {
-    _items.sort((a, b) {
-      DateTime aTimestamp = a.isRepost ? a.repostTimestamp ?? a.timestamp : a.timestamp;
-      DateTime bTimestamp = b.isRepost ? b.repostTimestamp ?? b.timestamp : b.timestamp;
-      return bTimestamp.compareTo(aTimestamp);
-    });
+void _sortNotes() {
+  _items.sort((a, b) {
+    DateTime aTimestamp = a.isRepost ? a.repostTimestamp ?? a.timestamp : a.timestamp;
+    DateTime bTimestamp = b.isRepost ? b.repostTimestamp ?? b.timestamp : b.timestamp;
+    return bTimestamp.compareTo(aTimestamp);
+  });
+
+  debugPrint('Notes sorted:');
+  for (var note in _items) {
+    debugPrint('ID: ${note.id}, Timestamp: ${note.timestamp}, Repost: ${note.repostTimestamp}');
   }
+}
+
 
   void _handleReactionsUpdated(String noteId, List<ReactionModel> reactions) {
     setState(() {
@@ -98,13 +104,6 @@ abstract class BaseFeedPageState<T extends BaseFeedPage> extends State<T> {
     setState(() {
       _replyCounts[noteId] = count;
     });
-  }
-
-  void _updateNoteCounts() {
-    for (var note in _items) {
-      _reactionCounts[note.id] = _dataService.reactionsMap[note.id]?.length ?? 0;
-      _replyCounts[note.id] = _dataService.repliesMap[note.id]?.length ?? 0;
-    }
   }
 
   void _onScroll() {
