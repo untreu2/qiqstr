@@ -66,6 +66,14 @@ class ProfileInfoWidget extends StatelessWidget {
                           fontSize: 14.0,
                         ),
                       ),
+                    if (user.lud16.isNotEmpty)
+                      Text(
+                        user.lud16,
+                        style: TextStyle(
+                          color: Colors.amber[800],
+                          fontSize: 14.0,
+                        ),
+                      ),
                     if (user.about.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 4.0),

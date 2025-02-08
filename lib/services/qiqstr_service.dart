@@ -133,36 +133,29 @@ class DataService {
   final Function(String, List<ReplyModel>)? onRepliesUpdated;
   final Function(String, int)? onReactionCountUpdated;
   final Function(String, int)? onReplyCountUpdated;
-
   List<NoteModel> notes = [];
   final Set<String> eventIds = {};
   final Map<String, List<ReactionModel>> reactionsMap = {};
   final Map<String, List<ReplyModel>> repliesMap = {};
   final Map<String, CachedProfile> profileCache = {};
-
   Box<UserModel>? usersBox;
   Box<NoteModel>? notesBox;
   Box<ReactionModel>? reactionsBox;
   Box<ReplyModel>? repliesBox;
-
   late WebSocketManager _socketManager;
   bool _isInitialized = false;
   bool _isClosed = false;
   Timer? _checkNewNotesTimer;
   Timer? _cacheCleanupTimer;
   final int currentLimit = 75;
-
   final Map<String, Completer<Map<String, String>>> _pendingProfileRequests = {};
   final Map<String, String> _profileSubscriptionIds = {};
-
   late ReceivePort _receivePort;
   late Isolate _isolate;
   late SendPort _sendPort;
   final Completer<void> _sendPortReadyCompleter = Completer<void>();
-
   Function(List<NoteModel>)? _onCacheLoad;
   final Uuid _uuid = Uuid();
-
   final Duration profileCacheTTL = const Duration(hours: 24);
   final Duration cacheCleanupInterval = const Duration(hours: 12);
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
@@ -525,12 +518,14 @@ class DataService {
       final about = profileContent['about'] as String? ?? '';
       final nip05 = profileContent['nip05'] as String? ?? '';
       final banner = profileContent['banner'] as String? ?? '';
+      final lud16 = profileContent['lud16'] as String? ?? '';
       profileCache[author] = CachedProfile({
         'name': userName,
         'profileImage': profileImage,
         'about': about,
         'nip05': nip05,
         'banner': banner,
+        'lud16': lud16,
       }, DateTime.now());
       if (usersBox != null && usersBox!.isOpen) {
         final userModel = UserModel(
@@ -540,6 +535,7 @@ class DataService {
           nip05: nip05,
           banner: banner,
           profileImage: profileImage,
+          lud16: lud16,
           updatedAt: DateTime.now(),
         );
         await usersBox!.put(author, userModel);
@@ -573,6 +569,7 @@ class DataService {
           'about': user.about,
           'nip05': user.nip05,
           'banner': user.banner,
+          'lud16': user.lud16,
         };
         profileCache[npub] = CachedProfile(data, user.updatedAt);
         return data;
@@ -602,6 +599,7 @@ class DataService {
       'about': '',
       'nip05': '',
       'banner': '',
+      'lud16': '',
     };
   }
 

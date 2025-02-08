@@ -23,6 +23,9 @@ class UserModel extends HiveObject {
   final String profileImage;
 
   @HiveField(6)
+  final String lud16;
+
+  @HiveField(7)
   final DateTime updatedAt;
 
   UserModel({
@@ -32,6 +35,7 @@ class UserModel extends HiveObject {
     required this.nip05,
     required this.banner,
     required this.profileImage,
+    required this.lud16,
     required this.updatedAt,
   });
 
@@ -43,6 +47,7 @@ class UserModel extends HiveObject {
       nip05: data['nip05'] ?? '',
       banner: data['banner'] ?? '',
       profileImage: data['profileImage'] ?? '',
+      lud16: data['lud16'] ?? '',
       updatedAt: DateTime.now(),
     );
   }
@@ -55,6 +60,7 @@ class UserModel extends HiveObject {
       nip05: json['nip05'] as String,
       banner: json['banner'] as String,
       profileImage: json['profileImage'] as String,
+      lud16: json['lud16'] as String? ?? '',
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
   }
@@ -66,6 +72,7 @@ class UserModel extends HiveObject {
         'nip05': nip05,
         'banner': banner,
         'profileImage': profileImage,
+        'lud16': lud16,
         'updatedAt': updatedAt.toIso8601String(),
       };
 }

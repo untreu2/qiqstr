@@ -23,14 +23,15 @@ class UserModelAdapter extends TypeAdapter<UserModel> {
       nip05: fields[3] as String,
       banner: fields[4] as String,
       profileImage: fields[5] as String,
-      updatedAt: fields[6] as DateTime,
+      lud16: fields[6] as String,
+      updatedAt: fields[7] as DateTime,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserModel obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(8)
       ..writeByte(0)
       ..write(obj.npub)
       ..writeByte(1)
@@ -44,6 +45,8 @@ class UserModelAdapter extends TypeAdapter<UserModel> {
       ..writeByte(5)
       ..write(obj.profileImage)
       ..writeByte(6)
+      ..write(obj.lud16)
+      ..writeByte(7)
       ..write(obj.updatedAt);
   }
 
