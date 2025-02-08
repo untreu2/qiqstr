@@ -1,5 +1,4 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/screens/send_reply.dart';
@@ -13,14 +12,14 @@ class NoteWidget extends StatefulWidget {
   final NoteModel note;
   final int reactionCount;
   final int replyCount;
-  final DataService dataService; 
+  final DataService dataService;
 
   const NoteWidget({
     Key? key,
     required this.note,
     required this.reactionCount,
     required this.replyCount,
-    required this.dataService, 
+    required this.dataService,
   }) : super(key: key);
 
   @override
@@ -38,12 +37,10 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-
     _highlightController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-
     _highlightAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _highlightController, curve: Curves.easeInOut),
     );
@@ -86,7 +83,6 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
 
   String _formatTimestamp(DateTime timestamp) {
     final Duration difference = DateTime.now().difference(timestamp);
-
     if (difference.inSeconds < 60) {
       return '${difference.inSeconds} seconds ago';
     } else if (difference.inMinutes < 60) {
@@ -114,8 +110,6 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
     });
     try {
       await widget.dataService.sendReaction(widget.note.id, '💜');
-      setState(() {
-      });
     } catch (e) {
       print('Error sending reaction: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -154,10 +148,130 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
     );
   }
 
+  Widget _buildAuthorInfo(String npub) {
+    return FutureBuilder<Map<String, String>>(
+      future: widget.dataService.getCachedUserProfile(npub),
+      builder: (context, snapshot) {
+        String name = 'Anonymous';
+        String profileImage = '';
+        if (snapshot.hasData) {
+          name = snapshot.data!['name'] ?? 'Anonymous';
+          profileImage = snapshot.data!['profileImage'] ?? '';
+        }
+        return Row(
+          children: [
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => ProfilePage(npub: npub)),
+                );
+              },
+              child: profileImage.isNotEmpty
+                  ? CircleAvatar(
+                      radius: 20,
+                      backgroundImage: CachedNetworkImageProvider(profileImage),
+                      backgroundColor: Colors.transparent,
+                    )
+                  : const CircleAvatar(
+                      radius: 16,
+                      child: Icon(Icons.person, size: 16),
+                    ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => ProfilePage(npub: npub)),
+                );
+              },
+              child: Text(
+                name,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildRepostInfo(String npub, DateTime? repostTimestamp) {
+    return FutureBuilder<Map<String, String>>(
+      future: widget.dataService.getCachedUserProfile(npub),
+      builder: (context, snapshot) {
+        String name = "Unknown";
+        String profileImage = "";
+        if (snapshot.hasData) {
+          name = snapshot.data!['name'] ?? "Unknown";
+          profileImage = snapshot.data!['profileImage'] ?? "";
+        }
+        return GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => ProfilePage(npub: npub)),
+            );
+          },
+          child: Row(
+            children: [
+              const Icon(
+                Icons.repeat,
+                size: 16.0,
+                color: Colors.grey,
+              ),
+              const SizedBox(width: 8.0),
+              profileImage.isNotEmpty
+                  ? CircleAvatar(
+                      radius: 12,
+                      backgroundImage: CachedNetworkImageProvider(profileImage),
+                      backgroundColor: Colors.transparent,
+                    )
+                  : const CircleAvatar(
+                      radius: 12,
+                      child: Icon(Icons.person, size: 12),
+                    ),
+              const SizedBox(width: 6.0),
+              Expanded(
+                child: Row(
+                  children: [
+                    Text(
+                      'Reposted by $name',
+                      style: const TextStyle(
+                        fontSize: 12.0,
+                        color: Colors.grey,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (repostTimestamp != null) ...[
+                      const SizedBox(width: 6.0),
+                      Text(
+                        '• ${_formatTimestamp(repostTimestamp)}',
+                        style: const TextStyle(
+                          fontSize: 12.0,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final parsedContent = _parseContent(widget.note.content);
-
     return GestureDetector(
       onDoubleTapDown: _handleDoubleTap,
       onHorizontalDragEnd: _handleHorizontalDragEnd,
@@ -185,45 +299,7 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
               padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 2.0),
               child: Row(
                 children: [
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) =>
-                                ProfilePage(npub: widget.note.author)),
-                      );
-                    },
-                    child: widget.note.authorProfileImage.isNotEmpty
-                        ? CircleAvatar(
-                            radius: 20,
-                            backgroundImage: CachedNetworkImageProvider(
-                                widget.note.authorProfileImage),
-                            backgroundColor: Colors.transparent,
-                          )
-                        : const CircleAvatar(
-                            radius: 16,
-                            child: Icon(Icons.person, size: 16),
-                          ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (context) =>
-                                ProfilePage(npub: widget.note.author)),
-                      );
-                    },
-                    child: Text(
-                      widget.note.authorName,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
+                  _buildAuthorInfo(widget.note.author),
                   const Spacer(),
                   Text(
                     _formatTimestamp(widget.note.timestamp),
@@ -234,90 +310,17 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
             ),
             if (widget.note.isRepost && widget.note.repostedBy != null)
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
-                child: GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            ProfilePage(npub: widget.note.repostedBy!),
-                      ),
-                    );
-                  },
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.repeat,
-                        size: 16.0,
-                        color: Colors.grey,
-                      ),
-                      const SizedBox(width: 8.0),
-                      widget.note.repostedByProfileImage != null &&
-                              widget.note.repostedByProfileImage!.isNotEmpty
-                          ? GestureDetector(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        ProfilePage(npub: widget.note.repostedBy!),
-                                  ),
-                                );
-                              },
-                              child: CircleAvatar(
-                                radius: 12,
-                                backgroundImage: CachedNetworkImageProvider(
-                                    widget.note.repostedByProfileImage!),
-                                backgroundColor: Colors.transparent,
-                              ),
-                            )
-                          : const CircleAvatar(
-                              radius: 12,
-                              child: Icon(Icons.person, size: 12),
-                            ),
-                      const SizedBox(width: 6.0),
-                      Expanded(
-                        child: Row(
-                          children: [
-                            Text(
-                              'Reposted by ${widget.note.repostedByName ?? "Unknown"}',
-                              style: const TextStyle(
-                                fontSize: 12.0,
-                                color: Colors.grey,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            if (widget.note.repostTimestamp != null) ...[
-                              const SizedBox(width: 6.0),
-                              Text(
-                                '• ${_formatTimestamp(widget.note.repostTimestamp!)}',
-                                style: const TextStyle(
-                                  fontSize: 12.0,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                child: _buildRepostInfo(widget.note.repostedBy!, widget.note.repostTimestamp),
               ),
             if (parsedContent['text'] != null &&
                 (parsedContent['text'] as String).isNotEmpty)
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
                 child: Text(
                   parsedContent['text'],
                   style: TextStyle(
-                    fontSize:
-                        (parsedContent['text'] as String).length < 21
-                            ? 20.0
-                            : 15.0,
+                    fontSize: (parsedContent['text'] as String).length < 21 ? 20.0 : 15.0,
                     fontWeight: FontWeight.normal,
                   ),
                 ),
@@ -330,7 +333,6 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                   mediaUrls: parsedContent['mediaUrls'] as List<String>,
                 ),
               ),
-
             if (parsedContent['linkUrls'] != null &&
                 (parsedContent['linkUrls'] as List).isNotEmpty)
               Padding(
@@ -339,10 +341,8 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                   linkUrls: parsedContent['linkUrls'] as List<String>,
                 ),
               ),
-
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
               child: Row(
                 children: [
                   Row(

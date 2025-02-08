@@ -20,12 +20,6 @@ class ReactionModel extends HiveObject {
   final DateTime timestamp;
 
   @HiveField(5)
-  final String authorName;
-
-  @HiveField(6)
-  final String authorProfileImage;
-
-  @HiveField(7)
   final DateTime fetchedAt;
 
   ReactionModel({
@@ -34,12 +28,10 @@ class ReactionModel extends HiveObject {
     required this.author,
     required this.content,
     required this.timestamp,
-    required this.authorName,
-    required this.authorProfileImage,
     required this.fetchedAt,
   });
 
-  factory ReactionModel.fromEvent(Map<String, dynamic> eventData, Map<String, String> profile) {
+  factory ReactionModel.fromEvent(Map<String, dynamic> eventData) {
     String? targetEventId;
     for (var tag in eventData['tags']) {
       if (tag.length >= 2 && tag[0] == 'e') {
@@ -47,21 +39,15 @@ class ReactionModel extends HiveObject {
         break;
       }
     }
-
     if (targetEventId == null) {
       throw Exception('targetEventId not found for reaction.');
     }
-
     return ReactionModel(
       id: eventData['id'] as String,
       targetEventId: targetEventId,
       author: eventData['pubkey'] as String,
       content: eventData['content'] as String,
-      timestamp: DateTime.fromMillisecondsSinceEpoch(
-        (eventData['created_at'] as int) * 1000,
-      ),
-      authorName: profile['name'] ?? 'Anonymous',
-      authorProfileImage: profile['profileImage'] ?? '',
+      timestamp: DateTime.fromMillisecondsSinceEpoch((eventData['created_at'] as int) * 1000),
       fetchedAt: DateTime.now(),
     );
   }
@@ -73,8 +59,6 @@ class ReactionModel extends HiveObject {
       author: json['author'],
       content: json['content'],
       timestamp: DateTime.parse(json['timestamp']),
-      authorName: json['authorName'],
-      authorProfileImage: json['authorProfileImage'],
       fetchedAt: DateTime.parse(json['fetchedAt']),
     );
   }
@@ -86,8 +70,6 @@ class ReactionModel extends HiveObject {
       'author': author,
       'content': content,
       'timestamp': timestamp.toIso8601String(),
-      'authorName': authorName,
-      'authorProfileImage': authorProfileImage,
       'fetchedAt': fetchedAt.toIso8601String(),
     };
   }

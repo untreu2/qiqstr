@@ -22,16 +22,14 @@ class ReplyModelAdapter extends TypeAdapter<ReplyModel> {
       content: fields[2] as String,
       timestamp: fields[3] as DateTime,
       parentEventId: fields[4] as String,
-      authorName: fields[5] as String,
-      authorProfileImage: fields[6] as String,
-      fetchedAt: fields[7] as DateTime,
+      fetchedAt: fields[5] as DateTime,
     );
   }
 
   @override
   void write(BinaryWriter writer, ReplyModel obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(6)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -43,10 +41,6 @@ class ReplyModelAdapter extends TypeAdapter<ReplyModel> {
       ..writeByte(4)
       ..write(obj.parentEventId)
       ..writeByte(5)
-      ..write(obj.authorName)
-      ..writeByte(6)
-      ..write(obj.authorProfileImage)
-      ..writeByte(7)
       ..write(obj.fetchedAt);
   }
 
