@@ -1005,9 +1005,7 @@ class DataService {
   void _logError(String error) {
     print('[DataService ERROR] $error');
   }
-}
 
-extension DataServiceFetchExtensions on DataService {
   String _extractIdentifier(String uri) {
     return uri.startsWith('nostr:') ? uri.substring(6) : uri;
   }
