@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter_linkify/flutter_linkify.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:qiqstr/screens/send_reply.dart';
 import 'package:qiqstr/widgets/link_preview_widget.dart';
 import 'package:qiqstr/widgets/media_preview_widget.dart';
@@ -26,12 +28,11 @@ class NoteWidget extends StatefulWidget {
   _NoteWidgetState createState() => _NoteWidgetState();
 }
 
-class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateMixin {
+class _NoteWidgetState extends State<NoteWidget>
+    with SingleTickerProviderStateMixin {
   late AnimationController _highlightController;
   late Animation<double> _highlightAnimation;
-
   final PageController _pageController = PageController();
-
   bool _isGlowing = false;
 
   @override
@@ -54,10 +55,12 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
   }
 
   Map<String, dynamic> _parseContent(String content) {
-    final RegExp mediaRegExp =
-        RegExp(r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|mp4|mov))', caseSensitive: false);
+    final RegExp mediaRegExp = RegExp(
+        r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|mp4|mov))',
+        caseSensitive: false);
     final Iterable<RegExpMatch> mediaMatches = mediaRegExp.allMatches(content);
-    final List<String> mediaUrls = mediaMatches.map((m) => m.group(0)!).toList();
+    final List<String> mediaUrls =
+        mediaMatches.map((m) => m.group(0)!).toList();
 
     final RegExp linkRegExp = RegExp(r'(https?:\/\/\S+)', caseSensitive: false);
     final Iterable<RegExpMatch> linkMatches = linkRegExp.allMatches(content);
@@ -69,10 +72,7 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
             !url.toLowerCase().endsWith('.mov'))
         .toList();
 
-    final String text = content
-        .replaceAll(mediaRegExp, '')
-        .replaceAll(linkRegExp, '')
-        .trim();
+    final String text = content.replaceAll(mediaRegExp, '').trim();
 
     return {
       'text': text,
@@ -83,25 +83,21 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
 
   String _formatTimestamp(DateTime timestamp) {
     final Duration difference = DateTime.now().difference(timestamp);
-    if (difference.inSeconds < 60) {
-      return '${difference.inSeconds} seconds ago';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes} minutes ago';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours} hours ago';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays} days ago';
-    } else if (difference.inDays < 30) {
+    if (difference.inSeconds < 60) return '${difference.inSeconds} seconds ago';
+    if (difference.inMinutes < 60) return '${difference.inMinutes} minutes ago';
+    if (difference.inHours < 24) return '${difference.inHours} hours ago';
+    if (difference.inDays < 7) return '${difference.inDays} days ago';
+    if (difference.inDays < 30)
       return '${(difference.inDays / 7).floor()} weeks ago';
-    } else if (difference.inDays < 365) {
+    if (difference.inDays < 365)
       return '${(difference.inDays / 30).floor()} months ago';
-    } else {
-      return '${(difference.inDays / 365).floor()} years ago';
-    }
+    return '${(difference.inDays / 365).floor()} years ago';
   }
 
   void _showHighlight() {
-    _highlightController.forward(from: 0.0).then((_) => _highlightController.reverse());
+    _highlightController
+        .forward(from: 0.0)
+        .then((_) => _highlightController.reverse());
   }
 
   void _handleDoubleTap(TapDownDetails details) async {
@@ -111,7 +107,6 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
     try {
       await widget.dataService.sendReaction(widget.note.id, '💜');
     } catch (e) {
-      print('Error sending reaction: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error sending reaction: $e')),
       );
@@ -163,10 +158,9 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
             GestureDetector(
               onTap: () {
                 Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => ProfilePage(npub: npub)),
-                );
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => ProfilePage(npub: npub)));
               },
               child: profileImage.isNotEmpty
                   ? CircleAvatar(
@@ -183,17 +177,14 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
             GestureDetector(
               onTap: () {
                 Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (context) => ProfilePage(npub: npub)),
-                );
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => ProfilePage(npub: npub)));
               },
               child: Text(
                 name,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
+                style:
+                    const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -206,26 +197,22 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
     return FutureBuilder<Map<String, String>>(
       future: widget.dataService.getCachedUserProfile(npub),
       builder: (context, snapshot) {
-        String name = "Unknown";
-        String profileImage = "";
+        String name = 'Unknown';
+        String profileImage = '';
         if (snapshot.hasData) {
-          name = snapshot.data!['name'] ?? "Unknown";
-          profileImage = snapshot.data!['profileImage'] ?? "";
+          name = snapshot.data!['name'] ?? 'Unknown';
+          profileImage = snapshot.data!['profileImage'] ?? '';
         }
         return GestureDetector(
           onTap: () {
             Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => ProfilePage(npub: npub)),
-            );
+                context,
+                MaterialPageRoute(
+                    builder: (context) => ProfilePage(npub: npub)));
           },
           child: Row(
             children: [
-              const Icon(
-                Icons.repeat,
-                size: 16.0,
-                color: Colors.grey,
-              ),
+              const Icon(Icons.repeat, size: 16.0, color: Colors.grey),
               const SizedBox(width: 8.0),
               profileImage.isNotEmpty
                   ? CircleAvatar(
@@ -243,20 +230,16 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
                   children: [
                     Text(
                       'Reposted by $name',
-                      style: const TextStyle(
-                        fontSize: 12.0,
-                        color: Colors.grey,
-                      ),
+                      style:
+                          const TextStyle(fontSize: 12.0, color: Colors.grey),
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (repostTimestamp != null) ...[
                       const SizedBox(width: 6.0),
                       Text(
                         '• ${_formatTimestamp(repostTimestamp)}',
-                        style: const TextStyle(
-                          fontSize: 12.0,
-                          color: Colors.grey,
-                        ),
+                        style:
+                            const TextStyle(fontSize: 12.0, color: Colors.grey),
                       ),
                     ],
                   ],
@@ -267,6 +250,17 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
         );
       },
     );
+  }
+
+  Future<void> _onOpen(LinkableElement link) async {
+    final Uri url = Uri.parse(link.url);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not launch ${link.url}')),
+      );
+    }
   }
 
   @override
@@ -283,7 +277,8 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
             child: Container(
               decoration: BoxDecoration(
                 border: Border.all(
-                  color: Colors.white.withOpacity(_highlightAnimation.value * 0.8),
+                  color:
+                      Colors.white.withOpacity(_highlightAnimation.value * 0.8),
                   width: 1.5,
                 ),
                 borderRadius: BorderRadius.circular(10.0),
@@ -296,7 +291,8 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 2.0),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 2.0),
               child: Row(
                 children: [
                   _buildAuthorInfo(widget.note.author),
@@ -310,19 +306,25 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
             ),
             if (widget.note.isRepost && widget.note.repostedBy != null)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
-                child: _buildRepostInfo(widget.note.repostedBy!, widget.note.repostTimestamp),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                child: _buildRepostInfo(
+                    widget.note.repostedBy!, widget.note.repostTimestamp),
               ),
             if (parsedContent['text'] != null &&
                 (parsedContent['text'] as String).isNotEmpty)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
-                child: Text(
-                  parsedContent['text'],
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+                child: Linkify(
+                  text: parsedContent['text'] as String,
+                  onOpen: _onOpen,
                   style: TextStyle(
-                    fontSize: (parsedContent['text'] as String).length < 21 ? 20.0 : 15.0,
-                    fontWeight: FontWeight.normal,
-                  ),
+                      fontSize: (parsedContent['text'] as String).length < 21
+                          ? 20.0
+                          : 15.0),
+                  linkStyle: const TextStyle(
+                      color: Colors.amberAccent, fontStyle: FontStyle.italic),
                 ),
               ),
             if (parsedContent['mediaUrls'] != null &&
@@ -330,54 +332,39 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4.0),
                 child: MediaPreviewWidget(
-                  mediaUrls: parsedContent['mediaUrls'] as List<String>,
-                ),
+                    mediaUrls: parsedContent['mediaUrls'] as List<String>),
               ),
             if (parsedContent['linkUrls'] != null &&
                 (parsedContent['linkUrls'] as List).isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4.0),
                 child: LinkPreviewWidget(
-                  linkUrls: parsedContent['linkUrls'] as List<String>,
-                ),
+                    linkUrls: parsedContent['linkUrls'] as List<String>),
               ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
               child: Row(
                 children: [
                   Row(
                     children: [
-                      Icon(
-                        Icons.favorite,
-                        size: 16.0,
-                        color: _isGlowing ? Colors.red : Colors.grey,
-                      ),
+                      Icon(Icons.favorite,
+                          size: 16.0,
+                          color: _isGlowing ? Colors.red : Colors.grey),
                       const SizedBox(width: 4.0),
-                      Text(
-                        widget.reactionCount.toString(),
-                        style: const TextStyle(
-                          fontSize: 12.0,
-                          color: Colors.grey,
-                        ),
-                      ),
+                      Text(widget.reactionCount.toString(),
+                          style: const TextStyle(
+                              fontSize: 12.0, color: Colors.grey)),
                     ],
                   ),
                   const SizedBox(width: 24.0),
                   Row(
                     children: [
-                      const Icon(
-                        Icons.reply,
-                        size: 16.0,
-                        color: Colors.grey,
-                      ),
+                      const Icon(Icons.reply, size: 16.0, color: Colors.grey),
                       const SizedBox(width: 4.0),
-                      Text(
-                        widget.replyCount.toString(),
-                        style: const TextStyle(
-                          fontSize: 12.0,
-                          color: Colors.grey,
-                        ),
-                      ),
+                      Text(widget.replyCount.toString(),
+                          style: const TextStyle(
+                              fontSize: 12.0, color: Colors.grey)),
                     ],
                   ),
                 ],
@@ -385,11 +372,7 @@ class _NoteWidgetState extends State<NoteWidget> with SingleTickerProviderStateM
             ),
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 6.0),
-              child: Divider(
-                height: 0.5, 
-                thickness: 0.5,
-                color: Colors.grey,
-              ),
+              child: Divider(height: 0.5, thickness: 0.5, color: Colors.grey),
             ),
           ],
         ),
