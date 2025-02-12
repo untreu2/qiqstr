@@ -35,10 +35,9 @@ class WebSocketManager {
   final Duration connectionTimeout;
   bool _isClosed = false;
 
-  WebSocketManager({
-    required this.relayUrls,
-    this.connectionTimeout = const Duration(seconds: 1),
-  });
+  WebSocketManager(
+      {required this.relayUrls,
+      this.connectionTimeout = const Duration(seconds: 1)});
 
   List<WebSocket> get activeSockets => _webSockets.values.toList();
   bool get isConnected => _webSockets.isNotEmpty;
@@ -430,6 +429,12 @@ class DataService {
         } else if (kind == 1) {
           await _processNoteEvent(eventData, targetNpubs);
         } else if (kind == 6) {
+          try {
+            final parsedContent = jsonDecode(eventData['content']);
+            if (parsedContent is Map && parsedContent.containsKey('content')) {
+              await _processNoteEvent(eventData, targetNpubs);
+            }
+          } catch (e) {}
           await _handleRepostEvent(eventData);
         }
       }
@@ -492,10 +497,6 @@ class DataService {
         await _subscribeToAllReactions();
       }
     }
-  }
-
-  void _sortNotes() {
-    notes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
   }
 
   Future<void> _handleReactionEvent(Map<String, dynamic> eventData) async {
@@ -758,20 +759,6 @@ class DataService {
         replies.removeWhere(
             (reply) => now.difference(reply.fetchedAt) > profileCacheTTL);
       });
-      await Future.wait([
-        if (reactionsBox != null && reactionsBox!.isOpen)
-          reactionsBox!.deleteAll(reactionsBox!.keys.where((key) {
-            final reaction = reactionsBox!.get(key);
-            return reaction != null &&
-                now.difference(reaction.fetchedAt) > profileCacheTTL;
-          })),
-        if (repliesBox != null && repliesBox!.isOpen)
-          repliesBox!.deleteAll(repliesBox!.keys.where((key) {
-            final reply = repliesBox!.get(key);
-            return reply != null &&
-                now.difference(reply.fetchedAt) > profileCacheTTL;
-          })),
-      ]);
       print('[DataService] Performed cache cleanup.');
     });
     print('[DataService] Started cache cleanup timer.');
@@ -1093,6 +1080,10 @@ class DataService {
   }
 
   String generateUUID() => _uuid.v4().replaceAll('-', '');
+
+  void _sortNotes() {
+    notes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  }
 
   Future<void> closeConnections() async {
     if (_isClosed) return;

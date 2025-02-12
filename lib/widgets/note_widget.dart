@@ -14,6 +14,7 @@ class NoteWidget extends StatefulWidget {
   final NoteModel note;
   final int reactionCount;
   final int replyCount;
+  final int repostCount;
   final DataService dataService;
 
   const NoteWidget({
@@ -21,6 +22,7 @@ class NoteWidget extends StatefulWidget {
     required this.note,
     required this.reactionCount,
     required this.replyCount,
+    required this.repostCount,
     required this.dataService,
   }) : super(key: key);
 
@@ -61,7 +63,6 @@ class _NoteWidgetState extends State<NoteWidget>
     final Iterable<RegExpMatch> mediaMatches = mediaRegExp.allMatches(content);
     final List<String> mediaUrls =
         mediaMatches.map((m) => m.group(0)!).toList();
-
     final RegExp linkRegExp = RegExp(r'(https?:\/\/\S+)', caseSensitive: false);
     final Iterable<RegExpMatch> linkMatches = linkRegExp.allMatches(content);
     final List<String> linkUrls = linkMatches
@@ -71,9 +72,7 @@ class _NoteWidgetState extends State<NoteWidget>
             !url.toLowerCase().endsWith('.mp4') &&
             !url.toLowerCase().endsWith('.mov'))
         .toList();
-
     final String text = content.replaceAll(mediaRegExp, '').trim();
-
     return {
       'text': text,
       'mediaUrls': mediaUrls,
@@ -363,6 +362,16 @@ class _NoteWidgetState extends State<NoteWidget>
                       const Icon(Icons.reply, size: 16.0, color: Colors.grey),
                       const SizedBox(width: 4.0),
                       Text(widget.replyCount.toString(),
+                          style: const TextStyle(
+                              fontSize: 12.0, color: Colors.grey)),
+                    ],
+                  ),
+                  const SizedBox(width: 24.0),
+                  Row(
+                    children: [
+                      const Icon(Icons.repeat, size: 16.0, color: Colors.grey),
+                      const SizedBox(width: 4.0),
+                      Text(widget.repostCount.toString(),
                           style: const TextStyle(
                               fontSize: 12.0, color: Colors.grey)),
                     ],

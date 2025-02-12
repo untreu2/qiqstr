@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'models/note_model.dart';
 import 'models/reaction_model.dart';
 import 'models/reply_model.dart';
+import 'models/repost_model.dart';
 import 'models/user_model.dart';
 import 'screens/login_page.dart';
 import 'screens/feed_page.dart';
@@ -17,6 +18,7 @@ void main() async {
     Hive.registerAdapter(NoteModelAdapter());
     Hive.registerAdapter(ReactionModelAdapter());
     Hive.registerAdapter(ReplyModelAdapter());
+    Hive.registerAdapter(RepostModelAdapter());
     Hive.registerAdapter(UserModelAdapter());
 
     const FlutterSecureStorage secureStorage = FlutterSecureStorage();
@@ -27,9 +29,11 @@ void main() async {
       await Hive.openBox<NoteModel>('notes_Feed_$npub');
       await Hive.openBox<ReactionModel>('reactions_Feed_$npub');
       await Hive.openBox<ReplyModel>('replies_Feed_$npub');
+      await Hive.openBox<RepostModel>('reposts_Feed_$npub');
       await Hive.openBox<NoteModel>('notes_Profile_$npub');
       await Hive.openBox<ReactionModel>('reactions_Profile_$npub');
       await Hive.openBox<ReplyModel>('replies_Profile_$npub');
+      await Hive.openBox<RepostModel>('reposts_Profile_$npub');
       await Hive.openBox<UserModel>('users');
     }
 
@@ -117,9 +121,11 @@ class SplashScreenState extends State<SplashScreen> {
         await Hive.openBox<NoteModel>('notes_Feed_$npub');
         await Hive.openBox<ReactionModel>('reactions_Feed_$npub');
         await Hive.openBox<ReplyModel>('replies_Feed_$npub');
+        await Hive.openBox<RepostModel>('reposts_Feed_$npub');
         await Hive.openBox<NoteModel>('notes_Profile_$npub');
         await Hive.openBox<ReactionModel>('reactions_Profile_$npub');
         await Hive.openBox<ReplyModel>('replies_Profile_$npub');
+        await Hive.openBox<RepostModel>('reposts_Profile_$npub');
         await Hive.openBox<UserModel>('users');
 
         Navigator.pushReplacement(

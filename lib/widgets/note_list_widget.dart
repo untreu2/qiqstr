@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/models/reaction_model.dart';
 import 'package:qiqstr/models/reply_model.dart';
+import 'package:qiqstr/models/repost_model.dart';
 import 'package:qiqstr/services/qiqstr_service.dart';
 import 'package:qiqstr/widgets/note_widget.dart';
 
@@ -26,6 +27,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   bool _isLoadingOlderNotes = false;
   Map<String, int> _reactionCounts = {};
   Map<String, int> _replyCounts = {};
+  Map<String, int> _repostCounts = {};
 
   @override
   void initState() {
@@ -38,6 +40,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       onRepliesUpdated: _handleRepliesUpdated,
       onReactionCountUpdated: _updateReactionCount,
       onReplyCountUpdated: _updateReplyCount,
+      onRepostsUpdated: _handleRepostsUpdated,
+      onRepostCountUpdated: _updateRepostCount,
     );
     _initialize();
   }
@@ -52,8 +56,12 @@ class _NoteListWidgetState extends State<NoteListWidget> {
           _sortNotes();
 
           for (var note in _items) {
-            _reactionCounts[note.id] = _dataService.reactionsMap[note.id]?.length ?? 0;
-            _replyCounts[note.id] = _dataService.repliesMap[note.id]?.length ?? 0;
+            _reactionCounts[note.id] =
+                _dataService.reactionsMap[note.id]?.length ?? 0;
+            _replyCounts[note.id] =
+                _dataService.repliesMap[note.id]?.length ?? 0;
+            _repostCounts[note.id] =
+                _dataService.repostsMap[note.id]?.length ?? 0;
           }
         });
       });
@@ -71,6 +79,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       _sortNotes();
       _reactionCounts[newNote.id] = 0;
       _replyCounts[newNote.id] = 0;
+      _repostCounts[newNote.id] = 0;
     });
   }
 
@@ -82,7 +91,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
           b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
       return bTimestamp.compareTo(aTimestamp);
     });
-
     debugPrint('Notes sorted:');
     for (var note in _items) {
       debugPrint(
@@ -102,6 +110,12 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     });
   }
 
+  void _handleRepostsUpdated(String noteId, List<RepostModel> reposts) {
+    setState(() {
+      _repostCounts[noteId] = reposts.length;
+    });
+  }
+
   void _updateReactionCount(String noteId, int count) {
     setState(() {
       _reactionCounts[noteId] = count;
@@ -114,18 +128,26 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     });
   }
 
+  void _updateRepostCount(String noteId, int count) {
+    setState(() {
+      _repostCounts[noteId] = count;
+    });
+  }
+
   Future<void> _loadOlderNotes() async {
     if (_isLoadingOlderNotes) return;
     setState(() => _isLoadingOlderNotes = true);
     try {
-      await _dataService.fetchOlderNotes(widget.dataType == DataType.Feed
-          ? await _dataService.getFollowingList(widget.npub)
-          : [widget.npub], (olderNote) {
+      await _dataService.fetchOlderNotes(
+          widget.dataType == DataType.Feed
+              ? await _dataService.getFollowingList(widget.npub)
+              : [widget.npub], (olderNote) {
         setState(() {
           _items.add(olderNote);
           _sortNotes();
           _reactionCounts[olderNote.id] = 0;
           _replyCounts[olderNote.id] = 0;
+          _repostCounts[olderNote.id] = 0;
         });
       });
     } catch (e) {
@@ -137,7 +159,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   void _showErrorSnackBar(String message) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
     });
   }
 
@@ -156,7 +179,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     return NotificationListener<ScrollNotification>(
       onNotification: (ScrollNotification scrollInfo) {
         if (!_isLoadingOlderNotes &&
-            scrollInfo.metrics.pixels >= scrollInfo.metrics.maxScrollExtent - 200) {
+            scrollInfo.metrics.pixels >=
+                scrollInfo.metrics.maxScrollExtent - 200) {
           _loadOlderNotes();
         }
         return false;
@@ -179,6 +203,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
               note: item,
               reactionCount: _reactionCounts[item.id] ?? 0,
               replyCount: _replyCounts[item.id] ?? 0,
+              repostCount: _repostCounts[item.id] ?? 0,
               dataService: _dataService,
             );
           },
