@@ -1074,12 +1074,4 @@ class DataService {
     ]);
     print('[DataService] All connections closed and boxes are closed.');
   }
-
-  void _log(String message) {
-    print('[DataService] $message');
-  }
-
-  void _logError(String error) {
-    print('[DataService ERROR] $error');
-  }
 }
