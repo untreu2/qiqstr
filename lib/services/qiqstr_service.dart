@@ -173,80 +173,69 @@ class DataService {
       this.onReplyCountUpdated});
   int get connectedRelaysCount => _socketManager.activeSockets.length;
   Future<void> initialize() async {
-    try {
-      await Future.wait([
-        _openHiveBox<NoteModel>('notes_${dataType.toString()}_$npub')
-            .then((box) {
-          notesBox = box;
-          print('[DataService] Hive notes box opened successfully.');
-        }),
-        _openHiveBox<ReactionModel>('reactions_${dataType.toString()}_$npub')
-            .then((box) {
-          reactionsBox = box;
-          print('[DataService] Hive reactions box opened successfully.');
-        }),
-        _openHiveBox<ReplyModel>('replies_${dataType.toString()}_$npub')
-            .then((box) {
-          repliesBox = box;
-          print('[DataService] Hive replies box opened successfully.');
-        }),
-        _openHiveBox<UserModel>('users').then((box) {
-          usersBox = box;
-          print('[DataService] Hive users box opened successfully.');
-        }),
-      ]);
-      _socketManager = WebSocketManager(relayUrls: [
-        'wss://relay.damus.io',
-        'wss://nos.lol',
-        'wss://relay.primal.net',
-        'wss://vitor.nostr1.com',
-        'wss://eu.purplerelay.com',
-      ]);
-      await _initializeIsolate();
-      _startCacheCleanup();
-      _isInitialized = true;
-    } catch (e) {
-      print('[DataService ERROR] Error during DataService initialization: $e');
-      _isInitialized = false;
-      rethrow;
-    }
+    await Future.wait([
+      _openHiveBox<NoteModel>('notes_${dataType.toString()}_$npub').then((box) {
+        notesBox = box;
+        print('[DataService] Hive notes box opened successfully.');
+      }),
+      _openHiveBox<ReactionModel>('reactions_${dataType.toString()}_$npub')
+          .then((box) {
+        reactionsBox = box;
+        print('[DataService] Hive reactions box opened successfully.');
+      }),
+      _openHiveBox<ReplyModel>('replies_${dataType.toString()}_$npub')
+          .then((box) {
+        repliesBox = box;
+        print('[DataService] Hive replies box opened successfully.');
+      }),
+      _openHiveBox<UserModel>('users').then((box) {
+        usersBox = box;
+        print('[DataService] Hive users box opened successfully.');
+      }),
+    ]);
+    _socketManager = WebSocketManager(relayUrls: [
+      'wss://relay.damus.io',
+      'wss://nos.lol',
+      'wss://relay.primal.net',
+      'wss://vitor.nostr1.com',
+      'wss://eu.purplerelay.com',
+    ]);
+    await _initializeIsolate();
+    _startCacheCleanup();
+    _isInitialized = true;
+    await _fetchUserData();
   }
 
   Future<Box<T>> _openHiveBox<T>(String boxName) async =>
       await Hive.openBox<T>(boxName);
   Future<void> _initializeIsolate() async {
-    try {
-      _receivePort = ReceivePort();
-      _isolate =
-          await Isolate.spawn(_dataProcessorEntryPoint, _receivePort.sendPort);
-      _receivePort.listen((message) {
-        if (message is SendPort) {
-          _sendPort = message;
-          if (!_sendPortReadyCompleter.isCompleted) {
-            _sendPortReadyCompleter.complete();
-          }
-        } else if (message is IsolateMessage) {
-          switch (message.type) {
-            case MessageType.NewNotes:
-              _handleNewNotes(message.data);
-              break;
-            case MessageType.CacheLoad:
-              _handleCacheLoad(message.data);
-              break;
-            case MessageType.Error:
-              print('[DataService ERROR] Isolate error: ${message.data}');
-              break;
-            case MessageType.Close:
-              print('[DataService] Isolate received close message.');
-              break;
-          }
+    _receivePort = ReceivePort();
+    _isolate =
+        await Isolate.spawn(_dataProcessorEntryPoint, _receivePort.sendPort);
+    _receivePort.listen((message) {
+      if (message is SendPort) {
+        _sendPort = message;
+        if (!_sendPortReadyCompleter.isCompleted) {
+          _sendPortReadyCompleter.complete();
         }
-      });
-      print('[DataService] Isolate initialized successfully.');
-    } catch (e) {
-      print('[DataService ERROR] Error initializing isolate: $e');
-      rethrow;
-    }
+      } else if (message is IsolateMessage) {
+        switch (message.type) {
+          case MessageType.NewNotes:
+            _handleNewNotes(message.data);
+            break;
+          case MessageType.CacheLoad:
+            _handleCacheLoad(message.data);
+            break;
+          case MessageType.Error:
+            print('[DataService ERROR] Isolate error: ${message.data}');
+            break;
+          case MessageType.Close:
+            print('[DataService] Isolate received close message.');
+            break;
+        }
+      }
+    });
+    print('[DataService] Isolate initialized successfully.');
   }
 
   static void _dataProcessorEntryPoint(SendPort sendPort) {
@@ -300,14 +289,41 @@ class DataService {
     return Request(generateUUID(), [filter]);
   }
 
+  Future<void> _fetchUserData() async {
+    List<String> targetNpubs;
+    if (dataType == DataType.Feed) {
+      final following = await getFollowingList(npub);
+      following.add(npub);
+      targetNpubs = following.toSet().toList();
+    } else {
+      targetNpubs = [npub];
+    }
+    if (_isClosed) return;
+    await _socketManager.connectRelays(targetNpubs,
+        onEvent: (event, relayUrl) => _handleEvent(event, targetNpubs),
+        onDisconnected: (relayUrl) =>
+            _socketManager.reconnectRelay(relayUrl, targetNpubs));
+    await fetchNotes(targetNpubs, initialLoad: true);
+    await Future.wait([loadReactionsFromCache(), loadRepliesFromCache()]);
+    await _subscribeToAllReactions();
+    _startCheckingForNewData(targetNpubs);
+    await getCachedUserProfile(npub);
+  }
+
   Future<void> initializeConnections() async {
     if (!_isInitialized) {
       print(
           '[DataService] DataService is not initialized. Call initialize() first.');
       return;
     }
-    List<String> targetNpubs =
-        dataType == DataType.Feed ? await getFollowingList(npub) : [npub];
+    List<String> targetNpubs;
+    if (dataType == DataType.Feed) {
+      final following = await getFollowingList(npub);
+      following.add(npub);
+      targetNpubs = following.toSet().toList();
+    } else {
+      targetNpubs = [npub];
+    }
     if (_isClosed) return;
     await _socketManager.connectRelays(targetNpubs,
         onEvent: (event, relayUrl) => _handleEvent(event, targetNpubs),
@@ -469,7 +485,7 @@ class DataService {
         print('[DataService] New note added and saved to cache: ${newNote.id}');
         await Future.wait([
           fetchReactionsForEvents([newNote.id]),
-          fetchRepliesForEvents([newNote.id]),
+          fetchRepliesForEvents([newNote.id])
         ]);
         await _subscribeToAllReactions();
       }
@@ -683,14 +699,11 @@ class DataService {
       List<String> targetNpubs, Function(NoteModel) onOlderNote) async {
     if (_isClosed || notes.isEmpty) return;
     final lastNote = notes.last;
-    final request = _createRequest(
-      Filter(
+    final request = _createRequest(Filter(
         authors: targetNpubs,
         kinds: [1, 6],
         limit: currentLimit,
-        until: lastNote.timestamp.millisecondsSinceEpoch ~/ 1000,
-      ),
-    );
+        until: lastNote.timestamp.millisecondsSinceEpoch ~/ 1000));
     await _broadcastRequest(request);
     print('[DataService] Sent older notes fetch request.');
   }
@@ -796,7 +809,7 @@ class DataService {
       final event = Event.from(
           kind: 7,
           tags: [
-            ['e', targetEventId],
+            ['e', targetEventId]
           ],
           content: reactionContent,
           privkey: privateKey);
@@ -879,7 +892,7 @@ class DataService {
       List<String> cachedEventIds = allNotes.map((note) => note.id).toList();
       await Future.wait([
         fetchReactionsForEvents(cachedEventIds),
-        fetchRepliesForEvents(cachedEventIds),
+        fetchRepliesForEvents(cachedEventIds)
       ]);
     } catch (e) {
       print('[DataService ERROR] Error loading notes from cache: $e');
@@ -953,7 +966,7 @@ class DataService {
       List<String> newEventIds = data.map((note) => note.id).toList();
       await Future.wait([
         fetchReactionsForEvents(newEventIds),
-        fetchRepliesForEvents(newEventIds),
+        fetchRepliesForEvents(newEventIds)
       ]);
       await _updateReactionSubscription();
     }
@@ -962,7 +975,7 @@ class DataService {
   Future<void> fetchReactionsForEvents(List<String> eventIdsToFetch) async {
     if (_isClosed) return;
     final request = Request(generateUUID(), [
-      Filter(kinds: [7], e: eventIdsToFetch, limit: 1000),
+      Filter(kinds: [7], e: eventIdsToFetch, limit: 1000)
     ]);
     await _broadcastRequest(request);
     print(
@@ -972,7 +985,7 @@ class DataService {
   Future<void> fetchRepliesForEvents(List<String> parentEventIds) async {
     if (_isClosed) return;
     final request = Request(generateUUID(), [
-      Filter(kinds: [1], e: parentEventIds, limit: 1000),
+      Filter(kinds: [1], e: parentEventIds, limit: 1000)
     ]);
     await _broadcastRequest(request);
     print('[DataService] Fetched replies for events: ${parentEventIds.length}');
