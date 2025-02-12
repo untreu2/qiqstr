@@ -33,14 +33,11 @@ class WebSocketManager {
   final Map<String, WebSocket> _webSockets = {};
   final Duration connectionTimeout;
   bool _isClosed = false;
-
   WebSocketManager(
       {required this.relayUrls,
       this.connectionTimeout = const Duration(seconds: 1)});
-
   List<WebSocket> get activeSockets => _webSockets.values.toList();
   bool get isConnected => _webSockets.isNotEmpty;
-
   Future<void> connectRelays(List<String> targetNpubs,
       {Function(dynamic event, String relayUrl)? onEvent,
       Function(String relayUrl)? onDisconnected}) async {
@@ -49,20 +46,18 @@ class WebSocketManager {
       if (!_webSockets.containsKey(relayUrl) ||
           _webSockets[relayUrl]?.readyState == WebSocket.closed) {
         try {
-          final ws =
+          final rawWs =
               await WebSocket.connect(relayUrl).timeout(connectionTimeout);
-          _webSockets[relayUrl] = ws;
-          ws.listen(
-            (event) => onEvent?.call(event, relayUrl),
-            onDone: () {
-              _webSockets.remove(relayUrl);
-              onDisconnected?.call(relayUrl);
-            },
-            onError: (error) {
-              _webSockets.remove(relayUrl);
-              onDisconnected?.call(relayUrl);
-            },
-          );
+          final wsBroadcast = rawWs.asBroadcastStream();
+          _webSockets[relayUrl] = rawWs;
+          wsBroadcast.listen((event) => onEvent?.call(event, relayUrl),
+              onDone: () {
+            _webSockets.remove(relayUrl);
+            onDisconnected?.call(relayUrl);
+          }, onError: (error) {
+            _webSockets.remove(relayUrl);
+            onDisconnected?.call(relayUrl);
+          });
         } catch (e) {
           print('Error connecting to relay $relayUrl: $e');
           _webSockets.remove(relayUrl);
@@ -94,23 +89,21 @@ class WebSocketManager {
     Timer(Duration(seconds: delaySeconds), () async {
       if (_isClosed) return;
       try {
-        final ws = await WebSocket.connect(relayUrl).timeout(connectionTimeout);
+        final rawWs =
+            await WebSocket.connect(relayUrl).timeout(connectionTimeout);
+        final wsBroadcast = rawWs.asBroadcastStream();
         if (_isClosed) {
-          await ws.close();
+          await rawWs.close();
           return;
         }
-        _webSockets[relayUrl] = ws;
-        ws.listen(
-          (event) {},
-          onDone: () {
-            _webSockets.remove(relayUrl);
-            reconnectRelay(relayUrl, targetNpubs, attempt: attempt + 1);
-          },
-          onError: (error) {
-            _webSockets.remove(relayUrl);
-            reconnectRelay(relayUrl, targetNpubs, attempt: attempt + 1);
-          },
-        );
+        _webSockets[relayUrl] = rawWs;
+        wsBroadcast.listen((event) {}, onDone: () {
+          _webSockets.remove(relayUrl);
+          reconnectRelay(relayUrl, targetNpubs, attempt: attempt + 1);
+        }, onError: (error) {
+          _webSockets.remove(relayUrl);
+          reconnectRelay(relayUrl, targetNpubs, attempt: attempt + 1);
+        });
         onReconnected?.call(relayUrl);
         print('Reconnected to relay: $relayUrl');
       } catch (e) {
@@ -170,19 +163,15 @@ class DataService {
   final Duration profileCacheTTL = const Duration(hours: 24);
   final Duration cacheCleanupInterval = const Duration(hours: 12);
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-
-  DataService({
-    required this.npub,
-    required this.dataType,
-    this.onNewNote,
-    this.onReactionsUpdated,
-    this.onRepliesUpdated,
-    this.onReactionCountUpdated,
-    this.onReplyCountUpdated,
-  });
-
+  DataService(
+      {required this.npub,
+      required this.dataType,
+      this.onNewNote,
+      this.onReactionsUpdated,
+      this.onRepliesUpdated,
+      this.onReactionCountUpdated,
+      this.onReplyCountUpdated});
   int get connectedRelaysCount => _socketManager.activeSockets.length;
-
   Future<void> initialize() async {
     try {
       await Future.wait([
@@ -225,7 +214,6 @@ class DataService {
 
   Future<Box<T>> _openHiveBox<T>(String boxName) async =>
       await Hive.openBox<T>(boxName);
-
   Future<void> _initializeIsolate() async {
     try {
       _receivePort = ReceivePort();
@@ -1050,7 +1038,6 @@ class DataService {
   }
 
   String generateUUID() => _uuid.v4().replaceAll('-', '');
-
   Future<void> closeConnections() async {
     if (_isClosed) return;
     _isClosed = true;
