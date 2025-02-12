@@ -11,6 +11,7 @@ import '../models/user_model.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
+import '../models/repost_model.dart';
 
 enum DataType { Feed, Profile, Note }
 
@@ -33,11 +34,15 @@ class WebSocketManager {
   final Map<String, WebSocket> _webSockets = {};
   final Duration connectionTimeout;
   bool _isClosed = false;
-  WebSocketManager(
-      {required this.relayUrls,
-      this.connectionTimeout = const Duration(seconds: 1)});
+
+  WebSocketManager({
+    required this.relayUrls,
+    this.connectionTimeout = const Duration(seconds: 1),
+  });
+
   List<WebSocket> get activeSockets => _webSockets.values.toList();
   bool get isConnected => _webSockets.isNotEmpty;
+
   Future<void> connectRelays(List<String> targetNpubs,
       {Function(dynamic event, String relayUrl)? onEvent,
       Function(String relayUrl)? onDisconnected}) async {
@@ -136,42 +141,58 @@ class DataService {
   final Function(String, List<ReplyModel>)? onRepliesUpdated;
   final Function(String, int)? onReactionCountUpdated;
   final Function(String, int)? onReplyCountUpdated;
+  final Function(String, List<RepostModel>)? onRepostsUpdated;
+  final Function(String, int)? onRepostCountUpdated;
+
   List<NoteModel> notes = [];
   final Set<String> eventIds = {};
   final Map<String, List<ReactionModel>> reactionsMap = {};
   final Map<String, List<ReplyModel>> repliesMap = {};
+  final Map<String, List<RepostModel>> repostsMap = {};
   final Map<String, CachedProfile> profileCache = {};
+
   Box<UserModel>? usersBox;
   Box<NoteModel>? notesBox;
   Box<ReactionModel>? reactionsBox;
   Box<ReplyModel>? repliesBox;
+  Box<RepostModel>? repostsBox;
+
   late WebSocketManager _socketManager;
   bool _isInitialized = false;
   bool _isClosed = false;
   Timer? _checkNewNotesTimer;
   Timer? _cacheCleanupTimer;
   final int currentLimit = 75;
+
   final Map<String, Completer<Map<String, String>>> _pendingProfileRequests =
       {};
   final Map<String, String> _profileSubscriptionIds = {};
+
   late ReceivePort _receivePort;
   late Isolate _isolate;
   late SendPort _sendPort;
   final Completer<void> _sendPortReadyCompleter = Completer<void>();
+
   Function(List<NoteModel>)? _onCacheLoad;
   final Uuid _uuid = Uuid();
   final Duration profileCacheTTL = const Duration(hours: 24);
   final Duration cacheCleanupInterval = const Duration(hours: 12);
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  DataService(
-      {required this.npub,
-      required this.dataType,
-      this.onNewNote,
-      this.onReactionsUpdated,
-      this.onRepliesUpdated,
-      this.onReactionCountUpdated,
-      this.onReplyCountUpdated});
+
+  DataService({
+    required this.npub,
+    required this.dataType,
+    this.onNewNote,
+    this.onReactionsUpdated,
+    this.onRepliesUpdated,
+    this.onReactionCountUpdated,
+    this.onReplyCountUpdated,
+    this.onRepostsUpdated,
+    this.onRepostCountUpdated,
+  });
+
   int get connectedRelaysCount => _socketManager.activeSockets.length;
+
   Future<void> initialize() async {
     await Future.wait([
       _openHiveBox<NoteModel>('notes_${dataType.toString()}_$npub').then((box) {
@@ -192,7 +213,13 @@ class DataService {
         usersBox = box;
         print('[DataService] Hive users box opened successfully.');
       }),
+      _openHiveBox<RepostModel>('reposts_${dataType.toString()}_$npub')
+          .then((box) {
+        repostsBox = box;
+        print('[DataService] Hive reposts box opened successfully.');
+      }),
     ]);
+
     _socketManager = WebSocketManager(relayUrls: [
       'wss://relay.damus.io',
       'wss://nos.lol',
@@ -200,6 +227,7 @@ class DataService {
       'wss://vitor.nostr1.com',
       'wss://eu.purplerelay.com',
     ]);
+
     await _initializeIsolate();
     _startCacheCleanup();
     _isInitialized = true;
@@ -208,6 +236,7 @@ class DataService {
 
   Future<Box<T>> _openHiveBox<T>(String boxName) async =>
       await Hive.openBox<T>(boxName);
+
   Future<void> _initializeIsolate() async {
     _receivePort = ReceivePort();
     _isolate =
@@ -304,7 +333,11 @@ class DataService {
         onDisconnected: (relayUrl) =>
             _socketManager.reconnectRelay(relayUrl, targetNpubs));
     await fetchNotes(targetNpubs, initialLoad: true);
-    await Future.wait([loadReactionsFromCache(), loadRepliesFromCache()]);
+    await Future.wait([
+      loadReactionsFromCache(),
+      loadRepliesFromCache(),
+      loadRepostsFromCache(),
+    ]);
     await _subscribeToAllReactions();
     _startCheckingForNewData(targetNpubs);
     await getCachedUserProfile(npub);
@@ -330,7 +363,11 @@ class DataService {
         onDisconnected: (relayUrl) =>
             _socketManager.reconnectRelay(relayUrl, targetNpubs));
     await fetchNotes(targetNpubs, initialLoad: true);
-    await Future.wait([loadReactionsFromCache(), loadRepliesFromCache()]);
+    await Future.wait([
+      loadReactionsFromCache(),
+      loadRepliesFromCache(),
+      loadRepostsFromCache(),
+    ]);
     await _subscribeToAllReactions();
     _startCheckingForNewData(targetNpubs);
   }
@@ -385,13 +422,15 @@ class DataService {
       if (decodedEvent[0] == 'EVENT') {
         final Map<String, dynamic> eventData =
             decodedEvent[2] as Map<String, dynamic>;
-        final kind = eventData['kind'] as int;
+        final int kind = eventData['kind'] as int;
         if (kind == 0) {
           await _handleProfileEvent(eventData);
         } else if (kind == 7) {
           await _handleReactionEvent(eventData);
-        } else if (kind == 1 || kind == 6) {
+        } else if (kind == 1) {
           await _processNoteEvent(eventData, targetNpubs);
+        } else if (kind == 6) {
+          await _handleRepostEvent(eventData);
         }
       }
     } catch (e) {
@@ -410,69 +449,31 @@ class DataService {
 
   Future<void> _processNoteEvent(
       Map<String, dynamic> eventData, List<String> targetNpubs) async {
-    int kind = eventData['kind'] as int;
-    final author = eventData['pubkey'] as String;
-    bool isRepost = kind == 6;
-    Map<String, dynamic>? originalEventData;
-    DateTime? repostTimestamp;
-    if (isRepost) {
-      repostTimestamp =
-          DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000);
-      final contentRaw = eventData['content'];
-      if (contentRaw is String && contentRaw.isNotEmpty) {
-        try {
-          originalEventData = jsonDecode(contentRaw) as Map<String, dynamic>;
-        } catch (e) {
-          originalEventData = null;
-        }
-      }
-      if (originalEventData == null) {
-        String? originalEventId;
-        for (var tag in eventData['tags']) {
-          if (tag is List && tag.length >= 2 && tag[0] == 'e') {
-            originalEventId = tag[1] as String;
-            break;
-          }
-        }
-        if (originalEventId != null) {
-          originalEventData = await _fetchEventById(originalEventId);
-        }
-      }
-      if (originalEventData == null) return;
-      eventData = originalEventData;
-    }
-    final eventId = eventData['id'] as String?;
+    final String? eventId = eventData['id'] as String?;
     if (eventId == null) {
       print('[DataService] Event ID is null.');
       return;
     }
-    final noteAuthor = eventData['pubkey'] as String;
-    final noteContentRaw = eventData['content'];
-    String noteContent =
+    final String noteAuthor = eventData['pubkey'] as String;
+    final dynamic noteContentRaw = eventData['content'];
+    final String noteContent =
         noteContentRaw is String ? noteContentRaw : jsonEncode(noteContentRaw);
-    final tags = eventData['tags'] as List<dynamic>;
-    final parentEventId = _extractParentEventId(tags);
+    final List<dynamic> tags = eventData['tags'] as List<dynamic>;
+    final String? parentEventId = _extractParentEventId(tags);
     if (eventIds.contains(eventId) || noteContent.trim().isEmpty) return;
-    if (parentEventId == null &&
-        dataType == DataType.Feed &&
-        targetNpubs.isNotEmpty &&
-        !targetNpubs.contains(noteAuthor) &&
-        (!isRepost || !targetNpubs.contains(author))) {
-      return;
-    }
     if (parentEventId != null) {
       await _handleReplyEvent(eventData, parentEventId);
     } else {
-      final timestamp = DateTime.fromMillisecondsSinceEpoch(
+      final DateTime timestamp = DateTime.fromMillisecondsSinceEpoch(
           (eventData['created_at'] as int) * 1000);
       final newNote = NoteModel(
         id: eventId,
         content: noteContent,
         author: noteAuthor,
         timestamp: timestamp,
-        isRepost: isRepost,
-        repostedBy: isRepost ? author : null,
-        repostTimestamp: repostTimestamp,
+        isRepost: false,
+        repostedBy: null,
+        repostTimestamp: null,
       );
       if (!eventIds.contains(newNote.id)) {
         notes.add(newNote);
@@ -485,7 +486,8 @@ class DataService {
         print('[DataService] New note added and saved to cache: ${newNote.id}');
         await Future.wait([
           fetchReactionsForEvents([newNote.id]),
-          fetchRepliesForEvents([newNote.id])
+          fetchRepliesForEvents([newNote.id]),
+          fetchRepostsForEvents([newNote.id]),
         ]);
         await _subscribeToAllReactions();
       }
@@ -546,8 +548,8 @@ class DataService {
   Future<void> _handleProfileEvent(Map<String, dynamic> eventData) async {
     if (_isClosed) return;
     try {
-      final author = eventData['pubkey'] as String;
-      final contentRaw = eventData['content'];
+      final String author = eventData['pubkey'] as String;
+      final dynamic contentRaw = eventData['content'];
       Map<String, dynamic> profileContent;
       if (contentRaw is String && contentRaw.isNotEmpty) {
         try {
@@ -558,12 +560,12 @@ class DataService {
       } else {
         profileContent = {};
       }
-      final userName = profileContent['name'] as String? ?? 'Anonymous';
-      final profileImage = profileContent['picture'] as String? ?? '';
-      final about = profileContent['about'] as String? ?? '';
-      final nip05 = profileContent['nip05'] as String? ?? '';
-      final banner = profileContent['banner'] as String? ?? '';
-      final lud16 = profileContent['lud16'] as String? ?? '';
+      final String userName = profileContent['name'] as String? ?? 'Anonymous';
+      final String profileImage = profileContent['picture'] as String? ?? '';
+      final String about = profileContent['about'] as String? ?? '';
+      final String nip05 = profileContent['nip05'] as String? ?? '';
+      final String banner = profileContent['banner'] as String? ?? '';
+      final String lud16 = profileContent['lud16'] as String? ?? '';
       profileCache[author] = CachedProfile({
         'name': userName,
         'profileImage': profileImage,
@@ -596,7 +598,7 @@ class DataService {
 
   Future<Map<String, String>> getCachedUserProfile(String npub) async {
     if (_isClosed) return _defaultProfile();
-    final now = DateTime.now();
+    final DateTime now = DateTime.now();
     if (profileCache.containsKey(npub)) {
       final cached = profileCache[npub]!;
       if (now.difference(cached.fetchedAt) < profileCacheTTL) {
@@ -652,7 +654,8 @@ class DataService {
 
   Future<List<String>> getFollowingList(String npub) async {
     List<String> following = [];
-    final limitedRelays = _socketManager.relayUrls.take(3).toList();
+    final List<String> limitedRelays =
+        _socketManager.relayUrls.take(3).toList();
     await Future.wait(limitedRelays.map((relayUrl) async {
       try {
         final ws = await WebSocket.connect(relayUrl)
@@ -698,7 +701,7 @@ class DataService {
   Future<void> fetchOlderNotes(
       List<String> targetNpubs, Function(NoteModel) onOlderNote) async {
     if (_isClosed || notes.isEmpty) return;
-    final lastNote = notes.last;
+    final NoteModel lastNote = notes.last;
     final request = _createRequest(Filter(
         authors: targetNpubs,
         kinds: [1, 6],
@@ -744,7 +747,7 @@ class DataService {
         timer.cancel();
         return;
       }
-      final now = DateTime.now();
+      final DateTime now = DateTime.now();
       profileCache.removeWhere(
           (key, cached) => now.difference(cached.fetchedAt) > profileCacheTTL);
       reactionsMap.forEach((eventId, reactions) {
@@ -780,13 +783,13 @@ class DataService {
       return;
     }
     try {
-      final privateKey = await _secureStorage.read(key: 'privateKey');
+      final String? privateKey = await _secureStorage.read(key: 'privateKey');
       if (privateKey == null || privateKey.isEmpty) {
         throw Exception('Private key not found. Please log in again.');
       }
       final event = Event.from(
           kind: 1, tags: [], content: noteContent, privkey: privateKey);
-      final serializedEvent = event.serialize();
+      final String serializedEvent = event.serialize();
       await _socketManager.broadcast(serializedEvent);
       print('[DataService] Note shared successfully.');
     } catch (e) {
@@ -802,7 +805,7 @@ class DataService {
       return;
     }
     try {
-      final privateKey = await _secureStorage.read(key: 'privateKey');
+      final String? privateKey = await _secureStorage.read(key: 'privateKey');
       if (privateKey == null || privateKey.isEmpty) {
         throw Exception('Private key not found. Please log in again.');
       }
@@ -813,7 +816,7 @@ class DataService {
           ],
           content: reactionContent,
           privkey: privateKey);
-      final serializedEvent = event.serialize();
+      final String serializedEvent = event.serialize();
       await _socketManager.broadcast(serializedEvent);
       print('[DataService] Reaction event sent to WebSocket successfully.');
     } catch (e) {
@@ -828,7 +831,7 @@ class DataService {
       return;
     }
     try {
-      final privateKey = await _secureStorage.read(key: 'privateKey');
+      final String? privateKey = await _secureStorage.read(key: 'privateKey');
       if (privateKey == null || privateKey.isEmpty) {
         throw Exception('Private key not found. Please log in again.');
       }
@@ -844,7 +847,7 @@ class DataService {
           ],
           content: replyContent,
           privkey: privateKey);
-      final serializedEvent = event.serialize();
+      final String serializedEvent = event.serialize();
       await _socketManager.broadcast(serializedEvent);
       print('[DataService] Reply event sent to WebSocket successfully.');
     } catch (e) {
@@ -876,7 +879,8 @@ class DataService {
       return;
     }
     try {
-      final allNotes = notesBox!.values.cast<NoteModel>().toList();
+      final List<NoteModel> allNotes =
+          notesBox!.values.cast<NoteModel>().toList();
       if (allNotes.isEmpty) {
         print('[DataService] No notes found in cache.');
         return;
@@ -892,7 +896,8 @@ class DataService {
       List<String> cachedEventIds = allNotes.map((note) => note.id).toList();
       await Future.wait([
         fetchReactionsForEvents(cachedEventIds),
-        fetchRepliesForEvents(cachedEventIds)
+        fetchRepliesForEvents(cachedEventIds),
+        fetchRepostsForEvents(cachedEventIds),
       ]);
     } catch (e) {
       print('[DataService ERROR] Error loading notes from cache: $e');
@@ -906,7 +911,8 @@ class DataService {
       return;
     }
     try {
-      final allReactions = reactionsBox!.values.cast<ReactionModel>().toList();
+      final List<ReactionModel> allReactions =
+          reactionsBox!.values.cast<ReactionModel>().toList();
       if (allReactions.isEmpty) {
         print('[DataService] No reactions found in cache.');
         return;
@@ -933,7 +939,8 @@ class DataService {
       return;
     }
     try {
-      final allReplies = repliesBox!.values.cast<ReplyModel>().toList();
+      final List<ReplyModel> allReplies =
+          repliesBox!.values.cast<ReplyModel>().toList();
       if (allReplies.isEmpty) {
         print('[DataService] No replies found in cache.');
         return;
@@ -948,6 +955,33 @@ class DataService {
           '[DataService] Replies cache loaded with ${allReplies.length} replies.');
     } catch (e) {
       print('[DataService ERROR] Error loading replies from cache: $e');
+    }
+  }
+
+  Future<void> loadRepostsFromCache() async {
+    if (repostsBox == null || !repostsBox!.isOpen) {
+      print('[DataService] Reposts box is not initialized or not open.');
+      return;
+    }
+    try {
+      final List<RepostModel> allReposts =
+          repostsBox!.values.cast<RepostModel>().toList();
+      if (allReposts.isEmpty) {
+        print('[DataService] No reposts found in cache.');
+        return;
+      }
+      for (var repost in allReposts) {
+        repostsMap.putIfAbsent(repost.originalNoteId, () => []);
+        if (!repostsMap[repost.originalNoteId]!.any((r) => r.id == repost.id)) {
+          repostsMap[repost.originalNoteId]!.add(repost);
+          onRepostsUpdated?.call(
+              repost.originalNoteId, repostsMap[repost.originalNoteId]!);
+        }
+      }
+      print(
+          '[DataService] Reposts cache loaded with ${allReposts.length} reposts.');
+    } catch (e) {
+      print('[DataService ERROR] Error loading reposts from cache: $e');
     }
   }
 
@@ -966,7 +1000,8 @@ class DataService {
       List<String> newEventIds = data.map((note) => note.id).toList();
       await Future.wait([
         fetchReactionsForEvents(newEventIds),
-        fetchRepliesForEvents(newEventIds)
+        fetchRepliesForEvents(newEventIds),
+        fetchRepostsForEvents(newEventIds),
       ]);
       await _updateReactionSubscription();
     }
@@ -989,6 +1024,16 @@ class DataService {
     ]);
     await _broadcastRequest(request);
     print('[DataService] Fetched replies for events: ${parentEventIds.length}');
+  }
+
+  Future<void> fetchRepostsForEvents(List<String> eventIdsToFetch) async {
+    if (_isClosed) return;
+    final request = Request(generateUUID(), [
+      Filter(kinds: [6], e: eventIdsToFetch, limit: 1000)
+    ]);
+    await _broadcastRequest(request);
+    print(
+        '[DataService] Fetched reposts for events: ${eventIdsToFetch.length}');
   }
 
   void _handleCacheLoad(dynamic data) {
@@ -1014,43 +1059,41 @@ class DataService {
     print('[DataService] Fetched profiles for all authors.');
   }
 
-  Future<Map<String, dynamic>?> _fetchEventById(String eventId) async {
-    if (_isClosed) return null;
-    final completer = Completer<Map<String, dynamic>?>();
-    String subscriptionId = generateUUID();
-    final request = Request(subscriptionId, [
-      Filter(ids: [eventId], limit: 1)
-    ]);
-    StreamSubscription? subscription;
-    await Future.wait(_socketManager.activeSockets.map((ws) async {
-      if (ws.readyState == WebSocket.open) {
-        subscription = ws.listen((event) {
-          final decoded = jsonDecode(event);
-          if (decoded[0] == 'EVENT' && decoded[1] == subscriptionId) {
-            completer.complete(decoded[2] as Map<String, dynamic>);
-            subscription?.cancel();
-          } else if (decoded[0] == 'EOSE' && decoded[1] == subscriptionId) {
-            if (!completer.isCompleted) {
-              completer.complete(null);
-            }
-            subscription?.cancel();
+  Future<void> _handleRepostEvent(Map<String, dynamic> eventData) async {
+    if (_isClosed) return;
+    try {
+      String? originalNoteId;
+      if (eventData['tags'] is List) {
+        for (var tag in eventData['tags']) {
+          if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
+            originalNoteId = tag[1] as String?;
+            break;
           }
-        }, onError: (error) {
-          if (!completer.isCompleted) {
-            completer.complete(null);
-          }
-          subscription?.cancel();
-        });
-        ws.add(request.serialize());
+        }
       }
-    }));
-    return completer.future.timeout(const Duration(seconds: 1), onTimeout: () {
-      print('[DataService] Timeout while fetching event by ID: $eventId');
-      return null;
-    });
+      if (originalNoteId == null) {
+        print(
+            '[DataService] Repost event does not contain an original note ID.');
+        return;
+      }
+      final repost = RepostModel.fromEvent(eventData, originalNoteId);
+      repostsMap.putIfAbsent(originalNoteId, () => []);
+      if (!repostsMap[originalNoteId]!.any((r) => r.id == repost.id)) {
+        repostsMap[originalNoteId]!.add(repost);
+        onRepostsUpdated?.call(originalNoteId, repostsMap[originalNoteId]!);
+        print(
+            '[DataService] Repost updated for event $originalNoteId by ${repost.repostedBy}');
+        onRepostCountUpdated?.call(
+            originalNoteId, repostsMap[originalNoteId]!.length);
+        await repostsBox?.put(repost.id, repost);
+      }
+    } catch (e) {
+      print('[DataService ERROR] Error handling repost event: $e');
+    }
   }
 
   String generateUUID() => _uuid.v4().replaceAll('-', '');
+
   Future<void> closeConnections() async {
     if (_isClosed) return;
     _isClosed = true;
@@ -1070,6 +1113,7 @@ class DataService {
       if (notesBox != null && notesBox!.isOpen) notesBox!.close(),
       if (reactionsBox != null && reactionsBox!.isOpen) reactionsBox!.close(),
       if (repliesBox != null && repliesBox!.isOpen) repliesBox!.close(),
+      if (repostsBox != null && repostsBox!.isOpen) repostsBox!.close(),
       if (usersBox != null && usersBox!.isOpen) usersBox!.close(),
     ]);
     print('[DataService] All connections closed and boxes are closed.');
