@@ -47,7 +47,8 @@ class Qiqstr extends StatelessWidget {
   final bool isLoggedIn;
   final String? npub;
 
-  const Qiqstr({Key? key, required this.isLoggedIn, this.npub}) : super(key: key);
+  const Qiqstr({Key? key, required this.isLoggedIn, this.npub})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -138,7 +139,8 @@ class SplashScreenState extends State<SplashScreen> {
     } catch (e) {
       print('Error reading secure storage or opening boxes: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("An error occurred while loading the app.")),
+        const SnackBar(
+            content: Text("An error occurred while loading the app.")),
       );
     }
   }
