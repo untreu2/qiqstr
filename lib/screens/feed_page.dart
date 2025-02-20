@@ -3,6 +3,7 @@ import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/services/qiqstr_service.dart';
 import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/models/user_model.dart';
+import 'package:qiqstr/screens/share_note.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -10,9 +11,7 @@ class FeedPage extends StatefulWidget {
   const FeedPage({super.key, required this.npub});
 
   @override
-  _FeedPageState createState() {
-    return _FeedPageState();
-  }
+  _FeedPageState createState() => _FeedPageState();
 }
 
 class _FeedPageState extends State<FeedPage> {
@@ -57,9 +56,9 @@ class _FeedPageState extends State<FeedPage> {
                       (BuildContext context, bool innerBoxIsScrolled) {
                     return [
                       SliverAppBar(
-                        title: Text(
+                        title: const Text(
                           'qiqstr',
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w900,
                             fontSize: 20.0,
@@ -77,6 +76,16 @@ class _FeedPageState extends State<FeedPage> {
                     dataType: DataType.Feed,
                   ),
                 ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (_) => ShareNoteDialog(dataService: dataService),
+          );
+        },
+        tooltip: 'Share Note',
+        child: const Icon(Icons.arrow_upward),
+      ),
     );
   }
 }
