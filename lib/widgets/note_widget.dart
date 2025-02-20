@@ -9,6 +9,7 @@ import 'package:qiqstr/widgets/media_preview_widget.dart';
 import '../models/note_model.dart';
 import '../screens/profile_page.dart';
 import '../services/qiqstr_service.dart';
+import 'content_parser.dart';
 
 class NoteWidget extends StatefulWidget {
   final NoteModel note;
@@ -54,30 +55,6 @@ class _NoteWidgetState extends State<NoteWidget>
     _highlightController.dispose();
     _pageController.dispose();
     super.dispose();
-  }
-
-  Map<String, dynamic> _parseContent(String content) {
-    final RegExp mediaRegExp = RegExp(
-        r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|mp4|mov))',
-        caseSensitive: false);
-    final Iterable<RegExpMatch> mediaMatches = mediaRegExp.allMatches(content);
-    final List<String> mediaUrls =
-        mediaMatches.map((m) => m.group(0)!).toList();
-    final RegExp linkRegExp = RegExp(r'(https?:\/\/\S+)', caseSensitive: false);
-    final Iterable<RegExpMatch> linkMatches = linkRegExp.allMatches(content);
-    final List<String> linkUrls = linkMatches
-        .map((m) => m.group(0)!)
-        .where((url) =>
-            !mediaUrls.contains(url) &&
-            !url.toLowerCase().endsWith('.mp4') &&
-            !url.toLowerCase().endsWith('.mov'))
-        .toList();
-    final String text = content.replaceAll(mediaRegExp, '').trim();
-    return {
-      'text': text,
-      'mediaUrls': mediaUrls,
-      'linkUrls': linkUrls,
-    };
   }
 
   String _formatTimestamp(DateTime timestamp) {
@@ -264,7 +241,7 @@ class _NoteWidgetState extends State<NoteWidget>
 
   @override
   Widget build(BuildContext context) {
-    final parsedContent = _parseContent(widget.note.content);
+    final parsedContent = parseContent(widget.note.content);
     return GestureDetector(
       onDoubleTapDown: _handleDoubleTap,
       onHorizontalDragEnd: _handleHorizontalDragEnd,
