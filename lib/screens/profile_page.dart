@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
-import 'package:qiqstr/services/qiqstr_service.dart';
 import 'package:qiqstr/widgets/sidebar_widget.dart';
+import 'package:qiqstr/services/qiqstr_service.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/widgets/profile_info_widget.dart';
 
@@ -19,14 +19,13 @@ class _ProfilePageState extends State<ProfilePage> {
   late DataService dataService;
   bool isLoading = true;
   String? errorMessage;
+  bool _isProfileInfoVisible = true;
+  final double _separatorHeight = 8;
 
   @override
   void initState() {
     super.initState();
-    dataService = DataService(
-      npub: widget.npub,
-      dataType: DataType.Profile,
-    );
+    dataService = DataService(npub: widget.npub, dataType: DataType.Profile);
     _loadUserProfile();
   }
 
@@ -46,6 +45,22 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
+  bool _handleScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollUpdateNotification) {
+      final double offset = notification.metrics.pixels;
+      if (offset <= 0 && !_isProfileInfoVisible) {
+        setState(() {
+          _isProfileInfoVisible = true;
+        });
+      } else if (offset > 0 && _isProfileInfoVisible) {
+        setState(() {
+          _isProfileInfoVisible = false;
+        });
+      }
+    }
+    return false;
+  }
+
   @override
   void dispose() {
     dataService.closeConnections();
@@ -60,21 +75,33 @@ class _ProfilePageState extends State<ProfilePage> {
           ? const Center(child: CircularProgressIndicator())
           : errorMessage != null
               ? Center(child: Text(errorMessage!))
-              : NestedScrollView(
-                  headerSliverBuilder:
-                      (BuildContext context, bool innerBoxIsScrolled) {
-                    return [
-                      SliverToBoxAdapter(
-                        child: user != null
-                            ? ProfileInfoWidget(user: user!)
-                            : Container(),
+              : Column(
+                  children: [
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 600),
+                      curve: Curves.easeInOut,
+                      child: _isProfileInfoVisible && user != null
+                          ? Container(
+                              color: Colors.black,
+                              child: ProfileInfoWidget(user: user!),
+                            )
+                          : Container(),
+                    ),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 600),
+                      height: _isProfileInfoVisible ? _separatorHeight : 0,
+                      curve: Curves.easeInOut,
+                    ),
+                    Expanded(
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: _handleScrollNotification,
+                        child: NoteListWidget(
+                          npub: widget.npub,
+                          dataType: DataType.Profile,
+                        ),
                       ),
-                    ];
-                  },
-                  body: NoteListWidget(
-                    npub: widget.npub,
-                    dataType: DataType.Profile,
-                  ),
+                    ),
+                  ],
                 ),
     );
   }
