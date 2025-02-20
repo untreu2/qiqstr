@@ -584,24 +584,25 @@ class DataService {
   Future<void> _handleProfileEvent(Map<String, dynamic> eventData) async {
     if (_isClosed) return;
     try {
-      final author = eventData['pubkey'] as String;
-      final contentRaw = eventData['content'];
-      Map<String, dynamic> profileContent;
-      if (contentRaw is String && contentRaw.isNotEmpty) {
+      String author = eventData['pubkey'] as String;
+      String contentRaw = eventData['content'] as String;
+      Map<String, dynamic> profileContent = {};
+      if (contentRaw.isNotEmpty) {
         try {
           profileContent = jsonDecode(contentRaw) as Map<String, dynamic>;
         } catch (e) {
           profileContent = {};
         }
-      } else {
-        profileContent = {};
       }
-      final userName = profileContent['name'] as String? ?? 'Anonymous';
-      final profileImage = profileContent['picture'] as String? ?? '';
-      final about = profileContent['about'] as String? ?? '';
-      final nip05 = profileContent['nip05'] as String? ?? '';
-      final banner = profileContent['banner'] as String? ?? '';
-      final lud16 = profileContent['lud16'] as String? ?? '';
+      String userName = profileContent['name'] as String? ?? 'Anonymous';
+      String profileImage = profileContent['picture'] as String? ?? '';
+      String about = profileContent['about'] as String? ?? '';
+      String nip05 = profileContent['nip05'] as String? ?? '';
+      String banner = profileContent['banner'] as String? ?? '';
+      String lud16 = profileContent['lud16'] as String? ?? '';
+      if (profileCache.containsKey(author)) {
+        profileCache.remove(author);
+      }
       profileCache[author] = CachedProfile({
         'name': userName,
         'profileImage': profileImage,
@@ -611,7 +612,10 @@ class DataService {
         'lud16': lud16,
       }, DateTime.now());
       if (usersBox != null && usersBox!.isOpen) {
-        final userModel = UserModel(
+        if (await usersBox!.containsKey(author)) {
+          await usersBox!.delete(author);
+        }
+        UserModel userModel = UserModel(
           npub: author,
           name: userName,
           about: about,
