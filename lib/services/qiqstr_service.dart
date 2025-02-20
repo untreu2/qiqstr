@@ -584,25 +584,25 @@ class DataService {
   Future<void> _handleProfileEvent(Map<String, dynamic> eventData) async {
     if (_isClosed) return;
     try {
-      String author = eventData['pubkey'] as String;
-      String contentRaw = eventData['content'] as String;
-      Map<String, dynamic> profileContent = {};
-      if (contentRaw.isNotEmpty) {
+      final author = eventData['pubkey'] as String;
+      final contentRaw = eventData['content'];
+      Map<String, dynamic> profileContent;
+      if (contentRaw is String && contentRaw.isNotEmpty) {
         try {
           profileContent = jsonDecode(contentRaw) as Map<String, dynamic>;
         } catch (e) {
           profileContent = {};
         }
+      } else {
+        profileContent = {};
       }
-      String userName = profileContent['name'] as String? ?? 'Anonymous';
-      String profileImage = profileContent['picture'] as String? ?? '';
-      String about = profileContent['about'] as String? ?? '';
-      String nip05 = profileContent['nip05'] as String? ?? '';
-      String banner = profileContent['banner'] as String? ?? '';
-      String lud16 = profileContent['lud16'] as String? ?? '';
-      if (profileCache.containsKey(author)) {
-        profileCache.remove(author);
-      }
+      final userName = profileContent['name'] as String? ?? 'Anonymous';
+      final profileImage = profileContent['picture'] as String? ?? '';
+      final about = profileContent['about'] as String? ?? '';
+      final nip05 = profileContent['nip05'] as String? ?? '';
+      final banner = profileContent['banner'] as String? ?? '';
+      final lud16 = profileContent['lud16'] as String? ?? '';
+      final website = profileContent['website'] as String? ?? '';
       profileCache[author] = CachedProfile({
         'name': userName,
         'profileImage': profileImage,
@@ -610,12 +610,10 @@ class DataService {
         'nip05': nip05,
         'banner': banner,
         'lud16': lud16,
+        'website': website
       }, DateTime.now());
       if (usersBox != null && usersBox!.isOpen) {
-        if (await usersBox!.containsKey(author)) {
-          await usersBox!.delete(author);
-        }
-        UserModel userModel = UserModel(
+        final userModel = UserModel(
           npub: author,
           name: userName,
           about: about,
@@ -623,6 +621,7 @@ class DataService {
           banner: banner,
           profileImage: profileImage,
           lud16: lud16,
+          website: website,
           updatedAt: DateTime.now(),
         );
         await usersBox!.put(author, userModel);
@@ -656,6 +655,7 @@ class DataService {
           'nip05': user.nip05,
           'banner': user.banner,
           'lud16': user.lud16,
+          'website': user.website,
         };
         profileCache[npub] = CachedProfile(data, user.updatedAt);
         return data;
@@ -686,6 +686,7 @@ class DataService {
         'nip05': '',
         'banner': '',
         'lud16': '',
+        'website': '',
       };
   Future<List<String>> getFollowingList(String npub) async {
     List<String> following = [];

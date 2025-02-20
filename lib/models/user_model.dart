@@ -28,6 +28,9 @@ class UserModel extends HiveObject {
   @HiveField(7)
   final DateTime updatedAt;
 
+  @HiveField(8)
+  final String website;
+
   UserModel({
     required this.npub,
     required this.name,
@@ -37,6 +40,7 @@ class UserModel extends HiveObject {
     required this.profileImage,
     required this.lud16,
     required this.updatedAt,
+    required this.website,
   });
 
   factory UserModel.fromCachedProfile(String npub, Map<String, String> data) {
@@ -48,6 +52,7 @@ class UserModel extends HiveObject {
       banner: data['banner'] ?? '',
       profileImage: data['profileImage'] ?? '',
       lud16: data['lud16'] ?? '',
+      website: data['website'] ?? '',
       updatedAt: DateTime.now(),
     );
   }
@@ -61,6 +66,7 @@ class UserModel extends HiveObject {
       banner: json['banner'] as String,
       profileImage: json['profileImage'] as String,
       lud16: json['lud16'] as String? ?? '',
+      website: json['website'] as String? ?? '',
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
   }
@@ -73,6 +79,7 @@ class UserModel extends HiveObject {
         'banner': banner,
         'profileImage': profileImage,
         'lud16': lud16,
+        'website': website,
         'updatedAt': updatedAt.toIso8601String(),
       };
 }

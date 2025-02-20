@@ -25,13 +25,14 @@ class UserModelAdapter extends TypeAdapter<UserModel> {
       profileImage: fields[5] as String,
       lud16: fields[6] as String,
       updatedAt: fields[7] as DateTime,
+      website: fields[8] as String,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserModel obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.npub)
       ..writeByte(1)
@@ -47,7 +48,9 @@ class UserModelAdapter extends TypeAdapter<UserModel> {
       ..writeByte(6)
       ..write(obj.lud16)
       ..writeByte(7)
-      ..write(obj.updatedAt);
+      ..write(obj.updatedAt)
+      ..writeByte(8)
+      ..write(obj.website);
   }
 
   @override
