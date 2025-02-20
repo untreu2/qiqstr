@@ -5,7 +5,9 @@ class SendReplyDialog extends StatefulWidget {
   final DataService dataService;
   final String noteId;
 
-  const SendReplyDialog({Key? key, required this.dataService, required this.noteId}) : super(key: key);
+  const SendReplyDialog(
+      {Key? key, required this.dataService, required this.noteId})
+      : super(key: key);
 
   @override
   _SendReplyDialogState createState() => _SendReplyDialogState();
@@ -14,7 +16,7 @@ class SendReplyDialog extends StatefulWidget {
 class _SendReplyDialogState extends State<SendReplyDialog> {
   final TextEditingController _replyController = TextEditingController();
   final FocusNode _replyFocusNode = FocusNode();
-  String _connectionMessage = 'Connecting to relays...';
+  String _connectionMessage = '';
   bool _isPosting = false;
 
   @override
@@ -27,7 +29,8 @@ class _SendReplyDialogState extends State<SendReplyDialog> {
           if (widget.dataService.connectedRelaysCount == 0) {
             _connectionMessage = 'No relay connections established.';
           } else {
-            _connectionMessage = 'CONNECTED TO ${widget.dataService.connectedRelaysCount} RELAYS.';
+            _connectionMessage =
+                'CONNECTED TO ${widget.dataService.connectedRelaysCount} RELAYS.';
           }
         });
       }

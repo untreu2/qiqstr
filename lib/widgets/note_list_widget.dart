@@ -5,6 +5,7 @@ import 'package:qiqstr/models/reply_model.dart';
 import 'package:qiqstr/models/repost_model.dart';
 import 'package:qiqstr/services/qiqstr_service.dart';
 import 'package:qiqstr/widgets/note_widget.dart';
+import 'package:qiqstr/screens/share_note.dart';
 
 class NoteListWidget extends StatefulWidget {
   final String npub;
@@ -54,7 +55,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
           _items.clear();
           _items.addAll(cachedNotes);
           _sortNotes();
-
           for (var note in _items) {
             _reactionCounts[note.id] =
                 _dataService.reactionsMap[note.id]?.length ?? 0;
@@ -139,17 +139,19 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     setState(() => _isLoadingOlderNotes = true);
     try {
       await _dataService.fetchOlderNotes(
-          widget.dataType == DataType.Feed
-              ? await _dataService.getFollowingList(widget.npub)
-              : [widget.npub], (olderNote) {
-        setState(() {
-          _items.add(olderNote);
-          _sortNotes();
-          _reactionCounts[olderNote.id] = 0;
-          _replyCounts[olderNote.id] = 0;
-          _repostCounts[olderNote.id] = 0;
-        });
-      });
+        widget.dataType == DataType.Feed
+            ? await _dataService.getFollowingList(widget.npub)
+            : [widget.npub],
+        (olderNote) {
+          setState(() {
+            _items.add(olderNote);
+            _sortNotes();
+            _reactionCounts[olderNote.id] = 0;
+            _replyCounts[olderNote.id] = 0;
+            _repostCounts[olderNote.id] = 0;
+          });
+        },
+      );
     } catch (e) {
       _showErrorSnackBar('Error loading older notes: $e');
     } finally {
@@ -176,38 +178,50 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return NotificationListener<ScrollNotification>(
-      onNotification: (ScrollNotification scrollInfo) {
-        if (!_isLoadingOlderNotes &&
-            scrollInfo.metrics.pixels >=
-                scrollInfo.metrics.maxScrollExtent - 200) {
-          _loadOlderNotes();
-        }
-        return false;
-      },
-      child: RefreshIndicator(
-        onRefresh: _initialize,
-        child: ListView.builder(
-          padding: EdgeInsets.zero,
-          itemCount: _items.length + (_isLoadingOlderNotes ? 1 : 0),
-          itemBuilder: (context, index) {
-            if (index == _items.length && _isLoadingOlderNotes) {
-              return const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Center(child: CircularProgressIndicator()),
+    return Scaffold(
+      body: NotificationListener<ScrollNotification>(
+        onNotification: (ScrollNotification scrollInfo) {
+          if (!_isLoadingOlderNotes &&
+              scrollInfo.metrics.pixels >=
+                  scrollInfo.metrics.maxScrollExtent - 200) {
+            _loadOlderNotes();
+          }
+          return false;
+        },
+        child: RefreshIndicator(
+          onRefresh: _initialize,
+          child: ListView.builder(
+            padding: EdgeInsets.zero,
+            itemCount: _items.length + (_isLoadingOlderNotes ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (index == _items.length && _isLoadingOlderNotes) {
+                return const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final item = _items[index];
+              return NoteWidget(
+                key: ValueKey(item.id),
+                note: item,
+                reactionCount: _reactionCounts[item.id] ?? 0,
+                replyCount: _replyCounts[item.id] ?? 0,
+                repostCount: _repostCounts[item.id] ?? 0,
+                dataService: _dataService,
               );
-            }
-            final item = _items[index];
-            return NoteWidget(
-              key: ValueKey(item.id),
-              note: item,
-              reactionCount: _reactionCounts[item.id] ?? 0,
-              replyCount: _replyCounts[item.id] ?? 0,
-              repostCount: _repostCounts[item.id] ?? 0,
-              dataService: _dataService,
-            );
-          },
+            },
+          ),
         ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (_) => ShareNoteDialog(dataService: _dataService),
+          );
+        },
+        tooltip: 'Share Note',
+        child: const Icon(Icons.arrow_upward),
       ),
     );
   }
