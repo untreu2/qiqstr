@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/models/reaction_model.dart';
 import 'package:qiqstr/models/reply_model.dart';
@@ -31,13 +30,9 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   Map<String, int> _replyCounts = {};
   Map<String, int> _repostCounts = {};
 
-  final ScrollController _scrollController = ScrollController();
-  bool _isButtonVisible = true;
-
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_onScroll);
     _dataService = DataService(
       npub: widget.npub,
       dataType: widget.dataType,
@@ -50,24 +45,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       onRepostCountUpdated: _updateRepostCount,
     );
     _initialize();
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.userScrollDirection ==
-        ScrollDirection.reverse) {
-      if (_isButtonVisible) {
-        setState(() {
-          _isButtonVisible = false;
-        });
-      }
-    } else if (_scrollController.position.userScrollDirection ==
-        ScrollDirection.forward) {
-      if (!_isButtonVisible) {
-        setState(() {
-          _isButtonVisible = true;
-        });
-      }
-    }
   }
 
   Future<void> _initialize() async {
@@ -191,7 +168,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   @override
   void dispose() {
-    _scrollController.dispose();
     _dataService.closeConnections();
     super.dispose();
   }
@@ -215,7 +191,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         child: RefreshIndicator(
           onRefresh: _initialize,
           child: ListView.builder(
-            controller: _scrollController,
             padding: EdgeInsets.zero,
             itemCount: _items.length + (_isLoadingOlderNotes ? 1 : 0),
             itemBuilder: (context, index) {
@@ -238,26 +213,15 @@ class _NoteListWidgetState extends State<NoteListWidget> {
           ),
         ),
       ),
-      floatingActionButton: AnimatedOpacity(
-        duration: const Duration(milliseconds: 300),
-        opacity: _isButtonVisible ? 1.0 : 0.0,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-          transform: _isButtonVisible
-              ? Matrix4.translationValues(0, 0, 0)
-              : Matrix4.translationValues(0, 100, 0),
-          child: FloatingActionButton(
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => ShareNoteDialog(dataService: _dataService),
-              );
-            },
-            tooltip: 'Share Note',
-            child: const Icon(Icons.arrow_upward),
-          ),
-        ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (_) => ShareNoteDialog(dataService: _dataService),
+          );
+        },
+        tooltip: 'Share Note',
+        child: const Icon(Icons.arrow_upward),
       ),
     );
   }
