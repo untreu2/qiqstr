@@ -51,8 +51,7 @@ class Qiqstr extends StatelessWidget {
   final bool isLoggedIn;
   final String? npub;
 
-  const Qiqstr({Key? key, required this.isLoggedIn, this.npub})
-      : super(key: key);
+  const Qiqstr({super.key, required this.isLoggedIn, this.npub});
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +96,7 @@ class Qiqstr extends StatelessWidget {
 }
 
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({Key? key}) : super(key: key);
+  const SplashScreen({super.key});
 
   @override
   SplashScreenState createState() => SplashScreenState();
@@ -164,7 +163,7 @@ class SplashScreenState extends State<SplashScreen> {
 }
 
 class HiveErrorApp extends StatelessWidget {
-  const HiveErrorApp({Key? key}) : super(key: key);
+  const HiveErrorApp({super.key});
 
   @override
   Widget build(BuildContext context) {

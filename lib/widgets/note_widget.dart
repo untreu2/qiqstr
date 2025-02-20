@@ -18,13 +18,13 @@ class NoteWidget extends StatefulWidget {
   final DataService dataService;
 
   const NoteWidget({
-    Key? key,
+    super.key,
     required this.note,
     required this.reactionCount,
     required this.replyCount,
     required this.repostCount,
     required this.dataService,
-  }) : super(key: key);
+  });
 
   @override
   _NoteWidgetState createState() => _NoteWidgetState();

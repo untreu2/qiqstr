@@ -8,7 +8,7 @@ import 'package:qiqstr/widgets/profile_info_widget.dart';
 class ProfilePage extends StatefulWidget {
   final String npub;
 
-  const ProfilePage({Key? key, required this.npub}) : super(key: key);
+  const ProfilePage({super.key, required this.npub});
 
   @override
   _ProfilePageState createState() => _ProfilePageState();

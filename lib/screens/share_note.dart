@@ -4,8 +4,7 @@ import '../services/qiqstr_service.dart';
 class ShareNoteDialog extends StatefulWidget {
   final DataService dataService;
 
-  const ShareNoteDialog({Key? key, required this.dataService})
-      : super(key: key);
+  const ShareNoteDialog({super.key, required this.dataService});
 
   @override
   _ShareNoteDialogState createState() => _ShareNoteDialogState();

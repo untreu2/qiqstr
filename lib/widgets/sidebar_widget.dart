@@ -6,7 +6,7 @@ import 'package:qiqstr/utils/logout.dart';
 class SidebarWidget extends StatelessWidget {
   final UserModel? user;
 
-  const SidebarWidget({Key? key, this.user}) : super(key: key);
+  const SidebarWidget({super.key, this.user});
 
   @override
   Widget build(BuildContext context) {
@@ -30,11 +30,11 @@ class SidebarWidget extends StatelessWidget {
                     currentAccountPicture: CircleAvatar(
                       backgroundImage: user!.profileImage.isNotEmpty
                           ? NetworkImage(user!.profileImage)
-                          : AssetImage('assets/default_profile.png') as ImageProvider,
+                          : AssetImage('assets/default_profile.png')
+                              as ImageProvider,
                     ),
                   ),
                 ),
-
                 ListTile(
                   leading: Icon(Icons.person, color: Colors.white),
                   title: Text('Profile', style: TextStyle(color: Colors.white)),
@@ -47,10 +47,10 @@ class SidebarWidget extends StatelessWidget {
                     );
                   },
                 ),
-
                 ListTile(
                   leading: Icon(Icons.logout, color: Colors.redAccent),
-                  title: Text('Logout', style: TextStyle(color: Colors.redAccent)),
+                  title:
+                      Text('Logout', style: TextStyle(color: Colors.redAccent)),
                   onTap: () {
                     Logout.performLogout(context);
                   },

@@ -4,7 +4,7 @@ import 'package:qiqstr/models/user_model.dart';
 class ProfileInfoWidget extends StatelessWidget {
   final UserModel user;
 
-  const ProfileInfoWidget({Key? key, required this.user}) : super(key: key);
+  const ProfileInfoWidget({super.key, required this.user});
 
   @override
   Widget build(BuildContext context) {
@@ -35,8 +35,7 @@ class ProfileInfoWidget extends StatelessWidget {
                 backgroundImage: user.profileImage.isNotEmpty
                     ? NetworkImage(user.profileImage)
                     : null,
-                backgroundColor:
-                    user.profileImage.isEmpty ? Colors.grey : null,
+                backgroundColor: user.profileImage.isEmpty ? Colors.grey : null,
                 child: user.profileImage.isEmpty
                     ? const Icon(
                         Icons.person,

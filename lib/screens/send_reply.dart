@@ -6,8 +6,7 @@ class SendReplyDialog extends StatefulWidget {
   final String noteId;
 
   const SendReplyDialog(
-      {Key? key, required this.dataService, required this.noteId})
-      : super(key: key);
+      {super.key, required this.dataService, required this.noteId});
 
   @override
   _SendReplyDialogState createState() => _SendReplyDialogState();

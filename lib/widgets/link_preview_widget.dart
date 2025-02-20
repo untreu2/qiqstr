@@ -5,7 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 class LinkPreviewWidget extends StatelessWidget {
   final List<String> linkUrls;
 
-  const LinkPreviewWidget({Key? key, required this.linkUrls}) : super(key: key);
+  const LinkPreviewWidget({super.key, required this.linkUrls});
 
   @override
   Widget build(BuildContext context) {

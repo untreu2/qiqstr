@@ -7,10 +7,12 @@ import 'package:qiqstr/models/user_model.dart';
 class FeedPage extends StatefulWidget {
   final String npub;
 
-  const FeedPage({Key? key, required this.npub}) : super(key: key);
+  const FeedPage({super.key, required this.npub});
 
   @override
-  _FeedPageState createState() => _FeedPageState();
+  _FeedPageState createState() {
+    return _FeedPageState();
+  }
 }
 
 class _FeedPageState extends State<FeedPage> {

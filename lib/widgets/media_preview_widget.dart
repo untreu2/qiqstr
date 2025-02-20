@@ -7,7 +7,7 @@ import '../widgets/photo_viewer_widget.dart';
 class MediaPreviewWidget extends StatefulWidget {
   final List<String> mediaUrls;
 
-  const MediaPreviewWidget({Key? key, required this.mediaUrls}) : super(key: key);
+  const MediaPreviewWidget({super.key, required this.mediaUrls});
 
   @override
   _MediaPreviewWidgetState createState() => _MediaPreviewWidgetState();
@@ -29,30 +29,35 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
     }
 
     final List<String> imageUrls = widget.mediaUrls
-        .where((url) => url.toLowerCase().endsWith('.jpg') ||
-                        url.toLowerCase().endsWith('.jpeg') ||
-                        url.toLowerCase().endsWith('.png') ||
-                        url.toLowerCase().endsWith('.webp') ||
-                        url.toLowerCase().endsWith('.gif'))
+        .where((url) =>
+            url.toLowerCase().endsWith('.jpg') ||
+            url.toLowerCase().endsWith('.jpeg') ||
+            url.toLowerCase().endsWith('.png') ||
+            url.toLowerCase().endsWith('.webp') ||
+            url.toLowerCase().endsWith('.gif'))
         .toList();
 
     final List<String> videoUrls = widget.mediaUrls
-        .where((url) => url.toLowerCase().endsWith('.mp4') ||
-                        url.toLowerCase().endsWith('.mov'))
+        .where((url) =>
+            url.toLowerCase().endsWith('.mp4') ||
+            url.toLowerCase().endsWith('.mov'))
         .toList();
 
-    final List<String> allMediaUrls = imageUrls.isNotEmpty ? imageUrls : videoUrls;
+    final List<String> allMediaUrls =
+        imageUrls.isNotEmpty ? imageUrls : videoUrls;
 
     if (allMediaUrls.length == 1) {
       String url = allMediaUrls.first;
       bool isVideo = videoUrls.contains(url);
 
       return isVideo
-          ? VP(url: url) 
+          ? VP(url: url)
           : CachedNetworkImage(
               imageUrl: url,
-              placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-              errorWidget: (context, url, error) => const Icon(Icons.error, size: 20),
+              placeholder: (context, url) =>
+                  const Center(child: CircularProgressIndicator()),
+              errorWidget: (context, url, error) =>
+                  const Icon(Icons.error, size: 20),
               fit: BoxFit.contain,
               width: double.infinity,
             );

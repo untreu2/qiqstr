@@ -4,7 +4,7 @@ import 'package:video_player/video_player.dart';
 class VP extends StatefulWidget {
   final String url;
 
-  const VP({Key? key, required this.url}) : super(key: key);
+  const VP({super.key, required this.url});
 
   @override
   _VPState createState() => _VPState();

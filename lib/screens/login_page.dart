@@ -4,7 +4,7 @@ import 'package:nostr/nostr.dart';
 import 'feed_page.dart';
 
 class LoginPage extends StatefulWidget {
-  const LoginPage({Key? key}) : super(key: key);
+  const LoginPage({super.key});
 
   @override
   _LoginPageState createState() => _LoginPageState();

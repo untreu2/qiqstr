@@ -12,10 +12,10 @@ class NoteListWidget extends StatefulWidget {
   final DataType dataType;
 
   const NoteListWidget({
-    Key? key,
+    super.key,
     required this.npub,
     required this.dataType,
-  }) : super(key: key);
+  });
 
   @override
   _NoteListWidgetState createState() => _NoteListWidgetState();

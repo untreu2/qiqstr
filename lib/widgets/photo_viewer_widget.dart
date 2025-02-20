@@ -7,10 +7,10 @@ class PhotoViewerWidget extends StatefulWidget {
   final int initialIndex;
 
   const PhotoViewerWidget({
-    Key? key,
+    super.key,
     required this.imageUrls,
     this.initialIndex = 0,
-  }) : super(key: key);
+  });
 
   @override
   _PhotoViewerWidgetState createState() => _PhotoViewerWidgetState();
