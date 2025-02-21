@@ -837,12 +837,13 @@ class DataService {
       List<String> targetNpubs, Function(NoteModel) onOlderNote) async {
     if (_isClosed || notes.isEmpty) return;
     final lastNote = notes.last;
-
-    final request = _createRequest(Filter(
-        authors: targetNpubs,
-        kinds: [1, 6],
-        limit: currentLimit,
-        until: lastNote.timestamp.millisecondsSinceEpoch ~/ 1000));
+    final filter = Filter(
+      authors: targetNpubs,
+      kinds: [1, 6],
+      limit: currentLimit,
+      until: lastNote.timestamp.millisecondsSinceEpoch ~/ 1000,
+    );
+    final request = _createRequest(filter);
     await _broadcastRequest(request);
   }
 
