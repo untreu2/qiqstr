@@ -25,13 +25,14 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       repostedBy: fields[5] as String?,
       repostTimestamp: fields[6] as DateTime?,
       repostCount: fields[7] as int,
+      rawWs: fields[8] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, NoteModel obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -47,7 +48,9 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       ..writeByte(6)
       ..write(obj.repostTimestamp)
       ..writeByte(7)
-      ..write(obj.repostCount);
+      ..write(obj.repostCount)
+      ..writeByte(8)
+      ..write(obj.rawWs);
   }
 
   @override
