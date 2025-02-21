@@ -388,7 +388,6 @@ class DataService {
     ]);
 
     await _subscribeToAllReactions();
-    _startCheckingForNewData(targetNpubs);
 
     _startRealTimeSubscription(targetNpubs);
     await getCachedUserProfile(npub);
