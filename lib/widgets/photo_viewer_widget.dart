@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class PhotoViewerWidget extends StatefulWidget {
   final List<String> imageUrls;
@@ -20,11 +21,24 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
   late PageController _pageController;
   late int currentIndex;
 
+  bool _didPrecacheImages = false;
+
   @override
   void initState() {
     super.initState();
     currentIndex = widget.initialIndex;
     _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didPrecacheImages) {
+      for (var imageUrl in widget.imageUrls) {
+        precacheImage(CachedNetworkImageProvider(imageUrl), context);
+      }
+      _didPrecacheImages = true;
+    }
   }
 
   @override
@@ -51,9 +65,10 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
         },
         builder: (context, index) {
           return PhotoViewGalleryPageOptions(
-            imageProvider: NetworkImage(widget.imageUrls[index]),
+            imageProvider: CachedNetworkImageProvider(widget.imageUrls[index]),
             minScale: PhotoViewComputedScale.contained * 1.0,
             maxScale: PhotoViewComputedScale.covered * 2.0,
+            basePosition: Alignment.center,
           );
         },
         loadingBuilder: (context, event) => const Center(
