@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
+import 'package:qiqstr/models/user_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:qiqstr/screens/send_reply.dart';
 import 'package:qiqstr/widgets/link_preview_widget.dart';
@@ -119,6 +120,25 @@ class _NoteWidgetState extends State<NoteWidget>
     );
   }
 
+  Future<void> _navigateToProfile(String npub) async {
+    try {
+      final profileData = await widget.dataService.getCachedUserProfile(npub);
+      final user = UserModel.fromCachedProfile(npub, profileData);
+      if (mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProfilePage(user: user),
+          ),
+        );
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading profile: $e')),
+      );
+    }
+  }
+
   Widget _buildAuthorInfo(String npub) {
     return FutureBuilder<Map<String, String>>(
       future: widget.dataService.getCachedUserProfile(npub),
@@ -132,12 +152,7 @@ class _NoteWidgetState extends State<NoteWidget>
         return Row(
           children: [
             GestureDetector(
-              onTap: () {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => ProfilePage(npub: npub)));
-              },
+              onTap: () => _navigateToProfile(npub),
               child: profileImage.isNotEmpty
                   ? CircleAvatar(
                       radius: 20,
@@ -151,12 +166,7 @@ class _NoteWidgetState extends State<NoteWidget>
             ),
             const SizedBox(width: 8),
             GestureDetector(
-              onTap: () {
-                Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => ProfilePage(npub: npub)));
-              },
+              onTap: () => _navigateToProfile(npub),
               child: Text(
                 name,
                 style:
@@ -180,12 +190,7 @@ class _NoteWidgetState extends State<NoteWidget>
           profileImage = snapshot.data!['profileImage'] ?? '';
         }
         return GestureDetector(
-          onTap: () {
-            Navigator.push(
-                context,
-                MaterialPageRoute(
-                    builder: (context) => ProfilePage(npub: npub)));
-          },
+          onTap: () => _navigateToProfile(npub),
           child: Row(
             children: [
               const Icon(Icons.repeat, size: 16.0, color: Colors.grey),
