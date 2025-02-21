@@ -197,11 +197,11 @@ class DataService {
   int get connectedRelaysCount => _socketManager.activeSockets.length;
 
   Future<void> initialize() async {
+    notesBox =
+        await _openHiveBox<NoteModel>('notes_${dataType.toString()}_$npub');
+    print('[DataService] Hive notes box opened successfully.');
+
     await Future.wait([
-      _openHiveBox<NoteModel>('notes_${dataType.toString()}_$npub').then((box) {
-        notesBox = box;
-        print('[DataService] Hive notes box opened successfully.');
-      }),
       _openHiveBox<ReactionModel>('reactions_${dataType.toString()}_$npub')
           .then((box) {
         reactionsBox = box;
@@ -212,14 +212,14 @@ class DataService {
         repliesBox = box;
         print('[DataService] Hive replies box opened successfully.');
       }),
-      _openHiveBox<UserModel>('users').then((box) {
-        usersBox = box;
-        print('[DataService] Hive users box opened successfully.');
-      }),
       _openHiveBox<RepostModel>('reposts_${dataType.toString()}_$npub')
           .then((box) {
         repostsBox = box;
         print('[DataService] Hive reposts box opened successfully.');
+      }),
+      _openHiveBox<UserModel>('users').then((box) {
+        usersBox = box;
+        print('[DataService] Hive users box opened successfully.');
       }),
     ]);
 
@@ -239,8 +239,23 @@ class DataService {
               _socketManager.reconnectRelay(relayUrl, [])),
     ]);
 
-    loadNotesFromCache((notes) {});
-    _fetchUserData();
+    await loadNotesFromCache((loadedNotes) {
+      print('[DataService] Cache loaded with ${loadedNotes.length} notes.');
+    });
+
+    if (notes.isNotEmpty) {
+      List<String> noteIds = notes.map((note) => note.id).toList();
+      await Future.wait([
+        fetchReactionsForEvents(noteIds),
+        fetchRepliesForEvents(noteIds),
+        fetchRepostsForEvents(noteIds),
+      ]);
+      print(
+          '[DataService] Fetched reactions, replies, and reposts for cached notes.');
+    }
+
+    await _fetchUserData();
+
     _startCacheCleanup();
     _isInitialized = true;
   }
