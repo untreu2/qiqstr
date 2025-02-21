@@ -349,6 +349,19 @@ class DataService {
 
   Request _createRequest(Filter filter) => Request(generateUUID(), [filter]);
 
+  void _startRealTimeSubscription(List<String> targetNpubs) {
+    final filter = Filter(
+      authors: targetNpubs,
+      kinds: [1, 6, 7],
+      since: (notes.isNotEmpty)
+          ? (notes.first.timestamp.millisecondsSinceEpoch ~/ 1000)
+          : null,
+    );
+    final request = Request(generateUUID(), [filter]);
+    _safeBroadcast(request.serialize());
+    print('[DataService] Started real-time subscription for new events.');
+  }
+
   Future<void> _fetchUserData() async {
     List<String> targetNpubs;
     if (dataType == DataType.Feed) {
@@ -377,6 +390,7 @@ class DataService {
     await _subscribeToAllReactions();
     _startCheckingForNewData(targetNpubs);
 
+    _startRealTimeSubscription(targetNpubs);
     await getCachedUserProfile(npub);
   }
 
@@ -407,7 +421,7 @@ class DataService {
     ]);
 
     await _subscribeToAllReactions();
-    _startCheckingForNewData(targetNpubs);
+    _startRealTimeSubscription(targetNpubs);
   }
 
   Future<void> _broadcastRequest(Request request) async =>
@@ -865,19 +879,6 @@ class DataService {
     );
     final request = _createRequest(filter);
     await _broadcastRequest(request);
-  }
-
-  void _startCheckingForNewData(List<String> targetNpubs) {
-    _checkNewNotesTimer?.cancel();
-    _checkNewNotesTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      if (_isClosed) {
-        timer.cancel();
-        return;
-      }
-      fetchNotes(targetNpubs);
-      _fetchProfilesBatch(targetNpubs);
-    });
-    print('[DataService] Started periodic data fetching every 30 seconds.');
   }
 
   Future<void> _subscribeToAllReactions() async {
