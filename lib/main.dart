@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,7 +11,7 @@ import 'models/user_model.dart';
 import 'screens/login_page.dart';
 import 'screens/feed_page.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
@@ -21,40 +22,22 @@ void main() async {
     Hive.registerAdapter(RepostModelAdapter());
     Hive.registerAdapter(UserModelAdapter());
 
-    const FlutterSecureStorage secureStorage = FlutterSecureStorage();
-    String? privateKey = await secureStorage.read(key: 'privateKey');
-    String? npub = await secureStorage.read(key: 'npub');
-
-    if (privateKey != null && npub != null) {
-      await Hive.openBox<NoteModel>('notes_Feed_$npub');
-      await Hive.openBox<ReactionModel>('reactions_Feed_$npub');
-      await Hive.openBox<ReplyModel>('replies_Feed_$npub');
-      await Hive.openBox<RepostModel>('reposts_Feed_$npub');
-      await Hive.openBox<NoteModel>('notes_Profile_$npub');
-      await Hive.openBox<ReactionModel>('reactions_Profile_$npub');
-      await Hive.openBox<ReplyModel>('replies_Profile_$npub');
-      await Hive.openBox<RepostModel>('reposts_Profile_$npub');
-      await Hive.openBox<UserModel>('users');
-    }
-
-    runApp(Qiqstr(
-      isLoggedIn: privateKey != null && npub != null,
-      npub: npub,
-    ));
+    runApp(
+      const ProviderScope(
+        child: QiqstrApp(),
+      ),
+    );
   } catch (e) {
     print('Error initializing Hive: $e');
     runApp(const HiveErrorApp());
   }
 }
 
-class Qiqstr extends StatelessWidget {
-  final bool isLoggedIn;
-  final String? npub;
-
-  const Qiqstr({super.key, required this.isLoggedIn, this.npub});
+class QiqstrApp extends ConsumerWidget {
+  const QiqstrApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
       title: 'Qiqstr',
       theme: ThemeData(
@@ -90,19 +73,19 @@ class Qiqstr extends StatelessWidget {
           textTheme: ButtonTextTheme.primary,
         ),
       ),
-      home: isLoggedIn ? FeedPage(npub: npub!) : const SplashScreen(),
+      home: const SplashScreen(),
     );
   }
 }
 
-class SplashScreen extends StatefulWidget {
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  SplashScreenState createState() => SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends ConsumerState<SplashScreen> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   @override

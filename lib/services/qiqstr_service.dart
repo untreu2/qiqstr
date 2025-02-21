@@ -260,8 +260,13 @@ class DataService {
     _isInitialized = true;
   }
 
-  Future<Box<T>> _openHiveBox<T>(String boxName) async =>
-      await Hive.openBox<T>(boxName);
+  Future<Box<T>> _openHiveBox<T>(String boxName) async {
+    if (Hive.isBoxOpen(boxName)) {
+      return Hive.box<T>(boxName);
+    } else {
+      return await Hive.openBox<T>(boxName);
+    }
+  }
 
   Future<void> _initializeIsolate() async {
     _receivePort = ReceivePort();
@@ -1232,14 +1237,6 @@ class DataService {
     _receivePort.close();
     await _socketManager.closeConnections();
 
-    await Future.wait([
-      if (notesBox != null && notesBox!.isOpen) notesBox!.close(),
-      if (reactionsBox != null && reactionsBox!.isOpen) reactionsBox!.close(),
-      if (repliesBox != null && repliesBox!.isOpen) repliesBox!.close(),
-      if (usersBox != null && usersBox!.isOpen) usersBox!.close(),
-      if (repostsBox != null && repostsBox!.isOpen) repostsBox!.close(),
-    ]);
-
-    print('[DataService] All connections closed and boxes are closed.');
+    print('[DataService] All connections closed. Hive boxes remain open.');
   }
 }
