@@ -688,6 +688,8 @@ class DataService {
     if (_isClosed) return;
     try {
       final author = eventData['pubkey'] as String;
+      final createdAt =
+          DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000);
       final contentRaw = eventData['content'];
 
       Map<String, dynamic> profileContent;
@@ -709,6 +711,15 @@ class DataService {
       final lud16 = profileContent['lud16'] as String? ?? '';
       final website = profileContent['website'] as String? ?? '';
 
+      if (profileCache.containsKey(author)) {
+        final cachedProfile = profileCache[author]!;
+        if (createdAt.isBefore(cachedProfile.fetchedAt)) {
+          print(
+              '[DataService] Profile event ignored for $author: older data received.');
+          return;
+        }
+      }
+
       profileCache[author] = CachedProfile({
         'name': userName,
         'profileImage': profileImage,
@@ -717,7 +728,7 @@ class DataService {
         'banner': banner,
         'lud16': lud16,
         'website': website
-      }, DateTime.now());
+      }, createdAt);
 
       if (usersBox != null && usersBox!.isOpen) {
         final userModel = UserModel(
@@ -729,7 +740,7 @@ class DataService {
           profileImage: profileImage,
           lud16: lud16,
           website: website,
-          updatedAt: DateTime.now(),
+          updatedAt: createdAt,
         );
         await usersBox!.put(author, userModel);
       }
