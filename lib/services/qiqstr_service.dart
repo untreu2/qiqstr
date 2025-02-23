@@ -600,22 +600,34 @@ class DataService {
       if (!eventIds.contains(hashedIdentifier)) {
         notes.add(newNote);
         eventIds.add(hashedIdentifier);
-
         if (notesBox != null && notesBox!.isOpen) {
           await notesBox!.put(hashedIdentifier, newNote);
         }
-
         _sortNotes();
         onNewNote?.call(newNote);
         print(
             '[DataService] New note added and saved to cache: ${newNote.uniqueId}');
 
-        List<String> newEventIds = [newNote.uniqueId];
+        final targetEventId = isRepost && originalEventData != null
+            ? originalEventData['id'] as String
+            : newNote.uniqueId;
+
+        if (onReactionsUpdated != null) {
+          onReactionsUpdated!(targetEventId, reactionsMap[targetEventId] ?? []);
+        }
+        if (onRepliesUpdated != null) {
+          onRepliesUpdated!(targetEventId, repliesMap[targetEventId] ?? []);
+        }
+        if (onRepostsUpdated != null) {
+          onRepostsUpdated!(targetEventId, repostsMap[targetEventId] ?? []);
+        }
+
         await Future.wait([
-          fetchReactionsForEvents(newEventIds),
-          fetchRepliesForEvents(newEventIds),
-          fetchRepostsForEvents(newEventIds)
+          fetchReactionsForEvents([targetEventId]),
+          fetchRepliesForEvents([targetEventId]),
+          fetchRepostsForEvents([targetEventId])
         ]);
+
         await _updateReactionSubscription();
       }
     }
