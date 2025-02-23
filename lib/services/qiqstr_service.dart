@@ -504,16 +504,23 @@ class DataService {
   Future<void> _processNoteEvent(
       Map<String, dynamic> eventData, List<String> targetNpubs,
       {String? rawWs}) async {
-    int kind = eventData['kind'] as int;
-    final author = eventData['pubkey'] as String;
-    bool isRepost = kind == 6;
-    Map<String, dynamic>? originalEventData;
+    final int kind = eventData['kind'] as int;
+    final String eventAuthor = eventData['pubkey'] as String;
+    final bool isRepost = kind == 6;
+
+    Map<String, dynamic> processedEventData = eventData;
     DateTime? repostTimestamp;
+    String? repostId;
+    late String originalNoteId;
 
     if (isRepost) {
+      final String repostEventId = eventData['id'] as String;
       repostTimestamp =
           DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000);
-      final contentRaw = eventData['content'];
+
+      final dynamic contentRaw = eventData['content'];
+      Map<String, dynamic>? originalEventData;
+
       if (contentRaw is String && contentRaw.isNotEmpty) {
         try {
           originalEventData = jsonDecode(contentRaw) as Map<String, dynamic>;
@@ -522,78 +529,88 @@ class DataService {
         }
       }
       if (originalEventData == null) {
-        String? originalEventId;
+        String? originalEventIdFromTag;
         for (var tag in eventData['tags']) {
           if (tag is List && tag.length >= 2 && tag[0] == 'e') {
-            originalEventId = tag[1] as String;
+            originalEventIdFromTag = tag[1] as String;
             break;
           }
         }
-        if (originalEventId != null) {
-          originalEventData = await _fetchEventById(originalEventId);
+        if (originalEventIdFromTag != null) {
+          originalEventData = await _fetchEventById(originalEventIdFromTag);
         }
       }
       if (originalEventData == null) return;
-      eventData = originalEventData;
+
+      originalNoteId = originalEventData['id'] as String;
+      repostId = repostEventId;
+
+      processedEventData = Map<String, dynamic>.from(originalEventData);
+      processedEventData['created_at'] = eventData['created_at'];
+      processedEventData['repostedBy'] = eventAuthor;
+      processedEventData['repostTimestamp'] = eventData['created_at'];
+      processedEventData['repostId'] = repostId;
+    } else {
+      originalNoteId = eventData['id'] as String;
     }
 
-    final eventId = eventData['id'] as String?;
-    if (eventId == null) {
-      print('[DataService] Event ID is null.');
-      return;
+    if (isRepost) {
+      if (repostId != null && notes.any((n) => n.repostId == repostId)) return;
+    } else {
+      if (eventIds.contains(originalNoteId)) return;
     }
 
-    final noteAuthor = eventData['pubkey'] as String;
-    final noteContentRaw = eventData['content'];
-    String noteContent =
+    final String noteAuthor = processedEventData['pubkey'] as String;
+    final dynamic noteContentRaw = processedEventData['content'];
+    final String noteContent =
         noteContentRaw is String ? noteContentRaw : jsonEncode(noteContentRaw);
-    final tags = eventData['tags'] as List<dynamic>;
-    final parentEventId = _extractParentEventId(tags);
+    final List<dynamic> tags = processedEventData['tags'] as List<dynamic>;
+    final String? parentEventId = _extractParentEventId(tags);
 
-    if (eventIds.contains(eventId) || noteContent.trim().isEmpty) return;
+    if (noteContent.trim().isEmpty) return;
 
     if (parentEventId == null &&
         dataType == DataType.Feed &&
         targetNpubs.isNotEmpty &&
         !targetNpubs.contains(noteAuthor) &&
-        (!isRepost || !targetNpubs.contains(author))) return;
+        (!isRepost || !targetNpubs.contains(eventAuthor))) return;
 
     if (parentEventId != null) {
-      await _handleReplyEvent(eventData, parentEventId);
+      await _handleReplyEvent(processedEventData, parentEventId);
     } else {
-      final timestamp = DateTime.fromMillisecondsSinceEpoch(
-          (eventData['created_at'] as int) * 1000);
-      final newNote = NoteModel(
-        id: eventId,
+      final DateTime timestamp = DateTime.fromMillisecondsSinceEpoch(
+          (processedEventData['created_at'] as int) * 1000);
+
+      final NoteModel newNote = NoteModel(
+        id: originalNoteId,
         content: noteContent,
         author: noteAuthor,
         timestamp: timestamp,
         isRepost: isRepost,
-        repostedBy: isRepost ? author : null,
+        repostedBy: isRepost ? eventAuthor : null,
         repostTimestamp: repostTimestamp,
         rawWs: rawWs,
+        repostId: repostId,
       );
 
-      if (!eventIds.contains(newNote.id)) {
-        notes.add(newNote);
-        eventIds.add(newNote.id);
+      notes.add(newNote);
+      eventIds.add(originalNoteId);
 
-        if (notesBox != null && notesBox!.isOpen) {
-          await notesBox!.put(newNote.id, newNote);
-        }
-
-        _sortNotes();
-        onNewNote?.call(newNote);
-        print('[DataService] New note added and saved to cache: ${newNote.id}');
-
-        List<String> newEventIds = [newNote.id];
-        await Future.wait([
-          fetchReactionsForEvents(newEventIds),
-          fetchRepliesForEvents(newEventIds),
-          fetchRepostsForEvents(newEventIds)
-        ]);
-        await _updateReactionSubscription();
+      if (notesBox != null && notesBox!.isOpen) {
+        await notesBox!.put(originalNoteId, newNote);
       }
+
+      _sortNotes();
+      onNewNote?.call(newNote);
+      print('[DataService] New note added and saved to cache: $originalNoteId');
+
+      List<String> newEventIds = [originalNoteId];
+      await Future.wait([
+        fetchReactionsForEvents(newEventIds),
+        fetchRepliesForEvents(newEventIds),
+        fetchRepostsForEvents(newEventIds)
+      ]);
+      await _updateReactionSubscription();
     }
   }
 
