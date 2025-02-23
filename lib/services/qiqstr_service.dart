@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:isolate';
 import 'dart:io';
 import 'dart:math';
+import 'package:crypto/crypto.dart';
 import 'package:hive/hive.dart';
 import 'package:nostr/nostr.dart';
 import 'package:uuid/uuid.dart';
@@ -27,6 +28,10 @@ class CachedProfile {
   final Map<String, String> data;
   final DateTime fetchedAt;
   CachedProfile(this.data, this.fetchedAt);
+}
+
+String hashEventId(String eventId) {
+  return md5.convert(utf8.encode(eventId)).toString();
 }
 
 class WebSocketManager {
@@ -143,6 +148,7 @@ class DataService {
   final Function(String, int)? onRepostCountUpdated;
 
   List<NoteModel> notes = [];
+
   final Set<String> eventIds = {};
 
   final Map<String, List<ReactionModel>> reactionsMap = {};
@@ -590,13 +596,13 @@ class DataService {
         rawWs: rawWs,
       );
 
-      final noteIdentifier = newNote.uniqueId;
-      if (!eventIds.contains(noteIdentifier)) {
+      final hashedIdentifier = hashEventId(newNote.uniqueId);
+      if (!eventIds.contains(hashedIdentifier)) {
         notes.add(newNote);
-        eventIds.add(noteIdentifier);
+        eventIds.add(hashedIdentifier);
 
         if (notesBox != null && notesBox!.isOpen) {
-          await notesBox!.put(noteIdentifier, newNote);
+          await notesBox!.put(hashedIdentifier, newNote);
         }
 
         _sortNotes();
@@ -1042,7 +1048,7 @@ class DataService {
     if (notesBox != null && notesBox!.isOpen) {
       try {
         final Map<String, NoteModel> notesMap = {
-          for (var note in notes) note.id: note
+          for (var note in notes) hashEventId(note.id): note
         };
         await notesBox!.putAll(notesMap);
         print('[DataService] Notes saved to cache successfully.');
@@ -1059,9 +1065,10 @@ class DataService {
       if (allNotes.isEmpty) return;
 
       for (var note in allNotes) {
-        if (!eventIds.contains(note.id)) {
+        final hashedId = hashEventId(note.id);
+        if (!eventIds.contains(hashedId)) {
           notes.add(note);
-          eventIds.add(note.id);
+          eventIds.add(hashedId);
         }
       }
 
@@ -1146,10 +1153,11 @@ class DataService {
   Future<void> _handleNewNotes(dynamic data) async {
     if (data is List<NoteModel> && data.isNotEmpty) {
       for (var note in data) {
-        if (!eventIds.contains(note.id)) {
+        final hashedId = hashEventId(note.id);
+        if (!eventIds.contains(hashedId)) {
           notes.add(note);
-          eventIds.add(note.id);
-          await notesBox!.put(note.id, note);
+          eventIds.add(hashedId);
+          await notesBox!.put(hashedId, note);
         }
       }
       _sortNotes();
