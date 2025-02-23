@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:collection';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/models/reaction_model.dart';
 import 'package:qiqstr/models/reply_model.dart';
@@ -21,7 +22,9 @@ class NoteListWidget extends StatefulWidget {
 }
 
 class _NoteListWidgetState extends State<NoteListWidget> {
-  final List<NoteModel> _items = [];
+  late SplayTreeSet<NoteModel> _itemsTree;
+  late ValueNotifier<List<NoteModel>> _notesNotifier;
+
   late DataService _dataService;
   bool _isInitializing = true;
   bool _isLoadingOlderNotes = false;
@@ -32,6 +35,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   @override
   void initState() {
     super.initState();
+    _itemsTree = SplayTreeSet<NoteModel>(_compareNotes);
+    _notesNotifier = ValueNotifier<List<NoteModel>>([]);
     _dataService = DataService(
       npub: widget.npub,
       dataType: widget.dataType,
@@ -46,23 +51,32 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     _initialize();
   }
 
+  int _compareNotes(NoteModel a, NoteModel b) {
+    DateTime aTime =
+        a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
+    DateTime bTime =
+        b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
+    int result = bTime.compareTo(aTime);
+    if (result == 0) {
+      return a.id.compareTo(b.id);
+    }
+    return result;
+  }
+
   Future<void> _initialize() async {
     try {
       await _dataService.initialize();
       await _dataService.loadNotesFromCache((cachedNotes) {
-        setState(() {
-          _items.clear();
-          _items.addAll(cachedNotes);
-          _sortNotes();
-          for (var note in _items) {
-            _reactionCounts[note.id] =
-                _dataService.reactionsMap[note.id]?.length ?? 0;
-            _replyCounts[note.id] =
-                _dataService.repliesMap[note.id]?.length ?? 0;
-            _repostCounts[note.id] =
-                _dataService.repostsMap[note.id]?.length ?? 0;
-          }
-        });
+        _itemsTree.clear();
+        _itemsTree.addAll(cachedNotes);
+        for (var note in cachedNotes) {
+          _reactionCounts[note.id] =
+              _dataService.reactionsMap[note.id]?.length ?? 0;
+          _replyCounts[note.id] = _dataService.repliesMap[note.id]?.length ?? 0;
+          _repostCounts[note.id] =
+              _dataService.repostsMap[note.id]?.length ?? 0;
+        }
+        _notesNotifier.value = _itemsTree.toList();
       });
       await _dataService.initializeConnections();
     } catch (e) {
@@ -73,27 +87,11 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   }
 
   void _handleNewNote(NoteModel newNote) {
-    setState(() {
-      _items.insert(0, newNote);
-      _sortNotes();
+    if (_itemsTree.add(newNote)) {
       _reactionCounts[newNote.id] = 0;
       _replyCounts[newNote.id] = 0;
       _repostCounts[newNote.id] = 0;
-    });
-  }
-
-  void _sortNotes() {
-    _items.sort((a, b) {
-      DateTime aTimestamp =
-          a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
-      DateTime bTimestamp =
-          b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
-      return bTimestamp.compareTo(aTimestamp);
-    });
-    debugPrint('Notes sorted:');
-    for (var note in _items) {
-      debugPrint(
-          'ID: ${note.id}, Timestamp: ${note.timestamp}, Repost: ${note.repostTimestamp}');
+      _notesNotifier.value = _itemsTree.toList();
     }
   }
 
@@ -142,13 +140,12 @@ class _NoteListWidgetState extends State<NoteListWidget> {
             ? await _dataService.getFollowingList(widget.npub)
             : [widget.npub],
         (olderNote) {
-          setState(() {
-            _items.add(olderNote);
-            _sortNotes();
+          if (_itemsTree.add(olderNote)) {
             _reactionCounts[olderNote.id] = 0;
             _replyCounts[olderNote.id] = 0;
             _repostCounts[olderNote.id] = 0;
-          });
+            _notesNotifier.value = _itemsTree.toList();
+          }
         },
       );
     } catch (e) {
@@ -168,6 +165,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   @override
   void dispose() {
     _dataService.closeConnections();
+    _notesNotifier.dispose();
     super.dispose();
   }
 
@@ -188,24 +186,29 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       },
       child: RefreshIndicator(
         onRefresh: _initialize,
-        child: ListView.builder(
-          padding: EdgeInsets.zero,
-          itemCount: _items.length + (_isLoadingOlderNotes ? 1 : 0),
-          itemBuilder: (context, index) {
-            if (index == _items.length && _isLoadingOlderNotes) {
-              return const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Center(child: CircularProgressIndicator()),
-              );
-            }
-            final item = _items[index];
-            return NoteWidget(
-              key: ValueKey(item.id),
-              note: item,
-              reactionCount: _reactionCounts[item.id] ?? 0,
-              replyCount: _replyCounts[item.id] ?? 0,
-              repostCount: _repostCounts[item.id] ?? 0,
-              dataService: _dataService,
+        child: ValueListenableBuilder<List<NoteModel>>(
+          valueListenable: _notesNotifier,
+          builder: (context, notes, child) {
+            return ListView.builder(
+              padding: EdgeInsets.zero,
+              itemCount: notes.length + (_isLoadingOlderNotes ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index == notes.length && _isLoadingOlderNotes) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                final note = notes[index];
+                return NoteWidget(
+                  key: ValueKey(note.id),
+                  note: note,
+                  reactionCount: _reactionCounts[note.id] ?? 0,
+                  replyCount: _replyCounts[note.id] ?? 0,
+                  repostCount: _repostCounts[note.id] ?? 0,
+                  dataService: _dataService,
+                );
+              },
             );
           },
         ),
