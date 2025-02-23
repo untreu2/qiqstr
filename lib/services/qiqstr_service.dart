@@ -534,7 +534,19 @@ class DataService {
         }
       }
       if (originalEventData == null) return;
-      eventData = originalEventData;
+
+      final originalId = originalEventData['id'] as String;
+      final uniqueRepostId = '${originalId}_$author';
+
+      eventData = {
+        ...originalEventData,
+        'uniqueId': uniqueRepostId,
+        'isRepost': true,
+        'repostedBy': author,
+        'repostTimestamp': repostTimestamp.millisecondsSinceEpoch ~/ 1000,
+      };
+    } else {
+      eventData['uniqueId'] = eventData['id'];
     }
 
     final eventId = eventData['id'] as String?;
@@ -550,13 +562,16 @@ class DataService {
     final tags = eventData['tags'] as List<dynamic>;
     final parentEventId = _extractParentEventId(tags);
 
-    if (eventIds.contains(eventId) || noteContent.trim().isEmpty) return;
-
-    if (parentEventId == null &&
+    if (dataType == DataType.Profile) {
+      if (!isRepost && noteAuthor != npub) return;
+      if (isRepost && eventData['repostedBy'] != npub) return;
+    } else if (parentEventId == null &&
         dataType == DataType.Feed &&
         targetNpubs.isNotEmpty &&
         !targetNpubs.contains(noteAuthor) &&
-        (!isRepost || !targetNpubs.contains(author))) return;
+        (!isRepost || !targetNpubs.contains(author))) {
+      return;
+    }
 
     if (parentEventId != null) {
       await _handleReplyEvent(eventData, parentEventId);
@@ -565,6 +580,7 @@ class DataService {
           (eventData['created_at'] as int) * 1000);
       final newNote = NoteModel(
         id: eventId,
+        uniqueId: eventData['uniqueId'] as String,
         content: noteContent,
         author: noteAuthor,
         timestamp: timestamp,
@@ -574,19 +590,21 @@ class DataService {
         rawWs: rawWs,
       );
 
-      if (!eventIds.contains(newNote.id)) {
+      final noteIdentifier = newNote.uniqueId;
+      if (!eventIds.contains(noteIdentifier)) {
         notes.add(newNote);
-        eventIds.add(newNote.id);
+        eventIds.add(noteIdentifier);
 
         if (notesBox != null && notesBox!.isOpen) {
-          await notesBox!.put(newNote.id, newNote);
+          await notesBox!.put(noteIdentifier, newNote);
         }
 
         _sortNotes();
         onNewNote?.call(newNote);
-        print('[DataService] New note added and saved to cache: ${newNote.id}');
+        print(
+            '[DataService] New note added and saved to cache: ${newNote.uniqueId}');
 
-        List<String> newEventIds = [newNote.id];
+        List<String> newEventIds = [newNote.uniqueId];
         await Future.wait([
           fetchReactionsForEvents(newEventIds),
           fetchRepliesForEvents(newEventIds),

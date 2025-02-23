@@ -8,31 +8,35 @@ class NoteModel extends HiveObject {
   final String id;
 
   @HiveField(1)
-  final String content;
+  final String uniqueId;
 
   @HiveField(2)
-  final String author;
+  final String content;
 
   @HiveField(3)
-  final DateTime timestamp;
+  final String author;
 
   @HiveField(4)
-  final bool isRepost;
+  final DateTime timestamp;
 
   @HiveField(5)
-  final String? repostedBy;
+  final bool isRepost;
 
   @HiveField(6)
-  final DateTime? repostTimestamp;
+  final String? repostedBy;
 
   @HiveField(7)
-  int repostCount;
+  final DateTime? repostTimestamp;
 
   @HiveField(8)
+  int repostCount;
+
+  @HiveField(9)
   final String? rawWs;
 
   NoteModel({
     required this.id,
+    required this.uniqueId,
     required this.content,
     required this.author,
     required this.timestamp,
@@ -46,6 +50,7 @@ class NoteModel extends HiveObject {
   factory NoteModel.fromJson(Map<String, dynamic> json) {
     return NoteModel(
       id: json['id'] as String,
+      uniqueId: json['uniqueId'] as String? ?? json['id'] as String,
       content: json['content'] as String,
       author: json['author'] as String,
       timestamp: DateTime.fromMillisecondsSinceEpoch(
@@ -64,6 +69,7 @@ class NoteModel extends HiveObject {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'uniqueId': uniqueId,
       'content': content,
       'author': author,
       'timestamp': timestamp.millisecondsSinceEpoch ~/ 1000,
