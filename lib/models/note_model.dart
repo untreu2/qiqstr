@@ -31,6 +31,9 @@ class NoteModel extends HiveObject {
   @HiveField(8)
   final String? rawWs;
 
+  @HiveField(9)
+  final String? repostId;
+
   NoteModel({
     required this.id,
     required this.content,
@@ -41,6 +44,7 @@ class NoteModel extends HiveObject {
     this.repostTimestamp,
     this.repostCount = 0,
     this.rawWs,
+    this.repostId,
   });
 
   factory NoteModel.fromJson(Map<String, dynamic> json) {
@@ -58,6 +62,7 @@ class NoteModel extends HiveObject {
           : null,
       repostCount: json['repostCount'] as int? ?? 0,
       rawWs: json['rawWs'] as String?,
+      repostId: json['repostId'] as String?,
     );
   }
 
@@ -74,6 +79,7 @@ class NoteModel extends HiveObject {
           : null,
       'repostCount': repostCount,
       'rawWs': rawWs,
+      'repostId': repostId,
     };
   }
 }
