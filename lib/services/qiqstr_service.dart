@@ -508,8 +508,10 @@ class DataService {
   }
 
   Future<void> _processNoteEvent(
-      Map<String, dynamic> eventData, List<String> targetNpubs,
-      {String? rawWs}) async {
+    Map<String, dynamic> eventData,
+    List<String> targetNpubs, {
+    String? rawWs,
+  }) async {
     int kind = eventData['kind'] as int;
     final author = eventData['pubkey'] as String;
     bool isRepost = kind == 6;
@@ -568,22 +570,24 @@ class DataService {
     final tags = eventData['tags'] as List<dynamic>;
     final parentEventId = _extractParentEventId(tags);
 
-    if (dataType == DataType.Profile) {
-      if (!isRepost && noteAuthor != npub) return;
-      if (isRepost && eventData['repostedBy'] != npub) return;
-    } else if (parentEventId == null &&
-        dataType == DataType.Feed &&
-        targetNpubs.isNotEmpty &&
-        !targetNpubs.contains(noteAuthor) &&
-        (!isRepost || !targetNpubs.contains(author))) {
-      return;
+    if (parentEventId == null) {
+      if (dataType == DataType.Profile) {
+        if (!isRepost && noteAuthor != npub) return;
+        if (isRepost && eventData['repostedBy'] != npub) return;
+      } else if (dataType == DataType.Feed &&
+          targetNpubs.isNotEmpty &&
+          !targetNpubs.contains(noteAuthor) &&
+          (!isRepost || !targetNpubs.contains(author))) {
+        return;
+      }
     }
 
     if (parentEventId != null) {
       await _handleReplyEvent(eventData, parentEventId);
     } else {
       final timestamp = DateTime.fromMillisecondsSinceEpoch(
-          (eventData['created_at'] as int) * 1000);
+        (eventData['created_at'] as int) * 1000,
+      );
       final newNote = NoteModel(
         id: eventId,
         uniqueId: eventData['uniqueId'] as String,
