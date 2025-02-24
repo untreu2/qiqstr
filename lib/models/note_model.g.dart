@@ -18,41 +18,38 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
     };
     return NoteModel(
       id: fields[0] as String,
-      uniqueId: fields[1] as String,
-      content: fields[2] as String,
-      author: fields[3] as String,
-      timestamp: fields[4] as DateTime,
-      isRepost: fields[5] as bool,
-      repostedBy: fields[6] as String?,
-      repostTimestamp: fields[7] as DateTime?,
-      repostCount: fields[8] as int,
-      rawWs: fields[9] as String?,
+      content: fields[1] as String,
+      author: fields[2] as String,
+      timestamp: fields[3] as DateTime,
+      isRepost: fields[4] as bool,
+      repostedBy: fields[5] as String?,
+      repostTimestamp: fields[6] as DateTime?,
+      repostCount: fields[7] as int,
+      rawWs: fields[8] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, NoteModel obj) {
     writer
-      ..writeByte(10)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
-      ..write(obj.uniqueId)
-      ..writeByte(2)
       ..write(obj.content)
-      ..writeByte(3)
+      ..writeByte(2)
       ..write(obj.author)
-      ..writeByte(4)
+      ..writeByte(3)
       ..write(obj.timestamp)
-      ..writeByte(5)
+      ..writeByte(4)
       ..write(obj.isRepost)
-      ..writeByte(6)
+      ..writeByte(5)
       ..write(obj.repostedBy)
-      ..writeByte(7)
+      ..writeByte(6)
       ..write(obj.repostTimestamp)
-      ..writeByte(8)
+      ..writeByte(7)
       ..write(obj.repostCount)
-      ..writeByte(9)
+      ..writeByte(8)
       ..write(obj.rawWs);
   }
 
