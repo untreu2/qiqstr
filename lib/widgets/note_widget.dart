@@ -101,9 +101,27 @@ class _NoteWidgetState extends State<NoteWidget>
   }
 
   void _handleHorizontalDragEnd(DragEndDetails details) {
-    if (details.primaryVelocity != null && details.primaryVelocity! > 0) {
-      _showReplyDialog();
-      _showHighlight();
+    if (details.primaryVelocity != null) {
+      if (details.primaryVelocity! > 0) {
+        _showReplyDialog();
+        _showHighlight();
+      } else if (details.primaryVelocity! < 0) {
+        _handleRepost();
+        _showHighlight();
+      }
+    }
+  }
+
+  Future<void> _handleRepost() async {
+    try {
+      await widget.dataService.sendRepost(widget.note);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Repost sent successfully.')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sending repost: $e')),
+      );
     }
   }
 
@@ -305,13 +323,14 @@ class _NoteWidgetState extends State<NoteWidget>
                       text: parsedContent['text'] as String,
                       onOpen: _onOpen,
                       style: TextStyle(
-                          fontSize:
-                              (parsedContent['text'] as String).length < 21
-                                  ? 20.0
-                                  : 15.0),
+                        fontSize: (parsedContent['text'] as String).length < 21
+                            ? 20.0
+                            : 15.0,
+                      ),
                       linkStyle: const TextStyle(
-                          color: Colors.amberAccent,
-                          fontStyle: FontStyle.italic),
+                        color: Colors.amberAccent,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                   ),
                 if (parsedContent['mediaUrls'] != null &&
@@ -319,14 +338,16 @@ class _NoteWidgetState extends State<NoteWidget>
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4.0),
                     child: MediaPreviewWidget(
-                        mediaUrls: parsedContent['mediaUrls'] as List<String>),
+                      mediaUrls: parsedContent['mediaUrls'] as List<String>,
+                    ),
                   ),
                 if (parsedContent['linkUrls'] != null &&
                     (parsedContent['linkUrls'] as List).isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4.0),
                     child: LinkPreviewWidget(
-                        linkUrls: parsedContent['linkUrls'] as List<String>),
+                      linkUrls: parsedContent['linkUrls'] as List<String>,
+                    ),
                   ),
                 Padding(
                   padding: const EdgeInsets.symmetric(
@@ -385,7 +406,7 @@ class _NoteWidgetState extends State<NoteWidget>
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: widget.note.rawWs ?? ''));
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Copied raw .JSON')),
+                  const SnackBar(content: Text('Copied raw JSON')),
                 );
               },
             ),

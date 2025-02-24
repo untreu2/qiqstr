@@ -1074,6 +1074,33 @@ class DataService {
     }
   }
 
+  Future<void> sendRepost(NoteModel note) async {
+    if (_isClosed) return;
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found.');
+      }
+      final content = note.rawWs ?? '';
+      final tags = [
+        ['e', note.id],
+        ['p', note.author]
+      ];
+      final event = Event.from(
+        kind: 6,
+        tags: tags,
+        content: content,
+        privkey: privateKey,
+      );
+      final serializedEvent = event.serialize();
+      await _socketManager.broadcast(serializedEvent);
+      print('[DataService] Repost event sent successfully.');
+    } catch (e) {
+      print('[DataService ERROR] Error sending repost: $e');
+      throw e;
+    }
+  }
+
   Future<void> saveNotesToCache() async {
     if (notesBox != null && notesBox!.isOpen) {
       try {
