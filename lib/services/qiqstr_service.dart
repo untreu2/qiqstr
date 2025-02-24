@@ -618,10 +618,10 @@ class DataService {
         reactionsMap[targetEventId]!.add(reaction);
         onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
 
-        print(
-            '[DataService] Reaction updated for event $targetEventId: ${reaction.content}');
-        onReactionCountUpdated?.call(
-            targetEventId, reactionsMap[targetEventId]!.length);
+        int count = reactionsMap[targetEventId]!.length;
+        onReactionCountUpdated?.call(targetEventId, count);
+
+        _updateNoteCounts(targetEventId, reactionCount: count);
 
         await reactionsBox?.put(reaction.id, reaction);
       }
@@ -641,10 +641,10 @@ class DataService {
         repliesMap[parentEventId]!.add(reply);
         onRepliesUpdated?.call(parentEventId, repliesMap[parentEventId]!);
 
-        print(
-            '[DataService] Reply updated for event $parentEventId: ${reply.content}');
-        onReplyCountUpdated?.call(
-            parentEventId, repliesMap[parentEventId]!.length);
+        int count = repliesMap[parentEventId]!.length;
+        onReplyCountUpdated?.call(parentEventId, count);
+
+        _updateNoteCounts(parentEventId, replyCount: count);
 
         await repliesBox?.put(reply.id, reply);
       }
@@ -672,15 +672,28 @@ class DataService {
         repostsMap[originalNoteId]!.add(repost);
         onRepostsUpdated?.call(originalNoteId, repostsMap[originalNoteId]!);
 
-        print(
-            '[DataService] Repost updated for event $originalNoteId: ${repost.repostedBy}');
-        onRepostCountUpdated?.call(
-            originalNoteId, repostsMap[originalNoteId]!.length);
+        int count = repostsMap[originalNoteId]!.length;
+        onRepostCountUpdated?.call(originalNoteId, count);
+
+        _updateNoteCounts(originalNoteId, repostCount: count);
 
         await repostsBox?.put(repost.id, repost);
       }
     } catch (e) {
       print('[DataService ERROR] Error handling repost event: $e');
+    }
+  }
+
+  void _updateNoteCounts(String noteId,
+      {int? reactionCount, int? replyCount, int? repostCount}) {
+    int index = notes.indexWhere((note) => note.id == noteId);
+    if (index != -1) {
+      final note = notes[index];
+      if (reactionCount != null) note.reactionCount = reactionCount;
+      if (replyCount != null) note.replyCount = replyCount;
+      if (repostCount != null) note.repostCount = repostCount;
+      note.save();
+      notesBox?.put(note.id, note);
     }
   }
 

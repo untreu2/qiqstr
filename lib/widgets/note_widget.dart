@@ -14,17 +14,11 @@ import 'content_parser.dart';
 
 class NoteWidget extends StatefulWidget {
   final NoteModel note;
-  final int reactionCount;
-  final int replyCount;
-  final int repostCount;
   final DataService dataService;
 
   const NoteWidget({
     super.key,
     required this.note,
-    required this.reactionCount,
-    required this.replyCount,
-    required this.repostCount,
     required this.dataService,
   });
 
@@ -333,7 +327,7 @@ class _NoteWidgetState extends State<NoteWidget>
                           size: 16.0,
                           color: _isGlowing ? Colors.red : Colors.grey),
                       const SizedBox(width: 4.0),
-                      Text(widget.reactionCount.toString(),
+                      Text(widget.note.reactionCount.toString(),
                           style: const TextStyle(
                               fontSize: 12.0, color: Colors.grey)),
                     ],
@@ -343,7 +337,7 @@ class _NoteWidgetState extends State<NoteWidget>
                     children: [
                       const Icon(Icons.reply, size: 16.0, color: Colors.grey),
                       const SizedBox(width: 4.0),
-                      Text(widget.replyCount.toString(),
+                      Text(widget.note.replyCount.toString(),
                           style: const TextStyle(
                               fontSize: 12.0, color: Colors.grey)),
                     ],
@@ -353,7 +347,7 @@ class _NoteWidgetState extends State<NoteWidget>
                     children: [
                       const Icon(Icons.repeat, size: 16.0, color: Colors.grey),
                       const SizedBox(width: 4.0),
-                      Text(widget.repostCount.toString(),
+                      Text(widget.note.repostCount.toString(),
                           style: const TextStyle(
                               fontSize: 12.0, color: Colors.grey)),
                     ],

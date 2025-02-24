@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:collection';
 import 'package:qiqstr/models/note_model.dart';
-import 'package:qiqstr/models/reaction_model.dart';
-import 'package:qiqstr/models/reply_model.dart';
-import 'package:qiqstr/models/repost_model.dart';
 import 'package:qiqstr/services/qiqstr_service.dart';
 import 'package:qiqstr/widgets/note_widget.dart';
 
@@ -28,9 +25,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   late DataService _dataService;
   bool _isInitializing = true;
   bool _isLoadingOlderNotes = false;
-  Map<String, int> _reactionCounts = {};
-  Map<String, int> _replyCounts = {};
-  Map<String, int> _repostCounts = {};
 
   @override
   void initState() {
@@ -41,12 +35,12 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       npub: widget.npub,
       dataType: widget.dataType,
       onNewNote: _handleNewNote,
-      onReactionsUpdated: _handleReactionsUpdated,
-      onRepliesUpdated: _handleRepliesUpdated,
-      onReactionCountUpdated: _updateReactionCount,
-      onReplyCountUpdated: _updateReplyCount,
-      onRepostsUpdated: _handleRepostsUpdated,
-      onRepostCountUpdated: _updateRepostCount,
+      onReactionsUpdated: (noteId, reactions) => setState(() {}),
+      onRepliesUpdated: (noteId, replies) => setState(() {}),
+      onReactionCountUpdated: (noteId, count) => setState(() {}),
+      onReplyCountUpdated: (noteId, count) => setState(() {}),
+      onRepostsUpdated: (noteId, reposts) => setState(() {}),
+      onRepostCountUpdated: (noteId, count) => setState(() {}),
     );
     _initialize();
   }
@@ -67,15 +61,9 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     try {
       await _dataService.initialize();
       await _dataService.loadNotesFromCache((cachedNotes) {
-        _itemsTree.clear();
-        _itemsTree.addAll(cachedNotes);
-        for (var note in cachedNotes) {
-          _reactionCounts[note.id] =
-              _dataService.reactionsMap[note.id]?.length ?? 0;
-          _replyCounts[note.id] = _dataService.repliesMap[note.id]?.length ?? 0;
-          _repostCounts[note.id] =
-              _dataService.repostsMap[note.id]?.length ?? 0;
-        }
+        _itemsTree
+          ..clear()
+          ..addAll(cachedNotes);
         _notesNotifier.value = _itemsTree.toList();
       });
       await _dataService.initializeConnections();
@@ -88,47 +76,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   void _handleNewNote(NoteModel newNote) {
     if (_itemsTree.add(newNote)) {
-      _reactionCounts[newNote.id] = 0;
-      _replyCounts[newNote.id] = 0;
-      _repostCounts[newNote.id] = 0;
       _notesNotifier.value = _itemsTree.toList();
     }
-  }
-
-  void _handleReactionsUpdated(String noteId, List<ReactionModel> reactions) {
-    setState(() {
-      _reactionCounts[noteId] = reactions.length;
-    });
-  }
-
-  void _handleRepliesUpdated(String noteId, List<ReplyModel> replies) {
-    setState(() {
-      _replyCounts[noteId] = replies.length;
-    });
-  }
-
-  void _handleRepostsUpdated(String noteId, List<RepostModel> reposts) {
-    setState(() {
-      _repostCounts[noteId] = reposts.length;
-    });
-  }
-
-  void _updateReactionCount(String noteId, int count) {
-    setState(() {
-      _reactionCounts[noteId] = count;
-    });
-  }
-
-  void _updateReplyCount(String noteId, int count) {
-    setState(() {
-      _replyCounts[noteId] = count;
-    });
-  }
-
-  void _updateRepostCount(String noteId, int count) {
-    setState(() {
-      _repostCounts[noteId] = count;
-    });
   }
 
   Future<void> _loadOlderNotes() async {
@@ -141,9 +90,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
             : [widget.npub],
         (olderNote) {
           if (_itemsTree.add(olderNote)) {
-            _reactionCounts[olderNote.id] = 0;
-            _replyCounts[olderNote.id] = 0;
-            _repostCounts[olderNote.id] = 0;
             _notesNotifier.value = _itemsTree.toList();
           }
         },
@@ -203,9 +149,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                 return NoteWidget(
                   key: ValueKey(note.id),
                   note: note,
-                  reactionCount: _reactionCounts[note.id] ?? 0,
-                  replyCount: _replyCounts[note.id] ?? 0,
-                  repostCount: _repostCounts[note.id] ?? 0,
                   dataService: _dataService,
                 );
               },
