@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:qiqstr/screens/send_reply.dart';
 import 'package:qiqstr/widgets/link_preview_widget.dart';
 import 'package:qiqstr/widgets/media_preview_widget.dart';
+import 'package:flutter/services.dart';
 import '../models/note_model.dart';
 import '../screens/profile_page.dart';
 import '../services/qiqstr_service.dart';
@@ -250,123 +251,146 @@ class _NoteWidgetState extends State<NoteWidget>
     return GestureDetector(
       onDoubleTapDown: _handleDoubleTap,
       onHorizontalDragEnd: _handleHorizontalDragEnd,
-      child: AnimatedBuilder(
-        animation: _highlightAnimation,
-        builder: (context, child) {
-          return Transform.scale(
-            scale: 1 - (_highlightAnimation.value * 0.05),
-            child: Container(
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color:
-                      Colors.white.withOpacity(_highlightAnimation.value * 0.8),
-                  width: 1.5,
+      child: Stack(
+        children: [
+          AnimatedBuilder(
+            animation: _highlightAnimation,
+            builder: (context, child) {
+              return Transform.scale(
+                scale: 1 - (_highlightAnimation.value * 0.05),
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: Colors.white
+                          .withOpacity(_highlightAnimation.value * 0.8),
+                      width: 1.5,
+                    ),
+                    borderRadius: BorderRadius.circular(10.0),
+                  ),
+                  child: child,
                 ),
-                borderRadius: BorderRadius.circular(10.0),
-              ),
-              child: child,
-            ),
-          );
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 2.0),
-              child: Row(
-                children: [
-                  _buildAuthorInfo(widget.note.author),
-                  const Spacer(),
-                  Text(
-                    _formatTimestamp(widget.note.timestamp),
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+              );
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12.0, vertical: 2.0),
+                  child: Row(
+                    children: [
+                      _buildAuthorInfo(widget.note.author),
+                      const Spacer(),
+                      Text(
+                        _formatTimestamp(widget.note.timestamp),
+                        style:
+                            const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-            if (widget.note.isRepost && widget.note.repostedBy != null)
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
-                child: _buildRepostInfo(
-                    widget.note.repostedBy!, widget.note.repostTimestamp),
-              ),
-            if (parsedContent['text'] != null &&
-                (parsedContent['text'] as String).isNotEmpty)
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
-                child: Linkify(
-                  text: parsedContent['text'] as String,
-                  onOpen: _onOpen,
-                  style: TextStyle(
-                      fontSize: (parsedContent['text'] as String).length < 21
-                          ? 20.0
-                          : 15.0),
-                  linkStyle: const TextStyle(
-                      color: Colors.amberAccent, fontStyle: FontStyle.italic),
                 ),
-              ),
-            if (parsedContent['mediaUrls'] != null &&
-                (parsedContent['mediaUrls'] as List).isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4.0),
-                child: MediaPreviewWidget(
-                    mediaUrls: parsedContent['mediaUrls'] as List<String>),
-              ),
-            if (parsedContent['linkUrls'] != null &&
-                (parsedContent['linkUrls'] as List).isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4.0),
-                child: LinkPreviewWidget(
-                    linkUrls: parsedContent['linkUrls'] as List<String>),
-              ),
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-              child: Row(
-                children: [
-                  Row(
+                if (widget.note.isRepost && widget.note.repostedBy != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12.0, vertical: 4.0),
+                    child: _buildRepostInfo(
+                        widget.note.repostedBy!, widget.note.repostTimestamp),
+                  ),
+                if (parsedContent['text'] != null &&
+                    (parsedContent['text'] as String).isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12.0, vertical: 4.0),
+                    child: Linkify(
+                      text: parsedContent['text'] as String,
+                      onOpen: _onOpen,
+                      style: TextStyle(
+                          fontSize:
+                              (parsedContent['text'] as String).length < 21
+                                  ? 20.0
+                                  : 15.0),
+                      linkStyle: const TextStyle(
+                          color: Colors.amberAccent,
+                          fontStyle: FontStyle.italic),
+                    ),
+                  ),
+                if (parsedContent['mediaUrls'] != null &&
+                    (parsedContent['mediaUrls'] as List).isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: MediaPreviewWidget(
+                        mediaUrls: parsedContent['mediaUrls'] as List<String>),
+                  ),
+                if (parsedContent['linkUrls'] != null &&
+                    (parsedContent['linkUrls'] as List).isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: LinkPreviewWidget(
+                        linkUrls: parsedContent['linkUrls'] as List<String>),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12.0, vertical: 8.0),
+                  child: Row(
                     children: [
-                      Icon(Icons.favorite,
-                          size: 16.0,
-                          color: _isGlowing ? Colors.red : Colors.grey),
-                      const SizedBox(width: 4.0),
-                      Text(widget.reactionCount.toString(),
-                          style: const TextStyle(
-                              fontSize: 12.0, color: Colors.grey)),
+                      Row(
+                        children: [
+                          Icon(Icons.favorite,
+                              size: 16.0,
+                              color: _isGlowing ? Colors.red : Colors.grey),
+                          const SizedBox(width: 4.0),
+                          Text(widget.reactionCount.toString(),
+                              style: const TextStyle(
+                                  fontSize: 12.0, color: Colors.grey)),
+                        ],
+                      ),
+                      const SizedBox(width: 24.0),
+                      Row(
+                        children: [
+                          const Icon(Icons.reply,
+                              size: 16.0, color: Colors.grey),
+                          const SizedBox(width: 4.0),
+                          Text(widget.replyCount.toString(),
+                              style: const TextStyle(
+                                  fontSize: 12.0, color: Colors.grey)),
+                        ],
+                      ),
+                      const SizedBox(width: 24.0),
+                      Row(
+                        children: [
+                          const Icon(Icons.repeat,
+                              size: 16.0, color: Colors.grey),
+                          const SizedBox(width: 4.0),
+                          Text(widget.repostCount.toString(),
+                              style: const TextStyle(
+                                  fontSize: 12.0, color: Colors.grey)),
+                        ],
+                      ),
                     ],
                   ),
-                  const SizedBox(width: 24.0),
-                  Row(
-                    children: [
-                      const Icon(Icons.reply, size: 16.0, color: Colors.grey),
-                      const SizedBox(width: 4.0),
-                      Text(widget.replyCount.toString(),
-                          style: const TextStyle(
-                              fontSize: 12.0, color: Colors.grey)),
-                    ],
-                  ),
-                  const SizedBox(width: 24.0),
-                  Row(
-                    children: [
-                      const Icon(Icons.repeat, size: 16.0, color: Colors.grey),
-                      const SizedBox(width: 4.0),
-                      Text(widget.repostCount.toString(),
-                          style: const TextStyle(
-                              fontSize: 12.0, color: Colors.grey)),
-                    ],
-                  ),
-                ],
-              ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 6.0),
+                  child:
+                      Divider(height: 0.5, thickness: 0.5, color: Colors.grey),
+                ),
+              ],
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 6.0),
-              child: Divider(height: 0.5, thickness: 0.5, color: Colors.grey),
+          ),
+          Positioned(
+            right: 8,
+            bottom: 8,
+            child: IconButton(
+              icon: const Icon(Icons.copy, size: 20, color: Colors.grey),
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: widget.note.rawWs ?? ''));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Copied raw .JSON')),
+                );
+              },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

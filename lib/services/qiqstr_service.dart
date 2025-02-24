@@ -588,6 +588,20 @@ class DataService {
       final timestamp = DateTime.fromMillisecondsSinceEpoch(
         (eventData['created_at'] as int) * 1000,
       );
+
+      String processedRawWs = rawWs ?? "";
+      if (isRepost && rawWs != null && rawWs.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(rawWs);
+          if (decoded is List &&
+              decoded.length >= 3 &&
+              decoded[2] is Map &&
+              decoded[2]['content'] != null) {
+            processedRawWs = decoded[2]['content'];
+          }
+        } catch (e) {}
+      }
+
       final newNote = NoteModel(
         id: eventId,
         uniqueId: eventData['uniqueId'] as String,
@@ -597,7 +611,7 @@ class DataService {
         isRepost: isRepost,
         repostedBy: isRepost ? author : null,
         repostTimestamp: repostTimestamp,
-        rawWs: rawWs,
+        rawWs: processedRawWs,
       );
 
       final hashedIdentifier = hashEventId(newNote.uniqueId);
