@@ -143,7 +143,7 @@ class DataService {
   final Function(String, int)? onRepostCountUpdated;
 
   List<NoteModel> notes = [];
-  final Set<String> eventIds = {};
+  final Set<String> noteIds = {};
 
   final Map<String, List<ReactionModel>> reactionsMap = {};
   final Map<String, List<ReplyModel>> repliesMap = {};
@@ -550,7 +550,7 @@ class DataService {
     final tags = eventData['tags'] as List<dynamic>;
     final parentEventId = _extractParentEventId(tags);
 
-    if (eventIds.contains(eventId) || noteContent.trim().isEmpty) return;
+    if (noteIds.contains(eventId) || noteContent.trim().isEmpty) return;
 
     if (parentEventId == null &&
         dataType == DataType.Feed &&
@@ -574,9 +574,9 @@ class DataService {
         rawWs: rawWs,
       );
 
-      if (!eventIds.contains(newNote.id)) {
+      if (!noteIds.contains(newNote.id)) {
         notes.add(newNote);
-        eventIds.add(newNote.id);
+        noteIds.add(newNote.id);
 
         if (notesBox != null && notesBox!.isOpen) {
           await notesBox!.put(newNote.id, newNote);
@@ -1054,9 +1054,9 @@ class DataService {
       if (allNotes.isEmpty) return;
 
       for (var note in allNotes) {
-        if (!eventIds.contains(note.id)) {
+        if (!noteIds.contains(note.id)) {
           notes.add(note);
-          eventIds.add(note.id);
+          noteIds.add(note.id);
         }
       }
 
@@ -1141,9 +1141,9 @@ class DataService {
   Future<void> _handleNewNotes(dynamic data) async {
     if (data is List<NoteModel> && data.isNotEmpty) {
       for (var note in data) {
-        if (!eventIds.contains(note.id)) {
+        if (!noteIds.contains(note.id)) {
           notes.add(note);
-          eventIds.add(note.id);
+          noteIds.add(note.id);
           await notesBox!.put(note.id, note);
         }
       }
@@ -1161,26 +1161,26 @@ class DataService {
     }
   }
 
-  Future<void> fetchReactionsForEvents(List<String> eventIdsToFetch) async {
+  Future<void> fetchReactionsForEvents(List<String> noteIdsToFetch) async {
     if (_isClosed) return;
     final request = Request(generateUUID(), [
-      Filter(kinds: [7], e: eventIdsToFetch, limit: 1000)
+      Filter(kinds: [7], e: noteIdsToFetch, limit: 1000)
     ]);
     await _broadcastRequest(request);
   }
 
-  Future<void> fetchRepliesForEvents(List<String> parentEventIds) async {
+  Future<void> fetchRepliesForEvents(List<String> parentNoteIds) async {
     if (_isClosed) return;
     final request = Request(generateUUID(), [
-      Filter(kinds: [1], e: parentEventIds, limit: 1000)
+      Filter(kinds: [1], e: parentNoteIds, limit: 1000)
     ]);
     await _broadcastRequest(request);
   }
 
-  Future<void> fetchRepostsForEvents(List<String> eventIdsToFetch) async {
+  Future<void> fetchRepostsForEvents(List<String> noteIdsToFetch) async {
     if (_isClosed) return;
     final request = Request(generateUUID(), [
-      Filter(kinds: [6], e: eventIdsToFetch, limit: 1000)
+      Filter(kinds: [6], e: noteIdsToFetch, limit: 1000)
     ]);
     await _broadcastRequest(request);
   }
