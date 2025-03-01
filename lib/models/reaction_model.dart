@@ -8,7 +8,7 @@ class ReactionModel extends HiveObject {
   final String id;
 
   @HiveField(1)
-  final String targetEventId;
+  final String targetNoteId;
 
   @HiveField(2)
   final String author;
@@ -24,7 +24,7 @@ class ReactionModel extends HiveObject {
 
   ReactionModel({
     required this.id,
-    required this.targetEventId,
+    required this.targetNoteId,
     required this.author,
     required this.content,
     required this.timestamp,
@@ -32,22 +32,23 @@ class ReactionModel extends HiveObject {
   });
 
   factory ReactionModel.fromEvent(Map<String, dynamic> eventData) {
-    String? targetEventId;
+    String? targetNoteId;
     for (var tag in eventData['tags']) {
       if (tag.length >= 2 && tag[0] == 'e') {
-        targetEventId = tag[1] as String;
+        targetNoteId = tag[1] as String;
         break;
       }
     }
-    if (targetEventId == null) {
-      throw Exception('targetEventId not found for reaction.');
+    if (targetNoteId == null) {
+      throw Exception('targetNoteId not found for reaction.');
     }
     return ReactionModel(
       id: eventData['id'] as String,
-      targetEventId: targetEventId,
+      targetNoteId: targetNoteId,
       author: eventData['pubkey'] as String,
       content: eventData['content'] as String,
-      timestamp: DateTime.fromMillisecondsSinceEpoch((eventData['created_at'] as int) * 1000),
+      timestamp: DateTime.fromMillisecondsSinceEpoch(
+          (eventData['created_at'] as int) * 1000),
       fetchedAt: DateTime.now(),
     );
   }
@@ -55,7 +56,7 @@ class ReactionModel extends HiveObject {
   factory ReactionModel.fromJson(Map<String, dynamic> json) {
     return ReactionModel(
       id: json['id'],
-      targetEventId: json['targetEventId'],
+      targetNoteId: json['targetNoteId'],
       author: json['author'],
       content: json['content'],
       timestamp: DateTime.parse(json['timestamp']),
@@ -66,7 +67,7 @@ class ReactionModel extends HiveObject {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'targetEventId': targetEventId,
+      'targetNoteId': targetNoteId,
       'author': author,
       'content': content,
       'timestamp': timestamp.toIso8601String(),

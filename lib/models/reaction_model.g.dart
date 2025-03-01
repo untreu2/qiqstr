@@ -18,7 +18,7 @@ class ReactionModelAdapter extends TypeAdapter<ReactionModel> {
     };
     return ReactionModel(
       id: fields[0] as String,
-      targetEventId: fields[1] as String,
+      targetNoteId: fields[1] as String,
       author: fields[2] as String,
       content: fields[3] as String,
       timestamp: fields[4] as DateTime,
@@ -33,7 +33,7 @@ class ReactionModelAdapter extends TypeAdapter<ReactionModel> {
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
-      ..write(obj.targetEventId)
+      ..write(obj.targetNoteId)
       ..writeByte(2)
       ..write(obj.author)
       ..writeByte(3)
