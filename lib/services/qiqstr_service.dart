@@ -558,15 +558,36 @@ class DataService {
     final tags = eventData['tags'] as List<dynamic>;
     final parentNoteId = _extractParentNoteId(tags);
 
-    if (noteIds.contains(noteId) || noteContent.trim().isEmpty) {
-      return;
+    if (!isRepost) {
+      if (noteIds.contains(noteId) || noteContent.trim().isEmpty) {
+        return;
+      }
+    } else {
+      bool duplicateRepost = notes.any((n) =>
+          n.id == noteId &&
+          n.isRepost &&
+          n.repostTimestamp != null &&
+          n.repostTimestamp == repostTimestamp);
+      if (duplicateRepost || noteContent.trim().isEmpty) {
+        return;
+      }
     }
 
-    if (parentNoteId == null &&
-        dataType == DataType.Feed &&
-        targetNpubs.isNotEmpty &&
-        !targetNpubs.contains(noteAuthor) &&
-        (!isRepost || !targetNpubs.contains(author))) return;
+    if (parentNoteId == null) {
+      if (dataType == DataType.Feed && targetNpubs.isNotEmpty) {
+        if (isRepost) {
+          if (!targetNpubs.contains(author)) return;
+        } else {
+          if (!targetNpubs.contains(noteAuthor)) return;
+        }
+      } else if (dataType == DataType.Profile) {
+        if (isRepost) {
+          if (author != npub) return;
+        } else {
+          if (noteAuthor != npub) return;
+        }
+      }
+    }
 
     if (parentNoteId != null) {
       await _handleReplyEvent(eventData, parentNoteId);
@@ -583,36 +604,40 @@ class DataService {
         repostTimestamp: repostTimestamp,
       );
 
-      if (!noteIds.contains(newNote.id)) {
-        notes.add(newNote);
+      notes.add(newNote);
+      if (!isRepost) {
         noteIds.add(newNote.id);
-
-        if (notesBox != null && notesBox!.isOpen) {
-          await notesBox!.put(newNote.id, newNote);
-        }
-
-        _sortNotes();
-        onNewNote?.call(newNote);
-        print('[DataService] New note added and saved to cache: ${newNote.id}');
-
-        List<String> newNoteIds = [newNote.id];
-        await Future.wait([
-          fetchReactionsForNotes(newNoteIds),
-          fetchRepliesForNotes(newNoteIds),
-          fetchRepostsForNotes(newNoteIds)
-        ]);
-        await _updateReactionSubscription();
       }
-      int currentRepostCount = repostsMap[noteId]?.length ?? 0;
-      int currentReactionCount = reactionsMap[noteId]?.length ?? 0;
-      int currentReplyCount = repliesMap[noteId]?.length ?? 0;
-      _updateNoteCounts(
-        noteId,
-        repostCount: currentRepostCount,
-        reactionCount: currentReactionCount,
-        replyCount: currentReplyCount,
-      );
+
+      if (notesBox != null && notesBox!.isOpen) {
+        final storageKey = isRepost
+            ? '${newNote.id}_${newNote.repostTimestamp?.millisecondsSinceEpoch}'
+            : newNote.id;
+        await notesBox!.put(storageKey, newNote);
+      }
+
+      _sortNotes();
+      onNewNote?.call(newNote);
+      print('[DataService] New note added and saved to cache: ${newNote.id}');
+
+      List<String> newNoteIds = [newNote.id];
+      await Future.wait([
+        fetchReactionsForNotes(newNoteIds),
+        fetchRepliesForNotes(newNoteIds),
+        fetchRepostsForNotes(newNoteIds)
+      ]);
+      await _updateReactionSubscription();
     }
+
+    int currentRepostCount = repostsMap[noteId]?.length ?? 0;
+    int currentReactionCount = reactionsMap[noteId]?.length ?? 0;
+    int currentReplyCount = repliesMap[noteId]?.length ?? 0;
+    _updateNoteCounts(
+      noteId,
+      repostCount: currentRepostCount,
+      reactionCount: currentReactionCount,
+      replyCount: currentReplyCount,
+    );
   }
 
   void _sortNotes() => notes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
