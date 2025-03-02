@@ -25,7 +25,6 @@ class NoteModel extends HiveObject {
   @HiveField(6)
   final DateTime? repostTimestamp;
 
-  @HiveField(7)
   NoteModel({
     required this.id,
     required this.content,
@@ -35,6 +34,26 @@ class NoteModel extends HiveObject {
     this.repostedBy,
     this.repostTimestamp,
   });
+
+  NoteModel copyWith({
+    String? id,
+    String? content,
+    String? author,
+    DateTime? timestamp,
+    bool? isRepost,
+    String? repostedBy,
+    DateTime? repostTimestamp,
+  }) {
+    return NoteModel(
+      id: id ?? this.id,
+      content: content ?? this.content,
+      author: author ?? this.author,
+      timestamp: timestamp ?? this.timestamp,
+      isRepost: isRepost ?? this.isRepost,
+      repostedBy: repostedBy ?? this.repostedBy,
+      repostTimestamp: repostTimestamp ?? this.repostTimestamp,
+    );
+  }
 
   factory NoteModel.fromJson(Map<String, dynamic> json) {
     return NoteModel(

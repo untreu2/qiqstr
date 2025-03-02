@@ -149,7 +149,7 @@ class DataService {
   final Function(String, int)? onRepostCountUpdated;
 
   List<NoteModel> notes = [];
-  final Set<String> noteIds = {};
+  final Set<String> noteKeys = {};
 
   final Map<String, List<ReactionModel>> reactionsMap = {};
   final Map<String, List<ReplyModel>> repliesMap = {};
@@ -203,6 +203,12 @@ class DataService {
 
   int get connectedRelaysCount => _socketManager.activeSockets.length;
 
+  String _noteUniqueKey(NoteModel note) {
+    return note.isRepost && note.repostTimestamp != null
+        ? '${note.id}_${note.repostTimestamp!.millisecondsSinceEpoch}'
+        : note.id;
+  }
+
   Future<void> initialize() async {
     notesBox =
         await _openHiveBox<NoteModel>('notes_${dataType.toString()}_$npub');
@@ -253,11 +259,12 @@ class DataService {
     });
 
     if (notes.isNotEmpty) {
-      List<String> noteIdsList = notes.map((note) => note.id).toList();
+      List<String> noteKeyList =
+          notes.map((note) => _noteUniqueKey(note)).toList();
       await Future.wait([
-        fetchReactionsForNotes(noteIdsList),
-        fetchRepliesForNotes(noteIdsList),
-        fetchRepostsForNotes(noteIdsList),
+        fetchReactionsForNotes(noteKeyList),
+        fetchRepliesForNotes(noteKeyList),
+        fetchRepostsForNotes(noteKeyList),
       ]);
       print(
           '[DataService] Fetched reactions, replies, and reposts for cached notes.');
@@ -558,8 +565,20 @@ class DataService {
     final tags = eventData['tags'] as List<dynamic>;
     final parentNoteId = _extractParentNoteId(tags);
 
+    final tempNote = NoteModel(
+      id: noteId,
+      content: noteContent,
+      author: noteAuthor,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(
+          (eventData['created_at'] as int) * 1000),
+      isRepost: isRepost,
+      repostedBy: isRepost ? author : null,
+      repostTimestamp: repostTimestamp,
+    );
+    final String uniqueKey = _noteUniqueKey(tempNote);
+
     if (!isRepost) {
-      if (noteIds.contains(noteId) || noteContent.trim().isEmpty) {
+      if (noteKeys.contains(uniqueKey) || noteContent.trim().isEmpty) {
         return;
       }
     } else {
@@ -604,27 +623,26 @@ class DataService {
         repostTimestamp: repostTimestamp,
       );
 
-      notes.add(newNote);
-      if (!isRepost) {
-        noteIds.add(newNote.id);
-      }
+      final noteInstance = newNote.copyWith();
 
-      if (notesBox != null && notesBox!.isOpen) {
-        final storageKey = isRepost
-            ? '${newNote.id}_${newNote.repostTimestamp?.millisecondsSinceEpoch}'
-            : newNote.id;
-        await notesBox!.put(storageKey, newNote);
+      final noteKey = _noteUniqueKey(noteInstance);
+      if (!noteKeys.contains(noteKey)) {
+        notes.add(noteInstance);
+        noteKeys.add(noteKey);
+        if (notesBox != null && notesBox!.isOpen) {
+          await notesBox!.put(noteKey, noteInstance);
+        }
       }
 
       _sortNotes();
-      onNewNote?.call(newNote);
-      print('[DataService] New note added and saved to cache: ${newNote.id}');
+      onNewNote?.call(noteInstance);
+      print('[DataService] New note added and saved to cache: $noteKey');
 
-      List<String> newNoteIds = [newNote.id];
+      List<String> newNoteKeys = [noteKey];
       await Future.wait([
-        fetchReactionsForNotes(newNoteIds),
-        fetchRepliesForNotes(newNoteIds),
-        fetchRepostsForNotes(newNoteIds)
+        fetchReactionsForNotes(newNoteKeys),
+        fetchRepliesForNotes(newNoteKeys),
+        fetchRepostsForNotes(newNoteKeys)
       ]);
       await _updateReactionSubscription();
     }
@@ -632,12 +650,10 @@ class DataService {
     int currentRepostCount = repostsMap[noteId]?.length ?? 0;
     int currentReactionCount = reactionsMap[noteId]?.length ?? 0;
     int currentReplyCount = repliesMap[noteId]?.length ?? 0;
-    _updateNoteCounts(
-      noteId,
-      repostCount: currentRepostCount,
-      reactionCount: currentReactionCount,
-      replyCount: currentReplyCount,
-    );
+    _updateNoteCounts(noteId,
+        repostCount: currentRepostCount,
+        reactionCount: currentReactionCount,
+        replyCount: currentReplyCount);
   }
 
   void _sortNotes() => notes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
@@ -660,7 +676,6 @@ class DataService {
       if (!reactionsMap[targetNoteId]!.any((r) => r.id == reaction.id)) {
         reactionsMap[targetNoteId]!.add(reaction);
         onReactionsUpdated?.call(targetNoteId, reactionsMap[targetNoteId]!);
-
         await reactionsBox?.put(reaction.id, reaction);
       }
     } catch (e) {
@@ -681,7 +696,6 @@ class DataService {
 
         int count = repliesMap[parentNoteId]!.length;
         onReplyCountUpdated?.call(parentNoteId, count);
-
         _updateNoteCounts(parentNoteId, replyCount: count);
 
         await repliesBox?.put(reply.id, reply);
@@ -712,7 +726,6 @@ class DataService {
 
         int count = repostsMap[originalNoteId]!.length;
         onRepostCountUpdated?.call(originalNoteId, count);
-
         _updateNoteCounts(originalNoteId, repostCount: count);
 
         await repostsBox?.put(repost.id, repost);
@@ -724,11 +737,12 @@ class DataService {
 
   void _updateNoteCounts(String noteId,
       {int? reactionCount, int? replyCount, int? repostCount}) {
-    int index = notes.indexWhere((note) => note.id == noteId);
+    final index = notes.indexWhere((note) => note.id == noteId);
     if (index != -1) {
       final note = notes[index];
       note.save();
-      notesBox?.put(note.id, note);
+      final key = _noteUniqueKey(note);
+      notesBox?.put(key, note);
     }
   }
 
@@ -942,10 +956,11 @@ class DataService {
   Future<void> _subscribeToAllReactions() async {
     if (_isClosed) return;
     String subscriptionId = generateUUID();
-    List<String> allNoteIds = notes.map((note) => note.id).toList();
-    if (allNoteIds.isEmpty) return;
+    List<String> allNoteKeys =
+        notes.map((note) => _noteUniqueKey(note)).toList();
+    if (allNoteKeys.isEmpty) return;
 
-    final filter = Filter(kinds: [7], e: allNoteIds, limit: 1000);
+    final filter = Filter(kinds: [7], e: allNoteKeys, limit: 1000);
     final request = Request(subscriptionId, [filter]);
     await _broadcastRequest(request);
   }
@@ -1071,7 +1086,7 @@ class DataService {
     if (notesBox != null && notesBox!.isOpen) {
       try {
         final Map<String, NoteModel> notesMap = {
-          for (var note in notes) note.id: note
+          for (var note in notes) _noteUniqueKey(note): note
         };
         await notesBox!.putAll(notesMap);
         print('[DataService] Notes saved to cache successfully.');
@@ -1088,21 +1103,23 @@ class DataService {
       if (allNotes.isEmpty) return;
 
       for (var note in allNotes) {
-        if (!noteIds.contains(note.id)) {
+        final key = _noteUniqueKey(note);
+        if (!noteKeys.contains(key)) {
           notes.add(note);
-          noteIds.add(note.id);
+          noteKeys.add(key);
         }
       }
 
       onLoad(allNotes);
       print('[DataService] Cache loaded with ${allNotes.length} notes.');
 
-      List<String> cachedNoteIds = allNotes.map((note) => note.id).toList();
+      List<String> cachedNoteKeys =
+          allNotes.map((note) => _noteUniqueKey(note)).toList();
 
       await Future.wait([
-        fetchReactionsForNotes(cachedNoteIds),
-        fetchRepliesForNotes(cachedNoteIds),
-        fetchRepostsForNotes(cachedNoteIds)
+        fetchReactionsForNotes(cachedNoteKeys),
+        fetchRepliesForNotes(cachedNoteKeys),
+        fetchRepostsForNotes(cachedNoteKeys)
       ]);
     } catch (e) {
       print('[DataService ERROR] Error loading notes from cache: $e');
@@ -1175,46 +1192,48 @@ class DataService {
   Future<void> _handleNewNotes(dynamic data) async {
     if (data is List<NoteModel> && data.isNotEmpty) {
       for (var note in data) {
-        if (!noteIds.contains(note.id)) {
+        final key = _noteUniqueKey(note);
+        if (!noteKeys.contains(key)) {
           notes.add(note);
-          noteIds.add(note.id);
-          await notesBox!.put(note.id, note);
+          noteKeys.add(key);
+          await notesBox!.put(key, note);
         }
       }
       _sortNotes();
       onNewNote?.call(data.last);
       print('[DataService] Handled new notes: ${data.length} notes added.');
 
-      List<String> newNoteIds = data.map((note) => note.id).toList();
+      List<String> newNoteKeys =
+          data.map((note) => _noteUniqueKey(note)).toList();
       await Future.wait([
-        fetchReactionsForNotes(newNoteIds),
-        fetchRepliesForNotes(newNoteIds),
-        fetchRepostsForNotes(newNoteIds)
+        fetchReactionsForNotes(newNoteKeys),
+        fetchRepliesForNotes(newNoteKeys),
+        fetchRepostsForNotes(newNoteKeys)
       ]);
       await _updateReactionSubscription();
     }
   }
 
-  Future<void> fetchReactionsForNotes(List<String> noteIdsToFetch) async {
+  Future<void> fetchReactionsForNotes(List<String> noteKeysToFetch) async {
     if (_isClosed) return;
     final request = Request(generateUUID(), [
-      Filter(kinds: [7], e: noteIdsToFetch, limit: 1000)
+      Filter(kinds: [7], e: noteKeysToFetch, limit: 1000)
     ]);
     await _broadcastRequest(request);
   }
 
-  Future<void> fetchRepliesForNotes(List<String> parentNoteIds) async {
+  Future<void> fetchRepliesForNotes(List<String> parentNoteKeys) async {
     if (_isClosed) return;
     final request = Request(generateUUID(), [
-      Filter(kinds: [1], e: parentNoteIds, limit: 1000)
+      Filter(kinds: [1], e: parentNoteKeys, limit: 1000)
     ]);
     await _broadcastRequest(request);
   }
 
-  Future<void> fetchRepostsForNotes(List<String> noteIdsToFetch) async {
+  Future<void> fetchRepostsForNotes(List<String> noteKeysToFetch) async {
     if (_isClosed) return;
     final request = Request(generateUUID(), [
-      Filter(kinds: [6], e: noteIdsToFetch, limit: 1000)
+      Filter(kinds: [6], e: noteKeysToFetch, limit: 1000)
     ]);
     await _broadcastRequest(request);
   }
