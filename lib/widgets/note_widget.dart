@@ -15,13 +15,7 @@ import 'content_parser.dart';
 class NoteWidget extends StatefulWidget {
   final NoteModel note;
   final DataService dataService;
-
-  const NoteWidget({
-    super.key,
-    required this.note,
-    required this.dataService,
-  });
-
+  const NoteWidget({super.key, required this.note, required this.dataService});
   @override
   _NoteWidgetState createState() => _NoteWidgetState();
 }
@@ -32,17 +26,13 @@ class _NoteWidgetState extends State<NoteWidget>
   late Animation<double> _highlightAnimation;
   final PageController _pageController = PageController();
   bool _isGlowing = false;
-
   @override
   void initState() {
     super.initState();
     _highlightController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
+        vsync: this, duration: const Duration(milliseconds: 300));
     _highlightAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _highlightController, curve: Curves.easeInOut),
-    );
+        CurvedAnimation(parent: _highlightController, curve: Curves.easeInOut));
   }
 
   @override
@@ -78,9 +68,8 @@ class _NoteWidgetState extends State<NoteWidget>
     try {
       await widget.dataService.sendReaction(widget.note.id, '💜');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sending reaction: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Error sending reaction: $e')));
     } finally {
       _showHighlight();
       Timer(const Duration(seconds: 1), () {
@@ -105,12 +94,9 @@ class _NoteWidgetState extends State<NoteWidget>
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
-      ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16.0))),
       builder: (context) => SendReplyDialog(
-        dataService: widget.dataService,
-        noteId: widget.note.id,
-      ),
+          dataService: widget.dataService, noteId: widget.note.id),
     );
   }
 
@@ -119,17 +105,12 @@ class _NoteWidgetState extends State<NoteWidget>
       final profileData = await widget.dataService.getCachedUserProfile(npub);
       final user = UserModel.fromCachedProfile(npub, profileData);
       if (mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ProfilePage(user: user),
-          ),
-        );
+        Navigator.push(context,
+            MaterialPageRoute(builder: (context) => ProfilePage(user: user)));
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading profile: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Error loading profile: $e')));
     }
   }
 
@@ -151,21 +132,16 @@ class _NoteWidgetState extends State<NoteWidget>
                   ? CircleAvatar(
                       radius: 20,
                       backgroundImage: CachedNetworkImageProvider(profileImage),
-                      backgroundColor: Colors.transparent,
-                    )
+                      backgroundColor: Colors.transparent)
                   : const CircleAvatar(
-                      radius: 16,
-                      child: Icon(Icons.person, size: 16),
-                    ),
+                      radius: 16, child: Icon(Icons.person, size: 16)),
             ),
             const SizedBox(width: 8),
             GestureDetector(
               onTap: () => _navigateToProfile(npub),
-              child: Text(
-                name,
-                style:
-                    const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-              ),
+              child: Text(name,
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -193,29 +169,22 @@ class _NoteWidgetState extends State<NoteWidget>
                   ? CircleAvatar(
                       radius: 12,
                       backgroundImage: CachedNetworkImageProvider(profileImage),
-                      backgroundColor: Colors.transparent,
-                    )
+                      backgroundColor: Colors.transparent)
                   : const CircleAvatar(
-                      radius: 12,
-                      child: Icon(Icons.person, size: 12),
-                    ),
+                      radius: 12, child: Icon(Icons.person, size: 12)),
               const SizedBox(width: 6.0),
               Expanded(
                 child: Row(
                   children: [
-                    Text(
-                      'Reposted by $name',
-                      style:
-                          const TextStyle(fontSize: 12.0, color: Colors.grey),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (repostTimestamp != null) ...[
-                      const SizedBox(width: 6.0),
-                      Text(
-                        '• ${_formatTimestamp(repostTimestamp)}',
+                    Text('Reposted by $name',
                         style:
                             const TextStyle(fontSize: 12.0, color: Colors.grey),
-                      ),
+                        overflow: TextOverflow.ellipsis),
+                    if (repostTimestamp != null) ...[
+                      const SizedBox(width: 6.0),
+                      Text('• ${_formatTimestamp(repostTimestamp)}',
+                          style: const TextStyle(
+                              fontSize: 12.0, color: Colors.grey)),
                     ],
                   ],
                 ),
@@ -233,8 +202,7 @@ class _NoteWidgetState extends State<NoteWidget>
       await launchUrl(url);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not launch ${link.url}')),
-      );
+          SnackBar(content: Text('Could not launch ${link.url}')));
     }
   }
 
@@ -252,10 +220,9 @@ class _NoteWidgetState extends State<NoteWidget>
             child: Container(
               decoration: BoxDecoration(
                 border: Border.all(
-                  color:
-                      Colors.white.withOpacity(_highlightAnimation.value * 0.8),
-                  width: 1.5,
-                ),
+                    color: Colors.white
+                        .withOpacity(_highlightAnimation.value * 0.8),
+                    width: 1.5),
                 borderRadius: BorderRadius.circular(10.0),
               ),
               child: child,
@@ -272,10 +239,8 @@ class _NoteWidgetState extends State<NoteWidget>
                 children: [
                   _buildAuthorInfo(widget.note.author),
                   const Spacer(),
-                  Text(
-                    _formatTimestamp(widget.note.timestamp),
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
+                  Text(_formatTimestamp(widget.note.timestamp),
+                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
                 ],
               ),
             ),
@@ -327,7 +292,11 @@ class _NoteWidgetState extends State<NoteWidget>
                           size: 16.0,
                           color: _isGlowing ? Colors.red : Colors.grey),
                       const SizedBox(width: 4.0),
-                      Text(widget.note.reactionCount.toString(),
+                      Text(
+                          (widget.dataService.reactionsMap[widget.note.id]
+                                      ?.length ??
+                                  0)
+                              .toString(),
                           style: const TextStyle(
                               fontSize: 12.0, color: Colors.grey)),
                     ],
@@ -337,7 +306,11 @@ class _NoteWidgetState extends State<NoteWidget>
                     children: [
                       const Icon(Icons.reply, size: 16.0, color: Colors.grey),
                       const SizedBox(width: 4.0),
-                      Text(widget.note.replyCount.toString(),
+                      Text(
+                          (widget.dataService.repliesMap[widget.note.id]
+                                      ?.length ??
+                                  0)
+                              .toString(),
                           style: const TextStyle(
                               fontSize: 12.0, color: Colors.grey)),
                     ],
@@ -347,7 +320,11 @@ class _NoteWidgetState extends State<NoteWidget>
                     children: [
                       const Icon(Icons.repeat, size: 16.0, color: Colors.grey),
                       const SizedBox(width: 4.0),
-                      Text(widget.note.repostCount.toString(),
+                      Text(
+                          (widget.dataService.repostsMap[widget.note.id]
+                                      ?.length ??
+                                  0)
+                              .toString(),
                           style: const TextStyle(
                               fontSize: 12.0, color: Colors.grey)),
                     ],
@@ -356,9 +333,9 @@ class _NoteWidgetState extends State<NoteWidget>
               ),
             ),
             const Padding(
-              padding: EdgeInsets.symmetric(vertical: 6.0),
-              child: Divider(height: 0.5, thickness: 0.5, color: Colors.grey),
-            ),
+                padding: EdgeInsets.symmetric(vertical: 6.0),
+                child:
+                    Divider(height: 0.5, thickness: 0.5, color: Colors.grey)),
           ],
         ),
       ),

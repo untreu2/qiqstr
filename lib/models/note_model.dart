@@ -26,15 +26,6 @@ class NoteModel extends HiveObject {
   final DateTime? repostTimestamp;
 
   @HiveField(7)
-  int repostCount;
-
-  @HiveField(8)
-  int replyCount;
-
-  @HiveField(9)
-  int reactionCount;
-
-  @HiveField(10)
   NoteModel({
     required this.id,
     required this.content,
@@ -43,9 +34,6 @@ class NoteModel extends HiveObject {
     this.isRepost = false,
     this.repostedBy,
     this.repostTimestamp,
-    this.repostCount = 0,
-    this.replyCount = 0,
-    this.reactionCount = 0,
   });
 
   factory NoteModel.fromJson(Map<String, dynamic> json) {
@@ -61,9 +49,6 @@ class NoteModel extends HiveObject {
           ? DateTime.fromMillisecondsSinceEpoch(
               (json['repostTimestamp'] as int) * 1000)
           : null,
-      repostCount: json['repostCount'] as int? ?? 0,
-      replyCount: json['replyCount'] as int? ?? 0,
-      reactionCount: json['reactionCount'] as int? ?? 0,
     );
   }
 
@@ -78,9 +63,6 @@ class NoteModel extends HiveObject {
       'repostTimestamp': repostTimestamp != null
           ? repostTimestamp!.millisecondsSinceEpoch ~/ 1000
           : null,
-      'repostCount': repostCount,
-      'replyCount': replyCount,
-      'reactionCount': reactionCount,
     };
   }
 }

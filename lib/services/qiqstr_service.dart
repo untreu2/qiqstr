@@ -559,15 +559,6 @@ class DataService {
     final parentNoteId = _extractParentNoteId(tags);
 
     if (noteIds.contains(noteId) || noteContent.trim().isEmpty) {
-      int currentRepostCount = repostsMap[noteId]?.length ?? 0;
-      int currentReactionCount = reactionsMap[noteId]?.length ?? 0;
-      int currentReplyCount = repliesMap[noteId]?.length ?? 0;
-      _updateNoteCounts(
-        noteId,
-        repostCount: currentRepostCount,
-        reactionCount: currentReactionCount,
-        replyCount: currentReplyCount,
-      );
       return;
     }
 
@@ -645,11 +636,6 @@ class DataService {
         reactionsMap[targetNoteId]!.add(reaction);
         onReactionsUpdated?.call(targetNoteId, reactionsMap[targetNoteId]!);
 
-        int count = reactionsMap[targetNoteId]!.length;
-        onReactionCountUpdated?.call(targetNoteId, count);
-
-        _updateNoteCounts(targetNoteId, reactionCount: count);
-
         await reactionsBox?.put(reaction.id, reaction);
       }
     } catch (e) {
@@ -716,9 +702,6 @@ class DataService {
     int index = notes.indexWhere((note) => note.id == noteId);
     if (index != -1) {
       final note = notes[index];
-      if (reactionCount != null) note.reactionCount = reactionCount;
-      if (replyCount != null) note.replyCount = replyCount;
-      if (repostCount != null) note.repostCount = repostCount;
       note.save();
       notesBox?.put(note.id, note);
     }
