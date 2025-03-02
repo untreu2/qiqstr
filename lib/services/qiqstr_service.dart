@@ -490,10 +490,10 @@ class DataService {
         } else if (kind == 7) {
           await _handleReactionEvent(eventData);
         } else if (kind == 1) {
-          await _processNoteEvent(eventData, targetNpubs, rawWs: event);
+          await _processNoteEvent(eventData, targetNpubs);
         } else if (kind == 6) {
           await _handleRepostEvent(eventData);
-          await _processNoteEvent(eventData, targetNpubs, rawWs: event);
+          await _processNoteEvent(eventData, targetNpubs);
         }
       }
     } catch (e) {
@@ -511,8 +511,7 @@ class DataService {
   }
 
   Future<void> _processNoteEvent(
-      Map<String, dynamic> eventData, List<String> targetNpubs,
-      {String? rawWs}) async {
+      Map<String, dynamic> eventData, List<String> targetNpubs) async {
     int kind = eventData['kind'] as int;
     final author = eventData['pubkey'] as String;
     bool isRepost = kind == 6;
@@ -591,7 +590,6 @@ class DataService {
         isRepost: isRepost,
         repostedBy: isRepost ? author : null,
         repostTimestamp: repostTimestamp,
-        rawWs: rawWs,
       );
 
       if (!noteIds.contains(newNote.id)) {

@@ -35,8 +35,6 @@ class NoteModel extends HiveObject {
   int reactionCount;
 
   @HiveField(10)
-  final String? rawWs;
-
   NoteModel({
     required this.id,
     required this.content,
@@ -48,7 +46,6 @@ class NoteModel extends HiveObject {
     this.repostCount = 0,
     this.replyCount = 0,
     this.reactionCount = 0,
-    this.rawWs,
   });
 
   factory NoteModel.fromJson(Map<String, dynamic> json) {
@@ -67,7 +64,6 @@ class NoteModel extends HiveObject {
       repostCount: json['repostCount'] as int? ?? 0,
       replyCount: json['replyCount'] as int? ?? 0,
       reactionCount: json['reactionCount'] as int? ?? 0,
-      rawWs: json['rawWs'] as String?,
     );
   }
 
@@ -85,7 +81,6 @@ class NoteModel extends HiveObject {
       'repostCount': repostCount,
       'replyCount': replyCount,
       'reactionCount': reactionCount,
-      'rawWs': rawWs,
     };
   }
 }

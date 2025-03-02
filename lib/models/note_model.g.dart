@@ -27,14 +27,13 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       repostCount: fields[7] as int,
       replyCount: fields[8] as int,
       reactionCount: fields[9] as int,
-      rawWs: fields[10] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, NoteModel obj) {
     writer
-      ..writeByte(11)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -54,9 +53,7 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       ..writeByte(8)
       ..write(obj.replyCount)
       ..writeByte(9)
-      ..write(obj.reactionCount)
-      ..writeByte(10)
-      ..write(obj.rawWs);
+      ..write(obj.reactionCount);
   }
 
   @override
