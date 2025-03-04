@@ -524,6 +524,7 @@ class DataService {
     bool isRepost = kind == 6;
     Map<String, dynamic>? originalEventData;
     DateTime? repostTimestamp;
+    String rawWsData = jsonEncode(eventData);
 
     if (isRepost) {
       repostTimestamp =
@@ -549,6 +550,7 @@ class DataService {
         }
       }
       if (originalEventData == null) return;
+      rawWsData = jsonEncode(originalEventData);
       eventData = originalEventData;
     }
 
@@ -565,18 +567,21 @@ class DataService {
     final tags = eventData['tags'] as List<dynamic>;
     final parentNoteId = _extractParentNoteId(tags);
 
-    final tempNote = NoteModel(
+    final timestamp = DateTime.fromMillisecondsSinceEpoch(
+        (eventData['created_at'] as int) * 1000);
+
+    final newNote = NoteModel(
       id: noteId,
       content: noteContent,
       author: noteAuthor,
-      timestamp: DateTime.fromMillisecondsSinceEpoch(
-          (eventData['created_at'] as int) * 1000),
+      timestamp: timestamp,
       isRepost: isRepost,
       repostedBy: isRepost ? author : null,
       repostTimestamp: repostTimestamp,
+      rawWs: rawWsData,
     );
 
-    String uniqueKey = _noteUniqueKey(tempNote);
+    String uniqueKey = _noteUniqueKey(newNote);
 
     if (parentNoteId == null) {
       if (dataType == DataType.Feed &&
@@ -590,18 +595,6 @@ class DataService {
     if (parentNoteId != null) {
       await _handleReplyEvent(eventData, parentNoteId);
     } else {
-      final timestamp = DateTime.fromMillisecondsSinceEpoch(
-          (eventData['created_at'] as int) * 1000);
-      final newNote = NoteModel(
-        id: noteId,
-        content: noteContent,
-        author: noteAuthor,
-        timestamp: timestamp,
-        isRepost: isRepost,
-        repostedBy: isRepost ? author : null,
-        repostTimestamp: repostTimestamp,
-      );
-
       final noteInstance = newNote.copyWith();
 
       if (!noteKeys.contains(uniqueKey) && noteContent.trim().isNotEmpty) {

@@ -25,6 +25,9 @@ class NoteModel extends HiveObject {
   @HiveField(6)
   final DateTime? repostTimestamp;
 
+  @HiveField(7)
+  final String rawWs;
+
   NoteModel({
     required this.id,
     required this.content,
@@ -33,6 +36,7 @@ class NoteModel extends HiveObject {
     this.isRepost = false,
     this.repostedBy,
     this.repostTimestamp,
+    required this.rawWs,
   });
 
   NoteModel copyWith({
@@ -43,6 +47,7 @@ class NoteModel extends HiveObject {
     bool? isRepost,
     String? repostedBy,
     DateTime? repostTimestamp,
+    String? rawWs,
   }) {
     return NoteModel(
       id: id ?? this.id,
@@ -52,6 +57,7 @@ class NoteModel extends HiveObject {
       isRepost: isRepost ?? this.isRepost,
       repostedBy: repostedBy ?? this.repostedBy,
       repostTimestamp: repostTimestamp ?? this.repostTimestamp,
+      rawWs: rawWs ?? this.rawWs,
     );
   }
 
@@ -68,6 +74,7 @@ class NoteModel extends HiveObject {
           ? DateTime.fromMillisecondsSinceEpoch(
               (json['repostTimestamp'] as int) * 1000)
           : null,
+      rawWs: json['rawWs'] as String,
     );
   }
 
@@ -82,6 +89,7 @@ class NoteModel extends HiveObject {
       'repostTimestamp': repostTimestamp != null
           ? repostTimestamp!.millisecondsSinceEpoch ~/ 1000
           : null,
+      'rawWs': rawWs,
     };
   }
 }
