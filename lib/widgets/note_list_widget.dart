@@ -57,15 +57,47 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     return result;
   }
 
+  bool _shouldDisplay(NoteModel note, List<String> following) {
+    if (widget.dataType == DataType.Feed) {
+      if (note.isRepost) {
+        final rb = note.repostedBy;
+        if (rb == null) return false;
+        return following.contains(rb);
+      } else {
+        return following.contains(note.author);
+      }
+    } else if (widget.dataType == DataType.Profile) {
+      if (note.isRepost) {
+        return note.repostedBy == widget.npub;
+      } else {
+        return note.author == widget.npub;
+      }
+    } else {
+      return true;
+    }
+  }
+
   Future<void> _initialize() async {
     try {
       await _dataService.initialize();
+
+      List<String> following = [];
+      if (widget.dataType == DataType.Feed) {
+        following = await _dataService.getFollowingList(widget.npub);
+      }
+
       await _dataService.loadNotesFromCache((cachedNotes) {
+        final filtered = cachedNotes
+            .where((note) => _shouldDisplay(note, following))
+            .toList();
+
         _itemsTree
           ..clear()
-          ..addAll(cachedNotes);
+          ..addAll(filtered);
+
         _notesNotifier.value = _itemsTree.toList();
       });
+
       await _dataService.initializeConnections();
     } catch (e) {
       _showErrorSnackBar('Failed to initialize: $e');
@@ -74,7 +106,16 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     }
   }
 
-  void _handleNewNote(NoteModel newNote) {
+  void _handleNewNote(NoteModel newNote) async {
+    List<String> following = [];
+    if (widget.dataType == DataType.Feed) {
+      following = await _dataService.getFollowingList(widget.npub);
+    }
+
+    if (!_shouldDisplay(newNote, following)) {
+      return;
+    }
+
     if (_itemsTree.add(newNote)) {
       _notesNotifier.value = _itemsTree.toList();
     }
@@ -84,16 +125,17 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     if (_isLoadingOlderNotes) return;
     setState(() => _isLoadingOlderNotes = true);
     try {
-      await _dataService.fetchOlderNotes(
-        widget.dataType == DataType.Feed
-            ? await _dataService.getFollowingList(widget.npub)
-            : [widget.npub],
-        (olderNote) {
+      final npubsToFetch = widget.dataType == DataType.Feed
+          ? await _dataService.getFollowingList(widget.npub)
+          : [widget.npub];
+
+      await _dataService.fetchOlderNotes(npubsToFetch, (olderNote) {
+        if (_shouldDisplay(olderNote, npubsToFetch)) {
           if (_itemsTree.add(olderNote)) {
             _notesNotifier.value = _itemsTree.toList();
           }
-        },
-      );
+        }
+      });
     } catch (e) {
       _showErrorSnackBar('Error loading older notes: $e');
     } finally {
@@ -103,8 +145,9 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   void _showErrorSnackBar(String message) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
     });
   }
 
