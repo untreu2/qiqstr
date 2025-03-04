@@ -575,36 +575,15 @@ class DataService {
       repostedBy: isRepost ? author : null,
       repostTimestamp: repostTimestamp,
     );
-    final String uniqueKey = _noteUniqueKey(tempNote);
 
-    if (!isRepost) {
-      if (noteKeys.contains(uniqueKey) || noteContent.trim().isEmpty) {
-        return;
-      }
-    } else {
-      bool duplicateRepost = notes.any((n) =>
-          n.id == noteId &&
-          n.isRepost &&
-          n.repostTimestamp != null &&
-          n.repostTimestamp == repostTimestamp);
-      if (duplicateRepost || noteContent.trim().isEmpty) {
-        return;
-      }
-    }
+    String uniqueKey = _noteUniqueKey(tempNote);
 
     if (parentNoteId == null) {
-      if (dataType == DataType.Feed && targetNpubs.isNotEmpty) {
-        if (isRepost) {
-          if (!targetNpubs.contains(author)) return;
-        } else {
-          if (!targetNpubs.contains(noteAuthor)) return;
-        }
-      } else if (dataType == DataType.Profile) {
-        if (isRepost) {
-          if (author != npub) return;
-        } else {
-          if (noteAuthor != npub) return;
-        }
+      if (dataType == DataType.Feed &&
+          targetNpubs.isNotEmpty &&
+          !isRepost &&
+          !targetNpubs.contains(noteAuthor)) {
+        return;
       }
     }
 
@@ -625,20 +604,19 @@ class DataService {
 
       final noteInstance = newNote.copyWith();
 
-      final noteKey = _noteUniqueKey(noteInstance);
-      if (!noteKeys.contains(noteKey)) {
+      if (!noteKeys.contains(uniqueKey) && noteContent.trim().isNotEmpty) {
         notes.add(noteInstance);
-        noteKeys.add(noteKey);
+        noteKeys.add(uniqueKey);
         if (notesBox != null && notesBox!.isOpen) {
-          await notesBox!.put(noteKey, noteInstance);
+          await notesBox!.put(uniqueKey, noteInstance);
         }
       }
 
       _sortNotes();
       onNewNote?.call(noteInstance);
-      print('[DataService] New note added and saved to cache: $noteKey');
+      print('[DataService] New note added and saved to cache: $uniqueKey');
 
-      List<String> newNoteKeys = [noteKey];
+      List<String> newNoteKeys = [uniqueKey];
       await Future.wait([
         fetchReactionsForNotes(newNoteKeys),
         fetchRepliesForNotes(newNoteKeys),
