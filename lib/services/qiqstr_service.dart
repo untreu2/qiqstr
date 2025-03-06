@@ -9,9 +9,7 @@ import 'package:uuid/uuid.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/user_model.dart';
 import '../models/note_model.dart';
-import '../models/reaction_model.dart';
-import '../models/reply_model.dart';
-import '../models/repost_model.dart';
+import '../models/interaction_model.dart';
 
 enum DataType { Feed, Profile, Note }
 
@@ -141,27 +139,19 @@ class DataService {
   final String npub;
   final DataType dataType;
   final Function(NoteModel)? onNewNote;
-  final Function(String, List<ReactionModel>)? onReactionsUpdated;
-  final Function(String, List<ReplyModel>)? onRepliesUpdated;
-  final Function(String, int)? onReactionCountUpdated;
-  final Function(String, int)? onReplyCountUpdated;
-  final Function(String, List<RepostModel>)? onRepostsUpdated;
-  final Function(String, int)? onRepostCountUpdated;
+  final Function(String, int, List<InteractionModel>)? onInteractionUpdated;
+  final Function(String, int, int)? onInteractionCountUpdated;
 
   List<NoteModel> notes = [];
   final Set<String> noteKeys = {};
 
-  final Map<String, List<ReactionModel>> reactionsMap = {};
-  final Map<String, List<ReplyModel>> repliesMap = {};
-  final Map<String, List<RepostModel>> repostsMap = {};
+  final Map<String, List<InteractionModel>> interactionsMap = {};
 
   final Map<String, CachedProfile> profileCache = {};
 
   Box<UserModel>? usersBox;
   Box<NoteModel>? notesBox;
-  Box<ReactionModel>? reactionsBox;
-  Box<ReplyModel>? repliesBox;
-  Box<RepostModel>? repostsBox;
+  Box<InteractionModel>? interactionsBox;
 
   late WebSocketManager _socketManager;
   bool _isInitialized = false;
@@ -193,12 +183,8 @@ class DataService {
     required this.npub,
     required this.dataType,
     this.onNewNote,
-    this.onReactionsUpdated,
-    this.onRepliesUpdated,
-    this.onReactionCountUpdated,
-    this.onReplyCountUpdated,
-    this.onRepostsUpdated,
-    this.onRepostCountUpdated,
+    this.onInteractionUpdated,
+    this.onInteractionCountUpdated,
   });
 
   int get connectedRelaysCount => _socketManager.activeSockets.length;
@@ -215,20 +201,11 @@ class DataService {
     print('[DataService] Hive notes box opened successfully.');
 
     await Future.wait([
-      _openHiveBox<ReactionModel>('reactions_${dataType.toString()}_$npub')
+      _openHiveBox<InteractionModel>(
+              'interactions_${dataType.toString()}_$npub')
           .then((box) {
-        reactionsBox = box;
-        print('[DataService] Hive reactions box opened successfully.');
-      }),
-      _openHiveBox<ReplyModel>('replies_${dataType.toString()}_$npub')
-          .then((box) {
-        repliesBox = box;
-        print('[DataService] Hive replies box opened successfully.');
-      }),
-      _openHiveBox<RepostModel>('reposts_${dataType.toString()}_$npub')
-          .then((box) {
-        repostsBox = box;
-        print('[DataService] Hive reposts box opened successfully.');
+        interactionsBox = box;
+        print('[DataService] Hive interactions box opened successfully.');
       }),
       _openHiveBox<UserModel>('users').then((box) {
         usersBox = box;
@@ -261,13 +238,8 @@ class DataService {
     if (notes.isNotEmpty) {
       List<String> noteKeyList =
           notes.map((note) => _noteUniqueKey(note)).toList();
-      await Future.wait([
-        fetchReactionsForNotes(noteKeyList),
-        fetchRepliesForNotes(noteKeyList),
-        fetchRepostsForNotes(noteKeyList),
-      ]);
-      print(
-          '[DataService] Fetched reactions, replies, and reposts for cached notes.');
+      await fetchInteractionsForNotes(noteKeyList);
+      print('[DataService] Fetched interactions for cached notes.');
     }
 
     await _fetchUserData();
@@ -368,7 +340,7 @@ class DataService {
   void _startRealTimeSubscription(List<String> targetNpubs) {
     final filter = Filter(
       authors: targetNpubs,
-      kinds: [1, 6, 7],
+      kinds: [1, 6],
       since: (notes.isNotEmpty)
           ? (notes.first.timestamp.millisecondsSinceEpoch ~/ 1000)
           : null,
@@ -397,13 +369,9 @@ class DataService {
 
     await fetchNotes(targetNpubs, initialLoad: true);
 
-    await Future.wait([
-      loadReactionsFromCache(),
-      loadRepliesFromCache(),
-      loadRepostsFromCache(),
-    ]);
+    await loadInteractionsFromCache();
 
-    await _subscribeToAllReactions();
+    await _subscribeToAllInteractions();
 
     _startRealTimeSubscription(targetNpubs);
     await getCachedUserProfile(npub);
@@ -429,13 +397,9 @@ class DataService {
 
     await fetchNotes(targetNpubs, initialLoad: true);
 
-    await Future.wait([
-      loadReactionsFromCache(),
-      loadRepliesFromCache(),
-      loadRepostsFromCache(),
-    ]);
+    await loadInteractionsFromCache();
 
-    await _subscribeToAllReactions();
+    await _subscribeToAllInteractions();
     _startRealTimeSubscription(targetNpubs);
   }
 
@@ -494,12 +458,9 @@ class DataService {
         final kind = eventData['kind'] as int;
         if (kind == 0) {
           await _handleProfileEvent(eventData);
-        } else if (kind == 7) {
-          await _handleReactionEvent(eventData);
+        } else if (kind == 7 || kind == 6) {
+          await _handleInteractionEvent(eventData);
         } else if (kind == 1) {
-          await _processNoteEvent(eventData, targetNpubs);
-        } else if (kind == 6) {
-          await _handleRepostEvent(eventData);
           await _processNoteEvent(eventData, targetNpubs);
         }
       }
@@ -610,47 +571,49 @@ class DataService {
       print('[DataService] New note added and saved to cache: $uniqueKey');
 
       List<String> newNoteKeys = [uniqueKey];
-      await Future.wait([
-        fetchReactionsForNotes(newNoteKeys),
-        fetchRepliesForNotes(newNoteKeys),
-        fetchRepostsForNotes(newNoteKeys)
-      ]);
-      await _updateReactionSubscription();
+      await fetchInteractionsForNotes(newNoteKeys);
+      await _subscribeToAllInteractions();
     }
 
-    int currentRepostCount = repostsMap[noteId]?.length ?? 0;
-    int currentReactionCount = reactionsMap[noteId]?.length ?? 0;
-    int currentReplyCount = repliesMap[noteId]?.length ?? 0;
+    int currentReplyCount =
+        interactionsMap[noteId]?.where((i) => i.kind == 1).length ?? 0;
+    int currentReactionCount =
+        interactionsMap[noteId]?.where((i) => i.kind == 7).length ?? 0;
+    int currentRepostCount =
+        interactionsMap[noteId]?.where((i) => i.kind == 6).length ?? 0;
     _updateNoteCounts(noteId,
-        repostCount: currentRepostCount,
         reactionCount: currentReactionCount,
-        replyCount: currentReplyCount);
+        replyCount: currentReplyCount,
+        repostCount: currentRepostCount);
   }
 
   void _sortNotes() => notes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-  Future<void> _handleReactionEvent(Map<String, dynamic> eventData) async {
+  Future<void> _handleInteractionEvent(Map<String, dynamic> eventData) async {
     if (_isClosed) return;
     try {
-      String? targetNoteId;
-      for (var tag in eventData['tags']) {
-        if (tag is List && tag.length >= 2 && tag[0] == 'e') {
-          targetNoteId = tag[1] as String;
-          break;
+      final interaction = InteractionModel.fromEvent(eventData);
+      final targetNoteId = interaction.targetNoteId;
+      interactionsMap.putIfAbsent(targetNoteId, () => []);
+      if (!interactionsMap[targetNoteId]!.any((i) => i.id == interaction.id)) {
+        interactionsMap[targetNoteId]!.add(interaction);
+        if (onInteractionUpdated != null) {
+          final listForKind = interactionsMap[targetNoteId]!
+              .where((i) => i.kind == interaction.kind)
+              .toList();
+          onInteractionUpdated!(targetNoteId, interaction.kind, listForKind);
         }
-      }
-      if (targetNoteId == null) return;
-
-      final reaction = ReactionModel.fromEvent(eventData);
-      reactionsMap.putIfAbsent(targetNoteId, () => []);
-
-      if (!reactionsMap[targetNoteId]!.any((r) => r.id == reaction.id)) {
-        reactionsMap[targetNoteId]!.add(reaction);
-        onReactionsUpdated?.call(targetNoteId, reactionsMap[targetNoteId]!);
-        await reactionsBox?.put(reaction.id, reaction);
+        if (onInteractionCountUpdated != null) {
+          final countForKind = interactionsMap[targetNoteId]!
+              .where((i) => i.kind == interaction.kind)
+              .length;
+          onInteractionCountUpdated!(
+              targetNoteId, interaction.kind, countForKind);
+        }
+        await interactionsBox?.put(interaction.id, interaction);
       }
     } catch (e) {
-      print('[DataService ERROR] Error handling reaction event: $e');
+      print('[DataService ERROR] Error handling interaction event: $e');
     }
   }
 
@@ -658,51 +621,25 @@ class DataService {
       Map<String, dynamic> eventData, String parentNoteId) async {
     if (_isClosed) return;
     try {
-      final reply = ReplyModel.fromEvent(eventData);
-      repliesMap.putIfAbsent(parentNoteId, () => []);
-
-      if (!repliesMap[parentNoteId]!.any((r) => r.id == reply.id)) {
-        repliesMap[parentNoteId]!.add(reply);
-        onRepliesUpdated?.call(parentNoteId, repliesMap[parentNoteId]!);
-
-        int count = repliesMap[parentNoteId]!.length;
-        onReplyCountUpdated?.call(parentNoteId, count);
-        _updateNoteCounts(parentNoteId, replyCount: count);
-
-        await repliesBox?.put(reply.id, reply);
+      final interaction = InteractionModel.fromEvent(eventData);
+      if (interaction.kind != 1) return;
+      interactionsMap.putIfAbsent(parentNoteId, () => []);
+      if (!interactionsMap[parentNoteId]!.any((i) => i.id == interaction.id)) {
+        interactionsMap[parentNoteId]!.add(interaction);
+        if (onInteractionUpdated != null) {
+          final listForReply =
+              interactionsMap[parentNoteId]!.where((i) => i.kind == 1).toList();
+          onInteractionUpdated!(parentNoteId, 1, listForReply);
+        }
+        if (onInteractionCountUpdated != null) {
+          final replyCount =
+              interactionsMap[parentNoteId]!.where((i) => i.kind == 1).length;
+          onInteractionCountUpdated!(parentNoteId, 1, replyCount);
+        }
+        await interactionsBox?.put(interaction.id, interaction);
       }
     } catch (e) {
       print('[DataService ERROR] Error handling reply event: $e');
-    }
-  }
-
-  Future<void> _handleRepostEvent(Map<String, dynamic> eventData) async {
-    if (_isClosed) return;
-    try {
-      String? originalNoteId;
-      for (var tag in eventData['tags']) {
-        if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
-          originalNoteId = tag[1] as String?;
-          break;
-        }
-      }
-      if (originalNoteId == null) return;
-
-      final repost = RepostModel.fromEvent(eventData, originalNoteId);
-      repostsMap.putIfAbsent(originalNoteId, () => []);
-
-      if (!repostsMap[originalNoteId]!.any((r) => r.id == repost.id)) {
-        repostsMap[originalNoteId]!.add(repost);
-        onRepostsUpdated?.call(originalNoteId, repostsMap[originalNoteId]!);
-
-        int count = repostsMap[originalNoteId]!.length;
-        onRepostCountUpdated?.call(originalNoteId, count);
-        _updateNoteCounts(originalNoteId, repostCount: count);
-
-        await repostsBox?.put(repost.id, repost);
-      }
-    } catch (e) {
-      print('[DataService ERROR] Error handling repost event: $e');
     }
   }
 
@@ -924,20 +861,17 @@ class DataService {
     await _broadcastRequest(request);
   }
 
-  Future<void> _subscribeToAllReactions() async {
+  Future<void> _subscribeToAllInteractions() async {
     if (_isClosed) return;
     String subscriptionId = generateUUID();
     List<String> allNoteKeys =
         notes.map((note) => _noteUniqueKey(note)).toList();
     if (allNoteKeys.isEmpty) return;
 
-    final filter = Filter(kinds: [7], e: allNoteKeys, limit: 1000);
+    final filter = Filter(kinds: [1, 7, 6], e: allNoteKeys, limit: 1000);
     final request = Request(subscriptionId, [filter]);
     await _broadcastRequest(request);
   }
-
-  Future<void> _updateReactionSubscription() async =>
-      await _subscribeToAllReactions();
 
   void _startCacheCleanup() {
     _cacheCleanupTimer?.cancel();
@@ -951,28 +885,17 @@ class DataService {
       profileCache.removeWhere(
           (key, cached) => now.difference(cached.fetchedAt) > profileCacheTTL);
 
-      reactionsMap.forEach((noteId, reactions) {
-        reactions.removeWhere(
-            (reaction) => now.difference(reaction.fetchedAt) > profileCacheTTL);
-      });
-
-      repliesMap.forEach((noteId, replies) {
-        replies.removeWhere(
-            (reply) => now.difference(reply.fetchedAt) > profileCacheTTL);
+      interactionsMap.forEach((noteId, interactions) {
+        interactions.removeWhere((interaction) =>
+            now.difference(interaction.fetchedAt) > profileCacheTTL);
       });
 
       await Future.wait([
-        if (reactionsBox != null && reactionsBox!.isOpen)
-          reactionsBox!.deleteAll(reactionsBox!.keys.where((key) {
-            final reaction = reactionsBox!.get(key);
-            return reaction != null &&
-                now.difference(reaction.fetchedAt) > profileCacheTTL;
-          })),
-        if (repliesBox != null && repliesBox!.isOpen)
-          repliesBox!.deleteAll(repliesBox!.keys.where((key) {
-            final reply = repliesBox!.get(key);
-            return reply != null &&
-                now.difference(reply.fetchedAt) > profileCacheTTL;
+        if (interactionsBox != null && interactionsBox!.isOpen)
+          interactionsBox!.deleteAll(interactionsBox!.keys.where((key) {
+            final interaction = interactionsBox!.get(key);
+            return interaction != null &&
+                now.difference(interaction.fetchedAt) > profileCacheTTL;
           })),
       ]);
 
@@ -1053,20 +976,6 @@ class DataService {
     }
   }
 
-  Future<void> saveNotesToCache() async {
-    if (notesBox != null && notesBox!.isOpen) {
-      try {
-        final Map<String, NoteModel> notesMap = {
-          for (var note in notes) _noteUniqueKey(note): note
-        };
-        await notesBox!.putAll(notesMap);
-        print('[DataService] Notes saved to cache successfully.');
-      } catch (e) {
-        print('[DataService ERROR] Error saving notes to cache: $e');
-      }
-    }
-  }
-
   Future<void> loadNotesFromCache(Function(List<NoteModel>) onLoad) async {
     if (notesBox == null || !notesBox!.isOpen) return;
     try {
@@ -1087,124 +996,38 @@ class DataService {
       List<String> cachedNoteKeys =
           allNotes.map((note) => _noteUniqueKey(note)).toList();
 
-      await Future.wait([
-        fetchReactionsForNotes(cachedNoteKeys),
-        fetchRepliesForNotes(cachedNoteKeys),
-        fetchRepostsForNotes(cachedNoteKeys)
-      ]);
+      await fetchInteractionsForNotes(cachedNoteKeys);
     } catch (e) {
       print('[DataService ERROR] Error loading notes from cache: $e');
     }
     await _fetchProfilesForAllData();
   }
 
-  Future<void> loadReactionsFromCache() async {
-    if (reactionsBox == null || !reactionsBox!.isOpen) return;
+  Future<void> loadInteractionsFromCache() async {
+    if (interactionsBox == null || !interactionsBox!.isOpen) return;
     try {
-      final allReactions = reactionsBox!.values.cast<ReactionModel>().toList();
-      if (allReactions.isEmpty) return;
+      final allInteractions =
+          interactionsBox!.values.cast<InteractionModel>().toList();
+      if (allInteractions.isEmpty) return;
 
-      for (var reaction in allReactions) {
-        reactionsMap.putIfAbsent(reaction.targetNoteId, () => []);
-        if (!reactionsMap[reaction.targetNoteId]!
-            .any((r) => r.id == reaction.id)) {
-          reactionsMap[reaction.targetNoteId]!.add(reaction);
-          onReactionsUpdated?.call(
-              reaction.targetNoteId, reactionsMap[reaction.targetNoteId]!);
+      for (var interaction in allInteractions) {
+        interactionsMap.putIfAbsent(interaction.targetNoteId, () => []);
+        if (!interactionsMap[interaction.targetNoteId]!
+            .any((i) => i.id == interaction.id)) {
+          interactionsMap[interaction.targetNoteId]!.add(interaction);
         }
       }
       print(
-          '[DataService] Reactions cache loaded with ${allReactions.length} reactions.');
+          '[DataService] Interactions cache loaded with ${allInteractions.length} interactions.');
     } catch (e) {
-      print('[DataService ERROR] Error loading reactions from cache: $e');
+      print('[DataService ERROR] Error loading interactions from cache: $e');
     }
   }
 
-  Future<void> loadRepliesFromCache() async {
-    if (repliesBox == null || !repliesBox!.isOpen) return;
-    try {
-      final allReplies = repliesBox!.values.cast<ReplyModel>().toList();
-      if (allReplies.isEmpty) return;
-
-      for (var reply in allReplies) {
-        repliesMap.putIfAbsent(reply.parentNoteId, () => []);
-        if (!repliesMap[reply.parentNoteId]!.any((r) => r.id == reply.id)) {
-          repliesMap[reply.parentNoteId]!.add(reply);
-        }
-      }
-      print(
-          '[DataService] Replies cache loaded with ${allReplies.length} replies.');
-    } catch (e) {
-      print('[DataService ERROR] Error loading replies from cache: $e');
-    }
-  }
-
-  Future<void> loadRepostsFromCache() async {
-    if (repostsBox == null || !repostsBox!.isOpen) return;
-    try {
-      final allReposts = repostsBox!.values.cast<RepostModel>().toList();
-      if (allReposts.isEmpty) return;
-
-      for (var repost in allReposts) {
-        repostsMap.putIfAbsent(repost.originalNoteId, () => []);
-        if (!repostsMap[repost.originalNoteId]!.any((r) => r.id == repost.id)) {
-          repostsMap[repost.originalNoteId]!.add(repost);
-          onRepostsUpdated?.call(
-              repost.originalNoteId, repostsMap[repost.originalNoteId]!);
-        }
-      }
-      print(
-          '[DataService] Reposts cache loaded with ${allReposts.length} reposts.');
-    } catch (e) {
-      print('[DataService ERROR] Error loading reposts from cache: $e');
-    }
-  }
-
-  Future<void> _handleNewNotes(dynamic data) async {
-    if (data is List<NoteModel> && data.isNotEmpty) {
-      for (var note in data) {
-        final key = _noteUniqueKey(note);
-        if (!noteKeys.contains(key)) {
-          notes.add(note);
-          noteKeys.add(key);
-          await notesBox!.put(key, note);
-        }
-      }
-      _sortNotes();
-      onNewNote?.call(data.last);
-      print('[DataService] Handled new notes: ${data.length} notes added.');
-
-      List<String> newNoteKeys =
-          data.map((note) => _noteUniqueKey(note)).toList();
-      await Future.wait([
-        fetchReactionsForNotes(newNoteKeys),
-        fetchRepliesForNotes(newNoteKeys),
-        fetchRepostsForNotes(newNoteKeys)
-      ]);
-      await _updateReactionSubscription();
-    }
-  }
-
-  Future<void> fetchReactionsForNotes(List<String> noteKeysToFetch) async {
+  Future<void> fetchInteractionsForNotes(List<String> noteKeysToFetch) async {
     if (_isClosed) return;
     final request = Request(generateUUID(), [
-      Filter(kinds: [7], e: noteKeysToFetch, limit: 1000)
-    ]);
-    await _broadcastRequest(request);
-  }
-
-  Future<void> fetchRepliesForNotes(List<String> parentNoteKeys) async {
-    if (_isClosed) return;
-    final request = Request(generateUUID(), [
-      Filter(kinds: [1], e: parentNoteKeys, limit: 1000)
-    ]);
-    await _broadcastRequest(request);
-  }
-
-  Future<void> fetchRepostsForNotes(List<String> noteKeysToFetch) async {
-    if (_isClosed) return;
-    final request = Request(generateUUID(), [
-      Filter(kinds: [6], e: noteKeysToFetch, limit: 1000)
+      Filter(kinds: [1, 7, 6], e: noteKeysToFetch, limit: 1000)
     ]);
     await _broadcastRequest(request);
   }
@@ -1222,12 +1045,9 @@ class DataService {
     if (_isClosed) return;
     Set<String> allAuthors = notes.map((note) => note.author).toSet();
 
-    for (var replies in repliesMap.values) {
-      allAuthors.addAll(replies.map((reply) => reply.author));
-    }
-    for (var reactions in reactionsMap.values) {
-      allAuthors.addAll(reactions.map((reaction) => reaction.author));
-    }
+    interactionsMap.forEach((noteId, interactions) {
+      allAuthors.addAll(interactions.map((interaction) => interaction.author));
+    });
 
     await _fetchProfilesBatch(allAuthors.toList());
   }
@@ -1286,5 +1106,27 @@ class DataService {
     await _socketManager.closeConnections();
 
     print('[DataService] All connections closed. Hive boxes remain open.');
+  }
+
+  Future<void> _handleNewNotes(dynamic data) async {
+    if (data is List<NoteModel> && data.isNotEmpty) {
+      for (var note in data) {
+        final key = _noteUniqueKey(note);
+        if (!noteKeys.contains(key)) {
+          notes.add(note);
+          noteKeys.add(key);
+          if (notesBox != null && notesBox!.isOpen) {
+            await notesBox!.put(key, note);
+          }
+        }
+      }
+      _sortNotes();
+      onNewNote?.call(data.last);
+      print('[DataService] Handled new notes: ${data.length} notes added.');
+      List<String> newNoteKeys =
+          data.map((note) => _noteUniqueKey(note)).toList();
+      await fetchInteractionsForNotes(newNoteKeys);
+      await _subscribeToAllInteractions();
+    }
   }
 }

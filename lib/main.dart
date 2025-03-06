@@ -4,9 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'models/note_model.dart';
-import 'models/reaction_model.dart';
-import 'models/reply_model.dart';
-import 'models/repost_model.dart';
+import 'models/interaction_model.dart';
 import 'models/user_model.dart';
 import 'screens/login_page.dart';
 import 'screens/feed_page.dart';
@@ -17,9 +15,7 @@ Future<void> main() async {
   try {
     await Hive.initFlutter();
     Hive.registerAdapter(NoteModelAdapter());
-    Hive.registerAdapter(ReactionModelAdapter());
-    Hive.registerAdapter(ReplyModelAdapter());
-    Hive.registerAdapter(RepostModelAdapter());
+    Hive.registerAdapter(InteractionModelAdapter());
     Hive.registerAdapter(UserModelAdapter());
 
     runApp(
@@ -101,13 +97,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
       if (privateKey != null && npub != null) {
         await Hive.openBox<NoteModel>('notes_Feed_$npub');
-        await Hive.openBox<ReactionModel>('reactions_Feed_$npub');
-        await Hive.openBox<ReplyModel>('replies_Feed_$npub');
-        await Hive.openBox<RepostModel>('reposts_Feed_$npub');
+        await Hive.openBox<InteractionModel>('interactions_Feed_$npub');
         await Hive.openBox<NoteModel>('notes_Profile_$npub');
-        await Hive.openBox<ReactionModel>('reactions_Profile_$npub');
-        await Hive.openBox<ReplyModel>('replies_Profile_$npub');
-        await Hive.openBox<RepostModel>('reposts_Profile_$npub');
+        await Hive.openBox<InteractionModel>('interactions_Profile_$npub');
         await Hive.openBox<UserModel>('users');
 
         Navigator.pushReplacement(

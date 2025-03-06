@@ -35,12 +35,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       npub: widget.npub,
       dataType: widget.dataType,
       onNewNote: _handleNewNote,
-      onReactionsUpdated: (noteId, reactions) => setState(() {}),
-      onRepliesUpdated: (noteId, replies) => setState(() {}),
-      onReactionCountUpdated: (noteId, count) => setState(() {}),
-      onReplyCountUpdated: (noteId, count) => setState(() {}),
-      onRepostsUpdated: (noteId, reposts) => setState(() {}),
-      onRepostCountUpdated: (noteId, count) => setState(() {}),
+      onInteractionUpdated: (noteId, kind, interactions) => setState(() {}),
+      onInteractionCountUpdated: (noteId, kind, count) => setState(() {}),
     );
     _initialize();
   }

@@ -1,46 +1,49 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'reply_model.dart';
+part of 'interaction_model.dart';
 
 // **************************************************************************
 // TypeAdapterGenerator
 // **************************************************************************
 
-class ReplyModelAdapter extends TypeAdapter<ReplyModel> {
+class InteractionModelAdapter extends TypeAdapter<InteractionModel> {
   @override
-  final int typeId = 2;
+  final int typeId = 4;
 
   @override
-  ReplyModel read(BinaryReader reader) {
+  InteractionModel read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return ReplyModel(
+    return InteractionModel(
       id: fields[0] as String,
-      author: fields[1] as String,
-      content: fields[2] as String,
-      timestamp: fields[3] as DateTime,
-      parentNoteId: fields[4] as String,
-      fetchedAt: fields[5] as DateTime,
+      kind: fields[1] as int,
+      targetNoteId: fields[2] as String,
+      author: fields[3] as String,
+      content: fields[4] as String,
+      timestamp: fields[5] as DateTime,
+      fetchedAt: fields[6] as DateTime,
     );
   }
 
   @override
-  void write(BinaryWriter writer, ReplyModel obj) {
+  void write(BinaryWriter writer, InteractionModel obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
-      ..write(obj.author)
+      ..write(obj.kind)
       ..writeByte(2)
-      ..write(obj.content)
+      ..write(obj.targetNoteId)
       ..writeByte(3)
-      ..write(obj.timestamp)
+      ..write(obj.author)
       ..writeByte(4)
-      ..write(obj.parentNoteId)
+      ..write(obj.content)
       ..writeByte(5)
+      ..write(obj.timestamp)
+      ..writeByte(6)
       ..write(obj.fetchedAt);
   }
 
@@ -50,7 +53,7 @@ class ReplyModelAdapter extends TypeAdapter<ReplyModel> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ReplyModelAdapter &&
+      other is InteractionModelAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

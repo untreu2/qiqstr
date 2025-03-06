@@ -16,6 +16,7 @@ class NoteWidget extends StatefulWidget {
   final NoteModel note;
   final DataService dataService;
   const NoteWidget({super.key, required this.note, required this.dataService});
+
   @override
   _NoteWidgetState createState() => _NoteWidgetState();
 }
@@ -26,6 +27,7 @@ class _NoteWidgetState extends State<NoteWidget>
   late Animation<double> _highlightAnimation;
   final PageController _pageController = PageController();
   bool _isGlowing = false;
+
   @override
   void initState() {
     super.initState();
@@ -132,9 +134,12 @@ class _NoteWidgetState extends State<NoteWidget>
                   ? CircleAvatar(
                       radius: 20,
                       backgroundImage: CachedNetworkImageProvider(profileImage),
-                      backgroundColor: Colors.transparent)
+                      backgroundColor: Colors.transparent,
+                    )
                   : const CircleAvatar(
-                      radius: 16, child: Icon(Icons.person, size: 16)),
+                      radius: 16,
+                      child: Icon(Icons.person, size: 16),
+                    ),
             ),
             const SizedBox(width: 8),
             GestureDetector(
@@ -169,9 +174,12 @@ class _NoteWidgetState extends State<NoteWidget>
                   ? CircleAvatar(
                       radius: 12,
                       backgroundImage: CachedNetworkImageProvider(profileImage),
-                      backgroundColor: Colors.transparent)
+                      backgroundColor: Colors.transparent,
+                    )
                   : const CircleAvatar(
-                      radius: 12, child: Icon(Icons.person, size: 12)),
+                      radius: 12,
+                      child: Icon(Icons.person, size: 12),
+                    ),
               const SizedBox(width: 6.0),
               Expanded(
                 child: Row(
@@ -293,8 +301,9 @@ class _NoteWidgetState extends State<NoteWidget>
                           color: _isGlowing ? Colors.red : Colors.grey),
                       const SizedBox(width: 4.0),
                       Text(
-                          (widget.dataService.reactionsMap[widget.note.id]
-                                      ?.length ??
+                          (widget.dataService.interactionsMap[widget.note.id]
+                                      ?.where((i) => i.kind == 7)
+                                      .length ??
                                   0)
                               .toString(),
                           style: const TextStyle(
@@ -307,8 +316,9 @@ class _NoteWidgetState extends State<NoteWidget>
                       const Icon(Icons.reply, size: 16.0, color: Colors.grey),
                       const SizedBox(width: 4.0),
                       Text(
-                          (widget.dataService.repliesMap[widget.note.id]
-                                      ?.length ??
+                          (widget.dataService.interactionsMap[widget.note.id]
+                                      ?.where((i) => i.kind == 1)
+                                      .length ??
                                   0)
                               .toString(),
                           style: const TextStyle(
@@ -321,8 +331,9 @@ class _NoteWidgetState extends State<NoteWidget>
                       const Icon(Icons.repeat, size: 16.0, color: Colors.grey),
                       const SizedBox(width: 4.0),
                       Text(
-                          (widget.dataService.repostsMap[widget.note.id]
-                                      ?.length ??
+                          (widget.dataService.interactionsMap[widget.note.id]
+                                      ?.where((i) => i.kind == 6)
+                                      .length ??
                                   0)
                               .toString(),
                           style: const TextStyle(
@@ -333,9 +344,9 @@ class _NoteWidgetState extends State<NoteWidget>
               ),
             ),
             const Padding(
-                padding: EdgeInsets.symmetric(vertical: 6.0),
-                child:
-                    Divider(height: 0.5, thickness: 0.5, color: Colors.grey)),
+              padding: EdgeInsets.symmetric(vertical: 6.0),
+              child: Divider(height: 0.5, thickness: 0.5, color: Colors.grey),
+            ),
           ],
         ),
       ),
