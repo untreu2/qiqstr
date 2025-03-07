@@ -481,10 +481,12 @@ class DataService {
         } else if (kind == 7) {
           await _handleReactionEvent(eventData);
         } else if (kind == 1) {
-          await _processNoteEvent(eventData, targetNpubs, rawWs: event);
+          await _processNoteEvent(eventData, targetNpubs,
+              rawWs: event.toString());
         } else if (kind == 6) {
           await _handleRepostEvent(eventData);
-          await _processNoteEvent(eventData, targetNpubs, rawWs: event);
+          await _processNoteEvent(eventData, targetNpubs,
+              rawWs: event.toString());
         }
       }
     } catch (e) {
@@ -509,14 +511,15 @@ class DataService {
     bool isRepost = kind == 6;
     Map<String, dynamic>? originalEventData;
     DateTime? repostTimestamp;
+    String? repostRawWs;
 
     if (isRepost) {
       repostTimestamp =
           DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000);
-      final contentRaw = eventData['content'];
-      if (contentRaw is String && contentRaw.isNotEmpty) {
+      repostRawWs = eventData['content'];
+      if (repostRawWs is String && repostRawWs.isNotEmpty) {
         try {
-          originalEventData = jsonDecode(contentRaw) as Map<String, dynamic>;
+          originalEventData = jsonDecode(repostRawWs) as Map<String, dynamic>;
         } catch (e) {
           originalEventData = null;
         }
@@ -571,7 +574,7 @@ class DataService {
         isRepost: isRepost,
         repostedBy: isRepost ? author : null,
         repostTimestamp: repostTimestamp,
-        rawWs: rawWs,
+        rawWs: isRepost ? repostRawWs : rawWs,
       );
 
       if (!eventIds.contains(newNote.id)) {
@@ -1016,6 +1019,44 @@ class DataService {
       print('[DataService] Reply event sent to WebSocket successfully.');
     } catch (e) {
       print('[DataService ERROR] Error sending reply: $e');
+      throw e;
+    }
+  }
+
+  Future<void> sendRepost(NoteModel note) async {
+    if (_isClosed) return;
+
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found.');
+      }
+
+      final content = note.rawWs;
+      if (content == null || content.isEmpty) {
+        throw Exception('Raw event data is missing for this note.');
+      }
+
+      final tags = [
+        ['e', note.id],
+        ['p', note.author]
+      ];
+
+      final event = Event.from(
+        kind: 6,
+        tags: tags,
+        content: content,
+        privkey: privateKey,
+      );
+
+      final serializedEvent = event.serialize();
+
+      await _socketManager.broadcast(serializedEvent);
+
+      print('[DataService] Repost event sent successfully.');
+    } catch (e) {
+      print('[DataService ERROR] Error sending repost: $e');
       throw e;
     }
   }
