@@ -482,11 +482,11 @@ class DataService {
           await _handleReactionEvent(eventData);
         } else if (kind == 1) {
           await _processNoteEvent(eventData, targetNpubs,
-              rawWs: event.toString());
+              rawWs: jsonEncode(eventData));
         } else if (kind == 6) {
           await _handleRepostEvent(eventData);
           await _processNoteEvent(eventData, targetNpubs,
-              rawWs: event.toString());
+              rawWs: jsonEncode(eventData));
         }
       }
     } catch (e) {
