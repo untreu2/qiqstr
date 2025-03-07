@@ -1,69 +1,61 @@
 import 'package:hive/hive.dart';
 
-part 'interaction_model.g.dart';
+part 'reaction_model.g.dart';
 
 @HiveType(typeId: 1)
-class InteractionModel extends HiveObject {
+class ReactionModel extends HiveObject {
   @HiveField(0)
   final String id;
 
   @HiveField(1)
-  final int kind;
+  final String targetEventId;
 
   @HiveField(2)
-  final String targetNoteId;
-
-  @HiveField(3)
   final String author;
 
-  @HiveField(4)
+  @HiveField(3)
   final String content;
 
-  @HiveField(5)
+  @HiveField(4)
   final DateTime timestamp;
 
-  @HiveField(6)
+  @HiveField(5)
   final DateTime fetchedAt;
 
-  InteractionModel({
+  ReactionModel({
     required this.id,
-    required this.kind,
-    required this.targetNoteId,
+    required this.targetEventId,
     required this.author,
     required this.content,
     required this.timestamp,
     required this.fetchedAt,
   });
 
-  factory InteractionModel.fromEvent(Map<String, dynamic> eventData) {
-    final int kind = eventData['kind'] as int;
-    String? targetNoteId;
+  factory ReactionModel.fromEvent(Map<String, dynamic> eventData) {
+    String? targetEventId;
     for (var tag in eventData['tags']) {
-      if (tag is List && tag.length >= 2 && tag[0] == 'e') {
-        targetNoteId = tag[1] as String;
+      if (tag.length >= 2 && tag[0] == 'e') {
+        targetEventId = tag[1] as String;
         break;
       }
     }
-    if (targetNoteId == null) {
-      throw Exception('targetNoteId not found for interaction.');
+    if (targetEventId == null) {
+      throw Exception('targetEventId not found for reaction.');
     }
-    return InteractionModel(
+    return ReactionModel(
       id: eventData['id'] as String,
-      kind: kind,
-      targetNoteId: targetNoteId,
+      targetEventId: targetEventId,
       author: eventData['pubkey'] as String,
       content: eventData['content'] as String,
-      timestamp: DateTime.fromMillisecondsSinceEpoch(
-          (eventData['created_at'] as int) * 1000),
+      timestamp: DateTime.fromMillisecondsSinceEpoch((eventData['created_at'] as int) * 1000),
       fetchedAt: DateTime.now(),
     );
   }
 
-  factory InteractionModel.fromJson(Map<String, dynamic> json) {
-    return InteractionModel(
+  factory ReactionModel.fromJson(Map<String, dynamic> json) {
+    return ReactionModel(
       id: json['id'],
-      kind: json['kind'],
-      targetNoteId: json['targetNoteId'],
+      targetEventId: json['targetEventId'],
       author: json['author'],
       content: json['content'],
       timestamp: DateTime.parse(json['timestamp']),
@@ -74,8 +66,7 @@ class InteractionModel extends HiveObject {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'kind': kind,
-      'targetNoteId': targetNoteId,
+      'targetEventId': targetEventId,
       'author': author,
       'content': content,
       'timestamp': timestamp.toIso8601String(),

@@ -1,56 +1,47 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'note_model.dart';
+part of 'reaction_model.dart';
 
 // **************************************************************************
 // TypeAdapterGenerator
 // **************************************************************************
 
-class NoteModelAdapter extends TypeAdapter<NoteModel> {
+class ReactionModelAdapter extends TypeAdapter<ReactionModel> {
   @override
-  final int typeId = 0;
+  final int typeId = 1;
 
   @override
-  NoteModel read(BinaryReader reader) {
+  ReactionModel read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return NoteModel(
+    return ReactionModel(
       id: fields[0] as String,
-      content: fields[1] as String,
+      targetEventId: fields[1] as String,
       author: fields[2] as String,
-      timestamp: fields[3] as DateTime,
-      isRepost: fields[4] as bool,
-      repostedBy: fields[5] as String?,
-      repostTimestamp: fields[6] as DateTime?,
-      repostCount: fields[7] as int,
-      rawWs: fields[8] as String?,
+      content: fields[3] as String,
+      timestamp: fields[4] as DateTime,
+      fetchedAt: fields[5] as DateTime,
     );
   }
 
   @override
-  void write(BinaryWriter writer, NoteModel obj) {
+  void write(BinaryWriter writer, ReactionModel obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(6)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
-      ..write(obj.content)
+      ..write(obj.targetEventId)
       ..writeByte(2)
       ..write(obj.author)
       ..writeByte(3)
-      ..write(obj.timestamp)
+      ..write(obj.content)
       ..writeByte(4)
-      ..write(obj.isRepost)
+      ..write(obj.timestamp)
       ..writeByte(5)
-      ..write(obj.repostedBy)
-      ..writeByte(6)
-      ..write(obj.repostTimestamp)
-      ..writeByte(7)
-      ..write(obj.repostCount)
-      ..writeByte(8)
-      ..write(obj.rawWs);
+      ..write(obj.fetchedAt);
   }
 
   @override
@@ -59,7 +50,7 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is NoteModelAdapter &&
+      other is ReactionModelAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

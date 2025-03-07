@@ -14,8 +14,19 @@ import 'content_parser.dart';
 
 class NoteWidget extends StatefulWidget {
   final NoteModel note;
+  final int reactionCount;
+  final int replyCount;
+  final int repostCount;
   final DataService dataService;
-  const NoteWidget({super.key, required this.note, required this.dataService});
+
+  const NoteWidget({
+    super.key,
+    required this.note,
+    required this.reactionCount,
+    required this.replyCount,
+    required this.repostCount,
+    required this.dataService,
+  });
 
   @override
   _NoteWidgetState createState() => _NoteWidgetState();
@@ -32,9 +43,12 @@ class _NoteWidgetState extends State<NoteWidget>
   void initState() {
     super.initState();
     _highlightController = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 300));
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
     _highlightAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(parent: _highlightController, curve: Curves.easeInOut));
+      CurvedAnimation(parent: _highlightController, curve: Curves.easeInOut),
+    );
   }
 
   @override
@@ -70,8 +84,9 @@ class _NoteWidgetState extends State<NoteWidget>
     try {
       await widget.dataService.sendReaction(widget.note.id, '💜');
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error sending reaction: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sending reaction: $e')),
+      );
     } finally {
       _showHighlight();
       Timer(const Duration(seconds: 1), () {
@@ -96,9 +111,12 @@ class _NoteWidgetState extends State<NoteWidget>
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16.0))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
+      ),
       builder: (context) => SendReplyDialog(
-          dataService: widget.dataService, noteId: widget.note.id),
+        dataService: widget.dataService,
+        noteId: widget.note.id,
+      ),
     );
   }
 
@@ -107,12 +125,17 @@ class _NoteWidgetState extends State<NoteWidget>
       final profileData = await widget.dataService.getCachedUserProfile(npub);
       final user = UserModel.fromCachedProfile(npub, profileData);
       if (mounted) {
-        Navigator.push(context,
-            MaterialPageRoute(builder: (context) => ProfilePage(user: user)));
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProfilePage(user: user),
+          ),
+        );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Error loading profile: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading profile: $e')),
+      );
     }
   }
 
@@ -144,9 +167,11 @@ class _NoteWidgetState extends State<NoteWidget>
             const SizedBox(width: 8),
             GestureDetector(
               onTap: () => _navigateToProfile(npub),
-              child: Text(name,
-                  style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.bold)),
+              child: Text(
+                name,
+                style:
+                    const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         );
@@ -184,15 +209,19 @@ class _NoteWidgetState extends State<NoteWidget>
               Expanded(
                 child: Row(
                   children: [
-                    Text('Reposted by $name',
-                        style:
-                            const TextStyle(fontSize: 12.0, color: Colors.grey),
-                        overflow: TextOverflow.ellipsis),
+                    Text(
+                      'Reposted by $name',
+                      style:
+                          const TextStyle(fontSize: 12.0, color: Colors.grey),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     if (repostTimestamp != null) ...[
                       const SizedBox(width: 6.0),
-                      Text('• ${_formatTimestamp(repostTimestamp)}',
-                          style: const TextStyle(
-                              fontSize: 12.0, color: Colors.grey)),
+                      Text(
+                        '• ${_formatTimestamp(repostTimestamp)}',
+                        style:
+                            const TextStyle(fontSize: 12.0, color: Colors.grey),
+                      ),
                     ],
                   ],
                 ),
@@ -210,7 +239,8 @@ class _NoteWidgetState extends State<NoteWidget>
       await launchUrl(url);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not launch ${link.url}')));
+        SnackBar(content: Text('Could not launch ${link.url}')),
+      );
     }
   }
 
@@ -228,9 +258,10 @@ class _NoteWidgetState extends State<NoteWidget>
             child: Container(
               decoration: BoxDecoration(
                 border: Border.all(
-                    color: Colors.white
-                        .withOpacity(_highlightAnimation.value * 0.8),
-                    width: 1.5),
+                  color:
+                      Colors.white.withOpacity(_highlightAnimation.value * 0.8),
+                  width: 1.5,
+                ),
                 borderRadius: BorderRadius.circular(10.0),
               ),
               child: child,
@@ -247,8 +278,10 @@ class _NoteWidgetState extends State<NoteWidget>
                 children: [
                   _buildAuthorInfo(widget.note.author),
                   const Spacer(),
-                  Text(_formatTimestamp(widget.note.timestamp),
-                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  Text(
+                    _formatTimestamp(widget.note.timestamp),
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                 ],
               ),
             ),
@@ -300,12 +333,7 @@ class _NoteWidgetState extends State<NoteWidget>
                           size: 16.0,
                           color: _isGlowing ? Colors.red : Colors.grey),
                       const SizedBox(width: 4.0),
-                      Text(
-                          (widget.dataService.interactionsMap[widget.note.id]
-                                      ?.where((i) => i.kind == 7)
-                                      .length ??
-                                  0)
-                              .toString(),
+                      Text(widget.reactionCount.toString(),
                           style: const TextStyle(
                               fontSize: 12.0, color: Colors.grey)),
                     ],
@@ -315,12 +343,7 @@ class _NoteWidgetState extends State<NoteWidget>
                     children: [
                       const Icon(Icons.reply, size: 16.0, color: Colors.grey),
                       const SizedBox(width: 4.0),
-                      Text(
-                          (widget.dataService.interactionsMap[widget.note.id]
-                                      ?.where((i) => i.kind == 1)
-                                      .length ??
-                                  0)
-                              .toString(),
+                      Text(widget.replyCount.toString(),
                           style: const TextStyle(
                               fontSize: 12.0, color: Colors.grey)),
                     ],
@@ -330,12 +353,7 @@ class _NoteWidgetState extends State<NoteWidget>
                     children: [
                       const Icon(Icons.repeat, size: 16.0, color: Colors.grey),
                       const SizedBox(width: 4.0),
-                      Text(
-                          (widget.dataService.interactionsMap[widget.note.id]
-                                      ?.where((i) => i.kind == 6)
-                                      .length ??
-                                  0)
-                              .toString(),
+                      Text(widget.repostCount.toString(),
                           style: const TextStyle(
                               fontSize: 12.0, color: Colors.grey)),
                     ],

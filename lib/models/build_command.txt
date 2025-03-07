@@ -1,3 +1,1 @@
-** this command created .g.dart files for hive models **
-
-flutter pub get && dart run build_runner build --delete-conflicting-outputs
+flutter pub get && flutter pub run build_runner build --delete-conflicting-outputs
