@@ -24,6 +24,7 @@ class ProfileInfoWidget extends StatelessWidget {
                 user.website.startsWith("https://"))
         ? "https://${user.website}"
         : user.website;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -100,31 +101,32 @@ class ProfileInfoWidget extends StatelessWidget {
                           ),
                         ),
                       ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4.0),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.link,
-                              color: Colors.amber, size: 14.0),
-                          const SizedBox(width: 4.0),
-                          Expanded(
-                            child: Linkify(
-                              onOpen: _onOpen,
-                              text: websiteUrl,
-                              style: const TextStyle(
-                                color: Colors.amber,
-                                fontSize: 14.0,
-                              ),
-                              linkStyle: const TextStyle(
-                                color: Colors.amber,
-                                fontSize: 14.0,
-                                decoration: TextDecoration.underline,
+                    if (user.website.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4.0),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.link,
+                                color: Colors.amber, size: 14.0),
+                            const SizedBox(width: 4.0),
+                            Expanded(
+                              child: Linkify(
+                                onOpen: _onOpen,
+                                text: websiteUrl,
+                                style: const TextStyle(
+                                  color: Colors.amber,
+                                  fontSize: 14.0,
+                                ),
+                                linkStyle: const TextStyle(
+                                  color: Colors.amber,
+                                  fontSize: 14.0,
+                                  decoration: TextDecoration.underline,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
