@@ -5,120 +5,133 @@ class SendReplyDialog extends StatefulWidget {
   final DataService dataService;
   final String noteId;
 
-  const SendReplyDialog(
-      {super.key, required this.dataService, required this.noteId});
+  const SendReplyDialog({
+    Key? key,
+    required this.dataService,
+    required this.noteId,
+  }) : super(key: key);
 
   @override
   _SendReplyDialogState createState() => _SendReplyDialogState();
 }
 
 class _SendReplyDialogState extends State<SendReplyDialog> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _replyController = TextEditingController();
-  final FocusNode _replyFocusNode = FocusNode();
-  String _connectionMessage = '';
   bool _isPosting = false;
+  String _connectionMessage = '';
 
   @override
   void initState() {
     super.initState();
+    _initializeConnection();
+  }
 
-    widget.dataService.initializeConnections().then((_) {
-      if (mounted) {
-        setState(() {
-          if (widget.dataService.connectedRelaysCount == 0) {
-            _connectionMessage = 'No relay connections established.';
-          } else {
-            _connectionMessage =
-                'CONNECTED TO ${widget.dataService.connectedRelaysCount} RELAYS.';
-          }
-        });
-      }
-    }).catchError((e) {
-      if (mounted) {
-        setState(() {
-          _connectionMessage = 'Error connecting to relays: $e';
-        });
-      }
-    });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _replyFocusNode.requestFocus();
-    });
+  Future<void> _initializeConnection() async {
+    try {
+      await widget.dataService.initializeConnections();
+      setState(() {
+        _connectionMessage = widget.dataService.connectedRelaysCount > 0
+            ? 'Connected to ${widget.dataService.connectedRelaysCount} relays'
+            : 'No relay connections established';
+      });
+    } catch (error) {
+      setState(() {
+        _connectionMessage = 'Error connecting: $error';
+      });
+    }
   }
 
   Future<void> _sendReply() async {
     if (_isPosting) return;
+    if (!_formKey.currentState!.validate()) return;
+
     setState(() {
       _isPosting = true;
     });
 
     try {
       final replyContent = _replyController.text.trim();
-      if (replyContent.isEmpty) {
-        throw Exception('Reply content cannot be empty.');
-      }
-
       await widget.dataService.sendReply(widget.noteId, replyContent);
-
-      Navigator.pop(context);
-    } catch (e) {
-      print('Error sending reply: $e');
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (error) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sending reply: $e')),
+        SnackBar(content: Text('Error sending reply: $error')),
       );
     } finally {
-      setState(() {
-        _isPosting = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isPosting = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        FractionallySizedBox(
-          heightFactor: 0.75,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: _replyController,
-                  focusNode: _replyFocusNode,
-                  decoration: const InputDecoration(
-                    labelText: 'ENTER YOUR REPLY...',
-                  ),
-                  maxLines: 4,
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      insetPadding: const EdgeInsets.all(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Form(
+              key: _formKey,
+              child: TextFormField(
+                controller: _replyController,
+                maxLines: 4,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Enter your reply',
+                  border: OutlineInputBorder(),
                 ),
-                const SizedBox(height: 20),
-                Text(
-                  _connectionMessage,
-                  style: const TextStyle(color: Colors.grey),
-                ),
-              ],
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter a reply';
+                  }
+                  return null;
+                },
+              ),
             ),
-          ),
-        ),
-        Positioned(
-          right: 16,
-          top: 16,
-          child: _isPosting
-              ? const CircularProgressIndicator(color: Colors.black)
-              : IconButton(
-                  icon: const Icon(Icons.arrow_upward, color: Colors.white),
-                  onPressed: _sendReply,
-                  color: Colors.white,
+            const SizedBox(height: 16),
+            Text(
+              _connectionMessage,
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
+                onPressed: _isPosting ? null : _sendReply,
+                child: _isPosting
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.black),
+                        ),
+                      )
+                    : const Text('Share'),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
   @override
   void dispose() {
-    _replyFocusNode.dispose();
     _replyController.dispose();
     super.dispose();
   }

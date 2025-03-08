@@ -177,12 +177,8 @@ class _NoteWidgetState extends State<NoteWidget> {
   }
 
   void _showReplyDialog() {
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
-      ),
       builder: (context) => SendReplyDialog(
         dataService: widget.dataService,
         noteId: widget.note.id,
