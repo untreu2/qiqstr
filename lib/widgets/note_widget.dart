@@ -8,6 +8,7 @@ import 'package:qiqstr/screens/send_reply.dart';
 import 'package:qiqstr/widgets/link_preview_widget.dart';
 import 'package:qiqstr/widgets/media_preview_widget.dart';
 import 'package:flutter/services.dart';
+import 'package:confetti/confetti.dart';
 import '../models/note_model.dart';
 import '../screens/profile_page.dart';
 import '../services/qiqstr_service.dart';
@@ -33,29 +34,35 @@ class NoteWidget extends StatefulWidget {
   _NoteWidgetState createState() => _NoteWidgetState();
 }
 
-class _NoteWidgetState extends State<NoteWidget>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _highlightController;
-  late Animation<double> _highlightAnimation;
-  final PageController _pageController = PageController();
-  bool _isGlowing = false;
+class _NoteWidgetState extends State<NoteWidget> {
+  bool _isReactionGlowing = false;
+  bool _isReplyGlowing = false;
+  bool _isRepostGlowing = false;
+
+  double _reactionScale = 1.0;
+  double _replyScale = 1.0;
+  double _repostScale = 1.0;
+
+  late ConfettiController _reactionConfettiController;
+  late ConfettiController _replyConfettiController;
+  late ConfettiController _repostConfettiController;
 
   @override
   void initState() {
     super.initState();
-    _highlightController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _highlightAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _highlightController, curve: Curves.easeInOut),
-    );
+    _reactionConfettiController =
+        ConfettiController(duration: const Duration(milliseconds: 300));
+    _replyConfettiController =
+        ConfettiController(duration: const Duration(milliseconds: 300));
+    _repostConfettiController =
+        ConfettiController(duration: const Duration(milliseconds: 300));
   }
 
   @override
   void dispose() {
-    _highlightController.dispose();
-    _pageController.dispose();
+    _reactionConfettiController.dispose();
+    _replyConfettiController.dispose();
+    _repostConfettiController.dispose();
     super.dispose();
   }
 
@@ -72,44 +79,91 @@ class _NoteWidgetState extends State<NoteWidget>
     return '${(difference.inDays / 365).floor()} years ago';
   }
 
-  void _showHighlight() {
-    _highlightController
-        .forward(from: 0.0)
-        .then((_) => _highlightController.reverse());
+  Path _smallCircleParticle(Size size) {
+    return Path()..addOval(Rect.fromCircle(center: Offset(0, 0), radius: 2));
   }
 
-  void _handleDoubleTap(TapDownDetails details) async {
+  void _animateReactionButton() {
     setState(() {
-      _isGlowing = true;
+      _reactionScale = 1.2;
+      _isReactionGlowing = true;
     });
+    _reactionConfettiController.play();
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        setState(() {
+          _reactionScale = 1.0;
+          _isReactionGlowing = false;
+        });
+      }
+    });
+  }
+
+  void _animateReplyButton() {
+    setState(() {
+      _replyScale = 1.2;
+      _isReplyGlowing = true;
+    });
+    _replyConfettiController.play();
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        setState(() {
+          _replyScale = 1.0;
+          _isReplyGlowing = false;
+        });
+      }
+    });
+  }
+
+  void _animateRepostButton() {
+    setState(() {
+      _repostScale = 1.2;
+      _isRepostGlowing = true;
+    });
+    _repostConfettiController.play();
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        setState(() {
+          _repostScale = 1.0;
+          _isRepostGlowing = false;
+        });
+      }
+    });
+  }
+
+  void _handleReactionTap() async {
+    _animateReactionButton();
     try {
       await widget.dataService.sendReaction(widget.note.id, '💜');
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error sending reaction: $e')),
       );
-    } finally {
-      _showHighlight();
-      Timer(const Duration(seconds: 1), () {
-        if (mounted) {
-          setState(() {
-            _isGlowing = false;
-          });
-        }
-      });
     }
+  }
+
+  void _handleDoubleTap(TapDownDetails details) async {
+    _handleReactionTap();
   }
 
   void _handleHorizontalDragEnd(DragEndDetails details) {
     if (details.primaryVelocity != null) {
       if (details.primaryVelocity! > 0) {
-        _showReplyDialog();
-        _showHighlight();
+        _handleReplyTap();
       } else if (details.primaryVelocity! < 0) {
-        _handleRepost();
-        _showHighlight();
+        _handleRepostTap();
       }
     }
+  }
+
+  void _handleReplyTap() {
+    _animateReplyButton();
+    _showReplyDialog();
+  }
+
+  void _handleRepostTap() {
+    _animateRepostButton();
+    _handleRepost();
   }
 
   Future<void> _handleRepost() async {
@@ -271,24 +325,10 @@ class _NoteWidgetState extends State<NoteWidget>
       onHorizontalDragEnd: _handleHorizontalDragEnd,
       child: Stack(
         children: [
-          AnimatedBuilder(
-            animation: _highlightAnimation,
-            builder: (context, child) {
-              return Transform.scale(
-                scale: 1 - (_highlightAnimation.value * 0.05),
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: Colors.white
-                          .withOpacity(_highlightAnimation.value * 0.8),
-                      width: 1.5,
-                    ),
-                    borderRadius: BorderRadius.circular(10.0),
-                  ),
-                  child: child,
-                ),
-              );
-            },
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10.0),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -324,8 +364,8 @@ class _NoteWidgetState extends State<NoteWidget>
                       onOpen: _onOpen,
                       style: TextStyle(
                         fontSize: (parsedContent['text'] as String).length < 21
-                            ? 20.0
-                            : 15.0,
+                            ? 18.0
+                            : 14.0,
                       ),
                       linkStyle: const TextStyle(
                         color: Colors.amberAccent,
@@ -354,38 +394,136 @@ class _NoteWidgetState extends State<NoteWidget>
                       horizontal: 12.0, vertical: 8.0),
                   child: Row(
                     children: [
-                      Row(
-                        children: [
-                          Icon(Icons.favorite,
-                              size: 16.0,
-                              color: _isGlowing ? Colors.red : Colors.grey),
-                          const SizedBox(width: 4.0),
-                          Text(widget.reactionCount.toString(),
-                              style: const TextStyle(
-                                  fontSize: 12.0, color: Colors.grey)),
-                        ],
+                      TweenAnimationBuilder<double>(
+                        tween: Tween<double>(begin: 1.0, end: _reactionScale),
+                        duration: const Duration(milliseconds: 300),
+                        builder: (context, scale, child) => Transform.scale(
+                          scale: scale,
+                          child: child,
+                        ),
+                        child: InkWell(
+                          splashColor: Colors.transparent,
+                          highlightColor: Colors.transparent,
+                          onTap: _handleReactionTap,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              ConfettiWidget(
+                                confettiController: _reactionConfettiController,
+                                blastDirectionality:
+                                    BlastDirectionality.explosive,
+                                shouldLoop: false,
+                                emissionFrequency: 0.05,
+                                numberOfParticles: 20,
+                                maxBlastForce: 10,
+                                minBlastForce: 5,
+                                colors: const [Colors.red],
+                                createParticlePath: _smallCircleParticle,
+                              ),
+                              Row(
+                                children: [
+                                  Icon(Icons.favorite,
+                                      size: 16.0,
+                                      color: _isReactionGlowing
+                                          ? Colors.red
+                                          : Colors.grey),
+                                  const SizedBox(width: 4.0),
+                                  Text(widget.reactionCount.toString(),
+                                      style: const TextStyle(
+                                          fontSize: 12.0, color: Colors.grey)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 24.0),
-                      Row(
-                        children: [
-                          const Icon(Icons.reply,
-                              size: 16.0, color: Colors.grey),
-                          const SizedBox(width: 4.0),
-                          Text(widget.replyCount.toString(),
-                              style: const TextStyle(
-                                  fontSize: 12.0, color: Colors.grey)),
-                        ],
+                      TweenAnimationBuilder<double>(
+                        tween: Tween<double>(begin: 1.0, end: _replyScale),
+                        duration: const Duration(milliseconds: 300),
+                        builder: (context, scale, child) => Transform.scale(
+                          scale: scale,
+                          child: child,
+                        ),
+                        child: InkWell(
+                          splashColor: Colors.transparent,
+                          highlightColor: Colors.transparent,
+                          onTap: _handleReplyTap,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              ConfettiWidget(
+                                confettiController: _replyConfettiController,
+                                blastDirectionality:
+                                    BlastDirectionality.explosive,
+                                shouldLoop: false,
+                                emissionFrequency: 0.05,
+                                numberOfParticles: 20,
+                                maxBlastForce: 10,
+                                minBlastForce: 5,
+                                colors: const [Colors.blue],
+                                createParticlePath: _smallCircleParticle,
+                              ),
+                              Row(
+                                children: [
+                                  Icon(Icons.reply,
+                                      size: 16.0,
+                                      color: _isReplyGlowing
+                                          ? Colors.blue
+                                          : Colors.grey),
+                                  const SizedBox(width: 4.0),
+                                  Text(widget.replyCount.toString(),
+                                      style: const TextStyle(
+                                          fontSize: 12.0, color: Colors.grey)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 24.0),
-                      Row(
-                        children: [
-                          const Icon(Icons.repeat,
-                              size: 16.0, color: Colors.grey),
-                          const SizedBox(width: 4.0),
-                          Text(widget.repostCount.toString(),
-                              style: const TextStyle(
-                                  fontSize: 12.0, color: Colors.grey)),
-                        ],
+                      TweenAnimationBuilder<double>(
+                        tween: Tween<double>(begin: 1.0, end: _repostScale),
+                        duration: const Duration(milliseconds: 300),
+                        builder: (context, scale, child) => Transform.scale(
+                          scale: scale,
+                          child: child,
+                        ),
+                        child: InkWell(
+                          splashColor: Colors.transparent,
+                          highlightColor: Colors.transparent,
+                          onTap: _handleRepostTap,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              ConfettiWidget(
+                                confettiController: _repostConfettiController,
+                                blastDirectionality:
+                                    BlastDirectionality.explosive,
+                                shouldLoop: false,
+                                emissionFrequency: 0.05,
+                                numberOfParticles: 20,
+                                maxBlastForce: 10,
+                                minBlastForce: 5,
+                                colors: const [Colors.green],
+                                createParticlePath: _smallCircleParticle,
+                              ),
+                              Row(
+                                children: [
+                                  Icon(Icons.repeat,
+                                      size: 16.0,
+                                      color: _isRepostGlowing
+                                          ? Colors.green
+                                          : Colors.grey),
+                                  const SizedBox(width: 4.0),
+                                  Text(widget.repostCount.toString(),
+                                      style: const TextStyle(
+                                          fontSize: 12.0, color: Colors.grey)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -402,7 +540,7 @@ class _NoteWidgetState extends State<NoteWidget>
             right: 8,
             bottom: 8,
             child: IconButton(
-              icon: const Icon(Icons.copy, size: 20, color: Colors.grey),
+              icon: const Icon(Icons.copy, size: 16, color: Colors.grey),
               onPressed: () {
                 Clipboard.setData(ClipboardData(text: widget.note.rawWs ?? ''));
                 ScaffoldMessenger.of(context).showSnackBar(

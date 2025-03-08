@@ -161,7 +161,6 @@ class DataService {
   bool _isInitialized = false;
   bool _isClosed = false;
 
-  Timer? _checkNewNotesTimer;
   Timer? _cacheCleanupTimer;
   final int currentLimit = 75;
 
@@ -1276,7 +1275,6 @@ class DataService {
     if (_isClosed) return;
     _isClosed = true;
 
-    _checkNewNotesTimer?.cancel();
     _cacheCleanupTimer?.cancel();
 
     try {
