@@ -20,7 +20,6 @@ class PhotoViewerWidget extends StatefulWidget {
 class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
   late PageController _pageController;
   late int currentIndex;
-
   bool _didPrecacheImages = false;
 
   @override
@@ -51,9 +50,19 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text('${currentIndex + 1} / ${widget.imageUrls.length}'),
         backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.close, size: 28),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Text(
+          '${currentIndex + 1} / ${widget.imageUrls.length}',
+          style: const TextStyle(fontWeight: FontWeight.w500),
+        ),
       ),
       body: PhotoViewGallery.builder(
         itemCount: widget.imageUrls.length,
@@ -64,15 +73,20 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
           });
         },
         builder: (context, index) {
+          final imageUrl = widget.imageUrls[index];
           return PhotoViewGalleryPageOptions(
-            imageProvider: CachedNetworkImageProvider(widget.imageUrls[index]),
-            minScale: PhotoViewComputedScale.contained * 1.0,
-            maxScale: PhotoViewComputedScale.covered * 2.0,
+            imageProvider: CachedNetworkImageProvider(imageUrl),
+            minScale: PhotoViewComputedScale.contained,
+            maxScale: PhotoViewComputedScale.covered * 2,
+            heroAttributes: PhotoViewHeroAttributes(tag: imageUrl),
             basePosition: Alignment.center,
           );
         },
         loadingBuilder: (context, event) => const Center(
           child: CircularProgressIndicator(),
+        ),
+        backgroundDecoration: const BoxDecoration(
+          color: Colors.black,
         ),
       ),
     );
