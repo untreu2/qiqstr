@@ -90,13 +90,16 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
                       },
                 child: isVideo
                     ? VP(url: url)
-                    : CachedNetworkImage(
-                        imageUrl: url,
-                        placeholder: (context, url) =>
-                            const Center(child: CircularProgressIndicator()),
-                        errorWidget: (context, url, error) =>
-                            const Icon(Icons.error, size: 20),
-                        fit: BoxFit.cover,
+                    : Container(
+                        color: Colors.black,
+                        child: CachedNetworkImage(
+                          imageUrl: url,
+                          placeholder: (context, url) =>
+                              const Center(child: CircularProgressIndicator()),
+                          errorWidget: (context, url, error) =>
+                              const Icon(Icons.error, size: 20),
+                          fit: BoxFit.contain,
+                        ),
                       ),
               );
             },
