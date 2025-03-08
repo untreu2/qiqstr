@@ -60,10 +60,6 @@ class _SendReplyDialogState extends State<SendReplyDialog> {
 
       await widget.dataService.sendReply(widget.noteId, replyContent);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Reply sent successfully!')),
-      );
-
       Navigator.pop(context);
     } catch (e) {
       print('Error sending reply: $e');

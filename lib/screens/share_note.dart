@@ -53,9 +53,7 @@ class _ShareNoteDialogState extends State<ShareNoteDialog> {
         throw Exception('Note content cannot be empty.');
       }
       await widget.dataService.shareNote(noteContent);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Note shared successfully!')),
-      );
+
       Navigator.pop(context);
     } catch (e) {
       debugPrint('Error sharing note: $e');

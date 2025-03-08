@@ -169,9 +169,6 @@ class _NoteWidgetState extends State<NoteWidget> {
   Future<void> _handleRepost() async {
     try {
       await widget.dataService.sendRepost(widget.note);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Repost sent successfully.')),
-      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error sending repost: $e')),
