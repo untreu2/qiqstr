@@ -80,7 +80,8 @@ class _NoteWidgetState extends State<NoteWidget> {
   }
 
   Path _smallCircleParticle(Size size) {
-    return Path()..addOval(Rect.fromCircle(center: Offset(0, 0), radius: 2));
+    return Path()
+      ..addOval(Rect.fromCircle(center: const Offset(0, 0), radius: 2));
   }
 
   void _animateReactionButton() {
@@ -144,16 +145,6 @@ class _NoteWidgetState extends State<NoteWidget> {
 
   void _handleDoubleTap(TapDownDetails details) async {
     _handleReactionTap();
-  }
-
-  void _handleHorizontalDragEnd(DragEndDetails details) {
-    if (details.primaryVelocity != null) {
-      if (details.primaryVelocity! > 0) {
-        _handleReplyTap();
-      } else if (details.primaryVelocity! < 0) {
-        _handleRepostTap();
-      }
-    }
   }
 
   void _handleReplyTap() {
@@ -315,7 +306,6 @@ class _NoteWidgetState extends State<NoteWidget> {
     final parsedContent = parseContent(widget.note.content);
     return GestureDetector(
       onDoubleTapDown: _handleDoubleTap,
-      onHorizontalDragEnd: _handleHorizontalDragEnd,
       child: Stack(
         children: [
           Container(
