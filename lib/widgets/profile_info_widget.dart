@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ProfileInfoWidget extends StatelessWidget {
   final UserModel user;
@@ -35,11 +36,22 @@ class ProfileInfoWidget extends StatelessWidget {
                 ),
                 child: Stack(
                   children: [
-                    Image.network(
-                      user.banner,
+                    CachedNetworkImage(
+                      imageUrl: user.banner,
                       width: double.infinity,
                       height: 200.0,
                       fit: BoxFit.cover,
+                      placeholder: (context, url) => Container(
+                        width: double.infinity,
+                        height: 200.0,
+                        color: Colors.grey,
+                      ),
+                      errorWidget: (context, url, error) => Container(
+                        width: double.infinity,
+                        height: 200.0,
+                        color: Colors.black,
+                        child: const Icon(Icons.error, color: Colors.red),
+                      ),
                     ),
                     Container(
                       width: double.infinity,
@@ -84,7 +96,7 @@ class ProfileInfoWidget extends StatelessWidget {
                   CircleAvatar(
                     radius: 40.0,
                     backgroundImage: user.profileImage.isNotEmpty
-                        ? NetworkImage(user.profileImage)
+                        ? CachedNetworkImageProvider(user.profileImage)
                         : null,
                     backgroundColor:
                         user.profileImage.isEmpty ? Colors.grey : null,
