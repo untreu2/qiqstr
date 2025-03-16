@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/profile_page.dart';
 import 'package:qiqstr/utils/logout.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class SidebarWidget extends StatelessWidget {
   final UserModel? user;
@@ -29,7 +30,7 @@ class SidebarWidget extends StatelessWidget {
                     ),
                     currentAccountPicture: CircleAvatar(
                       backgroundImage: user!.profileImage.isNotEmpty
-                          ? NetworkImage(user!.profileImage)
+                          ? CachedNetworkImageProvider(user!.profileImage)
                           : const AssetImage('assets/default_profile.png')
                               as ImageProvider,
                     ),
