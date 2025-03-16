@@ -226,8 +226,8 @@ class _NoteWidgetState extends State<NoteWidget> {
               onTap: () => _navigateToProfile(npub),
               child: Text(
                 name,
-                style:
-                    const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                    fontSize: 15.5, fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -347,8 +347,8 @@ class _NoteWidgetState extends State<NoteWidget> {
                       onOpen: _onOpen,
                       style: TextStyle(
                         fontSize: (parsedContent['text'] as String).length < 21
-                            ? 18.0
-                            : 14.0,
+                            ? 20.0
+                            : 15.0,
                       ),
                       linkStyle: const TextStyle(
                         color: Colors.amberAccent,
