@@ -8,7 +8,6 @@ import 'package:qiqstr/screens/send_reply.dart';
 import 'package:qiqstr/widgets/link_preview_widget.dart';
 import 'package:qiqstr/widgets/media_preview_widget.dart';
 import 'package:flutter/services.dart';
-import 'package:confetti/confetti.dart';
 import '../models/note_model.dart';
 import '../screens/profile_page.dart';
 import '../services/qiqstr_service.dart';
@@ -43,26 +42,13 @@ class _NoteWidgetState extends State<NoteWidget> {
   double _replyScale = 1.0;
   double _repostScale = 1.0;
 
-  late ConfettiController _reactionConfettiController;
-  late ConfettiController _replyConfettiController;
-  late ConfettiController _repostConfettiController;
-
   @override
   void initState() {
     super.initState();
-    _reactionConfettiController =
-        ConfettiController(duration: const Duration(milliseconds: 300));
-    _replyConfettiController =
-        ConfettiController(duration: const Duration(milliseconds: 300));
-    _repostConfettiController =
-        ConfettiController(duration: const Duration(milliseconds: 300));
   }
 
   @override
   void dispose() {
-    _reactionConfettiController.dispose();
-    _replyConfettiController.dispose();
-    _repostConfettiController.dispose();
     super.dispose();
   }
 
@@ -79,17 +65,11 @@ class _NoteWidgetState extends State<NoteWidget> {
     return '${(difference.inDays / 365).floor()} years ago';
   }
 
-  Path _smallCircleParticle(Size size) {
-    return Path()
-      ..addOval(Rect.fromCircle(center: const Offset(0, 0), radius: 2));
-  }
-
   void _animateReactionButton() {
     setState(() {
       _reactionScale = 1.2;
       _isReactionGlowing = true;
     });
-    _reactionConfettiController.play();
     Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted) {
         setState(() {
@@ -105,7 +85,6 @@ class _NoteWidgetState extends State<NoteWidget> {
       _replyScale = 1.2;
       _isReplyGlowing = true;
     });
-    _replyConfettiController.play();
     Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted) {
         setState(() {
@@ -121,7 +100,6 @@ class _NoteWidgetState extends State<NoteWidget> {
       _repostScale = 1.2;
       _isRepostGlowing = true;
     });
-    _repostConfettiController.play();
     Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted) {
         setState(() {
@@ -388,34 +366,17 @@ class _NoteWidgetState extends State<NoteWidget> {
                           splashColor: Colors.transparent,
                           highlightColor: Colors.transparent,
                           onTap: _handleReactionTap,
-                          child: Stack(
-                            alignment: Alignment.center,
+                          child: Row(
                             children: [
-                              ConfettiWidget(
-                                confettiController: _reactionConfettiController,
-                                blastDirectionality:
-                                    BlastDirectionality.explosive,
-                                shouldLoop: false,
-                                emissionFrequency: 0.05,
-                                numberOfParticles: 20,
-                                maxBlastForce: 10,
-                                minBlastForce: 5,
-                                colors: const [Colors.red],
-                                createParticlePath: _smallCircleParticle,
-                              ),
-                              Row(
-                                children: [
-                                  Icon(Icons.favorite,
-                                      size: 16.0,
-                                      color: _isReactionGlowing
-                                          ? Colors.red
-                                          : Colors.grey),
-                                  const SizedBox(width: 4.0),
-                                  Text(widget.reactionCount.toString(),
-                                      style: const TextStyle(
-                                          fontSize: 12.0, color: Colors.grey)),
-                                ],
-                              ),
+                              Icon(Icons.favorite,
+                                  size: 16.0,
+                                  color: _isReactionGlowing
+                                      ? Colors.red
+                                      : Colors.grey),
+                              const SizedBox(width: 4.0),
+                              Text(widget.reactionCount.toString(),
+                                  style: const TextStyle(
+                                      fontSize: 12.0, color: Colors.grey)),
                             ],
                           ),
                         ),
@@ -432,34 +393,17 @@ class _NoteWidgetState extends State<NoteWidget> {
                           splashColor: Colors.transparent,
                           highlightColor: Colors.transparent,
                           onTap: _handleReplyTap,
-                          child: Stack(
-                            alignment: Alignment.center,
+                          child: Row(
                             children: [
-                              ConfettiWidget(
-                                confettiController: _replyConfettiController,
-                                blastDirectionality:
-                                    BlastDirectionality.explosive,
-                                shouldLoop: false,
-                                emissionFrequency: 0.05,
-                                numberOfParticles: 20,
-                                maxBlastForce: 10,
-                                minBlastForce: 5,
-                                colors: const [Colors.blue],
-                                createParticlePath: _smallCircleParticle,
-                              ),
-                              Row(
-                                children: [
-                                  Icon(Icons.reply,
-                                      size: 16.0,
-                                      color: _isReplyGlowing
-                                          ? Colors.blue
-                                          : Colors.grey),
-                                  const SizedBox(width: 4.0),
-                                  Text(widget.replyCount.toString(),
-                                      style: const TextStyle(
-                                          fontSize: 12.0, color: Colors.grey)),
-                                ],
-                              ),
+                              Icon(Icons.reply,
+                                  size: 16.0,
+                                  color: _isReplyGlowing
+                                      ? Colors.blue
+                                      : Colors.grey),
+                              const SizedBox(width: 4.0),
+                              Text(widget.replyCount.toString(),
+                                  style: const TextStyle(
+                                      fontSize: 12.0, color: Colors.grey)),
                             ],
                           ),
                         ),
@@ -476,34 +420,17 @@ class _NoteWidgetState extends State<NoteWidget> {
                           splashColor: Colors.transparent,
                           highlightColor: Colors.transparent,
                           onTap: _handleRepostTap,
-                          child: Stack(
-                            alignment: Alignment.center,
+                          child: Row(
                             children: [
-                              ConfettiWidget(
-                                confettiController: _repostConfettiController,
-                                blastDirectionality:
-                                    BlastDirectionality.explosive,
-                                shouldLoop: false,
-                                emissionFrequency: 0.05,
-                                numberOfParticles: 20,
-                                maxBlastForce: 10,
-                                minBlastForce: 5,
-                                colors: const [Colors.green],
-                                createParticlePath: _smallCircleParticle,
-                              ),
-                              Row(
-                                children: [
-                                  Icon(Icons.repeat,
-                                      size: 16.0,
-                                      color: _isRepostGlowing
-                                          ? Colors.green
-                                          : Colors.grey),
-                                  const SizedBox(width: 4.0),
-                                  Text(widget.repostCount.toString(),
-                                      style: const TextStyle(
-                                          fontSize: 12.0, color: Colors.grey)),
-                                ],
-                              ),
+                              Icon(Icons.repeat,
+                                  size: 16.0,
+                                  color: _isRepostGlowing
+                                      ? Colors.green
+                                      : Colors.grey),
+                              const SizedBox(width: 4.0),
+                              Text(widget.repostCount.toString(),
+                                  style: const TextStyle(
+                                      fontSize: 12.0, color: Colors.grey)),
                             ],
                           ),
                         ),
