@@ -1,122 +1,149 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:smooth_page_indicator/smooth_page_indicator.dart';
-import '../widgets/video_preview.dart';
 import '../widgets/photo_viewer_widget.dart';
 
-class MediaPreviewWidget extends StatefulWidget {
+class MediaPreviewWidget extends StatelessWidget {
   final List<String> mediaUrls;
 
-  const MediaPreviewWidget({super.key, required this.mediaUrls});
-
-  @override
-  _MediaPreviewWidgetState createState() => _MediaPreviewWidgetState();
-}
-
-class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
-  final PageController _pageController = PageController();
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
+  const MediaPreviewWidget({Key? key, required this.mediaUrls})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    if (widget.mediaUrls.isEmpty) {
-      return const SizedBox.shrink();
+    if (mediaUrls.isEmpty) return const SizedBox.shrink();
+
+    final List<String> imageUrls = mediaUrls.where((url) {
+      final lower = url.toLowerCase();
+      return lower.endsWith('.jpg') ||
+          lower.endsWith('.jpeg') ||
+          lower.endsWith('.png') ||
+          lower.endsWith('.webp') ||
+          lower.endsWith('.gif');
+    }).toList();
+
+    if (imageUrls.length == 1) {
+      return GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PhotoViewerWidget(
+                imageUrls: imageUrls,
+                initialIndex: 0,
+              ),
+            ),
+          );
+        },
+        child: CachedNetworkImage(
+          imageUrl: imageUrls.first,
+          placeholder: (context, url) =>
+              const Center(child: CircularProgressIndicator()),
+          errorWidget: (context, url, error) =>
+              const Icon(Icons.error, size: 20),
+          fit: BoxFit.fitWidth,
+          width: double.infinity,
+        ),
+      );
     }
 
-    final List<String> imageUrls = widget.mediaUrls
-        .where((url) =>
-            url.toLowerCase().endsWith('.jpg') ||
-            url.toLowerCase().endsWith('.jpeg') ||
-            url.toLowerCase().endsWith('.png') ||
-            url.toLowerCase().endsWith('.webp') ||
-            url.toLowerCase().endsWith('.gif'))
-        .toList();
+    return _buildGrid(context, imageUrls);
+  }
 
-    final List<String> videoUrls = widget.mediaUrls
-        .where((url) =>
-            url.toLowerCase().endsWith('.mp4') ||
-            url.toLowerCase().endsWith('.mov'))
-        .toList();
+  Widget _buildGrid(BuildContext context, List<String> imageUrls) {
+    List<Widget> rows = [];
 
-    final List<String> allMediaUrls =
-        imageUrls.isNotEmpty ? imageUrls : videoUrls;
-
-    if (allMediaUrls.length == 1) {
-      String url = allMediaUrls.first;
-      bool isVideo = videoUrls.contains(url);
-
-      return isVideo
-          ? VP(url: url)
-          : CachedNetworkImage(
-              imageUrl: url,
-              placeholder: (context, url) =>
-                  const Center(child: CircularProgressIndicator()),
-              errorWidget: (context, url, error) =>
-                  const Icon(Icons.error, size: 20),
-              fit: BoxFit.contain,
-              width: double.infinity,
-            );
+    for (int i = 0; i < imageUrls.length; i += 2) {
+      if (i + 1 < imageUrls.length) {
+        rows.add(
+          Row(
+            children: [
+              Expanded(
+                child: _buildImageItem(
+                  context,
+                  imageUrls[i],
+                  i,
+                  imageUrls,
+                  isSquare: true,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: _buildImageItem(
+                  context,
+                  imageUrls[i + 1],
+                  i + 1,
+                  imageUrls,
+                  isSquare: true,
+                ),
+              ),
+            ],
+          ),
+        );
+      } else {
+        rows.add(
+          _buildImageItem(
+            context,
+            imageUrls[i],
+            i,
+            imageUrls,
+            isSquare: false,
+          ),
+        );
+      }
+      rows.add(const SizedBox(height: 4));
     }
 
     return Column(
-      children: [
-        SizedBox(
-          height: 300,
-          child: PageView.builder(
-            controller: _pageController,
-            itemCount: allMediaUrls.length,
-            itemBuilder: (context, index) {
-              String url = allMediaUrls[index];
-              bool isVideo = videoUrls.contains(url);
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: rows,
+    );
+  }
 
-              return GestureDetector(
-                onTap: isVideo
-                    ? null
-                    : () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => PhotoViewerWidget(
-                              imageUrls: imageUrls,
-                              initialIndex: index,
-                            ),
-                          ),
-                        );
-                      },
-                child: isVideo
-                    ? VP(url: url)
-                    : Container(
-                        color: Colors.black,
-                        child: CachedNetworkImage(
-                          imageUrl: url,
-                          placeholder: (context, url) =>
-                              const Center(child: CircularProgressIndicator()),
-                          errorWidget: (context, url, error) =>
-                              const Icon(Icons.error, size: 20),
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-              );
-            },
-          ),
+  Widget _buildImageItem(
+    BuildContext context,
+    String url,
+    int index,
+    List<String> imageUrls, {
+    required bool isSquare,
+  }) {
+    Widget imageWidget;
+
+    if (isSquare) {
+      imageWidget = AspectRatio(
+        aspectRatio: 1,
+        child: CachedNetworkImage(
+          imageUrl: url,
+          placeholder: (context, url) =>
+              const Center(child: CircularProgressIndicator()),
+          errorWidget: (context, url, error) =>
+              const Icon(Icons.error, size: 20),
+          fit: BoxFit.cover,
         ),
-        if (allMediaUrls.length > 1) const SizedBox(height: 4.0),
-        if (allMediaUrls.length > 1)
-          SmoothPageIndicator(
-            controller: _pageController,
-            count: allMediaUrls.length,
-            effect: const WormEffect(
-              activeDotColor: Colors.grey,
-              dotHeight: 6.0,
-              dotWidth: 6.0,
+      );
+    } else {
+      imageWidget = CachedNetworkImage(
+        imageUrl: url,
+        placeholder: (context, url) =>
+            const Center(child: CircularProgressIndicator()),
+        errorWidget: (context, url, error) => const Icon(Icons.error, size: 20),
+        fit: BoxFit.fitWidth,
+        width: double.infinity,
+      );
+    }
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PhotoViewerWidget(
+              imageUrls: imageUrls,
+              initialIndex: index,
             ),
           ),
-      ],
+        );
+      },
+      child: imageWidget,
     );
   }
 }
