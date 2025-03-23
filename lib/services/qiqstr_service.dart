@@ -12,6 +12,7 @@ import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
 import '../models/repost_model.dart';
+import '../models/following_model.dart';
 
 enum DataType { Feed, Profile, Note }
 
@@ -156,6 +157,7 @@ class DataService {
   Box<ReactionModel>? reactionsBox;
   Box<ReplyModel>? repliesBox;
   Box<RepostModel>? repostsBox;
+  Box<FollowingModel>? followingBox;
 
   late WebSocketManager _socketManager;
   bool _isInitialized = false;
@@ -219,6 +221,10 @@ class DataService {
       _openHiveBox<UserModel>('users').then((box) {
         usersBox = box;
         print('[DataService] Hive users box opened successfully.');
+      }),
+      _openHiveBox<FollowingModel>('followingBox').then((box) {
+        followingBox = box;
+        print('[DataService] Hive following box opened successfully.');
       }),
     ]);
 
@@ -361,6 +367,16 @@ class DataService {
     print('[DataService] Started real-time subscription for new events.');
   }
 
+  Future<void> _subscribeToFollowing() async {
+    final filter = Filter(
+      authors: [npub],
+      kinds: [3],
+    );
+    final request = Request(generateUUID(), [filter]);
+    await _broadcastRequest(request);
+    print('[DataService] Subscribed to following events (kind 3).');
+  }
+
   Future<void> _fetchUserData() async {
     List<String> targetNpubs;
     if (dataType == DataType.Feed) {
@@ -389,6 +405,8 @@ class DataService {
     await _subscribeToAllReactions();
 
     _startRealTimeSubscription(targetNpubs);
+    await _subscribeToFollowing();
+
     await getCachedUserProfile(npub);
   }
 
@@ -477,6 +495,8 @@ class DataService {
         final kind = eventData['kind'] as int;
         if (kind == 0) {
           await _handleProfileEvent(eventData);
+        } else if (kind == 3) {
+          await _handleFollowingEvent(eventData);
         } else if (kind == 7) {
           await _handleReactionEvent(eventData);
         } else if (kind == 1) {
@@ -493,13 +513,26 @@ class DataService {
     }
   }
 
-  String? _extractParentEventId(List<dynamic> tags) {
-    for (var tag in tags) {
-      if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
-        return tag[1] as String?;
+  Future<void> _handleFollowingEvent(Map<String, dynamic> eventData) async {
+    try {
+      List<String> newFollowing = [];
+      final tags = eventData['tags'] as List<dynamic>;
+      for (var tag in tags) {
+        if (tag is List && tag.isNotEmpty && tag[0] == 'p') {
+          if (tag.length > 1) {
+            newFollowing.add(tag[1] as String);
+          }
+        }
       }
+      if (followingBox != null && followingBox!.isOpen) {
+        final model =
+            FollowingModel(pubkeys: newFollowing, updatedAt: DateTime.now());
+        await followingBox!.put('following', model);
+        print('[DataService] Following model updated with new event.');
+      }
+    } catch (e) {
+      print('[DataService ERROR] Error handling following event: $e');
     }
-    return null;
   }
 
   Future<void> _processNoteEvent(
@@ -597,6 +630,15 @@ class DataService {
         await _updateReactionSubscription();
       }
     }
+  }
+
+  String? _extractParentEventId(List<dynamic> tags) {
+    for (var tag in tags) {
+      if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
+        return tag[1] as String?;
+      }
+    }
+    return null;
   }
 
   void _sortNotes() => notes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
@@ -835,6 +877,13 @@ class DataService {
   }
 
   Future<List<String>> getFollowingList(String npub) async {
+    if (followingBox != null && followingBox!.isOpen) {
+      final cachedFollowing = followingBox!.get('following');
+      if (cachedFollowing != null) {
+        print('[DataService] Using cached following list from Hive.');
+        return cachedFollowing.pubkeys;
+      }
+    }
     List<String> following = [];
     final limitedRelays = _socketManager.relayUrls.take(3).toList();
 
@@ -876,6 +925,13 @@ class DataService {
     }));
 
     following = following.toSet().toList();
+
+    if (followingBox != null && followingBox!.isOpen) {
+      final newFollowingModel =
+          FollowingModel(pubkeys: following, updatedAt: DateTime.now());
+      await followingBox!.put('following', newFollowingModel);
+      print('[DataService] Updated Hive following model.');
+    }
     return following;
   }
 

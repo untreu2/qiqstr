@@ -8,6 +8,7 @@ import 'models/reaction_model.dart';
 import 'models/reply_model.dart';
 import 'models/repost_model.dart';
 import 'models/user_model.dart';
+import 'models/following_model.dart';
 import 'screens/login_page.dart';
 import 'screens/feed_page.dart';
 
@@ -21,6 +22,7 @@ Future<void> main() async {
     Hive.registerAdapter(ReplyModelAdapter());
     Hive.registerAdapter(RepostModelAdapter());
     Hive.registerAdapter(UserModelAdapter());
+    Hive.registerAdapter(FollowingModelAdapter());
 
     runApp(
       const ProviderScope(
@@ -109,6 +111,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         await Hive.openBox<ReplyModel>('replies_Profile_$npub');
         await Hive.openBox<RepostModel>('reposts_Profile_$npub');
         await Hive.openBox<UserModel>('users');
+        await Hive.openBox<FollowingModel>('followingBox');
 
         Navigator.pushReplacement(
           context,
@@ -128,7 +131,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       print('Error reading secure storage or opening boxes: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text("An error occurred while loading the app.")),
+          content: Text("An error occurred while loading the app."),
+        ),
       );
     }
   }
