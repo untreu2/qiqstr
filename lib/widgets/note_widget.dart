@@ -12,6 +12,7 @@ import '../models/note_model.dart';
 import '../screens/profile_page.dart';
 import '../services/qiqstr_service.dart';
 import 'content_parser.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class NoteWidget extends StatefulWidget {
   final NoteModel note;
@@ -368,15 +369,20 @@ class _NoteWidgetState extends State<NoteWidget> {
                           onTap: _handleReactionTap,
                           child: Row(
                             children: [
-                              Icon(Icons.favorite,
-                                  size: 16.0,
-                                  color: _isReactionGlowing
-                                      ? Colors.red
-                                      : Colors.grey),
+                              SvgPicture.asset(
+                                'assets/reaction_button.svg',
+                                width: 16.0,
+                                height: 16.0,
+                                color: _isReactionGlowing
+                                    ? Colors.red
+                                    : Colors.white,
+                              ),
                               const SizedBox(width: 4.0),
-                              Text(widget.reactionCount.toString(),
-                                  style: const TextStyle(
-                                      fontSize: 12.0, color: Colors.grey)),
+                              Text(
+                                widget.reactionCount.toString(),
+                                style: const TextStyle(
+                                    fontSize: 12.0, color: Colors.white),
+                              ),
                             ],
                           ),
                         ),
@@ -395,15 +401,20 @@ class _NoteWidgetState extends State<NoteWidget> {
                           onTap: _handleReplyTap,
                           child: Row(
                             children: [
-                              Icon(Icons.reply,
-                                  size: 16.0,
-                                  color: _isReplyGlowing
-                                      ? Colors.blue
-                                      : Colors.grey),
+                              SvgPicture.asset(
+                                'assets/reply_button.svg',
+                                width: 16.0,
+                                height: 16.0,
+                                color: _isReplyGlowing
+                                    ? Colors.blue
+                                    : Colors.white,
+                              ),
                               const SizedBox(width: 4.0),
-                              Text(widget.replyCount.toString(),
-                                  style: const TextStyle(
-                                      fontSize: 12.0, color: Colors.grey)),
+                              Text(
+                                widget.replyCount.toString(),
+                                style: const TextStyle(
+                                    fontSize: 12.0, color: Colors.white),
+                              ),
                             ],
                           ),
                         ),
@@ -422,15 +433,20 @@ class _NoteWidgetState extends State<NoteWidget> {
                           onTap: _handleRepostTap,
                           child: Row(
                             children: [
-                              Icon(Icons.repeat,
-                                  size: 16.0,
-                                  color: _isRepostGlowing
-                                      ? Colors.green
-                                      : Colors.grey),
+                              SvgPicture.asset(
+                                'assets/repost_button.svg',
+                                width: 16.0,
+                                height: 16.0,
+                                color: _isRepostGlowing
+                                    ? Colors.green
+                                    : Colors.white,
+                              ),
                               const SizedBox(width: 4.0),
-                              Text(widget.repostCount.toString(),
-                                  style: const TextStyle(
-                                      fontSize: 12.0, color: Colors.grey)),
+                              Text(
+                                widget.repostCount.toString(),
+                                style: const TextStyle(
+                                    fontSize: 12.0, color: Colors.white),
+                              ),
                             ],
                           ),
                         ),
@@ -444,19 +460,6 @@ class _NoteWidgetState extends State<NoteWidget> {
                       Divider(height: 0.5, thickness: 0.5, color: Colors.grey),
                 ),
               ],
-            ),
-          ),
-          Positioned(
-            right: 8,
-            bottom: 8,
-            child: IconButton(
-              icon: const Icon(Icons.copy, size: 16, color: Colors.grey),
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: widget.note.rawWs ?? ''));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Copied raw JSON')),
-                );
-              },
             ),
           ),
         ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/services/qiqstr_service.dart';
 import 'package:qiqstr/widgets/sidebar_widget.dart';
@@ -68,6 +69,26 @@ class _FeedPageState extends State<FeedPage> {
                         snap: false,
                         backgroundColor: Colors.black,
                         iconTheme: const IconThemeData(color: Colors.white),
+                        actions: [
+                          IconButton(
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (_) =>
+                                    ShareNoteDialog(dataService: dataService),
+                              );
+                            },
+                            icon: SizedBox(
+                              width: 24.0,
+                              height: 24.0,
+                              child: SvgPicture.asset(
+                                'assets/new_post_button.svg',
+                                color: Colors.white,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ];
                   },
@@ -76,16 +97,6 @@ class _FeedPageState extends State<FeedPage> {
                     dataType: DataType.Feed,
                   ),
                 ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          showDialog(
-            context: context,
-            builder: (_) => ShareNoteDialog(dataService: dataService),
-          );
-        },
-        tooltip: 'Share Note',
-        child: const Icon(Icons.arrow_upward),
-      ),
     );
   }
 }
