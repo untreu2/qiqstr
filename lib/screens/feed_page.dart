@@ -48,6 +48,25 @@ class _FeedPageState extends State<FeedPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       drawer: SidebarWidget(user: user),
+      floatingActionButton: FloatingActionButton(
+        shape: const CircleBorder(),
+        backgroundColor: Colors.white,
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (_) => ShareNoteDialog(dataService: dataService),
+          );
+        },
+        child: SizedBox(
+          width: 24.0,
+          height: 24.0,
+          child: SvgPicture.asset(
+            'assets/new_post_button.svg',
+            color: Colors.black,
+            fit: BoxFit.contain,
+          ),
+        ),
+      ),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : errorMessage != null
@@ -69,26 +88,6 @@ class _FeedPageState extends State<FeedPage> {
                         snap: false,
                         backgroundColor: Colors.black,
                         iconTheme: const IconThemeData(color: Colors.white),
-                        actions: [
-                          IconButton(
-                            onPressed: () {
-                              showDialog(
-                                context: context,
-                                builder: (_) =>
-                                    ShareNoteDialog(dataService: dataService),
-                              );
-                            },
-                            icon: SizedBox(
-                              width: 24.0,
-                              height: 24.0,
-                              child: SvgPicture.asset(
-                                'assets/new_post_button.svg',
-                                color: Colors.white,
-                                fit: BoxFit.contain,
-                              ),
-                            ),
-                          ),
-                        ],
                       ),
                     ];
                   },
