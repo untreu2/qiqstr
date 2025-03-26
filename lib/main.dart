@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'models/note_model.dart';
 import 'models/reaction_model.dart';
 import 'models/reply_model.dart';
@@ -44,12 +43,10 @@ class QiqstrApp extends ConsumerWidget {
       title: 'Qiqstr',
       theme: ThemeData(
         scaffoldBackgroundColor: Colors.black,
-        textTheme: GoogleFonts.interTextTheme(
-          Theme.of(context).textTheme.apply(
-                bodyColor: Colors.white,
-                displayColor: Colors.white,
-              ),
-        ),
+        textTheme: Theme.of(context).textTheme.apply(
+              bodyColor: Colors.white,
+              displayColor: Colors.white,
+            ),
         colorScheme: const ColorScheme.dark(
           primary: Colors.white,
           secondary: Colors.grey,
@@ -64,7 +61,7 @@ class QiqstrApp extends ConsumerWidget {
           backgroundColor: Colors.black,
           elevation: 0,
           centerTitle: true,
-          titleTextStyle: GoogleFonts.inter(
+          titleTextStyle: const TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w600,
             color: Colors.white,
@@ -157,7 +154,7 @@ class HiveErrorApp extends StatelessWidget {
     return MaterialApp(
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: Colors.black,
-        textTheme: GoogleFonts.interTextTheme(),
+        textTheme: ThemeData.dark().textTheme,
       ),
       home: Scaffold(
         appBar: AppBar(
@@ -166,7 +163,7 @@ class HiveErrorApp extends StatelessWidget {
         body: Center(
           child: Text(
             'An error occurred while initializing the application.',
-            style: GoogleFonts.inter(
+            style: const TextStyle(
               fontSize: 18,
               color: Colors.white,
             ),
