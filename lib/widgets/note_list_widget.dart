@@ -10,12 +10,11 @@ import 'package:qiqstr/widgets/note_widget.dart';
 class NoteListWidget extends StatefulWidget {
   final String npub;
   final DataType dataType;
-  final String? hashtag;
+
   const NoteListWidget({
     super.key,
     required this.npub,
     required this.dataType,
-    this.hashtag,
   });
 
   @override
@@ -41,7 +40,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     _dataService = DataService(
       npub: widget.npub,
       dataType: widget.dataType,
-      hashtag: widget.hashtag,
       onNewNote: _handleNewNote,
       onReactionsUpdated: _handleReactionsUpdated,
       onRepliesUpdated: _handleRepliesUpdated,

@@ -14,7 +14,7 @@ import '../models/reply_model.dart';
 import '../models/repost_model.dart';
 import '../models/following_model.dart';
 
-enum DataType { Feed, Profile, Note, Hashtag }
+enum DataType { Feed, Profile, Note }
 
 enum MessageType { NewNotes, CacheLoad, Error, Close }
 
@@ -28,35 +28,6 @@ class CachedProfile {
   final Map<String, String> data;
   final DateTime fetchedAt;
   CachedProfile(this.data, this.fetchedAt);
-}
-
-class HashtagFilter extends Filter {
-  final List<String> t;
-  HashtagFilter({
-    List<String>? authors,
-    List<int>? kinds,
-    int? limit,
-    int? since,
-    int? until,
-    List<String>? ids,
-    List<String>? e,
-    required this.t,
-  }) : super(
-          authors: authors,
-          kinds: kinds,
-          limit: limit,
-          since: since,
-          until: until,
-          ids: ids,
-          e: e,
-        );
-
-  @override
-  Map<String, dynamic> toJson() {
-    final json = super.toJson();
-    json['#t'] = t;
-    return json;
-  }
 }
 
 class WebSocketManager {
@@ -164,7 +135,6 @@ class WebSocketManager {
 class DataService {
   final String npub;
   final DataType dataType;
-  final String? hashtag;
   final Function(NoteModel)? onNewNote;
   final Function(String, List<ReactionModel>)? onReactionsUpdated;
   final Function(String, List<ReplyModel>)? onRepliesUpdated;
@@ -214,30 +184,23 @@ class DataService {
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
-  DataService({
-    required this.npub,
-    required this.dataType,
-    this.hashtag,
-    this.onNewNote,
-    this.onReactionsUpdated,
-    this.onRepliesUpdated,
-    this.onReactionCountUpdated,
-    this.onReplyCountUpdated,
-    this.onRepostsUpdated,
-    this.onRepostCountUpdated,
-  });
+  DataService(
+      {required this.npub,
+      required this.dataType,
+      this.onNewNote,
+      this.onReactionsUpdated,
+      this.onRepliesUpdated,
+      this.onReactionCountUpdated,
+      this.onReplyCountUpdated,
+      this.onRepostsUpdated,
+      this.onRepostCountUpdated});
 
   int get connectedRelaysCount => _socketManager.activeSockets.length;
 
   Future<void> initialize() async {
-    String notesBoxName;
-    if (dataType == DataType.Hashtag && hashtag != null) {
-      notesBoxName = 'notes_${dataType.toString()}_${npub}_$hashtag';
-    } else {
-      notesBoxName = 'notes_${dataType.toString()}_$npub';
-    }
-    notesBox = await _openHiveBox<NoteModel>(notesBoxName);
-    print('[DataService] Hive notes box "$notesBoxName" opened successfully.');
+    notesBox =
+        await _openHiveBox<NoteModel>('notes_${dataType.toString()}_$npub');
+    print('[DataService] Hive notes box opened successfully.');
 
     await Future.wait([
       _openHiveBox<ReactionModel>('reactions_${dataType.toString()}_$npub')
@@ -415,8 +378,6 @@ class DataService {
   }
 
   Future<void> _fetchUserData() async {
-    if (dataType == DataType.Hashtag) return;
-
     List<String> targetNpubs;
     if (dataType == DataType.Feed) {
       final following = await getFollowingList(npub);
@@ -491,17 +452,6 @@ class DataService {
   Future<void> fetchNotes(List<String> targetNpubs,
       {bool initialLoad = false}) async {
     if (_isClosed) return;
-
-    if (dataType == DataType.Hashtag && hashtag != null) {
-      final filter = HashtagFilter(
-        kinds: [1, 6],
-        limit: currentLimit,
-        t: [hashtag!],
-      );
-      await _broadcastRequest(_createRequest(filter));
-      print('[DataService] Fetched notes for hashtag: $hashtag');
-      return;
-    }
 
     DateTime? sinceTimestamp;
     if (!initialLoad && notes.isNotEmpty) {
@@ -633,16 +583,6 @@ class DataService {
     String noteContent =
         noteContentRaw is String ? noteContentRaw : jsonEncode(noteContentRaw);
     final tags = eventData['tags'] as List<dynamic>;
-
-    if (dataType == DataType.Hashtag && hashtag != null) {
-      bool containsHashtag = tags.any((tag) =>
-          tag is List &&
-          tag.isNotEmpty &&
-          tag[0] == 't' &&
-          tag[1].toString().toLowerCase() == hashtag!.toLowerCase());
-      if (!containsHashtag) return;
-    }
-
     final parentEventId = _extractParentEventId(tags);
 
     if (eventIds.contains(eventId) || noteContent.trim().isEmpty) return;

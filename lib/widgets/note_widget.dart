@@ -10,49 +10,9 @@ import 'package:qiqstr/widgets/media_preview_widget.dart';
 import 'package:flutter/services.dart';
 import '../models/note_model.dart';
 import '../screens/profile_page.dart';
-import '../screens/hashtag_page.dart';
 import '../services/qiqstr_service.dart';
 import 'content_parser.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:linkify/linkify.dart';
-
-class HashtagElement extends LinkableElement {
-  HashtagElement(String text) : super(text, text);
-}
-
-class HashtagLinkifier extends Linkifier {
-  @override
-  List<LinkifyElement> parse(
-      List<LinkifyElement> elements, LinkifyOptions options) {
-    final List<LinkifyElement> ret = [];
-    final hashtagRegex = RegExp(r'(#[a-zA-Z0-9_]+)');
-    for (final element in elements) {
-      if (element is TextElement) {
-        final text = element.text;
-        final matches = hashtagRegex.allMatches(text);
-        if (matches.isEmpty) {
-          ret.add(element);
-        } else {
-          int start = 0;
-          for (final match in matches) {
-            if (match.start > start) {
-              ret.add(TextElement(text.substring(start, match.start)));
-            }
-            final hashtag = match.group(0)!;
-            ret.add(HashtagElement(hashtag));
-            start = match.end;
-          }
-          if (start < text.length) {
-            ret.add(TextElement(text.substring(start)));
-          }
-        }
-      } else {
-        ret.add(element);
-      }
-    }
-    return ret;
-  }
-}
 
 class NoteWidget extends StatefulWidget {
   final NoteModel note;
@@ -310,25 +270,13 @@ class _NoteWidgetState extends State<NoteWidget> {
   }
 
   Future<void> _onOpen(LinkableElement link) async {
-    if (link is HashtagElement) {
-      final String rawHashtag = link.text;
-      final String cleanHashtag = rawHashtag.substring(1).toLowerCase();
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              HashtagPage(npub: widget.dataService.npub, hashtag: cleanHashtag),
-        ),
-      );
+    final Uri url = Uri.parse(link.url);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url);
     } else {
-      final Uri url = Uri.parse(link.url);
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not launch ${link.url}')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not launch ${link.url}')),
+      );
     }
   }
 
@@ -385,11 +333,6 @@ class _NoteWidgetState extends State<NoteWidget> {
                         color: Colors.amberAccent,
                         fontStyle: FontStyle.italic,
                       ),
-                      linkifiers: [
-                        HashtagLinkifier(),
-                        UrlLinkifier(),
-                        EmailLinkifier(),
-                      ],
                     ),
                   ),
                 if (parsedContent['mediaUrls'] != null &&
