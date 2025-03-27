@@ -77,13 +77,10 @@ class _FeedPageState extends State<FeedPage> {
                       (BuildContext context, bool innerBoxIsScrolled) {
                     return [
                       SliverAppBar(
-                        title: const Text(
-                          'qiqstr',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 20.0,
-                          ),
+                        title: Image.asset(
+                          'assets/main_icon.png',
+                          height: 35.0,
+                          fit: BoxFit.contain,
                         ),
                         pinned: false,
                         snap: false,
