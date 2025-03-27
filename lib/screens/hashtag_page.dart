@@ -53,23 +53,24 @@ class _HashtagPageState extends State<HashtagPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       drawer: SidebarWidget(user: user),
-      floatingActionButton: FloatingActionButton(
-        shape: const CircleBorder(),
-        backgroundColor: Colors.white,
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
           showDialog(
             context: context,
             builder: (_) => ShareNoteDialog(dataService: dataService),
           );
         },
-        child: SizedBox(
-          width: 24.0,
-          height: 24.0,
-          child: SvgPicture.asset(
-            'assets/new_post_button.svg',
-            color: Colors.black,
-            fit: BoxFit.contain,
-          ),
+        backgroundColor: Colors.white,
+        icon: SvgPicture.asset(
+          'assets/new_post_button.svg',
+          color: Colors.black,
+          width: 20.0,
+          height: 20.0,
+          fit: BoxFit.contain,
+        ),
+        label: const Text(
+          'New',
+          style: TextStyle(color: Colors.black),
         ),
       ),
       body: isLoading
