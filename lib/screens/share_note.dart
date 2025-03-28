@@ -1,55 +1,72 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import '../services/qiqstr_service.dart';
 
-class ShareNoteDialog extends StatefulWidget {
+class ShareNotePage extends StatefulWidget {
   final DataService dataService;
 
-  const ShareNoteDialog({Key? key, required this.dataService})
-      : super(key: key);
+  const ShareNotePage({super.key, required this.dataService});
 
   @override
-  _ShareNoteDialogState createState() => _ShareNoteDialogState();
+  _ShareNotePageState createState() => _ShareNotePageState();
 }
 
-class _ShareNoteDialogState extends State<ShareNoteDialog> {
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+class _ShareNotePageState extends State<ShareNotePage> {
   final TextEditingController _noteController = TextEditingController();
   bool _isPosting = false;
-  String _connectionMessage = '';
+  bool _isMediaUploading = false;
+  final List<String> _mediaUrls = [];
+  final String _serverUrl = "https://nostr.build";
 
-  @override
-  void initState() {
-    super.initState();
-    _initializeConnection();
-  }
+  Future<void> _selectMedia() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: FileType.media,
+    );
 
-  Future<void> _initializeConnection() async {
-    try {
-      await widget.dataService.initializeConnections();
+    if (result != null && result.files.isNotEmpty) {
       setState(() {
-        _connectionMessage = widget.dataService.connectedRelaysCount > 0
-            ? 'Connected to ${widget.dataService.connectedRelaysCount} relays'
-            : 'No relay connections established';
+        _isMediaUploading = true;
       });
-    } catch (error) {
-      setState(() {
-        _connectionMessage = 'Error connecting: $error';
-      });
+      try {
+        for (var file in result.files) {
+          if (file.path != null) {
+            final url =
+                await widget.dataService.sendMedia(file.path!, _serverUrl);
+            setState(() {
+              _mediaUrls.add(url);
+            });
+          }
+        }
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error uploading media: $e')),
+        );
+      } finally {
+        setState(() {
+          _isMediaUploading = false;
+        });
+      }
     }
   }
 
   Future<void> _shareNote() async {
     if (_isPosting) return;
-    if (!_formKey.currentState!.validate()) return;
-
+    if (_noteController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a note')),
+      );
+      return;
+    }
     setState(() {
       _isPosting = true;
     });
-
     try {
-      final noteContent = _noteController.text.trim();
-      await widget.dataService.shareNote(noteContent);
-      if (!mounted) return;
+      final noteText = _noteController.text.trim();
+      final String finalNoteContent = _mediaUrls.isNotEmpty
+          ? "$noteText ${_mediaUrls.join(" ")}"
+          : noteText;
+      await widget.dataService.shareNote(finalNoteContent);
       Navigator.of(context).pop();
     } catch (error) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -64,71 +81,134 @@ class _ShareNoteDialogState extends State<ShareNoteDialog> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      insetPadding: const EdgeInsets.all(16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Form(
-              key: _formKey,
-              child: TextFormField(
-                controller: _noteController,
-                maxLines: 4,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: 'Enter your note',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter a note';
-                  }
-                  return null;
-                },
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _connectionMessage,
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                ),
-                onPressed: _isPosting ? null : _shareNote,
-                child: _isPosting
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.black),
-                        ),
-                      )
-                    : const Text('Share'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  void _removeMedia(String url) {
+    setState(() {
+      _mediaUrls.remove(url);
+    });
   }
 
   @override
   void dispose() {
     _noteController.dispose();
     super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              if (_mediaUrls.isNotEmpty)
+                Container(
+                  height: 170,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: _mediaUrls.map((url) {
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8.0),
+                          child: Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: Image.network(
+                                  url,
+                                  width: 160,
+                                  height: 160,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      width: 160,
+                                      height: 160,
+                                      color: Colors.grey[300],
+                                      child: const Icon(Icons.broken_image),
+                                    );
+                                  },
+                                ),
+                              ),
+                              Positioned(
+                                top: 0,
+                                right: 0,
+                                child: GestureDetector(
+                                  onTap: () => _removeMedia(url),
+                                  child: Container(
+                                    decoration: const BoxDecoration(
+                                      color: Colors.black54,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.close,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: TextField(
+                  autofocus: true,
+                  controller: _noteController,
+                  maxLines: null,
+                  expands: true,
+                  textAlignVertical: TextAlignVertical.top,
+                  decoration: const InputDecoration(
+                    hintText: "Write your note here...",
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ),
+              if (_isMediaUploading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(strokeWidth: 2),
+                      SizedBox(width: 8),
+                      Text("Uploading media..."),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            FloatingActionButton(
+              onPressed: _selectMedia,
+              heroTag: 'addMedia',
+              child: const Icon(Icons.attach_file),
+            ),
+            FloatingActionButton(
+              onPressed: _shareNote,
+              heroTag: 'shareNote',
+              child: _isPosting
+                  ? const CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    )
+                  : const Icon(Icons.send),
+            ),
+          ],
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+    );
   }
 }

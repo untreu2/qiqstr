@@ -44,17 +44,20 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
+  void _navigateToShareNotePage() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ShareNotePage(dataService: dataService),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       drawer: SidebarWidget(user: user),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          showDialog(
-            context: context,
-            builder: (_) => ShareNoteDialog(dataService: dataService),
-          );
-        },
+        onPressed: _navigateToShareNotePage,
         backgroundColor: Colors.white,
         icon: SvgPicture.asset(
           'assets/new_post_button.svg',
