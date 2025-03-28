@@ -617,7 +617,6 @@ class DataService {
           await notesBox!.put(newNote.id, newNote);
         }
 
-        _sortNotes();
         onNewNote?.call(newNote);
         print('[DataService] New note added and saved to cache: ${newNote.id}');
 
@@ -640,8 +639,6 @@ class DataService {
     }
     return null;
   }
-
-  void _sortNotes() => notes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
   Future<void> _handleReactionEvent(Map<String, dynamic> eventData) async {
     if (_isClosed) return;
@@ -1230,7 +1227,6 @@ class DataService {
           await notesBox!.put(note.id, note);
         }
       }
-      _sortNotes();
       onNewNote?.call(data.last);
       print('[DataService] Handled new notes: ${data.length} notes added.');
 
