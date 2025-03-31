@@ -1012,10 +1012,30 @@ class DataService {
       }
 
       final event = Event.from(
-          kind: 1, tags: [], content: noteContent, privkey: privateKey);
+        kind: 1,
+        tags: [],
+        content: noteContent,
+        privkey: privateKey,
+      );
       final serializedEvent = event.serialize();
+
       await _socketManager.broadcast(serializedEvent);
-      print('[DataService] Note shared successfully.');
+
+      final timestamp = DateTime.now();
+      final newNote = NoteModel(
+        id: event.id,
+        content: noteContent,
+        author: npub,
+        timestamp: timestamp,
+        isRepost: false,
+      );
+      notes.add(newNote);
+      eventIds.add(newNote.id);
+      if (notesBox != null && notesBox!.isOpen) {
+        await notesBox!.put(newNote.id, newNote);
+      }
+      onNewNote?.call(newNote);
+      print('[DataService] Note shared successfully and added to cache.');
     } catch (e) {
       print('[DataService ERROR] Error sharing note: $e');
       throw e;
@@ -1181,15 +1201,28 @@ class DataService {
       }
 
       final event = Event.from(
-          kind: 7,
-          tags: [
-            ['e', targetEventId]
-          ],
-          content: reactionContent,
-          privkey: privateKey);
+        kind: 7,
+        tags: [
+          ['e', targetEventId]
+        ],
+        content: reactionContent,
+        privkey: privateKey,
+      );
       final serializedEvent = event.serialize();
       await _socketManager.broadcast(serializedEvent);
-      print('[DataService] Reaction event sent to WebSocket successfully.');
+
+      final reaction = ReactionModel.fromEvent(event.toJson());
+      reactionsMap.putIfAbsent(targetEventId, () => []);
+      if (!reactionsMap[targetEventId]!.any((r) => r.id == reaction.id)) {
+        reactionsMap[targetEventId]!.add(reaction);
+        onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
+        onReactionCountUpdated?.call(
+            targetEventId, reactionsMap[targetEventId]!.length);
+        if (reactionsBox != null && reactionsBox!.isOpen) {
+          await reactionsBox!.put(reaction.id, reaction);
+        }
+      }
+      print('[DataService] Reaction sent and added to cache.');
     } catch (e) {
       print('[DataService ERROR] Error sending reaction: $e');
       throw e;
@@ -1209,16 +1242,29 @@ class DataService {
           .author;
 
       final event = Event.from(
-          kind: 1,
-          tags: [
-            ['e', parentEventId, '', 'root'],
-            ['p', noteAuthor]
-          ],
-          content: replyContent,
-          privkey: privateKey);
+        kind: 1,
+        tags: [
+          ['e', parentEventId, '', 'root'],
+          ['p', noteAuthor]
+        ],
+        content: replyContent,
+        privkey: privateKey,
+      );
       final serializedEvent = event.serialize();
       await _socketManager.broadcast(serializedEvent);
-      print('[DataService] Reply event sent to WebSocket successfully.');
+
+      final reply = ReplyModel.fromEvent(event.toJson());
+      repliesMap.putIfAbsent(parentEventId, () => []);
+      if (!repliesMap[parentEventId]!.any((r) => r.id == reply.id)) {
+        repliesMap[parentEventId]!.add(reply);
+        onRepliesUpdated?.call(parentEventId, repliesMap[parentEventId]!);
+        onReplyCountUpdated?.call(
+            parentEventId, repliesMap[parentEventId]!.length);
+        if (repliesBox != null && repliesBox!.isOpen) {
+          await repliesBox!.put(reply.id, reply);
+        }
+      }
+      print('[DataService] Reply sent and added to cache.');
     } catch (e) {
       print('[DataService ERROR] Error sending reply: $e');
       throw e;
@@ -1227,36 +1273,39 @@ class DataService {
 
   Future<void> sendRepost(NoteModel note) async {
     if (_isClosed) return;
-
     try {
       final privateKey = await _secureStorage.read(key: 'privateKey');
-
       if (privateKey == null || privateKey.isEmpty) {
         throw Exception('Private key not found.');
       }
-
       final content = note.rawWs;
       if (content == null || content.isEmpty) {
         throw Exception('Raw event data is missing for this note.');
       }
-
       final tags = [
         ['e', note.id],
         ['p', note.author]
       ];
-
       final event = Event.from(
         kind: 6,
         tags: tags,
         content: content,
         privkey: privateKey,
       );
-
       final serializedEvent = event.serialize();
-
       await _socketManager.broadcast(serializedEvent);
 
-      print('[DataService] Repost event sent successfully.');
+      final repost = RepostModel.fromEvent(event.toJson(), note.id);
+      repostsMap.putIfAbsent(note.id, () => []);
+      if (!repostsMap[note.id]!.any((r) => r.id == repost.id)) {
+        repostsMap[note.id]!.add(repost);
+        onRepostsUpdated?.call(note.id, repostsMap[note.id]!);
+        onRepostCountUpdated?.call(note.id, repostsMap[note.id]!.length);
+        if (repostsBox != null && repostsBox!.isOpen) {
+          await repostsBox!.put(repost.id, repost);
+        }
+      }
+      print('[DataService] Repost sent and added to cache.');
     } catch (e) {
       print('[DataService ERROR] Error sending repost: $e');
       throw e;
