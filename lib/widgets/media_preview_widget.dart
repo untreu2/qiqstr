@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/photo_viewer_widget.dart';
+import 'video_preview.dart';
 
 class MediaPreviewWidget extends StatelessWidget {
   final List<String> mediaUrls;
@@ -12,6 +13,17 @@ class MediaPreviewWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     if (mediaUrls.isEmpty) return const SizedBox.shrink();
 
+    final List<String> videoUrls = mediaUrls.where((url) {
+      final lower = url.toLowerCase();
+      return lower.endsWith('.mp4') ||
+          lower.endsWith('.mkv') ||
+          lower.endsWith('.mov');
+    }).toList();
+
+    if (videoUrls.isNotEmpty) {
+      return VP(url: videoUrls.first);
+    }
+
     final List<String> imageUrls = mediaUrls.where((url) {
       final lower = url.toLowerCase();
       return lower.endsWith('.jpg') ||
@@ -20,6 +32,10 @@ class MediaPreviewWidget extends StatelessWidget {
           lower.endsWith('.webp') ||
           lower.endsWith('.gif');
     }).toList();
+
+    if (imageUrls.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     if (imageUrls.length == 1) {
       return GestureDetector(
