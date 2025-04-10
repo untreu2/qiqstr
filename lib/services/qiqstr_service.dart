@@ -659,13 +659,6 @@ class DataService {
   Future<void> _handleReactionEvent(Map<String, dynamic> eventData) async {
     if (_isClosed) return;
     try {
-      final author = eventData['pubkey'] as String;
-      if (usersBox != null &&
-          usersBox!.isOpen &&
-          !usersBox!.containsKey(author)) {
-        await getCachedUserProfile(author);
-      }
-
       String? targetEventId;
       for (var tag in eventData['tags']) {
         if (tag is List && tag.length >= 2 && tag[0] == 'e') {
@@ -697,13 +690,6 @@ class DataService {
   Future<void> _handleZapEvent(Map<String, dynamic> eventData) async {
     if (_isClosed) return;
     try {
-      final author = eventData['pubkey'] as String;
-      if (usersBox != null &&
-          usersBox!.isOpen &&
-          !usersBox!.containsKey(author)) {
-        await getCachedUserProfile(author);
-      }
-
       final bolt11Tag = eventData['tags']?.firstWhere(
           (tag) => tag is List && tag.length >= 2 && tag[0] == 'bolt11',
           orElse: () => null);
@@ -746,13 +732,6 @@ class DataService {
       Map<String, dynamic> eventData, String parentEventId) async {
     if (_isClosed) return;
     try {
-      final author = eventData['pubkey'] as String;
-      if (usersBox != null &&
-          usersBox!.isOpen &&
-          !usersBox!.containsKey(author)) {
-        await getCachedUserProfile(author);
-      }
-
       final reply = ReplyModel.fromEvent(eventData);
       repliesMap.putIfAbsent(parentEventId, () => []);
 
@@ -777,13 +756,6 @@ class DataService {
   Future<void> _handleRepostEvent(Map<String, dynamic> eventData) async {
     if (_isClosed) return;
     try {
-      final author = eventData['pubkey'] as String;
-      if (usersBox != null &&
-          usersBox!.isOpen &&
-          !usersBox!.containsKey(author)) {
-        await getCachedUserProfile(author);
-      }
-
       String? originalNoteId;
       for (var tag in eventData['tags']) {
         if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
