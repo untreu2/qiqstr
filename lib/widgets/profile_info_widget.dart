@@ -13,84 +13,105 @@ class ProfileInfoWidget extends StatelessWidget {
     final uri = Uri.parse(link.url);
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
-    } else {
-      throw 'Could not launch ${link.url}';
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
     final websiteUrl = user.website.isNotEmpty &&
             !(user.website.startsWith("http://") ||
                 user.website.startsWith("https://"))
         ? "https://${user.website}"
         : user.website;
 
-    return SingleChildScrollView(
+    return Container(
+      color: Colors.black,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          user.banner.isNotEmpty
-              ? CachedNetworkImage(
-                  imageUrl: user.banner,
-                  width: double.infinity,
-                  height: 250,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => Container(
-                    width: double.infinity,
-                    height: 250,
-                    color: Colors.grey,
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    width: double.infinity,
-                    height: 250,
-                    color: Colors.black,
-                    child: const Icon(Icons.error, color: Colors.red),
-                  ),
-                )
-              : Container(
-                  width: double.infinity,
-                  height: 250,
-                  color: Colors.black,
-                ),
-          Padding(
-            padding: const EdgeInsets.all(16.0),
+          CachedNetworkImage(
+            imageUrl: user.banner,
+            width: screenWidth,
+            height: 160,
+            fit: BoxFit.cover,
+            placeholder: (context, url) => Container(
+              height: 160,
+              width: screenWidth,
+              color: Colors.grey[700],
+            ),
+            errorWidget: (context, url, error) => Container(
+              height: 160,
+              width: screenWidth,
+              color: Colors.black,
+              child: const Icon(Icons.error, color: Colors.red),
+            ),
+          ),
+          Container(
+            transform: Matrix4.translationValues(0, -40, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  radius: 50,
-                  backgroundImage: user.profileImage.isNotEmpty
-                      ? CachedNetworkImageProvider(user.profileImage)
-                      : null,
-                  backgroundColor:
-                      user.profileImage.isEmpty ? Colors.grey : null,
-                  child: user.profileImage.isEmpty
-                      ? const Icon(Icons.person, size: 50, color: Colors.white)
-                      : null,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  user.name.isNotEmpty ? user.name : 'Anonymous',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.black, width: 3),
+                  ),
+                  child: CircleAvatar(
+                    radius: 40,
+                    backgroundImage: user.profileImage.isNotEmpty
+                        ? CachedNetworkImageProvider(user.profileImage)
+                        : null,
+                    backgroundColor:
+                        user.profileImage.isEmpty ? Colors.grey : null,
+                    child: user.profileImage.isEmpty
+                        ? const Icon(Icons.person,
+                            size: 40, color: Colors.white)
+                        : null,
                   ),
                 ),
-                const SizedBox(height: 8),
-                if (user.nip05.isNotEmpty)
-                  Text(
-                    user.nip05,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.white70,
-                    ),
-                  ),
+                const SizedBox(height: 12),
+                user.nip05.contains('@')
+                    ? Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: user.name.isNotEmpty
+                                  ? user.name
+                                  : user.nip05.split('@').first,
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            TextSpan(
+                              text: '@${user.nip05.split('@').last}',
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFFBB86FC),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : Text(
+                        user.name.isNotEmpty ? user.name : 'Anonymous',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                const SizedBox(height: 12),
                 if (user.lud16.isNotEmpty)
                   Text(
                     user.lud16,
                     style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.amber[800],
+                      fontSize: 13,
+                      color: Colors.amber[600],
                     ),
                   ),
                 if (user.about.isNotEmpty)
@@ -102,33 +123,31 @@ class ProfileInfoWidget extends StatelessWidget {
                         fontSize: 14,
                         color: Colors.white70,
                       ),
-                      textAlign: TextAlign.center,
                     ),
                   ),
                 if (user.website.isNotEmpty)
                   Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Center(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.link, color: Colors.amber, size: 14),
-                          const SizedBox(width: 4),
-                          Linkify(
+                    padding: const EdgeInsets.only(top: 8.0, bottom: 1),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.link, color: Colors.amber, size: 14),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Linkify(
                             onOpen: _onOpen,
                             text: websiteUrl,
                             style: const TextStyle(
-                              fontSize: 14,
+                              fontSize: 13,
                               color: Colors.amber,
                             ),
                             linkStyle: const TextStyle(
-                              fontSize: 14,
+                              fontSize: 13,
                               color: Colors.amber,
                               decoration: TextDecoration.underline,
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
               ],

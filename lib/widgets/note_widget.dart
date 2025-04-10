@@ -209,28 +209,57 @@ class _NoteWidgetState extends State<NoteWidget> {
           name = snapshot.data!['name'] ?? 'Anonymous';
           profileImage = snapshot.data!['profileImage'] ?? '';
         }
+
+        final bool hasDomain = name.contains('@');
+        final String namePart = hasDomain ? name.split('@').first : name;
+        final String domainPart = hasDomain ? '@' + name.split('@').last : '';
+
         return Row(
           children: [
             GestureDetector(
               onTap: () => _navigateToProfile(npub),
-              child: profileImage.isNotEmpty
-                  ? CircleAvatar(
-                      radius: 20,
-                      backgroundImage: CachedNetworkImageProvider(profileImage),
-                      backgroundColor: Colors.transparent,
-                    )
-                  : const CircleAvatar(
-                      radius: 16,
-                      child: Icon(Icons.person, size: 16),
-                    ),
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.black, width: 2),
+                ),
+                child: CircleAvatar(
+                  radius: 20,
+                  backgroundImage: profileImage.isNotEmpty
+                      ? CachedNetworkImageProvider(profileImage)
+                      : null,
+                  backgroundColor:
+                      profileImage.isEmpty ? Colors.grey : Colors.transparent,
+                  child: profileImage.isEmpty
+                      ? const Icon(Icons.person, size: 20, color: Colors.white)
+                      : null,
+                ),
+              ),
             ),
             const SizedBox(width: 8),
             GestureDetector(
               onTap: () => _navigateToProfile(npub),
-              child: Text(
-                name,
-                style: const TextStyle(
-                    fontSize: 15.5, fontWeight: FontWeight.bold),
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(
+                      text: namePart,
+                      style: const TextStyle(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                    if (domainPart.isNotEmpty)
+                      TextSpan(
+                        text: domainPart,
+                        style: const TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -316,9 +345,8 @@ class _NoteWidgetState extends State<NoteWidget> {
       child: Stack(
         children: [
           Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10.0),
-            ),
+            color: Colors.black,
+            padding: const EdgeInsets.only(bottom: 8.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -356,6 +384,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                         fontSize: (parsedContent['text'] as String).length < 21
                             ? 20.0
                             : 15.0,
+                        color: Colors.white,
                       ),
                       linkStyle: const TextStyle(
                         color: Colors.amberAccent,
@@ -516,8 +545,11 @@ class _NoteWidgetState extends State<NoteWidget> {
                 ),
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 6.0),
-                  child:
-                      Divider(height: 0.5, thickness: 0.5, color: Colors.grey),
+                  child: Divider(
+                    height: 1.0,
+                    thickness: 1.0,
+                    color: Colors.white24,
+                  ),
                 ),
               ],
             ),
