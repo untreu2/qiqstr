@@ -746,6 +746,8 @@ class DataService {
 
         await repliesBox?.put(reply.id, reply);
       }
+
+      await fetchRepliesForEvents([reply.id]);
     } catch (e) {
       print('[DataService ERROR] Error handling reply event: $e');
     }
