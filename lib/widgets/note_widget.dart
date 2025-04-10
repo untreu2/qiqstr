@@ -351,8 +351,7 @@ class _NoteWidgetState extends State<NoteWidget> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12.0, vertical: 2.0),
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
                   child: Row(
                     children: [
                       _buildAuthorInfo(widget.note.author),
@@ -428,8 +427,8 @@ class _NoteWidgetState extends State<NoteWidget> {
                             children: [
                               SvgPicture.asset(
                                 'assets/reaction_button.svg',
-                                width: 16.0,
-                                height: 16.0,
+                                width: 18.0,
+                                height: 18.0,
                                 color: _isReactionGlowing
                                     ? Colors.red
                                     : Colors.white,
@@ -460,8 +459,8 @@ class _NoteWidgetState extends State<NoteWidget> {
                             children: [
                               SvgPicture.asset(
                                 'assets/reply_button.svg',
-                                width: 16.0,
-                                height: 16.0,
+                                width: 18.0,
+                                height: 18.0,
                                 color: _isReplyGlowing
                                     ? Colors.blue
                                     : Colors.white,
@@ -492,8 +491,8 @@ class _NoteWidgetState extends State<NoteWidget> {
                             children: [
                               SvgPicture.asset(
                                 'assets/repost_button.svg',
-                                width: 16.0,
-                                height: 16.0,
+                                width: 18.0,
+                                height: 18.0,
                                 color: _isRepostGlowing
                                     ? Colors.green
                                     : Colors.white,
@@ -524,8 +523,8 @@ class _NoteWidgetState extends State<NoteWidget> {
                             children: [
                               SvgPicture.asset(
                                 'assets/zap_button.svg',
-                                width: 16.0,
-                                height: 16.0,
+                                width: 18.0,
+                                height: 18.0,
                                 color: _isZapGlowing
                                     ? Colors.orange
                                     : Colors.white,
