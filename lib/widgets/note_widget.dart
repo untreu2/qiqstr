@@ -38,10 +38,12 @@ class _NoteWidgetState extends State<NoteWidget> {
   bool _isReactionGlowing = false;
   bool _isReplyGlowing = false;
   bool _isRepostGlowing = false;
+  bool _isZapGlowing = false;
 
   double _reactionScale = 1.0;
   double _replyScale = 1.0;
   double _repostScale = 1.0;
+  double _zapScale = 1.0;
 
   @override
   void initState() {
@@ -111,6 +113,21 @@ class _NoteWidgetState extends State<NoteWidget> {
     });
   }
 
+  void _animateZapButton() {
+    setState(() {
+      _zapScale = 1.2;
+      _isZapGlowing = true;
+    });
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        setState(() {
+          _zapScale = 1.0;
+          _isZapGlowing = false;
+        });
+      }
+    });
+  }
+
   void _handleReactionTap() async {
     _animateReactionButton();
     try {
@@ -134,6 +151,13 @@ class _NoteWidgetState extends State<NoteWidget> {
   void _handleRepostTap() {
     _animateRepostButton();
     _handleRepost();
+  }
+
+  void _handleZapTap() {
+    _animateZapButton();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Soooooon!')),
+    );
   }
 
   Future<void> _handleRepost() async {
@@ -283,6 +307,10 @@ class _NoteWidgetState extends State<NoteWidget> {
   @override
   Widget build(BuildContext context) {
     final parsedContent = parseContent(widget.note.content);
+    final int totalZapAmount = widget.dataService.zapMap[widget.note.id]
+            ?.fold<int>(0, (sum, zap) => sum + zap.amount) ??
+        0;
+
     return GestureDetector(
       onDoubleTapDown: _handleDoubleTap,
       child: Stack(
@@ -387,7 +415,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 24.0),
+                      const SizedBox(width: 14),
                       TweenAnimationBuilder<double>(
                         tween: Tween<double>(begin: 1.0, end: _replyScale),
                         duration: const Duration(milliseconds: 300),
@@ -419,7 +447,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 24.0),
+                      const SizedBox(width: 14),
                       TweenAnimationBuilder<double>(
                         tween: Tween<double>(begin: 1.0, end: _repostScale),
                         duration: const Duration(milliseconds: 300),
@@ -444,6 +472,38 @@ class _NoteWidgetState extends State<NoteWidget> {
                               const SizedBox(width: 4.0),
                               Text(
                                 widget.repostCount.toString(),
+                                style: const TextStyle(
+                                    fontSize: 12.0, color: Colors.white),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      TweenAnimationBuilder<double>(
+                        tween: Tween<double>(begin: 1.0, end: _zapScale),
+                        duration: const Duration(milliseconds: 300),
+                        builder: (context, scale, child) => Transform.scale(
+                          scale: scale,
+                          child: child,
+                        ),
+                        child: InkWell(
+                          splashColor: Colors.transparent,
+                          highlightColor: Colors.transparent,
+                          onTap: _handleZapTap,
+                          child: Row(
+                            children: [
+                              SvgPicture.asset(
+                                'assets/zap_button.svg',
+                                width: 16.0,
+                                height: 16.0,
+                                color: _isZapGlowing
+                                    ? Colors.orange
+                                    : Colors.white,
+                              ),
+                              const SizedBox(width: 4.0),
+                              Text(
+                                totalZapAmount.toString(),
                                 style: const TextStyle(
                                     fontSize: 12.0, color: Colors.white),
                               ),

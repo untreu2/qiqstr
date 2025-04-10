@@ -7,13 +7,15 @@ import 'package:hive/hive.dart';
 import 'package:nostr/nostr.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'dart:typed_data';
 import '../models/user_model.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
 import '../models/repost_model.dart';
 import '../models/following_model.dart';
-import 'dart:typed_data';
+import '../models/zap_model.dart';
+import '../services/bolt11_decoder.dart';
 
 enum DataType { Feed, Profile, Note }
 
@@ -143,6 +145,7 @@ class DataService {
   final Function(String, int)? onReplyCountUpdated;
   final Function(String, List<RepostModel>)? onRepostsUpdated;
   final Function(String, int)? onRepostCountUpdated;
+  final Function(String, List<ZapModel>)? onZapsUpdated;
 
   List<NoteModel> notes = [];
   final Set<String> eventIds = {};
@@ -150,6 +153,7 @@ class DataService {
   final Map<String, List<ReactionModel>> reactionsMap = {};
   final Map<String, List<ReplyModel>> repliesMap = {};
   final Map<String, List<RepostModel>> repostsMap = {};
+  final Map<String, List<ZapModel>> zapMap = {};
 
   final Map<String, CachedProfile> profileCache = {};
 
@@ -159,6 +163,7 @@ class DataService {
   Box<ReplyModel>? repliesBox;
   Box<RepostModel>? repostsBox;
   Box<FollowingModel>? followingBox;
+  Box<ZapModel>? zapBox;
 
   late WebSocketManager _socketManager;
   bool _isInitialized = false;
@@ -194,7 +199,8 @@ class DataService {
       this.onReactionCountUpdated,
       this.onReplyCountUpdated,
       this.onRepostsUpdated,
-      this.onRepostCountUpdated});
+      this.onRepostCountUpdated,
+      this.onZapsUpdated});
 
   int get connectedRelaysCount => _socketManager.activeSockets.length;
 
@@ -227,6 +233,10 @@ class DataService {
         followingBox = box;
         print('[DataService] Hive following box opened successfully.');
       }),
+      _openHiveBox<ZapModel>('zaps_${dataType.toString()}_$npub').then((box) {
+        zapBox = box;
+        print('[DataService] Hive zap box opened successfully.');
+      }),
     ]);
 
     _socketManager = WebSocketManager(relayUrls: [
@@ -255,14 +265,14 @@ class DataService {
         fetchReactionsForEvents(noteIds),
         fetchRepliesForEvents(noteIds),
         fetchRepostsForEvents(noteIds),
+        fetchZapsForEvents(noteIds),
       ]);
       print(
-          '[DataService] Fetched reactions, replies, and reposts for cached notes.');
+          '[DataService] Fetched reactions, replies, reposts, and zaps for cached notes.');
     }
 
     await _fetchUserData();
 
-    _startCacheCleanup();
     _isInitialized = true;
   }
 
@@ -400,7 +410,8 @@ class DataService {
     await Future.wait([
       loadReactionsFromCache(),
       loadRepliesFromCache(),
-      loadRepostsFromCache()
+      loadRepostsFromCache(),
+      loadZapsFromCache(),
     ]);
 
     await _subscribeToAllReactions();
@@ -434,7 +445,8 @@ class DataService {
     await Future.wait([
       loadReactionsFromCache(),
       loadRepliesFromCache(),
-      loadRepostsFromCache()
+      loadRepostsFromCache(),
+      loadZapsFromCache(),
     ]);
 
     await _subscribeToAllReactions();
@@ -507,6 +519,8 @@ class DataService {
           await _handleRepostEvent(eventData);
           await _processNoteEvent(eventData, targetNpubs,
               rawWs: jsonEncode(eventData));
+        } else if (kind == 9735) {
+          await _handleZapEvent(eventData);
         }
       }
     } catch (e) {
@@ -625,7 +639,8 @@ class DataService {
         await Future.wait([
           fetchReactionsForEvents(newEventIds),
           fetchRepliesForEvents(newEventIds),
-          fetchRepostsForEvents(newEventIds)
+          fetchRepostsForEvents(newEventIds),
+          fetchZapsForEvents(newEventIds),
         ]);
         await _updateReactionSubscription();
       }
@@ -669,6 +684,47 @@ class DataService {
       }
     } catch (e) {
       print('[DataService ERROR] Error handling reaction event: $e');
+    }
+  }
+
+  Future<void> _handleZapEvent(Map<String, dynamic> eventData) async {
+    if (_isClosed) return;
+    try {
+      final bolt11Tag = eventData['tags']?.firstWhere(
+          (tag) => tag is List && tag.length >= 2 && tag[0] == 'bolt11',
+          orElse: () => null);
+      if (bolt11Tag == null) return;
+      final bolt11 = bolt11Tag[1] as String;
+
+      final targetEventIdTag = eventData['tags']?.firstWhere(
+          (tag) => tag is List && tag.length >= 2 && tag[0] == 'e',
+          orElse: () => null);
+      if (targetEventIdTag == null) return;
+      final targetEventId = targetEventIdTag[1] as String;
+
+      final amount = LightningInvoiceParser.getSatoshiAmount(bolt11) ?? 0;
+      final rawMemo = LightningInvoiceParser.getMemo(bolt11);
+      String memo = '';
+      try {
+        if (rawMemo != null && rawMemo.isNotEmpty) {
+          final parsedMemo = jsonDecode(rawMemo);
+          memo = parsedMemo['content'] ?? '';
+        }
+      } catch (e) {
+        memo = rawMemo ?? '';
+      }
+
+      final zap = ZapModel.fromEvent(eventData, amount: amount, memo: memo);
+      zapMap.putIfAbsent(targetEventId, () => []);
+      if (!zapMap[targetEventId]!.any((z) => z.id == zap.id)) {
+        zapMap[targetEventId]!.add(zap);
+        await zapBox?.put(zap.id, zap);
+        onZapsUpdated?.call(targetEventId, zapMap[targetEventId]!);
+        print(
+            '[DataService] Zap added for $targetEventId: amount ${amount} sats');
+      }
+    } catch (e) {
+      print('[DataService ERROR] Error handling zap event: $e');
     }
   }
 
@@ -961,46 +1017,31 @@ class DataService {
   Future<void> _updateReactionSubscription() async =>
       await _subscribeToAllReactions();
 
-  void _startCacheCleanup() {
-    _cacheCleanupTimer?.cancel();
-    _cacheCleanupTimer = Timer.periodic(cacheCleanupInterval, (timer) async {
-      if (_isClosed) {
-        timer.cancel();
-        return;
+  Future<void> fetchZapsForEvents(List<String> eventIdsToFetch) async {
+    if (_isClosed) return;
+    final request = Request(generateUUID(), [
+      Filter(kinds: [9735], e: eventIdsToFetch, limit: 1000)
+    ]);
+    await _broadcastRequest(request);
+  }
+
+  Future<void> loadZapsFromCache() async {
+    if (zapBox == null || !zapBox!.isOpen) return;
+    try {
+      final allZaps = zapBox!.values.cast<ZapModel>().toList();
+      if (allZaps.isEmpty) return;
+
+      for (var zap in allZaps) {
+        zapMap.putIfAbsent(zap.targetEventId, () => []);
+        if (!zapMap[zap.targetEventId]!.any((z) => z.id == zap.id)) {
+          zapMap[zap.targetEventId]!.add(zap);
+        }
       }
-
-      final now = DateTime.now();
-      profileCache.removeWhere(
-          (key, cached) => now.difference(cached.fetchedAt) > profileCacheTTL);
-
-      reactionsMap.forEach((eventId, reactions) {
-        reactions.removeWhere(
-            (reaction) => now.difference(reaction.fetchedAt) > profileCacheTTL);
-      });
-
-      repliesMap.forEach((eventId, replies) {
-        replies.removeWhere(
-            (reply) => now.difference(reply.fetchedAt) > profileCacheTTL);
-      });
-
-      await Future.wait([
-        if (reactionsBox != null && reactionsBox!.isOpen)
-          reactionsBox!.deleteAll(reactionsBox!.keys.where((key) {
-            final reaction = reactionsBox!.get(key);
-            return reaction != null &&
-                now.difference(reaction.fetchedAt) > profileCacheTTL;
-          })),
-        if (repliesBox != null && repliesBox!.isOpen)
-          repliesBox!.deleteAll(repliesBox!.keys.where((key) {
-            final reply = repliesBox!.get(key);
-            return reply != null &&
-                now.difference(reply.fetchedAt) > profileCacheTTL;
-          })),
-      ]);
-
-      print('[DataService] Performed cache cleanup.');
-    });
-    print('[DataService] Started cache cleanup timer.');
+      print(
+          '[DataService] Zaps cache loaded with ${allZaps.length} zap receipts.');
+    } catch (e) {
+      print('[DataService ERROR] Error loading zaps from cache: $e');
+    }
   }
 
   Future<void> shareNote(String noteContent) async {
@@ -1347,7 +1388,8 @@ class DataService {
       await Future.wait([
         fetchReactionsForEvents(cachedEventIds),
         fetchRepliesForEvents(cachedEventIds),
-        fetchRepostsForEvents(cachedEventIds)
+        fetchRepostsForEvents(cachedEventIds),
+        fetchZapsForEvents(cachedEventIds),
       ]);
     } catch (e) {
       print('[DataService ERROR] Error loading notes from cache: $e');
@@ -1433,7 +1475,8 @@ class DataService {
       await Future.wait([
         fetchReactionsForEvents(newEventIds),
         fetchRepliesForEvents(newEventIds),
-        fetchRepostsForEvents(newEventIds)
+        fetchRepostsForEvents(newEventIds),
+        fetchZapsForEvents(newEventIds),
       ]);
       await _updateReactionSubscription();
     }
