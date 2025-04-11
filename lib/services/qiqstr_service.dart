@@ -3,11 +3,12 @@ import 'dart:convert';
 import 'dart:isolate';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import 'package:nostr/nostr.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'dart:typed_data';
 import '../models/user_model.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
@@ -16,6 +17,10 @@ import '../models/repost_model.dart';
 import '../models/following_model.dart';
 import '../models/zap_model.dart';
 import '../services/bolt11_decoder.dart';
+
+dynamic parseJson(String jsonString) {
+  return jsonDecode(jsonString);
+}
 
 enum DataType { Feed, Profile, Note }
 
@@ -36,19 +41,23 @@ class CachedProfile {
 class WebSocketManager {
   final List<String> relayUrls;
   final Map<String, WebSocket> _webSockets = {};
+
   final Duration connectionTimeout;
   bool _isClosed = false;
 
-  WebSocketManager(
-      {required this.relayUrls,
-      this.connectionTimeout = const Duration(seconds: 1)});
+  WebSocketManager({
+    required this.relayUrls,
+    this.connectionTimeout = const Duration(seconds: 5),
+  });
 
   List<WebSocket> get activeSockets => _webSockets.values.toList();
   bool get isConnected => _webSockets.isNotEmpty;
 
-  Future<void> connectRelays(List<String> targetNpubs,
-      {Function(dynamic event, String relayUrl)? onEvent,
-      Function(String relayUrl)? onDisconnected}) async {
+  Future<void> connectRelays(
+    List<String> targetNpubs, {
+    Function(dynamic event, String relayUrl)? onEvent,
+    Function(String relayUrl)? onDisconnected,
+  }) async {
     await Future.wait(relayUrls.map((relayUrl) async {
       if (_isClosed) return;
       if (!_webSockets.containsKey(relayUrl) ||
@@ -190,17 +199,18 @@ class DataService {
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
-  DataService(
-      {required this.npub,
-      required this.dataType,
-      this.onNewNote,
-      this.onReactionsUpdated,
-      this.onRepliesUpdated,
-      this.onReactionCountUpdated,
-      this.onReplyCountUpdated,
-      this.onRepostsUpdated,
-      this.onRepostCountUpdated,
-      this.onZapsUpdated});
+  DataService({
+    required this.npub,
+    required this.dataType,
+    this.onNewNote,
+    this.onReactionsUpdated,
+    this.onRepliesUpdated,
+    this.onReactionCountUpdated,
+    this.onReplyCountUpdated,
+    this.onRepostsUpdated,
+    this.onRepostCountUpdated,
+    this.onZapsUpdated,
+  });
 
   int get connectedRelaysCount => _socketManager.activeSockets.length;
 
@@ -244,7 +254,6 @@ class DataService {
       'wss://nos.lol',
       'wss://relay.primal.net',
       'wss://vitor.nostr1.com',
-      'wss://eu.purplerelay.com',
     ]);
 
     await Future.wait([
@@ -343,7 +352,7 @@ class DataService {
 
   static void _processCacheLoad(String data, SendPort sendPort) {
     try {
-      final List<dynamic> jsonData = json.decode(data);
+      final List<dynamic> jsonData = jsonDecode(data);
       final List<NoteModel> parsedNotes =
           jsonData.map((json) => NoteModel.fromJson(json)).toList();
       sendPort.send(IsolateMessage(MessageType.CacheLoad, parsedNotes));
@@ -354,7 +363,7 @@ class DataService {
 
   static void _processNewNotes(String data, SendPort sendPort) {
     try {
-      final List<dynamic> jsonData = json.decode(data);
+      final List<dynamic> jsonData = jsonDecode(data);
       final List<NoteModel> parsedNotes =
           jsonData.map((json) => NoteModel.fromJson(json)).toList();
       sendPort.send(IsolateMessage(MessageType.NewNotes, parsedNotes));
@@ -501,7 +510,7 @@ class DataService {
   Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {
     if (_isClosed) return;
     try {
-      final decodedEvent = jsonDecode(event);
+      final decodedEvent = await compute(parseJson, event as String);
       if (decodedEvent[0] == 'EVENT') {
         final Map<String, dynamic> eventData =
             decodedEvent[2] as Map<String, dynamic>;
@@ -909,7 +918,7 @@ class DataService {
     await _broadcastRequest(request);
 
     try {
-      return await completer.future.timeout(const Duration(seconds: 1),
+      return await completer.future.timeout(const Duration(seconds: 5),
           onTimeout: () => {
                 'name': 'Anonymous',
                 'profileImage': '',
@@ -946,7 +955,7 @@ class DataService {
     await Future.wait(limitedRelays.map((relayUrl) async {
       try {
         final ws = await WebSocket.connect(relayUrl)
-            .timeout(const Duration(seconds: 1));
+            .timeout(const Duration(seconds: 5));
         if (_isClosed) {
           await ws.close();
           return;
@@ -972,7 +981,7 @@ class DataService {
         });
 
         ws.add(request.serialize());
-        await completer.future.timeout(const Duration(seconds: 1),
+        await completer.future.timeout(const Duration(seconds: 5),
             onTimeout: () async {
           await ws.close();
         });
@@ -1560,7 +1569,7 @@ class DataService {
       }
     }));
 
-    return completer.future.timeout(const Duration(seconds: 1), onTimeout: () {
+    return completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
       return null;
     });
   }
