@@ -88,7 +88,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
 
     if (_title == null) {
       return Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
         child: Text(
           widget.url,
           style: const TextStyle(
@@ -100,58 +100,61 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
       );
     }
 
-    return GestureDetector(
-      onTap: () => _launchUrl(widget.url),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          alignment: Alignment.bottomLeft,
-          children: [
-            AspectRatio(
-              aspectRatio: 16 / 9,
-              child: _imageUrl != null
-                  ? Image.network(
-                      _imageUrl!,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      errorBuilder: (_, __, ___) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (mounted) {
-                            setState(() {
-                              _imageUrl = null;
-                            });
-                          }
-                        });
-                        return _placeholder();
-                      },
-                    )
-                  : _placeholder(),
-            ),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.8),
-                    Colors.transparent,
-                  ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+      child: GestureDetector(
+        onTap: () => _launchUrl(widget.url),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Stack(
+            alignment: Alignment.bottomLeft,
+            children: [
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: _imageUrl != null
+                    ? Image.network(
+                        _imageUrl!,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        errorBuilder: (_, __, ___) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) {
+                              setState(() {
+                                _imageUrl = null;
+                              });
+                            }
+                          });
+                          return _placeholder();
+                        },
+                      )
+                    : _placeholder(),
+              ),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.8),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+                child: Text(
+                  _title!,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white,
+                  ),
                 ),
               ),
-              child: Text(
-                _title!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.white,
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
