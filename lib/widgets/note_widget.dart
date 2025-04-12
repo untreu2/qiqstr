@@ -403,8 +403,10 @@ class _NoteWidgetState extends State<NoteWidget> {
                     (parsedContent['linkUrls'] as List).isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4.0),
-                    child: LinkPreviewWidget(
-                      linkUrls: parsedContent['linkUrls'] as List<String>,
+                    child: Column(
+                      children: (parsedContent['linkUrls'] as List<String>)
+                          .map((url) => LinkPreviewWidget(url: url))
+                          .toList(),
                     ),
                   ),
                 Padding(

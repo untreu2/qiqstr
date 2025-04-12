@@ -1,75 +1,179 @@
 import 'package:flutter/material.dart';
-import 'package:any_link_preview/any_link_preview.dart';
+import 'package:http/http.dart' as http;
+import 'package:html/parser.dart' as html_parser;
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class LinkPreviewWidget extends StatelessWidget {
-  final List<String> linkUrls;
+import '../models/link_preview_model.dart';
 
-  const LinkPreviewWidget({super.key, required this.linkUrls});
+class LinkPreviewWidget extends StatefulWidget {
+  final String url;
+
+  const LinkPreviewWidget({super.key, required this.url});
+
+  @override
+  State<LinkPreviewWidget> createState() => _LinkPreviewWidgetState();
+}
+
+class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
+  String? _title;
+  String? _imageUrl;
+  bool _isLoading = true;
+
+  late final Box<LinkPreviewModel> _cacheBox;
+
+  @override
+  void initState() {
+    super.initState();
+    _cacheBox = Hive.box<LinkPreviewModel>('link_preview_cache');
+    _loadPreview();
+  }
+
+  void _loadPreview() {
+    final cached = _cacheBox.get(widget.url);
+    if (cached != null) {
+      setState(() {
+        _title = cached.title;
+        _imageUrl = cached.imageUrl;
+        _isLoading = false;
+      });
+    } else {
+      _fetchPreviewData();
+    }
+  }
+
+  Future<void> _fetchPreviewData() async {
+    try {
+      final response = await http.get(Uri.parse(widget.url));
+      if (response.statusCode == 200) {
+        final document = html_parser.parse(response.body);
+
+        final metaOgTitle = document.querySelector('meta[property="og:title"]');
+        final metaTitle = document.querySelector('title');
+        final metaOgImage = document.querySelector('meta[property="og:image"]');
+
+        final String parsedTitle =
+            metaOgTitle?.attributes['content'] ?? metaTitle?.text ?? widget.url;
+        final String? parsedImage = metaOgImage?.attributes['content'];
+
+        if (!mounted) return;
+
+        final model =
+            LinkPreviewModel(title: parsedTitle, imageUrl: parsedImage);
+        _cacheBox.put(widget.url, model);
+
+        setState(() {
+          _title = parsedTitle;
+          _imageUrl = parsedImage;
+          _isLoading = false;
+        });
+      } else {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: linkUrls.map((url) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 12.0),
-          child: Center(
-            child: AnyLinkPreview(
-              link: url,
-              displayDirection: UIDirection.uiDirectionVertical,
-              cache: const Duration(days: 7),
-              backgroundColor: Colors.white,
-              borderRadius: 12.0,
-              errorWidget: GestureDetector(
-                onTap: () async {
-                  if (await canLaunchUrl(Uri.parse(url))) {
-                    await launchUrl(Uri.parse(url));
-                  }
-                },
-                child: Container(
-                  width: MediaQuery.of(context).size.width * 0.9,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12.0),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.grey.withOpacity(0.3),
-                        spreadRadius: 2,
-                        blurRadius: 5,
-                        offset: const Offset(0, 2),
+    if (_isLoading) {
+      return const Padding(
+        padding: EdgeInsets.all(12.0),
+        child: Center(child: CircularProgressIndicator(strokeWidth: 1.5)),
+      );
+    }
+
+    if (_title == null) {
+      return Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Text(
+          widget.url,
+          style: const TextStyle(
+            color: Colors.amberAccent,
+            fontSize: 14,
+            decoration: TextDecoration.underline,
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () => _launchUrl(widget.url),
+      child: _imageUrl != null
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                alignment: Alignment.bottomLeft,
+                children: [
+                  AspectRatio(
+                    aspectRatio: 16 / 9,
+                    child: Image.network(
+                      _imageUrl!,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: Colors.grey.shade900,
+                        child: const Center(
+                          child: Icon(Icons.link, color: Colors.white38),
+                        ),
                       ),
-                    ],
-                  ),
-                  padding: const EdgeInsets.all(12.0),
-                  alignment: Alignment.center,
-                  child: Text(
-                    url,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      decoration: TextDecoration.underline,
                     ),
                   ),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [
+                          Colors.black.withOpacity(0.8),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                    child: Text(
+                      _title!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : Container(
+              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(16),
+                border:
+                    Border.all(color: Colors.deepPurpleAccent.withOpacity(0.3)),
+              ),
+              child: Text(
+                _title!,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.white,
                 ),
               ),
-              bodyMaxLines: 3,
-              bodyTextOverflow: TextOverflow.ellipsis,
-              titleStyle: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                color: Colors.black,
-              ),
-              bodyStyle: const TextStyle(
-                fontSize: 12,
-                color: Colors.black54,
-              ),
             ),
-          ),
-        );
-      }).toList(),
     );
+  }
+
+  void _launchUrl(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 }

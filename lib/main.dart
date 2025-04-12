@@ -9,6 +9,7 @@ import 'models/repost_model.dart';
 import 'models/user_model.dart';
 import 'models/following_model.dart';
 import 'models/zap_model.dart';
+import 'models/link_preview_model.dart';
 import 'screens/login_page.dart';
 import 'screens/feed_page.dart';
 
@@ -24,6 +25,9 @@ Future<void> main() async {
     Hive.registerAdapter(UserModelAdapter());
     Hive.registerAdapter(FollowingModelAdapter());
     Hive.registerAdapter(ZapModelAdapter());
+    Hive.registerAdapter(LinkPreviewModelAdapter());
+
+    await Hive.openBox<LinkPreviewModel>('link_preview_cache');
 
     runApp(
       const ProviderScope(
