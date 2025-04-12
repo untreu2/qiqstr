@@ -8,7 +8,6 @@ import 'models/reply_model.dart';
 import 'models/repost_model.dart';
 import 'models/user_model.dart';
 import 'models/following_model.dart';
-import 'models/zap_model.dart';
 import 'models/link_preview_model.dart';
 import 'screens/login_page.dart';
 import 'screens/feed_page.dart';
@@ -24,7 +23,6 @@ Future<void> main() async {
     Hive.registerAdapter(RepostModelAdapter());
     Hive.registerAdapter(UserModelAdapter());
     Hive.registerAdapter(FollowingModelAdapter());
-    Hive.registerAdapter(ZapModelAdapter());
     Hive.registerAdapter(LinkPreviewModelAdapter());
 
     await Hive.openBox<LinkPreviewModel>('link_preview_cache');
@@ -109,13 +107,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         await Hive.openBox<ReactionModel>('reactions_Feed_$npub');
         await Hive.openBox<ReplyModel>('replies_Feed_$npub');
         await Hive.openBox<RepostModel>('reposts_Feed_$npub');
-        await Hive.openBox<ZapModel>('zaps_Feed_$npub');
-
         await Hive.openBox<NoteModel>('notes_Profile_$npub');
         await Hive.openBox<ReactionModel>('reactions_Profile_$npub');
         await Hive.openBox<ReplyModel>('replies_Profile_$npub');
         await Hive.openBox<RepostModel>('reposts_Profile_$npub');
-        await Hive.openBox<ZapModel>('zaps_Profile_$npub');
 
         await Hive.openBox<UserModel>('users');
         await Hive.openBox<FollowingModel>('followingBox');
