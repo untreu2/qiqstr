@@ -17,6 +17,8 @@ class _VPState extends State<VP> with SingleTickerProviderStateMixin {
   Duration _currentPosition = Duration.zero;
   Duration _totalDuration = Duration.zero;
 
+  static const double borderRadius = 16.0;
+
   @override
   void initState() {
     super.initState();
@@ -90,22 +92,25 @@ class _VPState extends State<VP> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return _controller.value.isInitialized
-        ? AspectRatio(
-            aspectRatio: _controller.value.aspectRatio,
-            child: GestureDetector(
-              onTap: () {
-                _togglePlayPause();
-                _toggleControlsVisibility();
-              },
-              child: Stack(
-                children: [
-                  VideoPlayer(_controller),
-                  AnimatedOpacity(
-                    opacity: _isControlsVisible ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 300),
-                    child: _buildControlsOverlay(),
-                  ),
-                ],
+        ? ClipRRect(
+            borderRadius: BorderRadius.circular(borderRadius),
+            child: AspectRatio(
+              aspectRatio: _controller.value.aspectRatio,
+              child: GestureDetector(
+                onTap: () {
+                  _togglePlayPause();
+                  _toggleControlsVisibility();
+                },
+                child: Stack(
+                  children: [
+                    VideoPlayer(_controller),
+                    AnimatedOpacity(
+                      opacity: _isControlsVisible ? 1.0 : 0.0,
+                      duration: const Duration(milliseconds: 300),
+                      child: _buildControlsOverlay(),
+                    ),
+                  ],
+                ),
               ),
             ),
           )

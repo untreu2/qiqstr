@@ -9,6 +9,10 @@ class MediaPreviewWidget extends StatelessWidget {
   const MediaPreviewWidget({Key? key, required this.mediaUrls})
       : super(key: key);
 
+  static const double borderRadius = 16.0;
+  static const EdgeInsets mediaPadding =
+      EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0);
+
   @override
   Widget build(BuildContext context) {
     if (mediaUrls.isEmpty) return const SizedBox.shrink();
@@ -21,7 +25,10 @@ class MediaPreviewWidget extends StatelessWidget {
     }).toList();
 
     if (videoUrls.isNotEmpty) {
-      return VP(url: videoUrls.first);
+      return Padding(
+        padding: mediaPadding,
+        child: VP(url: videoUrls.first),
+      );
     }
 
     final List<String> imageUrls = mediaUrls.where((url) {
@@ -37,114 +44,152 @@ class MediaPreviewWidget extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    if (imageUrls.length == 1) {
-      return GestureDetector(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => PhotoViewerWidget(
-                imageUrls: imageUrls,
-                initialIndex: 0,
-              ),
-            ),
-          );
-        },
-        child: CachedNetworkImage(
-          imageUrl: imageUrls.first,
-          placeholder: (context, url) =>
-              const Center(child: CircularProgressIndicator()),
-          errorWidget: (context, url, error) =>
-              const Icon(Icons.error, size: 20),
-          fit: BoxFit.fitWidth,
-          width: double.infinity,
-        ),
-      );
-    }
-
-    return _buildGrid(context, imageUrls);
-  }
-
-  Widget _buildGrid(BuildContext context, List<String> imageUrls) {
-    List<Widget> rows = [];
-
-    for (int i = 0; i < imageUrls.length; i += 2) {
-      if (i + 1 < imageUrls.length) {
-        rows.add(
-          Row(
-            children: [
-              Expanded(
-                child: _buildImageItem(
-                  context,
-                  imageUrls[i],
-                  i,
-                  imageUrls,
-                  isSquare: true,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: _buildImageItem(
-                  context,
-                  imageUrls[i + 1],
-                  i + 1,
-                  imageUrls,
-                  isSquare: true,
-                ),
-              ),
-            ],
-          ),
-        );
-      } else {
-        rows.add(
-          _buildImageItem(
-            context,
-            imageUrls[i],
-            i,
-            imageUrls,
-            isSquare: false,
-          ),
-        );
-      }
-      rows.add(const SizedBox(height: 4));
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: rows,
+    return Padding(
+      padding: mediaPadding,
+      child: _buildAdaptiveMediaGrid(context, imageUrls),
     );
   }
 
-  Widget _buildImageItem(
+  Widget _buildAdaptiveMediaGrid(BuildContext context, List<String> imageUrls) {
+    if (imageUrls.length == 1) {
+      return _buildRoundedImage(
+        context,
+        imageUrls[0],
+        0,
+        imageUrls,
+        useAspectRatio: false,
+        fit: BoxFit.contain,
+      );
+    } else if (imageUrls.length == 2) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Expanded(
+            child: _buildRoundedImage(
+              context,
+              imageUrls[0],
+              0,
+              imageUrls,
+              aspectRatio: 1,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _buildRoundedImage(
+              context,
+              imageUrls[1],
+              1,
+              imageUrls,
+              aspectRatio: 1,
+            ),
+          ),
+        ],
+      );
+    } else if (imageUrls.length == 3) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Expanded(
+            flex: 2,
+            child: _buildRoundedImage(
+              context,
+              imageUrls[0],
+              0,
+              imageUrls,
+              aspectRatio: 1,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            flex: 1,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildRoundedImage(
+                  context,
+                  imageUrls[1],
+                  1,
+                  imageUrls,
+                  aspectRatio: 1,
+                ),
+                const SizedBox(height: 4),
+                _buildRoundedImage(
+                  context,
+                  imageUrls[2],
+                  2,
+                  imageUrls,
+                  aspectRatio: 1,
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    } else {
+      int itemCount = imageUrls.length >= 4 ? 4 : imageUrls.length;
+
+      return GridView.builder(
+        shrinkWrap: true,
+        padding: EdgeInsets.zero,
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: itemCount,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          crossAxisSpacing: 4,
+          mainAxisSpacing: 4,
+        ),
+        itemBuilder: (context, index) {
+          return Stack(
+            children: [
+              _buildRoundedImage(
+                context,
+                imageUrls[index],
+                index,
+                imageUrls,
+                aspectRatio: 1,
+              ),
+              if (index == 3 && imageUrls.length > 4)
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(borderRadius),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '+${imageUrls.length - 4}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+            ],
+          );
+        },
+      );
+    }
+  }
+
+  Widget _buildRoundedImage(
     BuildContext context,
     String url,
     int index,
-    List<String> imageUrls, {
-    required bool isSquare,
+    List<String> allUrls, {
+    double? aspectRatio,
+    BoxFit fit = BoxFit.cover,
+    bool useAspectRatio = true,
   }) {
-    Widget imageWidget;
+    Widget image = CachedNetworkImage(
+      imageUrl: url,
+      fit: fit,
+      placeholder: (context, url) =>
+          const Center(child: CircularProgressIndicator()),
+      errorWidget: (context, url, error) => const Icon(Icons.error, size: 20),
+    );
 
-    if (isSquare) {
-      imageWidget = AspectRatio(
-        aspectRatio: 1,
-        child: CachedNetworkImage(
-          imageUrl: url,
-          placeholder: (context, url) =>
-              const Center(child: CircularProgressIndicator()),
-          errorWidget: (context, url, error) =>
-              const Icon(Icons.error, size: 20),
-          fit: BoxFit.cover,
-        ),
-      );
-    } else {
-      imageWidget = CachedNetworkImage(
-        imageUrl: url,
-        placeholder: (context, url) =>
-            const Center(child: CircularProgressIndicator()),
-        errorWidget: (context, url, error) => const Icon(Icons.error, size: 20),
-        fit: BoxFit.fitWidth,
-        width: double.infinity,
-      );
+    if (useAspectRatio && aspectRatio != null) {
+      image = AspectRatio(aspectRatio: aspectRatio, child: image);
     }
 
     return GestureDetector(
@@ -153,13 +198,16 @@ class MediaPreviewWidget extends StatelessWidget {
           context,
           MaterialPageRoute(
             builder: (_) => PhotoViewerWidget(
-              imageUrls: imageUrls,
+              imageUrls: allUrls,
               initialIndex: index,
             ),
           ),
         );
       },
-      child: imageWidget,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: image,
+      ),
     );
   }
 }
