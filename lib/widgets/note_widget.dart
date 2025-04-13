@@ -357,7 +357,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                       style: TextStyle(
                         fontSize: (parsedContent['text'] as String).length < 21
                             ? 20.0
-                            : 15.0,
+                            : 15.5,
                         color: Colors.white,
                       ),
                       linkStyle: const TextStyle(

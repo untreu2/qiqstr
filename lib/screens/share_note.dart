@@ -102,7 +102,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
           child: Column(
             children: [
               if (_mediaUrls.isNotEmpty)
-                Container(
+                SizedBox(
                   height: 170,
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
@@ -170,18 +170,44 @@ class _ShareNotePageState extends State<ShareNotePage> {
                   ),
                 ),
               ),
-              if (_isMediaUploading)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircularProgressIndicator(strokeWidth: 2),
-                      SizedBox(width: 8),
-                      Text("Uploading media..."),
-                    ],
-                  ),
-                ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: _isMediaUploading
+                    ? Container(
+                        key: const ValueKey('uploading'),
+                        margin: const EdgeInsets.symmetric(vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              "Uploading media...",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
             ],
           ),
         ),
