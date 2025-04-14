@@ -12,34 +12,68 @@ class SidebarWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Drawer(
+      backgroundColor: Colors.black,
       child: user == null
           ? const Center(child: CircularProgressIndicator())
           : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const SafeArea(
+                  bottom: false,
+                  child: SizedBox.shrink(),
+                ),
                 Container(
-                  color: Colors.black,
-                  child: UserAccountsDrawerHeader(
-                    decoration: const BoxDecoration(color: Colors.black),
-                    accountName: Text(
-                      user!.name,
-                      style: const TextStyle(color: Colors.white),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 28),
+                  decoration: const BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: Colors.white10, width: 0.5),
                     ),
-                    accountEmail: Text(
-                      user!.nip05.isNotEmpty ? user!.nip05 : '',
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    currentAccountPicture: CircleAvatar(
-                      backgroundImage: user!.profileImage.isNotEmpty
-                          ? CachedNetworkImageProvider(user!.profileImage)
-                          : const AssetImage('assets/default_profile.png')
-                              as ImageProvider,
-                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 30,
+                        backgroundImage: user!.profileImage.isNotEmpty
+                            ? CachedNetworkImageProvider(user!.profileImage)
+                            : const AssetImage('assets/default_profile.png')
+                                as ImageProvider,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              user!.name,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (user!.nip05.isNotEmpty)
+                              Text(
+                                '@${user!.nip05.split('@').last}',
+                                style: const TextStyle(
+                                  color: Color(0xFFBB86FC),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                          ],
+                        ),
+                      )
+                    ],
                   ),
                 ),
                 ListTile(
                   leading: const Icon(Icons.person, color: Colors.white),
-                  title: const Text('Profile',
-                      style: TextStyle(color: Colors.white)),
+                  title: const Text(
+                    'Profile',
+                    style: TextStyle(color: Colors.white, fontSize: 15),
+                  ),
                   onTap: () {
                     Navigator.push(
                       context,
@@ -51,8 +85,10 @@ class SidebarWidget extends StatelessWidget {
                 ),
                 ListTile(
                   leading: const Icon(Icons.logout, color: Colors.redAccent),
-                  title: const Text('Logout',
-                      style: TextStyle(color: Colors.redAccent)),
+                  title: const Text(
+                    'Logout',
+                    style: TextStyle(color: Colors.redAccent, fontSize: 15),
+                  ),
                   onTap: () {
                     Logout.performLogout(context);
                   },
