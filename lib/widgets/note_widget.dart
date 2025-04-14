@@ -189,8 +189,11 @@ class _NoteWidgetState extends State<NoteWidget> {
         }
 
         final bool hasDomain = name.contains('@');
-        final String namePart = hasDomain ? name.split('@').first : name;
-        final String domainPart = hasDomain ? '@' + name.split('@').last : '';
+        final String namePartRaw = hasDomain ? name.split('@').first : name;
+        final String namePart = namePartRaw.length > 21
+            ? '${namePartRaw.substring(0, 21)}...'
+            : namePartRaw;
+        final String domainPart = hasDomain ? '@${name.split('@').last}' : '';
 
         return Row(
           children: [
@@ -234,6 +237,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                         style: const TextStyle(
                           fontSize: 15.5,
                           fontWeight: FontWeight.bold,
+                          color: Colors.deepPurpleAccent,
                         ),
                       ),
                   ],
