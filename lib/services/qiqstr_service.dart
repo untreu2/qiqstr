@@ -525,8 +525,8 @@ class DataService {
         }
       }
       if (followingBox != null && followingBox!.isOpen) {
-        final model =
-            FollowingModel(pubkeys: newFollowing, updatedAt: DateTime.now());
+        final model = FollowingModel(
+            pubkeys: newFollowing, updatedAt: DateTime.now(), npub: npub);
         await followingBox!.put('following', model);
         print('[DataService] Following model updated with new event.');
       }
@@ -924,8 +924,8 @@ class DataService {
     following = following.toSet().toList();
 
     if (followingBox != null && followingBox!.isOpen) {
-      final newFollowingModel =
-          FollowingModel(pubkeys: following, updatedAt: DateTime.now());
+      final newFollowingModel = FollowingModel(
+          pubkeys: following, updatedAt: DateTime.now(), npub: npub);
       await followingBox!.put('following', newFollowingModel);
       print('[DataService] Updated Hive following model.');
     }

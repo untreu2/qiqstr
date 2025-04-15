@@ -10,8 +10,12 @@ class FollowingModel extends HiveObject {
   @HiveField(1)
   DateTime updatedAt;
 
+  @HiveField(2)
+  String npub;
+
   FollowingModel({
     required this.pubkeys,
     required this.updatedAt,
+    required this.npub,
   });
 }

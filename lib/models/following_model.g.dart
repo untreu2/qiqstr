@@ -19,17 +19,20 @@ class FollowingModelAdapter extends TypeAdapter<FollowingModel> {
     return FollowingModel(
       pubkeys: (fields[0] as List).cast<String>(),
       updatedAt: fields[1] as DateTime,
+      npub: fields[2] as String,
     );
   }
 
   @override
   void write(BinaryWriter writer, FollowingModel obj) {
     writer
-      ..writeByte(2)
+      ..writeByte(3)
       ..writeByte(0)
       ..write(obj.pubkeys)
       ..writeByte(1)
-      ..write(obj.updatedAt);
+      ..write(obj.updatedAt)
+      ..writeByte(2)
+      ..write(obj.npub);
   }
 
   @override
