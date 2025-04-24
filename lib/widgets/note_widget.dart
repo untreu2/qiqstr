@@ -16,11 +16,17 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 class NoteWidget extends StatefulWidget {
   final NoteModel note;
+  final int reactionCount;
+  final int replyCount;
+  final int repostCount;
   final DataService dataService;
 
   const NoteWidget({
     super.key,
     required this.note,
+    required this.reactionCount,
+    required this.replyCount,
+    required this.repostCount,
     required this.dataService,
   });
 
@@ -410,7 +416,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                               ),
                               const SizedBox(width: 4.0),
                               Text(
-                                widget.note.reactionCount.toString(),
+                                widget.reactionCount.toString(),
                                 style: const TextStyle(
                                     fontSize: 12.0, color: Colors.white),
                               ),
@@ -442,7 +448,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                               ),
                               const SizedBox(width: 4.0),
                               Text(
-                                widget.note.replyCount.toString(),
+                                widget.replyCount.toString(),
                                 style: const TextStyle(
                                     fontSize: 12.0, color: Colors.white),
                               ),
@@ -474,7 +480,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                               ),
                               const SizedBox(width: 4.0),
                               Text(
-                                widget.note.repostCount.toString(),
+                                widget.repostCount.toString(),
                                 style: const TextStyle(
                                     fontSize: 12.0, color: Colors.white),
                               ),
