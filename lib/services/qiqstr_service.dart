@@ -672,7 +672,9 @@ class DataService {
   }
 
   Future<void> _handleReplyEvent(
-      Map<String, dynamic> eventData, String parentEventId) async {
+    Map<String, dynamic> eventData,
+    String parentEventId,
+  ) async {
     if (_isClosed) return;
     try {
       final reply = ReplyModel.fromEvent(eventData);
@@ -685,9 +687,17 @@ class DataService {
         print(
             '[DataService] Reply updated for event $parentEventId: ${reply.content}');
         onReplyCountUpdated?.call(
-            parentEventId, repliesMap[parentEventId]!.length);
+          parentEventId,
+          repliesMap[parentEventId]!.length,
+        );
 
         await repliesBox?.put(reply.id, reply);
+
+        await Future.wait([
+          fetchReactionsForEvents([reply.id]),
+          fetchRepliesForEvents([reply.id]),
+          fetchRepostsForEvents([reply.id]),
+        ]);
       }
     } catch (e) {
       print('[DataService ERROR] Error handling reply event: $e');
@@ -1390,6 +1400,15 @@ class DataService {
       }
       print(
           '[DataService] Replies cache loaded with ${allReplies.length} replies.');
+
+      final replyIds = allReplies.map((r) => r.id).toList();
+      if (replyIds.isNotEmpty) {
+        await Future.wait([
+          fetchReactionsForEvents(replyIds),
+          fetchRepliesForEvents(replyIds),
+          fetchRepostsForEvents(replyIds),
+        ]);
+      }
     } catch (e) {
       print('[DataService ERROR] Error loading replies from cache: $e');
     }
