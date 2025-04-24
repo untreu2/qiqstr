@@ -28,6 +28,15 @@ class ReplyModel extends HiveObject {
   @HiveField(7)
   int depth;
 
+  @HiveField(8)
+  int reactionCount;
+
+  @HiveField(9)
+  int replyCount;
+
+  @HiveField(10)
+  int repostCount;
+
   ReplyModel({
     required this.id,
     required this.author,
@@ -37,6 +46,9 @@ class ReplyModel extends HiveObject {
     required this.fetchedAt,
     required this.rootEventId,
     required this.depth,
+    this.reactionCount = 0,
+    this.replyCount = 0,
+    this.repostCount = 0,
   });
 
   factory ReplyModel.fromEvent(Map<String, dynamic> eventData) {
@@ -64,11 +76,11 @@ class ReplyModel extends HiveObject {
     int depth = (rootId == parentId) ? 1 : 0;
 
     return ReplyModel(
-      id: eventData['id'] as String,
-      author: eventData['pubkey'] as String,
-      content: eventData['content'] as String,
-      timestamp: DateTime.fromMillisecondsSinceEpoch(
-          (eventData['created_at'] as int) * 1000),
+      id: eventData['id'],
+      author: eventData['pubkey'],
+      content: eventData['content'],
+      timestamp:
+          DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000),
       parentEventId: parentId,
       rootEventId: rootId,
       depth: depth,
@@ -86,6 +98,9 @@ class ReplyModel extends HiveObject {
       fetchedAt: DateTime.parse(json['fetchedAt']),
       rootEventId: json['rootEventId'],
       depth: json['depth'],
+      reactionCount: json['reactionCount'] ?? 0,
+      replyCount: json['replyCount'] ?? 0,
+      repostCount: json['repostCount'] ?? 0,
     );
   }
 
@@ -99,6 +114,9 @@ class ReplyModel extends HiveObject {
       'fetchedAt': fetchedAt.toIso8601String(),
       'rootEventId': rootEventId,
       'depth': depth,
+      'reactionCount': reactionCount,
+      'replyCount': replyCount,
+      'repostCount': repostCount,
     };
   }
 }

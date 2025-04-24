@@ -26,10 +26,16 @@ class NoteModel extends HiveObject {
   final DateTime? repostTimestamp;
 
   @HiveField(7)
-  int repostCount;
+  String? rawWs;
 
   @HiveField(8)
-  final String? rawWs;
+  int reactionCount;
+
+  @HiveField(9)
+  int replyCount;
+
+  @HiveField(10)
+  int repostCount;
 
   NoteModel({
     required this.id,
@@ -39,25 +45,27 @@ class NoteModel extends HiveObject {
     this.isRepost = false,
     this.repostedBy,
     this.repostTimestamp,
-    this.repostCount = 0,
     this.rawWs,
+    this.reactionCount = 0,
+    this.replyCount = 0,
+    this.repostCount = 0,
   });
 
   factory NoteModel.fromJson(Map<String, dynamic> json) {
     return NoteModel(
-      id: json['id'] as String,
-      content: json['content'] as String,
-      author: json['author'] as String,
-      timestamp: DateTime.fromMillisecondsSinceEpoch(
-          (json['timestamp'] as int) * 1000),
-      isRepost: json['isRepost'] as bool? ?? false,
-      repostedBy: json['repostedBy'] as String?,
+      id: json['id'],
+      content: json['content'],
+      author: json['author'],
+      timestamp: DateTime.fromMillisecondsSinceEpoch(json['timestamp'] * 1000),
+      isRepost: json['isRepost'] ?? false,
+      repostedBy: json['repostedBy'],
       repostTimestamp: json['repostTimestamp'] != null
-          ? DateTime.fromMillisecondsSinceEpoch(
-              (json['repostTimestamp'] as int) * 1000)
+          ? DateTime.fromMillisecondsSinceEpoch(json['repostTimestamp'] * 1000)
           : null,
-      repostCount: json['repostCount'] as int? ?? 0,
-      rawWs: json['rawWs'] as String?,
+      rawWs: json['rawWs'],
+      reactionCount: json['reactionCount'] ?? 0,
+      replyCount: json['replyCount'] ?? 0,
+      repostCount: json['repostCount'] ?? 0,
     );
   }
 
@@ -69,11 +77,11 @@ class NoteModel extends HiveObject {
       'timestamp': timestamp.millisecondsSinceEpoch ~/ 1000,
       'isRepost': isRepost,
       'repostedBy': repostedBy,
-      'repostTimestamp': repostTimestamp != null
-          ? repostTimestamp!.millisecondsSinceEpoch ~/ 1000
-          : null,
-      'repostCount': repostCount,
+      'repostTimestamp': repostTimestamp!.millisecondsSinceEpoch ~/ 1000,
       'rawWs': rawWs,
+      'reactionCount': reactionCount,
+      'replyCount': replyCount,
+      'repostCount': repostCount,
     };
   }
 }

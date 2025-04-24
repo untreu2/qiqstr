@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:isolate';
 import 'dart:io';
 import 'dart:math';
+import 'package:collection/collection.dart';
 import 'package:hive/hive.dart';
 import 'package:nostr/nostr.dart';
 import 'package:uuid/uuid.dart';
@@ -139,10 +140,7 @@ class DataService {
   final Function(NoteModel)? onNewNote;
   final Function(String, List<ReactionModel>)? onReactionsUpdated;
   final Function(String, List<ReplyModel>)? onRepliesUpdated;
-  final Function(String, int)? onReactionCountUpdated;
-  final Function(String, int)? onReplyCountUpdated;
   final Function(String, List<RepostModel>)? onRepostsUpdated;
-  final Function(String, int)? onRepostCountUpdated;
 
   List<NoteModel> notes = [];
   final Set<String> eventIds = {};
@@ -185,16 +183,14 @@ class DataService {
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
-  DataService(
-      {required this.npub,
-      required this.dataType,
-      this.onNewNote,
-      this.onReactionsUpdated,
-      this.onRepliesUpdated,
-      this.onReactionCountUpdated,
-      this.onReplyCountUpdated,
-      this.onRepostsUpdated,
-      this.onRepostCountUpdated});
+  DataService({
+    required this.npub,
+    required this.dataType,
+    this.onNewNote,
+    this.onReactionsUpdated,
+    this.onRepliesUpdated,
+    this.onRepostsUpdated,
+  });
 
   int get connectedRelaysCount => _socketManager.activeSockets.length;
 
@@ -644,7 +640,8 @@ class DataService {
     if (_isClosed) return;
     try {
       String? targetEventId;
-      for (var tag in eventData['tags']) {
+      final tags = eventData['tags'] as List<dynamic>? ?? [];
+      for (final tag in tags) {
         if (tag is List && tag.length >= 2 && tag[0] == 'e') {
           targetEventId = tag[1] as String;
           break;
@@ -653,18 +650,34 @@ class DataService {
       if (targetEventId == null) return;
 
       final reaction = ReactionModel.fromEvent(eventData);
-      reactionsMap.putIfAbsent(targetEventId, () => []);
+      reactionsMap.putIfAbsent(targetEventId, () => <ReactionModel>[]);
+      final list = reactionsMap[targetEventId]!;
+      if (list.any((r) => r.id == reaction.id)) return;
 
-      if (!reactionsMap[targetEventId]!.any((r) => r.id == reaction.id)) {
-        reactionsMap[targetEventId]!.add(reaction);
-        onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
+      list.add(reaction);
+      onReactionsUpdated?.call(targetEventId, List.unmodifiable(list));
+      await reactionsBox?.put(reaction.id, reaction);
 
-        print(
-            '[DataService] Reaction updated for event $targetEventId: ${reaction.content}');
-        onReactionCountUpdated?.call(
-            targetEventId, reactionsMap[targetEventId]!.length);
-
-        await reactionsBox?.put(reaction.id, reaction);
+      final noteIndex = notes.indexWhere((n) => n.id == targetEventId);
+      if (noteIndex != -1) {
+        final note = notes[noteIndex];
+        note.reactionCount = note.reactionCount + 1;
+        await note.save();
+        return;
+      }
+      ReplyModel? foundReply;
+      for (final replies in repliesMap.values) {
+        for (final r in replies) {
+          if (r.id == targetEventId) {
+            foundReply = r;
+            break;
+          }
+        }
+        if (foundReply != null) break;
+      }
+      if (foundReply != null) {
+        foundReply.reactionCount = foundReply.reactionCount + 1;
+        await foundReply.save();
       }
     } catch (e) {
       print('[DataService ERROR] Error handling reaction event: $e');
@@ -672,27 +685,53 @@ class DataService {
   }
 
   Future<void> _handleReplyEvent(
-      Map<String, dynamic> eventData, String parentEventId) async {
-    final reply = ReplyModel.fromEvent(eventData);
+    Map<String, dynamic> eventData,
+    String parentEventId,
+  ) async {
+    if (_isClosed) return;
+    try {
+      final reply = ReplyModel.fromEvent(eventData);
+      if (reply.depth == 0) {
+        reply.depth = calculateReplyDepth(reply, repliesMap);
+      }
 
-    if (reply.depth == 0) {
-      reply.depth = calculateReplyDepth(reply, repliesMap);
-    }
+      repliesMap.putIfAbsent(reply.rootEventId, () => <ReplyModel>[]);
+      final rootList = repliesMap[reply.rootEventId]!;
+      if (rootList.any((r) => r.id == reply.id)) return;
 
-    repliesMap.putIfAbsent(reply.rootEventId, () => []);
-    if (!repliesMap[reply.rootEventId]!.any((r) => r.id == reply.id)) {
-      repliesMap[reply.rootEventId]!.add(reply);
-      onRepliesUpdated?.call(reply.rootEventId, repliesMap[reply.rootEventId]!);
-      onReplyCountUpdated?.call(
-          reply.rootEventId, repliesMap[reply.rootEventId]!.length);
-
+      rootList.add(reply);
+      onRepliesUpdated?.call(reply.rootEventId, List.unmodifiable(rootList));
       await repliesBox?.put(reply.id, reply);
+
+      final noteIndex = notes.indexWhere((n) => n.id == reply.rootEventId);
+      if (noteIndex != -1) {
+        final note = notes[noteIndex];
+        note.replyCount = note.replyCount + 1;
+        await note.save();
+      } else {
+        ReplyModel? parentReply;
+        for (final replies in repliesMap.values) {
+          for (final r in replies) {
+            if (r.id == reply.rootEventId) {
+              parentReply = r;
+              break;
+            }
+          }
+          if (parentReply != null) break;
+        }
+        if (parentReply != null) {
+          parentReply.replyCount = parentReply.replyCount + 1;
+          await parentReply.save();
+        }
+      }
 
       await Future.wait([
         fetchReactionsForEvents([reply.id]),
         fetchRepliesForEvents([reply.id]),
         fetchRepostsForEvents([reply.id]),
       ]);
+    } catch (e) {
+      print('[DataService ERROR] Error handling reply event: $e');
     }
   }
 
@@ -700,27 +739,44 @@ class DataService {
     if (_isClosed) return;
     try {
       String? originalNoteId;
-      for (var tag in eventData['tags']) {
+      final tags = eventData['tags'] as List<dynamic>? ?? [];
+      for (final tag in tags) {
         if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
-          originalNoteId = tag[1] as String?;
+          originalNoteId = tag[1] as String;
           break;
         }
       }
       if (originalNoteId == null) return;
 
       final repost = RepostModel.fromEvent(eventData, originalNoteId);
-      repostsMap.putIfAbsent(originalNoteId, () => []);
+      repostsMap.putIfAbsent(originalNoteId, () => <RepostModel>[]);
+      final list = repostsMap[originalNoteId]!;
+      if (list.any((r) => r.id == repost.id)) return;
 
-      if (!repostsMap[originalNoteId]!.any((r) => r.id == repost.id)) {
-        repostsMap[originalNoteId]!.add(repost);
-        onRepostsUpdated?.call(originalNoteId, repostsMap[originalNoteId]!);
+      list.add(repost);
+      onRepostsUpdated?.call(originalNoteId, List.unmodifiable(list));
+      await repostsBox?.put(repost.id, repost);
 
-        print(
-            '[DataService] Repost updated for event $originalNoteId: ${repost.repostedBy}');
-        onRepostCountUpdated?.call(
-            originalNoteId, repostsMap[originalNoteId]!.length);
-
-        await repostsBox?.put(repost.id, repost);
+      final noteIndex = notes.indexWhere((n) => n.id == originalNoteId);
+      if (noteIndex != -1) {
+        final note = notes[noteIndex];
+        note.repostCount = note.repostCount + 1;
+        await note.save();
+        return;
+      }
+      ReplyModel? foundReply;
+      for (final replies in repliesMap.values) {
+        for (final r in replies) {
+          if (r.id == originalNoteId) {
+            foundReply = r;
+            break;
+          }
+        }
+        if (foundReply != null) break;
+      }
+      if (foundReply != null) {
+        foundReply.repostCount = foundReply.repostCount + 1;
+        await foundReply.save();
       }
     } catch (e) {
       print('[DataService ERROR] Error handling repost event: $e');
@@ -1193,7 +1249,9 @@ class DataService {
   }
 
   Future<void> sendReaction(
-      String targetEventId, String reactionContent) async {
+    String targetEventId,
+    String reactionContent,
+  ) async {
     if (_isClosed) return;
     try {
       final privateKey = await _secureStorage.read(key: 'privateKey');
@@ -1209,30 +1267,45 @@ class DataService {
         content: reactionContent,
         privkey: privateKey,
       );
-      final serializedEvent = event.serialize();
-      await _socketManager.broadcast(serializedEvent);
+      final serialized = event.serialize();
+      await _socketManager.broadcast(serialized);
 
       final reaction = ReactionModel.fromEvent(event.toJson());
-      reactionsMap.putIfAbsent(targetEventId, () => []);
-      if (!reactionsMap[targetEventId]!.any((r) => r.id == reaction.id)) {
-        reactionsMap[targetEventId]!.add(reaction);
-        onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
-        onReactionCountUpdated?.call(
-            targetEventId, reactionsMap[targetEventId]!.length);
-        if (reactionsBox != null && reactionsBox!.isOpen) {
-          await reactionsBox!.put(reaction.id, reaction);
+      reactionsMap.putIfAbsent(targetEventId, () => <ReactionModel>[]);
+      final list = reactionsMap[targetEventId]!;
+      if (!list.any((r) => r.id == reaction.id)) {
+        list.add(reaction);
+        onReactionsUpdated?.call(targetEventId, List.unmodifiable(list));
+        await reactionsBox?.put(reaction.id, reaction);
+
+        final noteIndex = notes.indexWhere((n) => n.id == targetEventId);
+        if (noteIndex != -1) {
+          final note = notes[noteIndex];
+          note.reactionCount++;
+          await note.save();
+        } else {
+          ReplyModel? foundReply;
+          for (final replies in repliesMap.values) {
+            foundReply = replies.firstWhereOrNull((r) => r.id == targetEventId);
+            if (foundReply != null) break;
+          }
+          if (foundReply != null) {
+            foundReply.reactionCount++;
+            await foundReply.save();
+          }
         }
       }
-      print('[DataService] Reaction sent and added to cache.');
     } catch (e) {
       print('[DataService ERROR] Error sending reaction: $e');
-      throw e;
+      rethrow;
     }
   }
 
-  Future<void> sendReply(String parentEventId, String replyContent) async {
+  Future<void> sendReply(
+    String parentEventId,
+    String replyContent,
+  ) async {
     if (_isClosed) return;
-
     try {
       final privateKey = await _secureStorage.read(key: 'privateKey');
       if (privateKey == null || privateKey.isEmpty) {
@@ -1242,48 +1315,53 @@ class DataService {
       String rootEventId = parentEventId;
       int replyDepth = 0;
       String? parentAuthor;
-
       try {
         final parentReply = repliesMap.values
             .expand((list) => list)
             .firstWhere((r) => r.id == parentEventId);
-
         rootEventId = parentReply.rootEventId;
         replyDepth = parentReply.depth;
         parentAuthor = parentReply.author;
       } catch (_) {
-        final parentNote = notes.firstWhere((note) => note.id == parentEventId,
-            orElse: () => throw Exception('Parent event not found.'));
+        final parentNote = notes.firstWhere((n) => n.id == parentEventId);
         parentAuthor = parentNote.author;
       }
 
       final tags = <List<String>>[
         ['e', rootEventId, '', 'root'],
         ['e', parentEventId, '', 'reply'],
-        ['p', parentAuthor]
+        ['p', parentAuthor],
       ];
-
       final event = Event.from(
         kind: 1,
         tags: tags,
         content: replyContent,
         privkey: privateKey,
       );
-
-      final serializedEvent = event.serialize();
-      await _socketManager.broadcast(serializedEvent);
+      final serialized = event.serialize();
+      await _socketManager.broadcast(serialized);
 
       final reply = ReplyModel.fromEvent(event.toJson());
       reply.depth = replyDepth + 1;
-
-      repliesMap.putIfAbsent(reply.rootEventId, () => []);
-      if (!repliesMap[reply.rootEventId]!.any((r) => r.id == reply.id)) {
-        repliesMap[reply.rootEventId]!.add(reply);
-        onRepliesUpdated?.call(
-            reply.rootEventId, repliesMap[reply.rootEventId]!);
-        onReplyCountUpdated?.call(
-            reply.rootEventId, repliesMap[reply.rootEventId]!.length);
+      repliesMap.putIfAbsent(reply.rootEventId, () => <ReplyModel>[]);
+      final rootList = repliesMap[reply.rootEventId]!;
+      if (!rootList.any((r) => r.id == reply.id)) {
+        rootList.add(reply);
+        onRepliesUpdated?.call(reply.rootEventId, List.unmodifiable(rootList));
         await repliesBox?.put(reply.id, reply);
+
+        final noteIndex = notes.indexWhere((n) => n.id == reply.rootEventId);
+        if (noteIndex != -1) {
+          final note = notes[noteIndex];
+          note.replyCount++;
+          await note.save();
+        } else {
+          final parentReply = repliesMap.values
+              .expand((list) => list)
+              .firstWhere((r) => r.id == reply.rootEventId);
+          parentReply.replyCount++;
+          await parentReply.save();
+        }
 
         await Future.wait([
           fetchReactionsForEvents([reply.id]),
@@ -1291,11 +1369,9 @@ class DataService {
           fetchRepostsForEvents([reply.id]),
         ]);
       }
-
-      print('[DataService] Reply sent and added to cache.');
     } catch (e) {
       print('[DataService ERROR] Error sending reply: $e');
-      throw e;
+      rethrow;
     }
   }
 
@@ -1310,9 +1386,10 @@ class DataService {
       if (content == null || content.isEmpty) {
         throw Exception('Raw event data is missing for this note.');
       }
+
       final tags = [
         ['e', note.id],
-        ['p', note.author]
+        ['p', note.author],
       ];
       final event = Event.from(
         kind: 6,
@@ -1320,23 +1397,23 @@ class DataService {
         content: content,
         privkey: privateKey,
       );
-      final serializedEvent = event.serialize();
-      await _socketManager.broadcast(serializedEvent);
+      final serialized = event.serialize();
+      await _socketManager.broadcast(serialized);
 
       final repost = RepostModel.fromEvent(event.toJson(), note.id);
-      repostsMap.putIfAbsent(note.id, () => []);
-      if (!repostsMap[note.id]!.any((r) => r.id == repost.id)) {
-        repostsMap[note.id]!.add(repost);
-        onRepostsUpdated?.call(note.id, repostsMap[note.id]!);
-        onRepostCountUpdated?.call(note.id, repostsMap[note.id]!.length);
-        if (repostsBox != null && repostsBox!.isOpen) {
-          await repostsBox!.put(repost.id, repost);
-        }
+      repostsMap.putIfAbsent(note.id, () => <RepostModel>[]);
+      final list = repostsMap[note.id]!;
+      if (!list.any((r) => r.id == repost.id)) {
+        list.add(repost);
+        onRepostsUpdated?.call(note.id, List.unmodifiable(list));
+        await repostsBox?.put(repost.id, repost);
+
+        note.repostCount++;
+        await note.save();
       }
-      print('[DataService] Repost sent and added to cache.');
     } catch (e) {
       print('[DataService ERROR] Error sending repost: $e');
-      throw e;
+      rethrow;
     }
   }
 
