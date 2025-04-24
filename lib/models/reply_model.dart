@@ -22,6 +22,12 @@ class ReplyModel extends HiveObject {
   @HiveField(5)
   final DateTime fetchedAt;
 
+  @HiveField(6)
+  final String rootEventId;
+
+  @HiveField(7)
+  int depth;
+
   ReplyModel({
     required this.id,
     required this.author,
@@ -29,25 +35,43 @@ class ReplyModel extends HiveObject {
     required this.timestamp,
     required this.parentEventId,
     required this.fetchedAt,
+    required this.rootEventId,
+    required this.depth,
   });
 
   factory ReplyModel.fromEvent(Map<String, dynamic> eventData) {
-    String? parentEventId;
-    for (var tag in eventData['tags']) {
-      if (tag.length >= 2 && tag[0] == 'e') {
-        parentEventId = tag[1] as String;
-        break;
+    String? parentId;
+    String? rootId;
+
+    final tags = eventData['tags'] as List<dynamic>;
+
+    for (var tag in tags) {
+      if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
+        if (tag.length >= 4 && tag[3] == 'root') {
+          rootId = tag[1] as String;
+        } else {
+          parentId ??= tag[1] as String;
+        }
       }
     }
-    if (parentEventId == null || parentEventId.isEmpty) {
-      throw Exception('parentEventId not found for reply.');
+
+    if (parentId == null) {
+      throw Exception('parentEventId not found in event tags.');
     }
+
+    rootId ??= parentId;
+
+    int depth = (rootId == parentId) ? 1 : 0;
+
     return ReplyModel(
       id: eventData['id'] as String,
       author: eventData['pubkey'] as String,
       content: eventData['content'] as String,
-      timestamp: DateTime.fromMillisecondsSinceEpoch((eventData['created_at'] as int) * 1000),
-      parentEventId: parentEventId,
+      timestamp: DateTime.fromMillisecondsSinceEpoch(
+          (eventData['created_at'] as int) * 1000),
+      parentEventId: parentId,
+      rootEventId: rootId,
+      depth: depth,
       fetchedAt: DateTime.now(),
     );
   }
@@ -60,6 +84,8 @@ class ReplyModel extends HiveObject {
       timestamp: DateTime.parse(json['timestamp']),
       parentEventId: json['parentEventId'],
       fetchedAt: DateTime.parse(json['fetchedAt']),
+      rootEventId: json['rootEventId'],
+      depth: json['depth'],
     );
   }
 
@@ -71,6 +97,8 @@ class ReplyModel extends HiveObject {
       'timestamp': timestamp.toIso8601String(),
       'parentEventId': parentEventId,
       'fetchedAt': fetchedAt.toIso8601String(),
+      'rootEventId': rootEventId,
+      'depth': depth,
     };
   }
 }
