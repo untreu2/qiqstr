@@ -1,6 +1,5 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/widgets/sidebar_widget.dart';
@@ -16,31 +15,19 @@ class FeedPage extends StatefulWidget {
   _FeedPageState createState() => _FeedPageState();
 }
 
-class _FeedPageState extends State<FeedPage>
-    with SingleTickerProviderStateMixin {
+class _FeedPageState extends State<FeedPage> {
   UserModel? user;
   late DataService dataService;
   bool isLoading = true;
   String? errorMessage;
 
   final ScrollController _scrollController = ScrollController();
-  bool _fabVisible = true;
 
   @override
   void initState() {
     super.initState();
     dataService = DataService(npub: widget.npub, dataType: DataType.Feed);
     _loadUserProfile();
-
-    _scrollController.addListener(() {
-      if (_scrollController.position.userScrollDirection ==
-          ScrollDirection.reverse) {
-        if (_fabVisible) setState(() => _fabVisible = false);
-      } else if (_scrollController.position.userScrollDirection ==
-          ScrollDirection.forward) {
-        if (!_fabVisible) setState(() => _fabVisible = true);
-      }
-    });
   }
 
   Future<void> _loadUserProfile() async {
@@ -122,37 +109,27 @@ class _FeedPageState extends State<FeedPage>
       backgroundColor: Colors.black,
       drawer: SidebarWidget(user: user),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      floatingActionButton: AnimatedSlide(
-        offset: _fabVisible ? Offset.zero : const Offset(0, 2),
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOut,
-        child: AnimatedOpacity(
-          opacity: _fabVisible ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeInOut,
-          child: Padding(
-            padding: const EdgeInsets.only(right: 12, bottom: 12),
-            child: ClipOval(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    shape: BoxShape.circle,
-                  ),
-                  child: IconButton(
-                    onPressed: _navigateToShareNotePage,
-                    icon: SvgPicture.asset(
-                      'assets/new_post_button.svg',
-                      color: Colors.white,
-                      width: 24,
-                      height: 24,
-                    ),
-                    tooltip: 'New Note',
-                  ),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(right: 12, bottom: 12),
+        child: ClipOval(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            child: Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.5),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                onPressed: _navigateToShareNotePage,
+                icon: SvgPicture.asset(
+                  'assets/new_post_button.svg',
+                  color: Colors.white,
+                  width: 24,
+                  height: 24,
                 ),
+                tooltip: 'New Note',
               ),
             ),
           ),
