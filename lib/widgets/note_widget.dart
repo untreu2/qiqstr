@@ -182,20 +182,21 @@ class _NoteWidgetState extends State<NoteWidget> {
       future: widget.dataService.getCachedUserProfile(npub),
       builder: (context, snapshot) {
         String name = 'Anonymous';
+        String nip05 = '';
         String profileImage = '';
+
         if (snapshot.hasData) {
-          name = snapshot.data!['name'] ?? 'Anonymous';
-          profileImage = snapshot.data!['profileImage'] ?? '';
+          final user = UserModel.fromCachedProfile(npub, snapshot.data!);
+          name = user.name;
+          nip05 = user.nip05;
+          profileImage = user.profileImage;
         }
 
-        final bool hasDomain = name.contains('@');
-        final String namePartRaw = hasDomain ? name.split('@').first : name;
-        final String namePart = namePartRaw.length > 21
-            ? '${namePartRaw.substring(0, 21)}...'
-            : namePartRaw;
-        final String domainPart = hasDomain ? '@${name.split('@').last}' : '';
+        final truncatedName =
+            name.length > 25 ? '${name.substring(0, 25)}...' : name;
 
         return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             GestureDetector(
               onTap: () => _navigateToProfile(npub),
@@ -220,28 +221,26 @@ class _NoteWidgetState extends State<NoteWidget> {
             const SizedBox(width: 8),
             GestureDetector(
               onTap: () => _navigateToProfile(npub),
-              child: Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: namePart,
-                      style: const TextStyle(
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    truncatedName,
+                    style: const TextStyle(
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  if (nip05.isNotEmpty)
+                    Text(
+                      nip05,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[400],
                       ),
                     ),
-                    if (domainPart.isNotEmpty)
-                      TextSpan(
-                        text: domainPart,
-                        style: const TextStyle(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.deepPurpleAccent,
-                        ),
-                      ),
-                  ],
-                ),
+                ],
               ),
             ),
           ],
@@ -494,8 +493,8 @@ class _NoteWidgetState extends State<NoteWidget> {
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 6.0),
                   child: Divider(
-                    height: 1.0,
-                    thickness: 1.0,
+                    height: 4.0,
+                    thickness: 0.5,
                     color: Colors.white24,
                   ),
                 ),
