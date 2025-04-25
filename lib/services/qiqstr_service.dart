@@ -672,35 +672,27 @@ class DataService {
   }
 
   Future<void> _handleReplyEvent(
-    Map<String, dynamic> eventData,
-    String parentEventId,
-  ) async {
-    if (_isClosed) return;
-    try {
-      final reply = ReplyModel.fromEvent(eventData);
-      repliesMap.putIfAbsent(parentEventId, () => []);
+      Map<String, dynamic> eventData, String parentEventId) async {
+    final reply = ReplyModel.fromEvent(eventData);
 
-      if (!repliesMap[parentEventId]!.any((r) => r.id == reply.id)) {
-        repliesMap[parentEventId]!.add(reply);
-        onRepliesUpdated?.call(parentEventId, repliesMap[parentEventId]!);
+    if (reply.depth == 0) {
+      reply.depth = calculateReplyDepth(reply, repliesMap);
+    }
 
-        print(
-            '[DataService] Reply updated for event $parentEventId: ${reply.content}');
-        onReplyCountUpdated?.call(
-          parentEventId,
-          repliesMap[parentEventId]!.length,
-        );
+    repliesMap.putIfAbsent(reply.rootEventId, () => []);
+    if (!repliesMap[reply.rootEventId]!.any((r) => r.id == reply.id)) {
+      repliesMap[reply.rootEventId]!.add(reply);
+      onRepliesUpdated?.call(reply.rootEventId, repliesMap[reply.rootEventId]!);
+      onReplyCountUpdated?.call(
+          reply.rootEventId, repliesMap[reply.rootEventId]!.length);
 
-        await repliesBox?.put(reply.id, reply);
+      await repliesBox?.put(reply.id, reply);
 
-        await Future.wait([
-          fetchReactionsForEvents([reply.id]),
-          fetchRepliesForEvents([reply.id]),
-          fetchRepostsForEvents([reply.id]),
-        ]);
-      }
-    } catch (e) {
-      print('[DataService ERROR] Error handling reply event: $e');
+      await Future.wait([
+        fetchReactionsForEvents([reply.id]),
+        fetchRepliesForEvents([reply.id]),
+        fetchRepostsForEvents([reply.id]),
+      ]);
     }
   }
 
@@ -1240,39 +1232,66 @@ class DataService {
 
   Future<void> sendReply(String parentEventId, String replyContent) async {
     if (_isClosed) return;
+
     try {
       final privateKey = await _secureStorage.read(key: 'privateKey');
       if (privateKey == null || privateKey.isEmpty) {
         throw Exception('Private key not found.');
       }
-      String noteAuthor = notes
-          .firstWhere((note) => note.id == parentEventId,
-              orElse: () => throw Exception('Event not found for reply.'))
-          .author;
+
+      String rootEventId = parentEventId;
+      int replyDepth = 0;
+      String? parentAuthor;
+
+      try {
+        final parentReply = repliesMap.values
+            .expand((list) => list)
+            .firstWhere((r) => r.id == parentEventId);
+
+        rootEventId = parentReply.rootEventId;
+        replyDepth = parentReply.depth;
+        parentAuthor = parentReply.author;
+      } catch (_) {
+        final parentNote = notes.firstWhere((note) => note.id == parentEventId,
+            orElse: () => throw Exception('Parent event not found.'));
+        parentAuthor = parentNote.author;
+      }
+
+      final tags = <List<String>>[
+        ['e', rootEventId, '', 'root'],
+        ['e', parentEventId, '', 'reply'],
+        ['p', parentAuthor]
+      ];
 
       final event = Event.from(
         kind: 1,
-        tags: [
-          ['e', parentEventId, '', 'root'],
-          ['p', noteAuthor]
-        ],
+        tags: tags,
         content: replyContent,
         privkey: privateKey,
       );
+
       final serializedEvent = event.serialize();
       await _socketManager.broadcast(serializedEvent);
 
       final reply = ReplyModel.fromEvent(event.toJson());
-      repliesMap.putIfAbsent(parentEventId, () => []);
-      if (!repliesMap[parentEventId]!.any((r) => r.id == reply.id)) {
-        repliesMap[parentEventId]!.add(reply);
-        onRepliesUpdated?.call(parentEventId, repliesMap[parentEventId]!);
+      reply.depth = replyDepth + 1;
+
+      repliesMap.putIfAbsent(reply.rootEventId, () => []);
+      if (!repliesMap[reply.rootEventId]!.any((r) => r.id == reply.id)) {
+        repliesMap[reply.rootEventId]!.add(reply);
+        onRepliesUpdated?.call(
+            reply.rootEventId, repliesMap[reply.rootEventId]!);
         onReplyCountUpdated?.call(
-            parentEventId, repliesMap[parentEventId]!.length);
-        if (repliesBox != null && repliesBox!.isOpen) {
-          await repliesBox!.put(reply.id, reply);
-        }
+            reply.rootEventId, repliesMap[reply.rootEventId]!.length);
+        await repliesBox?.put(reply.id, reply);
+
+        await Future.wait([
+          fetchReactionsForEvents([reply.id]),
+          fetchRepliesForEvents([reply.id]),
+          fetchRepostsForEvents([reply.id]),
+        ]);
       }
+
       print('[DataService] Reply sent and added to cache.');
     } catch (e) {
       print('[DataService ERROR] Error sending reply: $e');
@@ -1388,16 +1407,29 @@ class DataService {
 
   Future<void> loadRepliesFromCache() async {
     if (repliesBox == null || !repliesBox!.isOpen) return;
+
     try {
       final allReplies = repliesBox!.values.cast<ReplyModel>().toList();
       if (allReplies.isEmpty) return;
 
       for (var reply in allReplies) {
-        repliesMap.putIfAbsent(reply.parentEventId, () => []);
-        if (!repliesMap[reply.parentEventId]!.any((r) => r.id == reply.id)) {
-          repliesMap[reply.parentEventId]!.add(reply);
+        repliesMap.putIfAbsent(reply.rootEventId, () => []);
+        if (!repliesMap[reply.rootEventId]!.any((r) => r.id == reply.id)) {
+          repliesMap[reply.rootEventId]!.add(reply);
         }
       }
+
+      for (var replies in repliesMap.values) {
+        for (var reply in replies) {
+          if (reply.depth == 0) {
+            final newDepth = calculateReplyDepth(reply, repliesMap);
+            reply.depth = newDepth;
+
+            await repliesBox?.put(reply.id, reply);
+          }
+        }
+      }
+
       print(
           '[DataService] Replies cache loaded with ${allReplies.length} replies.');
 
@@ -1412,6 +1444,27 @@ class DataService {
     } catch (e) {
       print('[DataService ERROR] Error loading replies from cache: $e');
     }
+  }
+
+  int calculateReplyDepth(
+      ReplyModel reply, Map<String, List<ReplyModel>> repliesMap) {
+    int depth = 1;
+    String? currentParent = reply.parentEventId;
+
+    while (currentParent != null) {
+      try {
+        final parentReply = repliesMap.values
+            .expand((list) => list)
+            .firstWhere((r) => r.id == currentParent);
+
+        depth++;
+        currentParent = parentReply.parentEventId;
+      } catch (e) {
+        break;
+      }
+    }
+
+    return depth;
   }
 
   Future<void> loadRepostsFromCache() async {
