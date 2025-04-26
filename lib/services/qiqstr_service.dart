@@ -385,6 +385,14 @@ class DataService {
       final following = await getFollowingList(npub);
       following.add(npub);
       targetNpubs = following.toSet().toList();
+
+      await Future.wait(
+        following
+            .where((followedNpub) => followedNpub != npub)
+            .map((followedNpub) {
+          return getFollowingList(followedNpub);
+        }),
+      );
     } else {
       targetNpubs = [npub];
     }
@@ -890,17 +898,13 @@ class DataService {
   }
 
   Future<List<String>> getFollowingList(String targetNpub) async {
-    bool isCurrentUser = targetNpub == this.npub;
-    bool useCache = isCurrentUser;
-
-    if (useCache && followingBox != null && followingBox!.isOpen) {
+    if (followingBox != null && followingBox!.isOpen) {
       final cachedFollowing = followingBox!.get('following_$targetNpub');
       if (cachedFollowing != null) {
         print('[DataService] Using cached following list for $targetNpub.');
         return cachedFollowing.pubkeys;
       }
     }
-
     List<String> following = [];
     final limitedRelays = _socketManager.relayUrls.take(3).toList();
 
@@ -943,13 +947,12 @@ class DataService {
 
     following = following.toSet().toList();
 
-    if (useCache && followingBox != null && followingBox!.isOpen) {
+    if (followingBox != null && followingBox!.isOpen) {
       final newFollowingModel = FollowingModel(
           pubkeys: following, updatedAt: DateTime.now(), npub: targetNpub);
       await followingBox!.put('following_$targetNpub', newFollowingModel);
       print('[DataService] Updated Hive following model for $targetNpub.');
     }
-
     return following;
   }
 

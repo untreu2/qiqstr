@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
+import 'package:qiqstr/models/following_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
@@ -75,15 +76,37 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           DataService(npub: widget.user.npub, dataType: DataType.Profile);
       await service.initialize();
 
+      if (service.followingBox != null && service.followingBox!.isOpen) {
+        final cachedModel =
+            service.followingBox!.get('following_${widget.user.npub}');
+
+        if (cachedModel != null) {
+          setState(() {
+            followingCount = cachedModel.pubkeys.length;
+            isLoadingFollowing = false;
+          });
+          return;
+        }
+      }
+
       final fetchedFollowings =
           await service.getFollowingList(widget.user.npub);
+
+      if (service.followingBox != null && service.followingBox!.isOpen) {
+        await service.followingBox!.put(
+          'following_${widget.user.npub}',
+          FollowingModel(
+            pubkeys: fetchedFollowings,
+            updatedAt: DateTime.now(),
+            npub: widget.user.npub,
+          ),
+        );
+      }
 
       setState(() {
         followingCount = fetchedFollowings.length;
         isLoadingFollowing = false;
       });
-
-      await service.closeConnections();
     } catch (e) {
       print('Error loading following count: $e');
       setState(() {
