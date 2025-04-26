@@ -967,7 +967,27 @@ class DataService {
       until: lastNote.timestamp.millisecondsSinceEpoch ~/ 1000,
     );
     final request = _createRequest(filter);
+
     await _broadcastRequest(request);
+
+    _onCacheLoad = (List<NoteModel> newNotes) async {
+      for (var note in newNotes) {
+        if (!eventIds.contains(note.id)) {
+          notes.add(note);
+          eventIds.add(note.id);
+          onOlderNote(note);
+
+          await Future.wait([
+            fetchReactionsForEvents([note.id]),
+            fetchRepliesForEvents([note.id]),
+            fetchRepostsForEvents([note.id])
+          ]);
+        }
+      }
+      await _updateReactionSubscription();
+      print(
+          '[DataService] Fetched and processed ${newNotes.length} older notes.');
+    };
   }
 
   Future<void> _subscribeToAllReactions() async {
@@ -1351,10 +1371,12 @@ class DataService {
     if (notesBox != null && notesBox!.isOpen) {
       try {
         final Map<String, NoteModel> notesMap = {
-          for (var note in notes) note.id: note
+          for (var note in notes.take(200)) note.id: note
         };
+        await notesBox!.clear();
         await notesBox!.putAll(notesMap);
-        print('[DataService] Notes saved to cache successfully.');
+        print(
+            '[DataService] Notes saved to cache successfully. (${notesMap.length} notes)');
       } catch (e) {
         print('[DataService ERROR] Error saving notes to cache: $e');
       }
@@ -1367,17 +1389,28 @@ class DataService {
       final allNotes = notesBox!.values.cast<NoteModel>().toList();
       if (allNotes.isEmpty) return;
 
-      for (var note in allNotes) {
+      allNotes.sort((a, b) {
+        DateTime aTime =
+            a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
+        DateTime bTime =
+            b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
+        return bTime.compareTo(aTime);
+      });
+
+      final limitedNotes = allNotes.take(200).toList();
+
+      for (var note in limitedNotes) {
         if (!eventIds.contains(note.id)) {
           notes.add(note);
           eventIds.add(note.id);
         }
       }
 
-      onLoad(allNotes);
-      print('[DataService] Cache loaded with ${allNotes.length} notes.');
+      onLoad(limitedNotes);
+      print('[DataService] Cache loaded with ${limitedNotes.length} notes.');
 
-      List<String> cachedEventIds = allNotes.map((note) => note.id).toList();
+      List<String> cachedEventIds =
+          limitedNotes.map((note) => note.id).toList();
 
       await Future.wait([
         fetchReactionsForEvents(cachedEventIds),
