@@ -20,6 +20,9 @@ class ReplyModel extends HiveObject {
   final String parentEventId;
 
   @HiveField(5)
+  final String? rootEventId;
+
+  @HiveField(6)
   final DateTime fetchedAt;
 
   ReplyModel({
@@ -28,20 +31,21 @@ class ReplyModel extends HiveObject {
     required this.content,
     required this.timestamp,
     required this.parentEventId,
+    this.rootEventId,
     required this.fetchedAt,
   });
 
   factory ReplyModel.fromEvent(Map<String, dynamic> eventData) {
-    String? parentEventId;
-    for (var tag in eventData['tags']) {
-      if (tag.length >= 2 && tag[0] == 'e') {
-        parentEventId = tag[1] as String;
-        break;
-      }
-    }
-    if (parentEventId == null || parentEventId.isEmpty) {
+    final tags = eventData['tags'] as List<dynamic>;
+
+    final ids = _extractRootAndParentIds(tags);
+    final parentId = ids['parent'] ?? ids['root'];
+    final rootId = ids['root'];
+
+    if (parentId == null || parentId.isEmpty) {
       throw Exception('parentEventId not found for reply.');
     }
+
     return ReplyModel(
       id: eventData['id'] as String,
       author: eventData['pubkey'] as String,
@@ -49,7 +53,8 @@ class ReplyModel extends HiveObject {
       timestamp: DateTime.fromMillisecondsSinceEpoch(
         (eventData['created_at'] as int) * 1000,
       ),
-      parentEventId: parentEventId,
+      parentEventId: parentId,
+      rootEventId: rootId,
       fetchedAt: DateTime.now(),
     );
   }
@@ -61,6 +66,7 @@ class ReplyModel extends HiveObject {
       content: json['content'],
       timestamp: DateTime.parse(json['timestamp']),
       parentEventId: json['parentEventId'],
+      rootEventId: json['rootEventId'],
       fetchedAt: DateTime.parse(json['fetchedAt']),
     );
   }
@@ -72,7 +78,33 @@ class ReplyModel extends HiveObject {
       'content': content,
       'timestamp': timestamp.toIso8601String(),
       'parentEventId': parentEventId,
+      'rootEventId': rootEventId,
       'fetchedAt': fetchedAt.toIso8601String(),
+    };
+  }
+
+  static Map<String, String?> _extractRootAndParentIds(List<dynamic> tags) {
+    String? rootId;
+    String? parentId;
+
+    for (var tag in tags) {
+      if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
+        if (tag.length > 3 && tag[3] == 'root') {
+          rootId = tag[1] as String;
+        } else if (tag.length > 3 && tag[3] == 'reply') {
+          parentId = tag[1] as String;
+        } else if (tag.length > 2 && (tag[2] == 'root' || tag[2] == 'reply')) {
+          if (tag[2] == 'root') rootId = tag[1] as String;
+          if (tag[2] == 'reply') parentId = tag[1] as String;
+        } else if (parentId == null) {
+          parentId = tag[1] as String;
+        }
+      }
+    }
+
+    return {
+      'root': rootId,
+      'parent': parentId,
     };
   }
 }

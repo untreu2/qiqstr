@@ -14,6 +14,7 @@ import '../models/reply_model.dart';
 import '../models/repost_model.dart';
 import '../models/following_model.dart';
 import 'dart:typed_data';
+import 'package:collection/collection.dart';
 
 enum DataType { Feed, Profile, Note }
 
@@ -673,23 +674,25 @@ class DataService {
 
   Future<void> _handleReplyEvent(
     Map<String, dynamic> eventData,
-    String parentEventId,
+    String parentEventIdFromProcessNote,
   ) async {
     if (_isClosed) return;
     try {
       final reply = ReplyModel.fromEvent(eventData);
-      repliesMap.putIfAbsent(parentEventId, () => []);
 
-      if (!repliesMap[parentEventId]!.any((r) => r.id == reply.id)) {
-        repliesMap[parentEventId]!.add(reply);
-        onRepliesUpdated?.call(parentEventId, repliesMap[parentEventId]!);
+      repliesMap.putIfAbsent(reply.parentEventId, () => []);
+
+      if (!repliesMap[reply.parentEventId]!.any((r) => r.id == reply.id)) {
+        repliesMap[reply.parentEventId]!.add(reply);
+
+        onRepliesUpdated?.call(
+            reply.parentEventId, repliesMap[reply.parentEventId]!);
 
         print(
-            '[DataService] Reply updated for event $parentEventId: ${reply.content}');
+            '[DataService] Reply added for parent ${reply.parentEventId}: ${reply.content}');
+
         onReplyCountUpdated?.call(
-          parentEventId,
-          repliesMap[parentEventId]!.length,
-        );
+            reply.parentEventId, repliesMap[reply.parentEventId]!.length);
 
         await repliesBox?.put(reply.id, reply);
 
@@ -1245,34 +1248,46 @@ class DataService {
       if (privateKey == null || privateKey.isEmpty) {
         throw Exception('Private key not found.');
       }
-      String noteAuthor = notes
-          .firstWhere((note) => note.id == parentEventId,
-              orElse: () => throw Exception('Event not found for reply.'))
-          .author;
+
+      final parentNote =
+          notes.firstWhereOrNull((note) => note.id == parentEventId);
+      if (parentNote == null) {
+        throw Exception('Parent event not found for reply.');
+      }
+
+      final rootId = parentNote.id;
+
+      final tags = [
+        ['e', rootId, '', 'root'],
+        ['e', parentEventId, '', 'reply'],
+        ['p', parentNote.author],
+      ];
 
       final event = Event.from(
         kind: 1,
-        tags: [
-          ['e', parentEventId, '', 'root'],
-          ['p', noteAuthor]
-        ],
+        tags: tags,
         content: replyContent,
         privkey: privateKey,
       );
+
       final serializedEvent = event.serialize();
       await _socketManager.broadcast(serializedEvent);
 
       final reply = ReplyModel.fromEvent(event.toJson());
-      repliesMap.putIfAbsent(parentEventId, () => []);
-      if (!repliesMap[parentEventId]!.any((r) => r.id == reply.id)) {
-        repliesMap[parentEventId]!.add(reply);
-        onRepliesUpdated?.call(parentEventId, repliesMap[parentEventId]!);
+
+      repliesMap.putIfAbsent(reply.parentEventId, () => []);
+      if (!repliesMap[reply.parentEventId]!.any((r) => r.id == reply.id)) {
+        repliesMap[reply.parentEventId]!.add(reply);
+        onRepliesUpdated?.call(
+            reply.parentEventId, repliesMap[reply.parentEventId]!);
         onReplyCountUpdated?.call(
-            parentEventId, repliesMap[parentEventId]!.length);
+            reply.parentEventId, repliesMap[reply.parentEventId]!.length);
+
         if (repliesBox != null && repliesBox!.isOpen) {
           await repliesBox!.put(reply.id, reply);
         }
       }
+
       print('[DataService] Reply sent and added to cache.');
     } catch (e) {
       print('[DataService ERROR] Error sending reply: $e');
