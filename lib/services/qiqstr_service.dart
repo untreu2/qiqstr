@@ -380,32 +380,43 @@ class DataService {
 
   Future<void> _fetchUserData() async {
     List<String> targetNpubs;
+
     if (dataType == DataType.Feed) {
       final following = await getFollowingList(npub);
       following.add(npub);
       targetNpubs = following.toSet().toList();
+
+      await Future.wait(
+        following
+            .where((followedNpub) => followedNpub != npub)
+            .map((followedNpub) {
+          return getFollowingList(followedNpub);
+        }),
+      );
     } else {
       targetNpubs = [npub];
     }
 
     if (_isClosed) return;
 
-    await _socketManager.connectRelays(targetNpubs,
-        onEvent: (event, relayUrl) => _handleEvent(event, targetNpubs),
-        onDisconnected: (relayUrl) =>
-            _socketManager.reconnectRelay(relayUrl, targetNpubs));
+    await _socketManager.connectRelays(
+      targetNpubs,
+      onEvent: (event, relayUrl) => _handleEvent(event, targetNpubs),
+      onDisconnected: (relayUrl) =>
+          _socketManager.reconnectRelay(relayUrl, targetNpubs),
+    );
 
     await fetchNotes(targetNpubs, initialLoad: true);
 
     await Future.wait([
       loadReactionsFromCache(),
       loadRepliesFromCache(),
-      loadRepostsFromCache()
+      loadRepostsFromCache(),
     ]);
 
     await _subscribeToAllReactions();
-
     _startRealTimeSubscription(targetNpubs);
+
     await _subscribeToFollowing();
 
     await getCachedUserProfile(npub);
@@ -886,11 +897,11 @@ class DataService {
     }
   }
 
-  Future<List<String>> getFollowingList(String npub) async {
+  Future<List<String>> getFollowingList(String targetNpub) async {
     if (followingBox != null && followingBox!.isOpen) {
-      final cachedFollowing = followingBox!.get('following');
+      final cachedFollowing = followingBox!.get('following_$targetNpub');
       if (cachedFollowing != null) {
-        print('[DataService] Using cached following list from Hive.');
+        print('[DataService] Using cached following list for $targetNpub.');
         return cachedFollowing.pubkeys;
       }
     }
@@ -905,8 +916,8 @@ class DataService {
           await ws.close();
           return;
         }
-        final request =
-            _createRequest(Filter(authors: [npub], kinds: [3], limit: 1000));
+        final request = _createRequest(
+            Filter(authors: [targetNpub], kinds: [3], limit: 1000));
         final completer = Completer<void>();
 
         ws.listen((event) {
@@ -938,9 +949,9 @@ class DataService {
 
     if (followingBox != null && followingBox!.isOpen) {
       final newFollowingModel = FollowingModel(
-          pubkeys: following, updatedAt: DateTime.now(), npub: npub);
-      await followingBox!.put('following', newFollowingModel);
-      print('[DataService] Updated Hive following model.');
+          pubkeys: following, updatedAt: DateTime.now(), npub: targetNpub);
+      await followingBox!.put('following_$targetNpub', newFollowingModel);
+      print('[DataService] Updated Hive following model for $targetNpub.');
     }
     return following;
   }
