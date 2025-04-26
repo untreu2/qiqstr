@@ -2,13 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
-import 'package:qiqstr/models/following_model.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/screens/following_page.dart';
-import 'package:qiqstr/services/qiqstr_service.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ProfileInfoWidget extends StatefulWidget {
   final UserModel user;
@@ -21,14 +18,11 @@ class ProfileInfoWidget extends StatefulWidget {
 
 class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   bool? _isVerified;
-  int followingCount = 0;
-  bool isLoadingFollowing = true;
 
   @override
   void initState() {
     super.initState();
     _verifyIfNeeded();
-    _loadFollowingCount();
   }
 
   Future<void> _verifyIfNeeded() async {
@@ -67,52 +61,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     } catch (e) {
       print('Error verifying NIP-05 for $nip05: $e');
       return false;
-    }
-  }
-
-  Future<void> _loadFollowingCount() async {
-    try {
-      final service =
-          DataService(npub: widget.user.npub, dataType: DataType.Profile);
-      await service.initialize();
-
-      if (service.followingBox != null && service.followingBox!.isOpen) {
-        final cachedModel =
-            service.followingBox!.get('following_${widget.user.npub}');
-
-        if (cachedModel != null) {
-          setState(() {
-            followingCount = cachedModel.pubkeys.length;
-            isLoadingFollowing = false;
-          });
-          return;
-        }
-      }
-
-      final fetchedFollowings =
-          await service.getFollowingList(widget.user.npub);
-
-      if (service.followingBox != null && service.followingBox!.isOpen) {
-        await service.followingBox!.put(
-          'following_${widget.user.npub}',
-          FollowingModel(
-            pubkeys: fetchedFollowings,
-            updatedAt: DateTime.now(),
-            npub: widget.user.npub,
-          ),
-        );
-      }
-
-      setState(() {
-        followingCount = fetchedFollowings.length;
-        isLoadingFollowing = false;
-      });
-    } catch (e) {
-      print('Error loading following count: $e');
-      setState(() {
-        followingCount = 0;
-        isLoadingFollowing = false;
-      });
     }
   }
 
@@ -251,36 +199,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                       ],
                     ),
                   ),
-                const SizedBox(height: 16),
-                GestureDetector(
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => FollowingPage(npub: user.npub),
-                      ),
-                    );
-                  },
-                  child: Row(
-                    children: [
-                      const Icon(Icons.people, color: Colors.amber, size: 20),
-                      const SizedBox(width: 6),
-                      isLoadingFollowing
-                          ? const Text(
-                              'Loading...',
-                              style: TextStyle(
-                                  color: Colors.white70, fontSize: 14),
-                            )
-                          : Text(
-                              '$followingCount Following',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                    ],
-                  ),
-                ),
               ],
             ),
           ),

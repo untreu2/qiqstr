@@ -898,6 +898,12 @@ class DataService {
   }
 
   Future<List<String>> getFollowingList(String targetNpub) async {
+    if (targetNpub != npub) {
+      print(
+          '[DataService] Skipping following fetch for non-logged-in user: $targetNpub');
+      return [];
+    }
+
     if (followingBox != null && followingBox!.isOpen) {
       final cachedFollowing = followingBox!.get('following_$targetNpub');
       if (cachedFollowing != null) {
@@ -905,6 +911,7 @@ class DataService {
         return cachedFollowing.pubkeys;
       }
     }
+
     List<String> following = [];
     final limitedRelays = _socketManager.relayUrls.take(3).toList();
 
@@ -942,7 +949,9 @@ class DataService {
           await ws.close();
         });
         await ws.close();
-      } catch (e) {}
+      } catch (e) {
+        print('[DataService] Error fetching following from $relayUrl: $e');
+      }
     }));
 
     following = following.toSet().toList();
