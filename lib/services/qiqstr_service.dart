@@ -463,16 +463,30 @@ class DataService {
   Request _createRequest(Filter filter) => Request(generateUUID(), [filter]);
 
   void _startRealTimeSubscription(List<String> targetNpubs) {
-    final filter = Filter(
+    final filterNotesAndReactions = Filter(
       authors: targetNpubs,
-      kinds: [1, 6, 7],
+      kinds: [1, 7],
       since: (notes.isNotEmpty)
           ? (notes.first.timestamp.millisecondsSinceEpoch ~/ 1000)
           : null,
     );
-    final request = Request(generateUUID(), [filter]);
-    _safeBroadcast(request.serialize());
-    print('[DataService] Started real-time subscription for new events.');
+
+    final requestNotes = Request(generateUUID(), [filterNotesAndReactions]);
+    _safeBroadcast(requestNotes.serialize());
+
+    final filterReposts = Filter(
+      authors: targetNpubs,
+      kinds: [6],
+      since: (notes.isNotEmpty)
+          ? (notes.first.timestamp.millisecondsSinceEpoch ~/ 1000)
+          : null,
+    );
+
+    final requestReposts = Request(generateUUID(), [filterReposts]);
+    _safeBroadcast(requestReposts.serialize());
+
+    print(
+        '[DataService] Started real-time subscription for notes, reactions, and reposts separately.');
   }
 
   Future<void> _subscribeToFollowing() async {
@@ -805,6 +819,60 @@ class DataService {
 
         if (repostsBox != null && repostsBox!.isOpen) {
           await repostsBox!.put(repost.id, repost);
+        }
+
+        final rawContent = eventData['content'];
+
+        String finalContent = '';
+        String originalAuthor = eventData['pubkey'];
+        String originalId = originalNoteId;
+        String? originalRawWs;
+
+        if (rawContent is String) {
+          try {
+            final decoded = jsonDecode(rawContent);
+            if (decoded is Map<String, dynamic>) {
+              if (decoded.containsKey('content')) {
+                finalContent = decoded['content'] as String;
+              }
+              if (decoded.containsKey('pubkey')) {
+                originalAuthor = decoded['pubkey'] as String;
+              }
+              if (decoded.containsKey('id')) {
+                originalId = decoded['id'] as String;
+              }
+
+              originalRawWs = jsonEncode(decoded);
+            } else {
+              finalContent = rawContent;
+            }
+          } catch (e) {
+            finalContent = rawContent;
+          }
+        }
+
+        final note = NoteModel(
+          id: originalId,
+          content: finalContent,
+          author: originalAuthor,
+          timestamp: DateTime.fromMillisecondsSinceEpoch(
+              eventData['created_at'] * 1000),
+          isRepost: true,
+          repostedBy: eventData['pubkey'],
+          repostTimestamp: DateTime.fromMillisecondsSinceEpoch(
+              eventData['created_at'] * 1000),
+          rawWs: originalRawWs ?? jsonEncode(eventData),
+        );
+
+        if (!eventIds.contains(note.id)) {
+          notes.add(note);
+          eventIds.add(note.id);
+
+          if (notesBox != null && notesBox!.isOpen) {
+            await notesBox!.put(note.id, note);
+          }
+
+          onNewNote?.call(note);
         }
 
         await _fetchProfilesBatch([repost.repostedBy]);
@@ -1530,20 +1598,30 @@ class DataService {
       if (privateKey == null || privateKey.isEmpty) {
         throw Exception('Private key not found.');
       }
-      final content = note.rawWs;
+
+      String? content = note.rawWs;
+
       if (content == null || content.isEmpty) {
-        throw Exception('Raw event data is missing for this note.');
+        final originalEvent = await _fetchEventById(note.id);
+        if (originalEvent != null) {
+          content = jsonEncode(originalEvent);
+        } else {
+          throw Exception('Original event could not be fetched.');
+        }
       }
+
       final tags = [
         ['e', note.id],
         ['p', note.author]
       ];
+
       final event = Event.from(
         kind: 6,
         tags: tags,
         content: content,
         privkey: privateKey,
       );
+
       final serializedEvent = event.serialize();
       await _socketManager.broadcast(serializedEvent);
 
@@ -1557,6 +1635,27 @@ class DataService {
           await repostsBox!.put(repost.id, repost);
         }
       }
+
+      final repostedNote = NoteModel(
+        id: note.id,
+        content: note.content,
+        author: note.author,
+        timestamp: DateTime.now(),
+        isRepost: true,
+        repostedBy: npub,
+        repostTimestamp: DateTime.now(),
+        rawWs: serializedEvent,
+      );
+
+      if (!eventIds.contains(repostedNote.id)) {
+        notes.add(repostedNote);
+        eventIds.add(repostedNote.id);
+        if (notesBox != null && notesBox!.isOpen) {
+          await notesBox!.put(repostedNote.id, repostedNote);
+        }
+        onNewNote?.call(repostedNote);
+      }
+
       print('[DataService] Repost sent and added to cache.');
     } catch (e) {
       print('[DataService ERROR] Error sending repost: $e');
