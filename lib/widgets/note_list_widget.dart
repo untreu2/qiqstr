@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'dart:collection';
+import 'package:flutter/material.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/models/reaction_model.dart';
 import 'package:qiqstr/models/reply_model.dart';
@@ -24,13 +24,12 @@ class NoteListWidget extends StatefulWidget {
 class _NoteListWidgetState extends State<NoteListWidget> {
   late SplayTreeSet<NoteModel> _itemsTree;
   late ValueNotifier<List<NoteModel>> _notesNotifier;
-
   late DataService _dataService;
+
   bool _isInitializing = true;
-  bool _isLoadingOlderNotes = false;
-  Map<String, int> _reactionCounts = {};
-  Map<String, int> _replyCounts = {};
-  Map<String, int> _repostCounts = {};
+  final Map<String, int> _reactionCounts = {};
+  final Map<String, int> _replyCounts = {};
+  final Map<String, int> _repostCounts = {};
 
   @override
   void initState() {
@@ -57,18 +56,16 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     DateTime bTime =
         b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
     int result = bTime.compareTo(aTime);
-    if (result == 0) {
-      return a.id.compareTo(b.id);
-    }
-    return result;
+    return result == 0 ? a.id.compareTo(b.id) : result;
   }
 
   Future<void> _initialize() async {
     try {
       await _dataService.initialize();
       await _dataService.loadNotesFromCache((cachedNotes) {
-        _itemsTree.clear();
-        _itemsTree.addAll(cachedNotes);
+        _itemsTree
+          ..clear()
+          ..addAll(cachedNotes);
         for (var note in cachedNotes) {
           _reactionCounts[note.id] =
               _dataService.reactionsMap[note.id]?.length ?? 0;
@@ -82,7 +79,9 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     } catch (e) {
       _showErrorSnackBar('Failed to initialize: $e');
     } finally {
-      setState(() => _isInitializing = false);
+      if (mounted) {
+        setState(() => _isInitializing = false);
+      }
     }
   }
 
@@ -96,69 +95,59 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   }
 
   void _handleReactionsUpdated(String noteId, List<ReactionModel> reactions) {
-    setState(() {
-      _reactionCounts[noteId] = reactions.length;
-    });
+    if (mounted) {
+      setState(() {
+        _reactionCounts[noteId] = reactions.length;
+      });
+    }
   }
 
   void _handleRepliesUpdated(String noteId, List<ReplyModel> replies) {
-    setState(() {
-      _replyCounts[noteId] = replies.length;
-    });
+    if (mounted) {
+      setState(() {
+        _replyCounts[noteId] = replies.length;
+      });
+    }
   }
 
   void _handleRepostsUpdated(String noteId, List<RepostModel> reposts) {
-    setState(() {
-      _repostCounts[noteId] = reposts.length;
-    });
+    if (mounted) {
+      setState(() {
+        _repostCounts[noteId] = reposts.length;
+      });
+    }
   }
 
   void _updateReactionCount(String noteId, int count) {
-    setState(() {
-      _reactionCounts[noteId] = count;
-    });
+    if (mounted) {
+      setState(() {
+        _reactionCounts[noteId] = count;
+      });
+    }
   }
 
   void _updateReplyCount(String noteId, int count) {
-    setState(() {
-      _replyCounts[noteId] = count;
-    });
+    if (mounted) {
+      setState(() {
+        _replyCounts[noteId] = count;
+      });
+    }
   }
 
   void _updateRepostCount(String noteId, int count) {
-    setState(() {
-      _repostCounts[noteId] = count;
-    });
-  }
-
-  Future<void> _loadOlderNotes() async {
-    if (_isLoadingOlderNotes) return;
-    setState(() => _isLoadingOlderNotes = true);
-    try {
-      await _dataService.fetchOlderNotes(
-        widget.dataType == DataType.Feed
-            ? await _dataService.getFollowingList(widget.npub)
-            : [widget.npub],
-        (olderNote) {
-          if (_itemsTree.add(olderNote)) {
-            _reactionCounts[olderNote.id] = 0;
-            _replyCounts[olderNote.id] = 0;
-            _repostCounts[olderNote.id] = 0;
-            _notesNotifier.value = _itemsTree.toList();
-          }
-        },
-      );
-    } catch (e) {
-      _showErrorSnackBar('Error loading older notes: $e');
-    } finally {
-      setState(() => _isLoadingOlderNotes = false);
+    if (mounted) {
+      setState(() {
+        _repostCounts[noteId] = count;
+      });
     }
   }
 
   void _showErrorSnackBar(String message) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(message)));
+      }
     });
   }
 
@@ -172,47 +161,45 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   @override
   Widget build(BuildContext context) {
     if (_isInitializing) {
-      return const Center(child: CircularProgressIndicator());
+      return const SliverToBoxAdapter(
+        child: Center(child: CircularProgressIndicator()),
+      );
     }
 
-    return NotificationListener<ScrollNotification>(
-      onNotification: (scrollInfo) {
-        if (!_isLoadingOlderNotes &&
-            scrollInfo.metrics.pixels >=
-                scrollInfo.metrics.maxScrollExtent - 200) {
-          _loadOlderNotes();
+    return ValueListenableBuilder<List<NoteModel>>(
+      valueListenable: _notesNotifier,
+      builder: (context, notes, child) {
+        if (notes.isEmpty) {
+          return const SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  "No notes yet.",
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ),
+            ),
+          );
         }
-        return false;
+        return SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              final note = notes[index];
+              return NoteWidget(
+                key: ValueKey(note.id),
+                note: note,
+                reactionCount: _reactionCounts[note.id] ?? 0,
+                replyCount: _replyCounts[note.id] ?? 0,
+                repostCount: _repostCounts[note.id] ?? 0,
+                dataService: _dataService,
+                currentUserNpub: widget.npub,
+              );
+            },
+            childCount: notes.length,
+          ),
+        );
       },
-      child: RefreshIndicator(
-        onRefresh: _initialize,
-        child: ValueListenableBuilder<List<NoteModel>>(
-          valueListenable: _notesNotifier,
-          builder: (context, notes, child) {
-            return ListView.builder(
-              padding: EdgeInsets.zero,
-              itemCount: notes.length + (_isLoadingOlderNotes ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index == notes.length && _isLoadingOlderNotes) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                final note = notes[index];
-                return NoteWidget(
-                    key: ValueKey(note.id),
-                    note: note,
-                    reactionCount: _reactionCounts[note.id] ?? 0,
-                    replyCount: _replyCounts[note.id] ?? 0,
-                    repostCount: _repostCounts[note.id] ?? 0,
-                    dataService: _dataService,
-                    currentUserNpub: widget.npub);
-              },
-            );
-          },
-        ),
-      ),
     );
   }
 }

@@ -21,8 +21,6 @@ class _FeedPageState extends State<FeedPage> {
   bool isLoading = true;
   String? errorMessage;
 
-  final ScrollController _scrollController = ScrollController();
-
   @override
   void initState() {
     super.initState();
@@ -34,15 +32,21 @@ class _FeedPageState extends State<FeedPage> {
     try {
       await dataService.initialize();
       final profileData = await dataService.getCachedUserProfile(widget.npub);
-      setState(() {
-        user = UserModel.fromCachedProfile(widget.npub, profileData);
-      });
+      if (mounted) {
+        setState(() {
+          user = UserModel.fromCachedProfile(widget.npub, profileData);
+        });
+      }
     } catch (e) {
-      setState(() {
-        errorMessage = 'An error occurred while loading profile.';
-      });
+      if (mounted) {
+        setState(() {
+          errorMessage = 'An error occurred while loading profile.';
+        });
+      }
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
@@ -54,37 +58,23 @@ class _FeedPageState extends State<FeedPage> {
     );
   }
 
-  Widget _buildInfoSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            IconButton(
-              padding: EdgeInsets.zero,
-              icon: const Icon(Icons.menu, color: Colors.white),
-              onPressed: () {
-                Scaffold.of(context).openDrawer();
-              },
-              tooltip: 'Open menu',
+  Widget _buildInfoSection() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 60, 16, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Feed',
+            style: TextStyle(
+              fontSize: 36,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              letterSpacing: -1,
             ),
-            const SizedBox(width: 8),
-            const Text(
-              'Feed',
-              style: TextStyle(
-                fontSize: 36,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-                letterSpacing: -1,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        const Padding(
-          padding: EdgeInsets.only(left: 16),
-          child: Text(
+          ),
+          const SizedBox(height: 8),
+          const Text(
             "Here are the notes from people you follow.",
             style: TextStyle(
               fontSize: 16,
@@ -92,15 +82,9 @@ class _FeedPageState extends State<FeedPage> {
               height: 1.5,
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
   }
 
   @override
@@ -144,20 +128,19 @@ class _FeedPageState extends State<FeedPage> {
                     style: const TextStyle(color: Colors.white70),
                   ),
                 )
-              : NestedScrollView(
-                  controller: _scrollController,
-                  headerSliverBuilder: (context, innerScrolled) => [
+              : CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(
+                    parent: BouncingScrollPhysics(),
+                  ),
+                  slivers: [
                     SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(0, 60, 20, 20),
-                        child: _buildInfoSection(context),
-                      ),
+                      child: _buildInfoSection(),
+                    ),
+                    NoteListWidget(
+                      npub: widget.npub,
+                      dataType: DataType.Feed,
                     ),
                   ],
-                  body: NoteListWidget(
-                    npub: widget.npub,
-                    dataType: DataType.Feed,
-                  ),
                 ),
     );
   }

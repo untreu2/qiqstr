@@ -12,18 +12,20 @@ class ProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: NestedScrollView(
-        headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) {
-          return [
-            SliverToBoxAdapter(
-              child: ProfileInfoWidget(user: user),
-            ),
-          ];
-        },
-        body: NoteListWidget(
-          npub: user.npub,
-          dataType: DataType.Profile,
+      backgroundColor: Colors.black,
+      body: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
         ),
+        slivers: [
+          SliverToBoxAdapter(
+            child: ProfileInfoWidget(user: user),
+          ),
+          NoteListWidget(
+            npub: user.npub,
+            dataType: DataType.Profile,
+          ),
+        ],
       ),
     );
   }
