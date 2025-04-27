@@ -40,7 +40,7 @@ class WebSocketManager {
 
   WebSocketManager(
       {required this.relayUrls,
-      this.connectionTimeout = const Duration(seconds: 1)});
+      this.connectionTimeout = const Duration(seconds: 3)});
 
   List<WebSocket> get activeSockets => _webSockets.values.toList();
   bool get isConnected => _webSockets.isNotEmpty;
@@ -1059,7 +1059,7 @@ class DataService {
     await _broadcastRequest(request);
 
     try {
-      return await completer.future.timeout(const Duration(seconds: 1),
+      return await completer.future.timeout(const Duration(seconds: 3),
           onTimeout: () => {
                 'name': 'Anonymous',
                 'profileImage': '',
@@ -1133,7 +1133,7 @@ class DataService {
     await Future.wait(limitedRelays.map((relayUrl) async {
       try {
         final ws = await WebSocket.connect(relayUrl)
-            .timeout(const Duration(seconds: 1));
+            .timeout(const Duration(seconds: 3));
         if (_isClosed) {
           await ws.close();
           return;
@@ -1159,7 +1159,7 @@ class DataService {
         });
 
         ws.add(request.serialize());
-        await completer.future.timeout(const Duration(seconds: 1),
+        await completer.future.timeout(const Duration(seconds: 3),
             onTimeout: () async {
           await ws.close();
         });
@@ -1477,7 +1477,7 @@ class DataService {
       final processingUrl = uploadResp['processing_url'];
       int retries = 5;
       while (retries > 0) {
-        await Future.delayed(const Duration(seconds: 1));
+        await Future.delayed(const Duration(seconds: 3));
         final pollRequest = await httpClient.getUrl(Uri.parse(processingUrl));
         final pollResponse = await pollRequest.close();
         if (pollResponse.statusCode == 201) {
@@ -1945,36 +1945,50 @@ class DataService {
 
   Future<Map<String, dynamic>?> _fetchEventById(String eventId) async {
     if (_isClosed) return null;
+
     final completer = Completer<Map<String, dynamic>?>();
-    String subscriptionId = generateUUID();
+    final subscriptionId = generateUUID();
     final request = Request(subscriptionId, [
       Filter(ids: [eventId], limit: 1)
     ]);
-    StreamSubscription? subscription;
 
-    await Future.wait(_socketManager.activeSockets.map((ws) async {
+    final List<StreamSubscription> subscriptions = [];
+
+    for (final ws in _socketManager.activeSockets) {
       if (ws.readyState == WebSocket.open) {
-        subscription = ws.listen((event) {
+        final sub = ws.listen((event) {
           final decoded = jsonDecode(event);
           if (decoded[0] == 'EVENT' && decoded[1] == subscriptionId) {
-            completer.complete(decoded[2] as Map<String, dynamic>);
-            subscription?.cancel();
-          } else if (decoded[0] == 'EOSE' && decoded[1] == subscriptionId) {
-            if (!completer.isCompleted) completer.complete(null);
-            subscription?.cancel();
+            if (!completer.isCompleted) {
+              completer.complete(decoded[2] as Map<String, dynamic>);
+            }
+          }
+          if (decoded[0] == 'EOSE' && decoded[1] == subscriptionId) {
+            if (!completer.isCompleted) {
+              completer.complete(null);
+            }
           }
         }, onError: (error) {
-          if (!completer.isCompleted) completer.complete(null);
-          subscription?.cancel();
+          if (!completer.isCompleted) {
+            completer.complete(null);
+          }
         });
 
+        subscriptions.add(sub);
         ws.add(request.serialize());
       }
-    }));
+    }
 
-    return completer.future.timeout(const Duration(seconds: 1), onTimeout: () {
-      return null;
-    });
+    final result = await completer.future.timeout(
+      const Duration(seconds: 5),
+      onTimeout: () => null,
+    );
+
+    for (final sub in subscriptions) {
+      await sub.cancel();
+    }
+
+    return result;
   }
 
   String generateUUID() => _uuid.v4().replaceAll('-', '');
