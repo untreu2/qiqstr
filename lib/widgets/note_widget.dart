@@ -153,7 +153,7 @@ class _NoteWidgetState extends State<NoteWidget> {
               spans.add(TextSpan(
                 text: text.substring(lastMatchEnd),
                 style: TextStyle(
-                  fontSize: text.length < 21 ? 20 : 15.5,
+                  fontSize: text.length < 21 ? 20 : 16,
                   color: Colors.white,
                 ),
               ));
@@ -476,12 +476,14 @@ class _NoteWidgetState extends State<NoteWidget> {
                 ],
               ),
             ),
+            const SizedBox(height: 8),
             if ((parsed['textParts'] as List).isNotEmpty)
               Padding(
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 child: _buildContentText(parsed),
               ),
+            const SizedBox(height: 6),
             if ((parsed['mediaUrls'] as List).isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
@@ -501,6 +503,7 @@ class _NoteWidgetState extends State<NoteWidget> {
               for (final q in parsed['quoteIds'] as List<String>)
                 QuoteWidget(bech32: q, dataService: widget.dataService),
             ],
+            const SizedBox(height: 8),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
