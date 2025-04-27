@@ -45,6 +45,8 @@ class _NoteWidgetState extends State<NoteWidget> {
   double _reactionScale = 1.0;
   double _replyScale = 1.0;
   double _repostScale = 1.0;
+  bool _isZapGlowing = false;
+  double _zapScale = 1.0;
 
   String _formatTimestamp(DateTime timestamp) {
     final d = DateTime.now().difference(timestamp);
@@ -182,6 +184,21 @@ class _NoteWidgetState extends State<NoteWidget> {
     );
   }
 
+  void _animateZapButton() {
+    setState(() {
+      _zapScale = 1.2;
+      _isZapGlowing = true;
+    });
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        setState(() {
+          _zapScale = 1.0;
+          _isZapGlowing = false;
+        });
+      }
+    });
+  }
+
   void _animateReactionButton() {
     setState(() {
       _reactionScale = 1.2;
@@ -240,6 +257,16 @@ class _NoteWidgetState extends State<NoteWidget> {
   bool _hasReposted() {
     final r = widget.dataService.repostsMap[widget.note.id] ?? [];
     return r.any((e) => e.repostedBy == widget.currentUserNpub);
+  }
+
+  void _handleZapTap() {
+    _animateZapButton();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("I'm working on it"),
+        duration: Duration(seconds: 1),
+      ),
+    );
   }
 
   void _handleReactionTap() async {
@@ -506,19 +533,12 @@ class _NoteWidgetState extends State<NoteWidget> {
                     count: widget.repostCount,
                     onTap: _handleRepostTap,
                   ),
-                  InkWell(
-                    splashColor: Colors.transparent,
-                    highlightColor: Colors.transparent,
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("I'm working on it"),
-                          duration: Duration(seconds: 1),
-                        ),
-                      );
-                    },
-                    child: Icon(Icons.bookmark_border,
-                        color: Colors.white, size: 24),
+                  _buildAction(
+                    scale: _zapScale,
+                    svg: 'assets/zap_button.svg',
+                    color: _isZapGlowing ? Colors.amber.shade300 : Colors.white,
+                    count: 0,
+                    onTap: _handleZapTap,
                   ),
                 ],
               ),
