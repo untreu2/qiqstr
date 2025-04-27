@@ -781,23 +781,56 @@ class DataService {
     }
   }
 
+  Future<void> _handleRepostEvent(Map<String, dynamic> eventData) async {
+    if (_isClosed) return;
+    try {
+      String? originalNoteId;
+      for (var tag in eventData['tags']) {
+        if (tag is List && tag.length >= 2 && tag[0] == 'e') {
+          originalNoteId = tag[1] as String;
+          break;
+        }
+      }
+      if (originalNoteId == null) return;
+
+      final repost = RepostModel.fromEvent(eventData, originalNoteId);
+      repostsMap.putIfAbsent(originalNoteId, () => []);
+
+      if (!repostsMap[originalNoteId]!.any((r) => r.id == repost.id)) {
+        repostsMap[originalNoteId]!.add(repost);
+
+        onRepostsUpdated?.call(originalNoteId, repostsMap[originalNoteId]!);
+        onRepostCountUpdated?.call(
+            originalNoteId, repostsMap[originalNoteId]!.length);
+
+        if (repostsBox != null && repostsBox!.isOpen) {
+          await repostsBox!.put(repost.id, repost);
+        }
+
+        await _fetchProfilesBatch([repost.repostedBy]);
+      }
+    } catch (e) {
+      print('[DataService ERROR] Error handling repost event: $e');
+    }
+  }
+
   Future<void> _handleReplyEvent(
-    Map<String, dynamic> eventData,
-    String parentEventIdFromProcessNote,
-  ) async {
+      Map<String, dynamic> eventData, String parentEventId) async {
     if (_isClosed) return;
     try {
       final reply = ReplyModel.fromEvent(eventData);
-      repliesMap.putIfAbsent(reply.parentEventId, () => []);
+      repliesMap.putIfAbsent(parentEventId, () => []);
 
-      if (!repliesMap[reply.parentEventId]!.any((r) => r.id == reply.id)) {
-        repliesMap[reply.parentEventId]!.add(reply);
-        onRepliesUpdated?.call(
-            reply.parentEventId, repliesMap[reply.parentEventId]!);
+      if (!repliesMap[parentEventId]!.any((r) => r.id == reply.id)) {
+        repliesMap[parentEventId]!.add(reply);
+
+        onRepliesUpdated?.call(parentEventId, repliesMap[parentEventId]!);
         onReplyCountUpdated?.call(
-            reply.parentEventId, repliesMap[reply.parentEventId]!.length);
+            parentEventId, repliesMap[parentEventId]!.length);
 
-        await repliesBox?.put(reply.id, reply);
+        if (repliesBox != null && repliesBox!.isOpen) {
+          await repliesBox!.put(reply.id, reply);
+        }
 
         await _fetchProfilesBatch([reply.author]);
 
@@ -1722,9 +1755,17 @@ class DataService {
         await _handleFollowingEvent(eventData);
       } else if (kind == 7) {
         await _handleReactionEvent(eventData);
-      } else if (kind == 1 || kind == 6) {
-        await _processNoteEvent(eventData, targetNpubs,
-            rawWs: jsonEncode(eventData));
+      } else if (kind == 1) {
+        if ((eventData['tags'] as List<dynamic>)
+            .any((tag) => tag is List && tag.isNotEmpty && tag[0] == 'e')) {
+          await _handleReplyEvent(
+              eventData, _extractRootEventId(eventData['tags']) ?? '');
+        } else {
+          await _processNoteEvent(eventData, targetNpubs,
+              rawWs: jsonEncode(eventData));
+        }
+      } else if (kind == 6) {
+        await _handleRepostEvent(eventData);
       }
     } catch (e) {
       print('[DataService ERROR] Error processing parsed event: $e');
