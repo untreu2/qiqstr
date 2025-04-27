@@ -135,6 +135,14 @@ class WebSocketManager {
 }
 
 class DataService {
+  late Isolate _eventProcessorIsolate;
+  late SendPort _eventProcessorSendPort;
+  final Completer<void> _eventProcessorReady = Completer<void>();
+
+  late Isolate _fetchProcessorIsolate;
+  late SendPort _fetchProcessorSendPort;
+  final Completer<void> _fetchProcessorReady = Completer<void>();
+
   final String npub;
   final DataType dataType;
   final Function(NoteModel)? onNewNote;
@@ -200,6 +208,12 @@ class DataService {
   int get connectedRelaysCount => _socketManager.activeSockets.length;
 
   Future<void> initialize() async {
+    await Future.wait([
+      _initializeEventProcessorIsolate(),
+      _initializeFetchProcessorIsolate(),
+      _initializeIsolate(),
+    ]);
+
     notesBox =
         await _openHiveBox<NoteModel>('notes_${dataType.toString()}_$npub');
     print('[DataService] Hive notes box opened successfully.');
@@ -237,14 +251,6 @@ class DataService {
       'wss://vitor.nostr1.com',
     ]);
 
-    await Future.wait([
-      _initializeIsolate(),
-      _socketManager.connectRelays([],
-          onEvent: (event, relayUrl) => _handleEvent(event, []),
-          onDisconnected: (relayUrl) =>
-              _socketManager.reconnectRelay(relayUrl, [])),
-    ]);
-
     await loadNotesFromCache((loadedNotes) {
       print('[DataService] Cache loaded with ${loadedNotes.length} notes.');
     });
@@ -264,6 +270,107 @@ class DataService {
 
     _startCacheCleanup();
     _isInitialized = true;
+  }
+
+  Future<void> _initializeEventProcessorIsolate() async {
+    final ReceivePort receivePort = ReceivePort();
+    _eventProcessorIsolate =
+        await Isolate.spawn(_eventProcessorEntryPoint, receivePort.sendPort);
+
+    receivePort.listen((dynamic message) {
+      if (message is SendPort) {
+        _eventProcessorSendPort = message;
+        _eventProcessorReady.complete();
+      } else if (message is Map<String, dynamic>) {
+        if (message.containsKey('error')) {
+          print('[Isolate ERROR] ${message['error']}');
+        } else {
+          _processParsedEvent(message);
+        }
+      }
+    });
+  }
+
+  Future<void> _initializeFetchProcessorIsolate() async {
+    final ReceivePort receivePort = ReceivePort();
+    _fetchProcessorIsolate =
+        await Isolate.spawn(_fetchProcessorEntryPoint, receivePort.sendPort);
+
+    receivePort.listen((dynamic message) {
+      if (message is SendPort) {
+        _fetchProcessorSendPort = message;
+        _fetchProcessorReady.complete();
+      } else if (message is Map<String, dynamic>) {
+        if (message.containsKey('error')) {
+          print('[Fetch Isolate ERROR] ${message['error']}');
+        } else {
+          _handleFetchedData(message);
+        }
+      }
+    });
+  }
+
+  static void _eventProcessorEntryPoint(SendPort sendPort) {
+    final ReceivePort port = ReceivePort();
+    sendPort.send(port.sendPort);
+
+    port.listen((dynamic message) async {
+      if (message is Map<String, dynamic>) {
+        try {
+          final String eventRaw = message['eventRaw'];
+          final List<String> targetNpubs =
+              List<String>.from(message['targetNpubs']);
+          final int priority = message['priority'] ?? 2;
+
+          final decodedEvent = jsonDecode(eventRaw);
+
+          if (decodedEvent is List && decodedEvent.length > 2) {
+            final kind = decodedEvent[2]['kind'] as int;
+            final eventId = decodedEvent[2]['id'] as String;
+            final author = decodedEvent[2]['pubkey'] as String;
+
+            sendPort.send({
+              'kind': kind,
+              'eventId': eventId,
+              'author': author,
+              'eventData': decodedEvent[2],
+              'targetNpubs': targetNpubs,
+              'priority': priority,
+            });
+          } else {
+            sendPort.send({
+              'error':
+                  'Unexpected event format or not an EVENT type: $decodedEvent'
+            });
+          }
+        } catch (e) {
+          sendPort.send({'error': e.toString()});
+        }
+      }
+    });
+  }
+
+  static void _fetchProcessorEntryPoint(SendPort sendPort) {
+    final ReceivePort port = ReceivePort();
+    sendPort.send(port.sendPort);
+
+    port.listen((dynamic message) async {
+      if (message is Map<String, dynamic>) {
+        try {
+          final String type = message['type'];
+          final List<String> eventIds = List<String>.from(message['eventIds']);
+          final int priority = message['priority'] ?? 2;
+
+          sendPort.send({
+            'type': type,
+            'eventIds': eventIds,
+            'priority': priority,
+          });
+        } catch (e) {
+          sendPort.send({'error': e.toString()});
+        }
+      }
+    });
   }
 
   Future<Box<T>> _openHiveBox<T>(String boxName) async {
@@ -500,28 +607,14 @@ class DataService {
   Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {
     if (_isClosed) return;
     try {
-      final decodedEvent = jsonDecode(event);
-      if (decodedEvent[0] == 'EVENT') {
-        final Map<String, dynamic> eventData =
-            decodedEvent[2] as Map<String, dynamic>;
-        final kind = eventData['kind'] as int;
-        if (kind == 0) {
-          await _handleProfileEvent(eventData);
-        } else if (kind == 3) {
-          await _handleFollowingEvent(eventData);
-        } else if (kind == 7) {
-          await _handleReactionEvent(eventData);
-        } else if (kind == 1) {
-          await _processNoteEvent(eventData, targetNpubs,
-              rawWs: jsonEncode(eventData));
-        } else if (kind == 6) {
-          await _handleRepostEvent(eventData);
-          await _processNoteEvent(eventData, targetNpubs,
-              rawWs: jsonEncode(eventData));
-        }
-      }
+      await _eventProcessorReady.future;
+      _eventProcessorSendPort.send({
+        'eventRaw': event,
+        'targetNpubs': targetNpubs,
+        'priority': 1,
+      });
     } catch (e) {
-      print('[DataService ERROR] Error handling event: $e');
+      print('[DataService ERROR] Error sending event to isolate: $e');
     }
   }
 
@@ -716,36 +809,6 @@ class DataService {
       }
     } catch (e) {
       print('[DataService ERROR] Error handling reply event: $e');
-    }
-  }
-
-  Future<void> _handleRepostEvent(Map<String, dynamic> eventData) async {
-    if (_isClosed) return;
-    try {
-      String? originalNoteId;
-      for (var tag in eventData['tags']) {
-        if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
-          originalNoteId = tag[1] as String?;
-          break;
-        }
-      }
-      if (originalNoteId == null) return;
-
-      final repost = RepostModel.fromEvent(eventData, originalNoteId);
-      repostsMap.putIfAbsent(originalNoteId, () => []);
-
-      if (!repostsMap[originalNoteId]!.any((r) => r.id == repost.id)) {
-        repostsMap[originalNoteId]!.add(repost);
-        onRepostsUpdated?.call(originalNoteId, repostsMap[originalNoteId]!);
-        onRepostCountUpdated?.call(
-            originalNoteId, repostsMap[originalNoteId]!.length);
-
-        await repostsBox?.put(repost.id, repost);
-
-        await _fetchProfilesBatch([repost.repostedBy]);
-      }
-    } catch (e) {
-      print('[DataService ERROR] Error handling repost event: $e');
     }
   }
 
@@ -1619,26 +1682,81 @@ class DataService {
 
   Future<void> fetchReactionsForEvents(List<String> eventIdsToFetch) async {
     if (_isClosed) return;
-    final request = Request(generateUUID(), [
-      Filter(kinds: [7], e: eventIdsToFetch, limit: 1000)
-    ]);
-    await _broadcastRequest(request);
+    await _fetchProcessorReady.future;
+    _fetchProcessorSendPort.send({
+      'type': 'reaction',
+      'eventIds': eventIdsToFetch,
+      'priority': 2,
+    });
   }
 
   Future<void> fetchRepliesForEvents(List<String> parentEventIds) async {
     if (_isClosed) return;
-    final request = Request(generateUUID(), [
-      Filter(kinds: [1], e: parentEventIds, limit: 1000)
-    ]);
-    await _broadcastRequest(request);
+    await _fetchProcessorReady.future;
+    _fetchProcessorSendPort.send({
+      'type': 'reply',
+      'eventIds': parentEventIds,
+      'priority': 2,
+    });
   }
 
   Future<void> fetchRepostsForEvents(List<String> eventIdsToFetch) async {
     if (_isClosed) return;
-    final request = Request(generateUUID(), [
-      Filter(kinds: [6], e: eventIdsToFetch, limit: 1000)
-    ]);
-    await _broadcastRequest(request);
+    await _fetchProcessorReady.future;
+    _fetchProcessorSendPort.send({
+      'type': 'repost',
+      'eventIds': eventIdsToFetch,
+      'priority': 2,
+    });
+  }
+
+  Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
+    try {
+      final int kind = parsedData['kind'];
+      final Map<String, dynamic> eventData = parsedData['eventData'];
+      final List<String> targetNpubs = parsedData['targetNpubs'];
+
+      if (kind == 0) {
+        await _handleProfileEvent(eventData);
+      } else if (kind == 3) {
+        await _handleFollowingEvent(eventData);
+      } else if (kind == 7) {
+        await _handleReactionEvent(eventData);
+      } else if (kind == 1 || kind == 6) {
+        await _processNoteEvent(eventData, targetNpubs,
+            rawWs: jsonEncode(eventData));
+      }
+    } catch (e) {
+      print('[DataService ERROR] Error processing parsed event: $e');
+    }
+  }
+
+  Future<void> _handleFetchedData(Map<String, dynamic> fetchData) async {
+    try {
+      final String type = fetchData['type'];
+      final List<String> eventIds = List<String>.from(fetchData['eventIds']);
+
+      Request request;
+      if (type == 'reaction') {
+        request = Request(generateUUID(), [
+          Filter(kinds: [7], e: eventIds, limit: 1000)
+        ]);
+      } else if (type == 'reply') {
+        request = Request(generateUUID(), [
+          Filter(kinds: [1], e: eventIds, limit: 1000)
+        ]);
+      } else if (type == 'repost') {
+        request = Request(generateUUID(), [
+          Filter(kinds: [6], e: eventIds, limit: 1000)
+        ]);
+      } else {
+        return;
+      }
+
+      await _broadcastRequest(request);
+    } catch (e) {
+      print('[DataService ERROR] Error handling fetched data: $e');
+    }
   }
 
   void _handleCacheLoad(dynamic data) {
@@ -1711,6 +1829,18 @@ class DataService {
         _sendPort.send(IsolateMessage(MessageType.Close, 'close'));
       }
     } catch (e) {}
+
+    try {
+      _eventProcessorIsolate.kill(priority: Isolate.immediate);
+    } catch (e) {
+      print('[DataService] Failed to kill eventProcessorIsolate: $e');
+    }
+
+    try {
+      _fetchProcessorIsolate.kill(priority: Isolate.immediate);
+    } catch (e) {
+      print('[DataService] Failed to kill fetchProcessorIsolate: $e');
+    }
 
     _isolate.kill(priority: Isolate.immediate);
     _receivePort.close();
