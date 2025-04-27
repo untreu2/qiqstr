@@ -822,13 +822,14 @@ class DataService {
         }
 
         final rawContent = eventData['content'];
-
         String finalContent = '';
-        String originalAuthor = eventData['pubkey'];
+        String originalAuthor = '';
         String originalId = originalNoteId;
         String? originalRawWs;
+        DateTime originalTimestamp =
+            DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000);
 
-        if (rawContent is String) {
+        if (rawContent is String && rawContent.isNotEmpty) {
           try {
             final decoded = jsonDecode(rawContent);
             if (decoded is Map<String, dynamic>) {
@@ -841,6 +842,10 @@ class DataService {
               if (decoded.containsKey('id')) {
                 originalId = decoded['id'] as String;
               }
+              if (decoded.containsKey('created_at')) {
+                originalTimestamp = DateTime.fromMillisecondsSinceEpoch(
+                    (decoded['created_at'] as int) * 1000);
+              }
               originalRawWs = jsonEncode(decoded);
             } else {
               finalContent = rawContent;
@@ -850,16 +855,18 @@ class DataService {
           }
         }
 
+        final repostTimestamp =
+            DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000);
+
         final note = NoteModel(
           id: originalId,
           content: finalContent,
-          author: originalAuthor,
-          timestamp: DateTime.fromMillisecondsSinceEpoch(
-              eventData['created_at'] * 1000),
+          author:
+              originalAuthor.isNotEmpty ? originalAuthor : eventData['pubkey'],
+          timestamp: originalTimestamp,
           isRepost: true,
           repostedBy: eventData['pubkey'],
-          repostTimestamp: DateTime.fromMillisecondsSinceEpoch(
-              eventData['created_at'] * 1000),
+          repostTimestamp: repostTimestamp,
           rawWs: originalRawWs ?? jsonEncode(eventData),
         );
 
@@ -879,6 +886,14 @@ class DataService {
           }
 
           onNewNote?.call(note);
+
+          await Future.wait([
+            fetchReactionsForEvents([note.id]),
+            fetchRepliesForEvents([note.id]),
+            fetchRepostsForEvents([note.id]),
+          ]);
+
+          await _updateReactionSubscription();
         }
 
         await _fetchProfilesBatch([repost.repostedBy]);
