@@ -595,18 +595,18 @@ class DataService {
     String noteContent =
         noteContentRaw is String ? noteContentRaw : jsonEncode(noteContentRaw);
     final tags = eventData['tags'] as List<dynamic>;
-    final parentEventId = _extractParentEventId(tags);
+    final rootEventId = _extractRootEventId(tags);
 
     if (eventIds.contains(eventId) || noteContent.trim().isEmpty) return;
 
-    if (parentEventId == null &&
+    if (rootEventId == null &&
         dataType == DataType.Feed &&
         targetNpubs.isNotEmpty &&
         !targetNpubs.contains(noteAuthor) &&
         (!isRepost || !targetNpubs.contains(author))) return;
 
-    if (parentEventId != null) {
-      await _handleReplyEvent(eventData, parentEventId);
+    if (rootEventId != null) {
+      await _handleReplyEvent(eventData, rootEventId);
     } else {
       final timestamp = DateTime.fromMillisecondsSinceEpoch(
           (eventData['created_at'] as int) * 1000);
@@ -643,9 +643,9 @@ class DataService {
     }
   }
 
-  String? _extractParentEventId(List<dynamic> tags) {
+  String? _extractRootEventId(List<dynamic> tags) {
     for (var tag in tags) {
-      if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
+      if (tag is List && tag.length >= 4 && tag[0] == 'e' && tag[3] == 'root') {
         return tag[1] as String?;
       }
     }
