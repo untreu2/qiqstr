@@ -586,7 +586,6 @@ class DataService {
 
     final eventId = eventData['id'] as String?;
     if (eventId == null) {
-      print('[DataService] Event ID is null.');
       return;
     }
 
@@ -599,11 +598,19 @@ class DataService {
 
     if (eventIds.contains(eventId) || noteContent.trim().isEmpty) return;
 
-    if (rootEventId == null &&
-        dataType == DataType.Feed &&
-        targetNpubs.isNotEmpty &&
-        !targetNpubs.contains(noteAuthor) &&
-        (!isRepost || !targetNpubs.contains(author))) return;
+    if (dataType == DataType.Profile) {
+      if (!(noteAuthor == npub || (isRepost && author == npub))) {
+        return;
+      }
+    } else {
+      if (rootEventId == null &&
+          dataType == DataType.Feed &&
+          targetNpubs.isNotEmpty &&
+          !targetNpubs.contains(noteAuthor) &&
+          (!isRepost || !targetNpubs.contains(author))) {
+        return;
+      }
+    }
 
     if (rootEventId != null) {
       await _handleReplyEvent(eventData, rootEventId);
@@ -630,7 +637,6 @@ class DataService {
         }
 
         onNewNote?.call(newNote);
-        print('[DataService] New note added and saved to cache: ${newNote.id}');
 
         List<String> newEventIds = [newNote.id];
         await Future.wait([
