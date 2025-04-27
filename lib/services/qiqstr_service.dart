@@ -891,6 +891,36 @@ class DataService {
     }
   }
 
+  Future<NoteModel?> getCachedNote(String eventIdHex) async {
+    final inMemory = notes.firstWhereOrNull((n) => n.id == eventIdHex);
+    if (inMemory != null) return inMemory;
+
+    if (notesBox != null && notesBox!.isOpen) {
+      final inHive = notesBox!.get(eventIdHex);
+      if (inHive != null) return inHive;
+    }
+
+    final raw = await _fetchEventById(eventIdHex);
+    if (raw == null) return null;
+
+    final model = NoteModel(
+      id: raw['id'],
+      content: raw['content'] is String
+          ? raw['content']
+          : jsonEncode(raw['content']),
+      author: raw['pubkey'],
+      timestamp: DateTime.fromMillisecondsSinceEpoch(raw['created_at'] * 1000),
+      isRepost: raw['kind'] == 6,
+      rawWs: jsonEncode(raw),
+    );
+
+    notes.add(model);
+    eventIds.add(model.id);
+    await notesBox?.put(model.id, model);
+
+    return model;
+  }
+
   Future<List<String>> getFollowingList(String targetNpub) async {
     if (targetNpub != npub) {
       print(

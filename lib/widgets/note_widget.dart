@@ -5,7 +5,6 @@ import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:flutter/services.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/send_reply.dart';
 import 'package:qiqstr/widgets/link_preview_widget.dart';
@@ -14,6 +13,7 @@ import '../models/note_model.dart';
 import '../screens/profile_page.dart';
 import '../services/qiqstr_service.dart';
 import 'content_parser.dart';
+import 'quote_widget.dart';
 
 class NoteWidget extends StatefulWidget {
   final NoteModel note;
@@ -41,7 +41,6 @@ class _NoteWidgetState extends State<NoteWidget> {
   bool _isReactionGlowing = false;
   bool _isReplyGlowing = false;
   bool _isRepostGlowing = false;
-
   double _reactionScale = 1.0;
   double _replyScale = 1.0;
   double _repostScale = 1.0;
@@ -470,6 +469,10 @@ class _NoteWidgetState extends State<NoteWidget> {
                       .toList(),
                 ),
               ),
+            if ((parsed['quoteIds'] as List).isNotEmpty) ...[
+              for (final q in parsed['quoteIds'] as List<String>)
+                QuoteWidget(bech32: q, dataService: widget.dataService),
+            ],
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
