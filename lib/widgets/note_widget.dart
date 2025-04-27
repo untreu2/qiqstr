@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
@@ -56,23 +57,6 @@ class _NoteWidgetState extends State<NoteWidget> {
     return '${(d.inDays / 365).floor()}y';
   }
 
-  Future<String?> _fetchUsername(String id) async {
-    try {
-      String? pubHex;
-      if (id.startsWith('npub1')) {
-        pubHex = decodeBasicBech32(id, 'npub');
-      } else if (id.startsWith('nprofile1')) {
-        pubHex = decodeTlvBech32Full(id, 'nprofile')['type_0_main'];
-      }
-      if (pubHex != null) {
-        final data = await widget.dataService.getCachedUserProfile(pubHex);
-        final user = UserModel.fromCachedProfile(pubHex, data);
-        if (user.name.isNotEmpty) return user.name;
-      }
-    } catch (_) {}
-    return null;
-  }
-
   Future<void> _navigateToMentionProfile(String id) async {
     try {
       String? pubHex;
@@ -92,47 +76,109 @@ class _NoteWidgetState extends State<NoteWidget> {
     } catch (_) {}
   }
 
+  Future<Map<String, String>> _fetchAllMentions(
+      List<Map<String, dynamic>> mentionParts) async {
+    final Map<String, String> results = {};
+
+    for (final part in mentionParts) {
+      final id = part['id'] as String;
+      try {
+        String? pubHex;
+        if (id.startsWith('npub1')) {
+          pubHex = decodeBasicBech32(id, 'npub');
+        } else if (id.startsWith('nprofile1')) {
+          pubHex = decodeTlvBech32Full(id, 'nprofile')['type_0_main'];
+        }
+        if (pubHex != null) {
+          final data = await widget.dataService.getCachedUserProfile(pubHex);
+          final user = UserModel.fromCachedProfile(pubHex, data);
+          if (user.name.isNotEmpty) {
+            results[id] = user.name;
+          }
+        }
+      } catch (_) {}
+    }
+
+    return results;
+  }
+
   Widget _buildContentText(Map<String, dynamic> parsed) {
     final parts = parsed['textParts'] as List<Map<String, dynamic>>;
-    return Wrap(
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: parts.map((p) {
-        if (p['type'] == 'text') {
-          final txt = p['text'] as String;
-          return Linkify(
-            text: txt,
-            onOpen: _onOpen,
-            style: TextStyle(
-              fontSize: txt.length < 21 ? 20 : 15.5,
-              color: Colors.white,
-            ),
-            linkStyle: const TextStyle(
-              color: Colors.amberAccent,
-              fontStyle: FontStyle.italic,
-            ),
-          );
-        }
-        return FutureBuilder<String?>(
-          future: _fetchUsername(p['id']),
-          builder: (_, snap) {
-            final disp = snap.data?.isNotEmpty == true
-                ? '@${snap.data}'
-                : '@${p['id'].substring(0, 8)}...';
-            return GestureDetector(
-              onTap: () => _navigateToMentionProfile(p['id']),
-              child: Text(
-                disp,
+
+    return FutureBuilder<Map<String, String>>(
+      future: _fetchAllMentions(
+          parts.where((p) => p['type'] == 'mention').toList()),
+      builder: (context, snapshot) {
+        final mentions = snapshot.data ?? {};
+
+        List<InlineSpan> spans = [];
+
+        for (var p in parts) {
+          if (p['type'] == 'text') {
+            final text = p['text'] as String;
+            final regex = RegExp(r'(https?:\/\/[^\s]+)');
+            final matches = regex.allMatches(text);
+
+            int lastMatchEnd = 0;
+            for (final match in matches) {
+              if (match.start > lastMatchEnd) {
+                spans.add(TextSpan(
+                  text: text.substring(lastMatchEnd, match.start),
+                  style: TextStyle(
+                    fontSize: text.length < 21 ? 20 : 15.5,
+                    color: Colors.white,
+                  ),
+                ));
+              }
+
+              final url = text.substring(match.start, match.end);
+              spans.add(
+                TextSpan(
+                  text: url,
+                  style: const TextStyle(
+                    color: Colors.amberAccent,
+                    fontStyle: FontStyle.italic,
+                    fontSize: 15.5,
+                  ),
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = () => _onOpen(LinkableElement(url, url)),
+                ),
+              );
+              lastMatchEnd = match.end;
+            }
+
+            if (lastMatchEnd < text.length) {
+              spans.add(TextSpan(
+                text: text.substring(lastMatchEnd),
+                style: TextStyle(
+                  fontSize: text.length < 21 ? 20 : 15.5,
+                  color: Colors.white,
+                ),
+              ));
+            }
+          } else if (p['type'] == 'mention') {
+            final username =
+                mentions[p['id']] ?? '${p['id'].substring(0, 8)}...';
+            spans.add(
+              TextSpan(
+                text: '@$username',
                 style: const TextStyle(
                   color: Colors.amberAccent,
                   fontSize: 15.5,
                   fontWeight: FontWeight.w500,
                   fontStyle: FontStyle.italic,
                 ),
+                recognizer: TapGestureRecognizer()
+                  ..onTap = () => _navigateToMentionProfile(p['id']),
               ),
             );
-          },
+          }
+        }
+
+        return RichText(
+          text: TextSpan(children: spans),
         );
-      }).toList(),
+      },
     );
   }
 

@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
@@ -33,6 +34,111 @@ class QuoteWidget extends StatelessWidget {
     if (await canLaunchUrl(url)) await launchUrl(url);
   }
 
+  Future<Map<String, String>> _fetchAllMentions(
+      List<Map<String, dynamic>> mentionParts) async {
+    final Map<String, String> results = {};
+    for (final part in mentionParts) {
+      final id = part['id'] as String;
+      try {
+        String? pubHex;
+        if (id.startsWith('npub1')) {
+          pubHex = decodeBasicBech32(id, 'npub');
+        } else if (id.startsWith('nprofile1')) {
+          pubHex = decodeTlvBech32Full(id, 'nprofile')['type_0_main'];
+        }
+        if (pubHex != null) {
+          final data = await dataService.getCachedUserProfile(pubHex);
+          final user = UserModel.fromCachedProfile(pubHex, data);
+          if (user.name.isNotEmpty) {
+            results[id] = user.name;
+          }
+        }
+      } catch (_) {}
+    }
+    return results;
+  }
+
+  Widget _contentText(Map<String, dynamic> parsed) {
+    final parts = parsed['textParts'] as List<Map<String, dynamic>>;
+
+    return FutureBuilder<Map<String, String>>(
+      future: _fetchAllMentions(
+          parts.where((p) => p['type'] == 'mention').toList()),
+      builder: (context, snapshot) {
+        final mentions = snapshot.data ?? {};
+
+        List<InlineSpan> spans = [];
+
+        for (var p in parts) {
+          if (p['type'] == 'text') {
+            final text = p['text'] as String;
+            final regex = RegExp(r'(https?:\/\/[^\s]+)');
+            final matches = regex.allMatches(text);
+
+            int lastMatchEnd = 0;
+            for (final match in matches) {
+              if (match.start > lastMatchEnd) {
+                spans.add(TextSpan(
+                  text: text.substring(lastMatchEnd, match.start),
+                  style: const TextStyle(fontSize: 14, color: Colors.white70),
+                ));
+              }
+
+              final url = text.substring(match.start, match.end);
+              spans.add(
+                TextSpan(
+                  text: url,
+                  style: const TextStyle(
+                    color: Colors.amberAccent,
+                    fontStyle: FontStyle.italic,
+                    fontSize: 14,
+                  ),
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = () => _onOpen(LinkableElement(url, url)),
+                ),
+              );
+              lastMatchEnd = match.end;
+            }
+
+            if (lastMatchEnd < text.length) {
+              spans.add(TextSpan(
+                text: text.substring(lastMatchEnd),
+                style: const TextStyle(fontSize: 14, color: Colors.white70),
+              ));
+            }
+          } else if (p['type'] == 'mention') {
+            final username = mentions[p['id']] ?? '${p['id'].substring(0, 8)}…';
+            spans.add(
+              TextSpan(
+                text: '@$username',
+                style: const TextStyle(
+                  color: Colors.amberAccent,
+                  fontSize: 14,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            );
+          }
+        }
+
+        return RichText(
+          text: TextSpan(children: spans),
+        );
+      },
+    );
+  }
+
+  Future<NoteModel?> _fetchNote() async {
+    String? hex;
+    if (bech32.startsWith('note1')) {
+      hex = decodeBasicBech32(bech32, 'note');
+    } else if (bech32.startsWith('nevent1')) {
+      hex = decodeTlvBech32Full(bech32, 'nevent')['type_0_main'];
+    }
+    if (hex == null) return null;
+    return await dataService.getCachedNote(hex);
+  }
+
   Widget _authorInfo(String npub) {
     return FutureBuilder<Map<String, String>>(
       future: dataService.getCachedUserProfile(npub),
@@ -64,38 +170,6 @@ class QuoteWidget extends StatelessWidget {
         );
       },
     );
-  }
-
-  Widget _contentText(Map<String, dynamic> parsed) {
-    final parts = parsed['textParts'] as List<Map<String, dynamic>>;
-    return Wrap(
-      children: parts.map((p) {
-        if (p['type'] == 'text') {
-          return Linkify(
-            text: p['text'] as String,
-            onOpen: _onOpen,
-            style: const TextStyle(fontSize: 14, color: Colors.white70),
-            linkStyle: const TextStyle(color: Colors.amberAccent),
-          );
-        }
-        return Text('@${(p['id'] as String).substring(0, 8)}…',
-            style: const TextStyle(
-                color: Colors.amberAccent,
-                fontSize: 14,
-                fontStyle: FontStyle.italic));
-      }).toList(),
-    );
-  }
-
-  Future<NoteModel?> _fetchNote() async {
-    String? hex;
-    if (bech32.startsWith('note1')) {
-      hex = decodeBasicBech32(bech32, 'note');
-    } else if (bech32.startsWith('nevent1')) {
-      hex = decodeTlvBech32Full(bech32, 'nevent')['type_0_main'];
-    }
-    if (hex == null) return null;
-    return await dataService.getCachedNote(hex);
   }
 
   @override
