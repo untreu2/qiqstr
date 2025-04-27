@@ -2,17 +2,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
-import 'package:qiqstr/models/user_model.dart';
+import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter/services.dart';
+import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/send_reply.dart';
 import 'package:qiqstr/widgets/link_preview_widget.dart';
 import 'package:qiqstr/widgets/media_preview_widget.dart';
-import 'package:flutter/services.dart';
 import '../models/note_model.dart';
 import '../screens/profile_page.dart';
 import '../services/qiqstr_service.dart';
 import 'content_parser.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 class NoteWidget extends StatefulWidget {
   final NoteModel note;
@@ -45,29 +46,95 @@ class _NoteWidgetState extends State<NoteWidget> {
   double _replyScale = 1.0;
   double _repostScale = 1.0;
 
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
   String _formatTimestamp(DateTime timestamp) {
-    final Duration difference = DateTime.now().difference(timestamp);
-    if (difference.inSeconds < 60) return '${difference.inSeconds}s';
-    if (difference.inMinutes < 60) return '${difference.inMinutes}m';
-    if (difference.inHours < 24) return '${difference.inHours}h';
-    if (difference.inDays < 7) return '${difference.inDays}d';
-    if (difference.inDays < 30) {
-      return '${(difference.inDays / 7).floor()}w';
-    }
-    if (difference.inDays < 365) {
-      return '${(difference.inDays / 30).floor()}mo';
-    }
-    return '${(difference.inDays / 365).floor()}y';
+    final d = DateTime.now().difference(timestamp);
+    if (d.inSeconds < 60) return '${d.inSeconds}s';
+    if (d.inMinutes < 60) return '${d.inMinutes}m';
+    if (d.inHours < 24) return '${d.inHours}h';
+    if (d.inDays < 7) return '${d.inDays}d';
+    if (d.inDays < 30) return '${(d.inDays / 7).floor()}w';
+    if (d.inDays < 365) return '${(d.inDays / 30).floor()}mo';
+    return '${(d.inDays / 365).floor()}y';
+  }
+
+  Future<String?> _fetchUsername(String id) async {
+    try {
+      String? pubHex;
+      if (id.startsWith('npub1')) {
+        pubHex = decodeBasicBech32(id, 'npub');
+      } else if (id.startsWith('nprofile1')) {
+        pubHex = decodeTlvBech32Full(id, 'nprofile')['type_0_main'];
+      }
+      if (pubHex != null) {
+        final data = await widget.dataService.getCachedUserProfile(pubHex);
+        final user = UserModel.fromCachedProfile(pubHex, data);
+        if (user.name.isNotEmpty) return user.name;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> _navigateToMentionProfile(String id) async {
+    try {
+      String? pubHex;
+      if (id.startsWith('npub1')) {
+        pubHex = decodeBasicBech32(id, 'npub');
+      } else if (id.startsWith('nprofile1')) {
+        pubHex = decodeTlvBech32Full(id, 'nprofile')['type_0_main'];
+      }
+      if (pubHex == null) return;
+      final data = await widget.dataService.getCachedUserProfile(pubHex);
+      final user = UserModel.fromCachedProfile(pubHex, data);
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ProfilePage(user: user)),
+      );
+    } catch (_) {}
+  }
+
+  Widget _buildContentText(Map<String, dynamic> parsed) {
+    final parts = parsed['textParts'] as List<Map<String, dynamic>>;
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: parts.map((p) {
+        if (p['type'] == 'text') {
+          final txt = p['text'] as String;
+          return Linkify(
+            text: txt,
+            onOpen: _onOpen,
+            style: TextStyle(
+              fontSize: txt.length < 21 ? 20 : 15.5,
+              color: Colors.white,
+            ),
+            linkStyle: const TextStyle(
+              color: Colors.amberAccent,
+              fontStyle: FontStyle.italic,
+            ),
+          );
+        }
+        return FutureBuilder<String?>(
+          future: _fetchUsername(p['id']),
+          builder: (_, snap) {
+            final disp = snap.data?.isNotEmpty == true
+                ? '@${snap.data}'
+                : '@${p['id'].substring(0, 8)}...';
+            return GestureDetector(
+              onTap: () => _navigateToMentionProfile(p['id']),
+              child: Text(
+                disp,
+                style: const TextStyle(
+                  color: Colors.amberAccent,
+                  fontSize: 15.5,
+                  fontWeight: FontWeight.w500,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            );
+          },
+        );
+      }).toList(),
+    );
   }
 
   void _animateReactionButton() {
@@ -116,102 +183,74 @@ class _NoteWidgetState extends State<NoteWidget> {
   }
 
   bool _hasReacted() {
-    final reactions = widget.dataService.reactionsMap[widget.note.id] ?? [];
-    return reactions.any((r) => r.author == widget.currentUserNpub);
+    final r = widget.dataService.reactionsMap[widget.note.id] ?? [];
+    return r.any((e) => e.author == widget.currentUserNpub);
   }
 
   bool _hasReplied() {
-    final replies = widget.dataService.repliesMap[widget.note.id] ?? [];
-    return replies.any((r) => r.author == widget.currentUserNpub);
+    final r = widget.dataService.repliesMap[widget.note.id] ?? [];
+    return r.any((e) => e.author == widget.currentUserNpub);
   }
 
   bool _hasReposted() {
-    final reposts = widget.dataService.repostsMap[widget.note.id] ?? [];
-    return reposts.any((r) => r.repostedBy == widget.currentUserNpub);
+    final r = widget.dataService.repostsMap[widget.note.id] ?? [];
+    return r.any((e) => e.repostedBy == widget.currentUserNpub);
   }
 
   void _handleReactionTap() async {
     _animateReactionButton();
     try {
       await widget.dataService.sendReaction(widget.note.id, '💜');
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sending reaction: $e')),
-      );
-    }
-  }
-
-  void _handleDoubleTap(TapDownDetails details) async {
-    _handleReactionTap();
+    } catch (_) {}
   }
 
   void _handleReplyTap() {
     _animateReplyButton();
-    _showReplyDialog();
-  }
-
-  void _handleRepostTap() {
-    _animateRepostButton();
-    _handleRepost();
-  }
-
-  Future<void> _handleRepost() async {
-    try {
-      await widget.dataService.sendRepost(widget.note);
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sending repost: $e')),
-      );
-    }
-  }
-
-  void _showReplyDialog() {
     showDialog(
       context: context,
-      builder: (context) => SendReplyDialog(
-        dataService: widget.dataService,
-        noteId: widget.note.id,
-      ),
+      builder: (_) => SendReplyDialog(
+          dataService: widget.dataService, noteId: widget.note.id),
     );
+  }
+
+  void _handleRepostTap() async {
+    _animateRepostButton();
+    try {
+      await widget.dataService.sendRepost(widget.note);
+    } catch (_) {}
+  }
+
+  Future<void> _onOpen(LinkableElement link) async {
+    final url = Uri.parse(link.url);
+    if (await canLaunchUrl(url)) await launchUrl(url);
   }
 
   Future<void> _navigateToProfile(String npub) async {
     try {
-      final profileData = await widget.dataService.getCachedUserProfile(npub);
-      final user = UserModel.fromCachedProfile(npub, profileData);
-      if (mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ProfilePage(user: user),
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading profile: $e')),
+      final data = await widget.dataService.getCachedUserProfile(npub);
+      final user = UserModel.fromCachedProfile(npub, data);
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ProfilePage(user: user)),
       );
-    }
+    } catch (_) {}
   }
 
   Widget _buildAuthorInfo(String npub) {
     return FutureBuilder<Map<String, String>>(
       future: widget.dataService.getCachedUserProfile(npub),
-      builder: (context, snapshot) {
+      builder: (_, snap) {
         String name = 'Anonymous';
         String nip05 = '';
-        String profileImage = '';
-
-        if (snapshot.hasData) {
-          final user = UserModel.fromCachedProfile(npub, snapshot.data!);
-          name = user.name;
-          nip05 = user.nip05;
-          profileImage = user.profileImage;
+        String img = '';
+        if (snap.hasData) {
+          final u = UserModel.fromCachedProfile(npub, snap.data!);
+          name = u.name;
+          nip05 = u.nip05;
+          img = u.profileImage;
         }
-
-        final truncatedName =
-            name.length > 25 ? '${name.substring(0, 25)}...' : name;
-
+        final tr = name.length > 25 ? '${name.substring(0, 25)}...' : name;
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -224,12 +263,11 @@ class _NoteWidgetState extends State<NoteWidget> {
                 ),
                 child: CircleAvatar(
                   radius: 20,
-                  backgroundImage: profileImage.isNotEmpty
-                      ? CachedNetworkImageProvider(profileImage)
-                      : null,
+                  backgroundImage:
+                      img.isNotEmpty ? CachedNetworkImageProvider(img) : null,
                   backgroundColor:
-                      profileImage.isEmpty ? Colors.grey : Colors.transparent,
-                  child: profileImage.isEmpty
+                      img.isEmpty ? Colors.grey : Colors.transparent,
+                  child: img.isEmpty
                       ? const Icon(Icons.person, size: 20, color: Colors.white)
                       : null,
                 ),
@@ -242,7 +280,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    truncatedName,
+                    tr,
                     style: const TextStyle(
                       fontSize: 15.5,
                       fontWeight: FontWeight.bold,
@@ -252,10 +290,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                   if (nip05.isNotEmpty)
                     Text(
                       nip05,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[400],
-                      ),
+                      style: TextStyle(fontSize: 13, color: Colors.grey[400]),
                     ),
                 ],
               ),
@@ -266,49 +301,45 @@ class _NoteWidgetState extends State<NoteWidget> {
     );
   }
 
-  Widget _buildRepostInfo(String npub, DateTime? repostTimestamp) {
+  Widget _buildRepostInfo(String npub, DateTime? ts) {
     return FutureBuilder<Map<String, String>>(
       future: widget.dataService.getCachedUserProfile(npub),
-      builder: (context, snapshot) {
+      builder: (_, snap) {
         String name = 'Unknown';
-        String profileImage = '';
-        if (snapshot.hasData) {
-          name = snapshot.data!['name'] ?? 'Unknown';
-          profileImage = snapshot.data!['profileImage'] ?? '';
+        String img = '';
+        if (snap.hasData) {
+          name = snap.data!['name'] ?? 'Unknown';
+          img = snap.data!['profileImage'] ?? '';
         }
         return GestureDetector(
           onTap: () => _navigateToProfile(npub),
           child: Row(
             children: [
-              const Icon(Icons.repeat, size: 16.0, color: Colors.grey),
-              const SizedBox(width: 8.0),
-              profileImage.isNotEmpty
+              const Icon(Icons.repeat, size: 16, color: Colors.grey),
+              const SizedBox(width: 8),
+              img.isNotEmpty
                   ? CircleAvatar(
                       radius: 12,
-                      backgroundImage: CachedNetworkImageProvider(profileImage),
+                      backgroundImage: CachedNetworkImageProvider(img),
                       backgroundColor: Colors.transparent,
                     )
                   : const CircleAvatar(
                       radius: 12,
                       child: Icon(Icons.person, size: 12),
                     ),
-              const SizedBox(width: 6.0),
+              const SizedBox(width: 6),
               Expanded(
                 child: Row(
                   children: [
-                    Text(
-                      'Reposted by $name',
-                      style:
-                          const TextStyle(fontSize: 12.0, color: Colors.grey),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (repostTimestamp != null) ...[
-                      const SizedBox(width: 6.0),
-                      Text(
-                        '• ${_formatTimestamp(repostTimestamp)}',
+                    Text('Reposted by $name',
                         style:
-                            const TextStyle(fontSize: 12.0, color: Colors.grey),
-                      ),
+                            const TextStyle(fontSize: 12, color: Colors.grey),
+                        overflow: TextOverflow.ellipsis),
+                    if (ts != null) ...[
+                      const SizedBox(width: 6),
+                      Text('• ${_formatTimestamp(ts)}',
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.grey)),
                     ],
                   ],
                 ),
@@ -321,44 +352,36 @@ class _NoteWidgetState extends State<NoteWidget> {
   }
 
   Widget _buildInteractionAvatars() {
-    final Set<String> npubs = {};
-
-    final reactions = widget.dataService.reactionsMap[widget.note.id] ?? [];
-    npubs.addAll(reactions.map((r) => r.author));
-
-    final replies = widget.dataService.repliesMap[widget.note.id] ?? [];
-    npubs.addAll(replies.map((r) => r.author));
-
-    final reposts = widget.dataService.repostsMap[widget.note.id] ?? [];
-    npubs.addAll(reposts.map((r) => r.repostedBy));
-
-    if (npubs.isEmpty) return const SizedBox.shrink();
-
+    final set = <String>{};
+    set.addAll((widget.dataService.reactionsMap[widget.note.id] ?? [])
+        .map((e) => e.author));
+    set.addAll((widget.dataService.repliesMap[widget.note.id] ?? [])
+        .map((e) => e.author));
+    set.addAll((widget.dataService.repostsMap[widget.note.id] ?? [])
+        .map((e) => e.repostedBy));
+    if (set.isEmpty) return const SizedBox.shrink();
+    final list = set.toList();
     return ListView.builder(
       scrollDirection: Axis.horizontal,
-      itemCount: npubs.length,
-      itemBuilder: (context, index) {
-        final npubList = npubs.toList();
-        final npub = npubList[index];
+      itemCount: list.length,
+      itemBuilder: (_, i) {
+        final npub = list[i];
         return FutureBuilder<Map<String, String>>(
           future: widget.dataService.getCachedUserProfile(npub),
-          builder: (context, snapshot) {
-            String profileImage = '';
-            if (snapshot.hasData) {
-              profileImage = snapshot.data!['profileImage'] ?? '';
-            }
+          builder: (_, snap) {
+            String img = '';
+            if (snap.hasData) img = snap.data!['profileImage'] ?? '';
             return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
               child: GestureDetector(
                 onTap: () => _navigateToProfile(npub),
                 child: CircleAvatar(
                   radius: 14,
-                  backgroundImage: profileImage.isNotEmpty
-                      ? CachedNetworkImageProvider(profileImage)
-                      : null,
+                  backgroundImage:
+                      img.isNotEmpty ? CachedNetworkImageProvider(img) : null,
                   backgroundColor:
-                      profileImage.isEmpty ? Colors.grey : Colors.transparent,
-                  child: profileImage.isEmpty
+                      img.isEmpty ? Colors.grey : Colors.transparent,
+                  child: img.isEmpty
                       ? const Icon(Icons.person, size: 16, color: Colors.white)
                       : null,
                 ),
@@ -370,212 +393,130 @@ class _NoteWidgetState extends State<NoteWidget> {
     );
   }
 
-  Future<void> _onOpen(LinkableElement link) async {
-    final Uri url = Uri.parse(link.url);
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not launch ${link.url}')),
-      );
-    }
+  Widget _buildAction({
+    required double scale,
+    required String svg,
+    required Color color,
+    required int count,
+    required VoidCallback onTap,
+  }) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 1.0, end: scale),
+      duration: const Duration(milliseconds: 300),
+      builder: (_, s, child) => Transform.scale(scale: s, child: child),
+      child: InkWell(
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        onTap: onTap,
+        child: Row(
+          children: [
+            SvgPicture.asset(svg, width: 20, height: 20, color: color),
+            const SizedBox(width: 4),
+            Text('$count',
+                style: const TextStyle(fontSize: 13, color: Colors.white)),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final parsedContent = parseContent(widget.note.content);
-
+    final parsed = parseContent(widget.note.content);
     return GestureDetector(
-      onDoubleTapDown: _handleDoubleTap,
-      child: Stack(
-        children: [
-          Container(
-            color: Colors.black,
-            padding: const EdgeInsets.only(bottom: 2.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                  child: Row(
-                    children: [
-                      _buildAuthorInfo(widget.note.author),
-                      const Spacer(),
-                      Text(
-                        _formatTimestamp(widget.note.timestamp),
-                        style:
-                            const TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                ),
-                if (widget.note.isRepost && widget.note.repostedBy != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12.0, vertical: 4.0),
-                    child: _buildRepostInfo(
-                        widget.note.repostedBy!, widget.note.repostTimestamp),
-                  ),
-                if (parsedContent['text'] != null &&
-                    (parsedContent['text'] as String).isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12.0, vertical: 4.0),
-                    child: Linkify(
-                      text: parsedContent['text'] as String,
-                      onOpen: _onOpen,
-                      style: TextStyle(
-                        fontSize: (parsedContent['text'] as String).length < 21
-                            ? 20.0
-                            : 15.5,
-                        color: Colors.white,
-                      ),
-                      linkStyle: const TextStyle(
-                        color: Colors.amberAccent,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ),
-                if (parsedContent['mediaUrls'] != null &&
-                    (parsedContent['mediaUrls'] as List).isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4.0),
-                    child: MediaPreviewWidget(
-                      mediaUrls: parsedContent['mediaUrls'] as List<String>,
-                    ),
-                  ),
-                if (parsedContent['linkUrls'] != null &&
-                    (parsedContent['linkUrls'] as List).isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4.0),
-                    child: Column(
-                      children: (parsedContent['linkUrls'] as List<String>)
-                          .map((url) => LinkPreviewWidget(url: url))
-                          .toList(),
-                    ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12.0, vertical: 8.0),
-                  child: Row(
-                    children: [
-                      TweenAnimationBuilder<double>(
-                        tween: Tween<double>(begin: 1.0, end: _reactionScale),
-                        duration: const Duration(milliseconds: 300),
-                        builder: (context, scale, child) => Transform.scale(
-                          scale: scale,
-                          child: child,
-                        ),
-                        child: InkWell(
-                          splashColor: Colors.transparent,
-                          highlightColor: Colors.transparent,
-                          onTap: _handleReactionTap,
-                          child: Row(
-                            children: [
-                              SvgPicture.asset(
-                                'assets/reaction_button.svg',
-                                width: 20.00,
-                                height: 20.00,
-                                color: (_isReactionGlowing || _hasReacted())
-                                    ? Colors.red.shade400
-                                    : Colors.white,
-                              ),
-                              const SizedBox(width: 4.0),
-                              Text(
-                                widget.reactionCount.toString(),
-                                style: const TextStyle(
-                                    fontSize: 13.0, color: Colors.white),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      TweenAnimationBuilder<double>(
-                        tween: Tween<double>(begin: 1.0, end: _replyScale),
-                        duration: const Duration(milliseconds: 300),
-                        builder: (context, scale, child) => Transform.scale(
-                          scale: scale,
-                          child: child,
-                        ),
-                        child: InkWell(
-                          splashColor: Colors.transparent,
-                          highlightColor: Colors.transparent,
-                          onTap: _handleReplyTap,
-                          child: Row(
-                            children: [
-                              SvgPicture.asset(
-                                'assets/reply_button.svg',
-                                width: 20.00,
-                                height: 20.00,
-                                color: (_isReplyGlowing || _hasReplied())
-                                    ? Colors.blue.shade200
-                                    : Colors.white,
-                              ),
-                              const SizedBox(width: 4.0),
-                              Text(
-                                widget.replyCount.toString(),
-                                style: const TextStyle(
-                                    fontSize: 13.0, color: Colors.white),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      TweenAnimationBuilder<double>(
-                        tween: Tween<double>(begin: 1.0, end: _repostScale),
-                        duration: const Duration(milliseconds: 300),
-                        builder: (context, scale, child) => Transform.scale(
-                          scale: scale,
-                          child: child,
-                        ),
-                        child: InkWell(
-                          splashColor: Colors.transparent,
-                          highlightColor: Colors.transparent,
-                          onTap: _handleRepostTap,
-                          child: Row(
-                            children: [
-                              SvgPicture.asset(
-                                'assets/repost_button.svg',
-                                width: 20.00,
-                                height: 20.00,
-                                color: (_isRepostGlowing || _hasReposted())
-                                    ? Colors.green.shade400
-                                    : Colors.white,
-                              ),
-                              const SizedBox(width: 4.0),
-                              Text(
-                                widget.repostCount.toString(),
-                                style: const TextStyle(
-                                    fontSize: 13.0, color: Colors.white),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: SizedBox(
-                          height: 36,
-                          child: _buildInteractionAvatars(),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 6.0),
-                  child: Divider(
-                    height: 4.0,
-                    thickness: 0.5,
-                    color: Colors.white24,
-                  ),
-                ),
-              ],
+      onDoubleTapDown: (_) => _handleReactionTap(),
+      child: Container(
+        color: Colors.black,
+        padding: const EdgeInsets.only(bottom: 2),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                children: [
+                  _buildAuthorInfo(widget.note.author),
+                  const Spacer(),
+                  Text(_formatTimestamp(widget.note.timestamp),
+                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ),
             ),
-          ),
-        ],
+            if (widget.note.isRepost && widget.note.repostedBy != null)
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: _buildRepostInfo(
+                    widget.note.repostedBy!, widget.note.repostTimestamp),
+              ),
+            if ((parsed['textParts'] as List).isNotEmpty)
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: _buildContentText(parsed),
+              ),
+            if ((parsed['mediaUrls'] as List).isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: MediaPreviewWidget(
+                    mediaUrls: parsed['mediaUrls'] as List<String>),
+              ),
+            if ((parsed['linkUrls'] as List).isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Column(
+                  children: (parsed['linkUrls'] as List<String>)
+                      .map((u) => LinkPreviewWidget(url: u))
+                      .toList(),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  _buildAction(
+                    scale: _reactionScale,
+                    svg: 'assets/reaction_button.svg',
+                    color: _isReactionGlowing || _hasReacted()
+                        ? Colors.red.shade400
+                        : Colors.white,
+                    count: widget.reactionCount,
+                    onTap: _handleReactionTap,
+                  ),
+                  const SizedBox(width: 16),
+                  _buildAction(
+                    scale: _replyScale,
+                    svg: 'assets/reply_button.svg',
+                    color: _isReplyGlowing || _hasReplied()
+                        ? Colors.blue.shade200
+                        : Colors.white,
+                    count: widget.replyCount,
+                    onTap: _handleReplyTap,
+                  ),
+                  const SizedBox(width: 16),
+                  _buildAction(
+                    scale: _repostScale,
+                    svg: 'assets/repost_button.svg',
+                    color: _isRepostGlowing || _hasReposted()
+                        ? Colors.green.shade400
+                        : Colors.white,
+                    count: widget.repostCount,
+                    onTap: _handleRepostTap,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child:
+                        SizedBox(height: 36, child: _buildInteractionAvatars()),
+                  ),
+                ],
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 6),
+              child: Divider(height: 4, thickness: .5, color: Colors.white24),
+            ),
+          ],
+        ),
       ),
     );
   }
