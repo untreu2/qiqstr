@@ -670,13 +670,12 @@ class DataService {
       if (!reactionsMap[targetEventId]!.any((r) => r.id == reaction.id)) {
         reactionsMap[targetEventId]!.add(reaction);
         onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
-
-        print(
-            '[DataService] Reaction updated for event $targetEventId: ${reaction.content}');
         onReactionCountUpdated?.call(
             targetEventId, reactionsMap[targetEventId]!.length);
 
         await reactionsBox?.put(reaction.id, reaction);
+
+        await _fetchProfilesBatch([reaction.author]);
       }
     } catch (e) {
       print('[DataService ERROR] Error handling reaction event: $e');
@@ -690,22 +689,18 @@ class DataService {
     if (_isClosed) return;
     try {
       final reply = ReplyModel.fromEvent(eventData);
-
       repliesMap.putIfAbsent(reply.parentEventId, () => []);
 
       if (!repliesMap[reply.parentEventId]!.any((r) => r.id == reply.id)) {
         repliesMap[reply.parentEventId]!.add(reply);
-
         onRepliesUpdated?.call(
             reply.parentEventId, repliesMap[reply.parentEventId]!);
-
-        print(
-            '[DataService] Reply added for parent ${reply.parentEventId}: ${reply.content}');
-
         onReplyCountUpdated?.call(
             reply.parentEventId, repliesMap[reply.parentEventId]!.length);
 
         await repliesBox?.put(reply.id, reply);
+
+        await _fetchProfilesBatch([reply.author]);
 
         await Future.wait([
           fetchReactionsForEvents([reply.id]),
@@ -736,13 +731,12 @@ class DataService {
       if (!repostsMap[originalNoteId]!.any((r) => r.id == repost.id)) {
         repostsMap[originalNoteId]!.add(repost);
         onRepostsUpdated?.call(originalNoteId, repostsMap[originalNoteId]!);
-
-        print(
-            '[DataService] Repost updated for event $originalNoteId: ${repost.repostedBy}');
         onRepostCountUpdated?.call(
             originalNoteId, repostsMap[originalNoteId]!.length);
 
         await repostsBox?.put(repost.id, repost);
+
+        await _fetchProfilesBatch([repost.repostedBy]);
       }
     } catch (e) {
       print('[DataService ERROR] Error handling repost event: $e');

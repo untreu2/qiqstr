@@ -20,6 +20,7 @@ class NoteWidget extends StatefulWidget {
   final int replyCount;
   final int repostCount;
   final DataService dataService;
+  final String currentUserNpub;
 
   const NoteWidget({
     super.key,
@@ -28,6 +29,7 @@ class NoteWidget extends StatefulWidget {
     required this.replyCount,
     required this.repostCount,
     required this.dataService,
+    required this.currentUserNpub,
   });
 
   @override
@@ -111,6 +113,21 @@ class _NoteWidgetState extends State<NoteWidget> {
         });
       }
     });
+  }
+
+  bool _hasReacted() {
+    final reactions = widget.dataService.reactionsMap[widget.note.id] ?? [];
+    return reactions.any((r) => r.author == widget.currentUserNpub);
+  }
+
+  bool _hasReplied() {
+    final replies = widget.dataService.repliesMap[widget.note.id] ?? [];
+    return replies.any((r) => r.author == widget.currentUserNpub);
+  }
+
+  bool _hasReposted() {
+    final reposts = widget.dataService.repostsMap[widget.note.id] ?? [];
+    return reposts.any((r) => r.repostedBy == widget.currentUserNpub);
   }
 
   void _handleReactionTap() async {
@@ -303,6 +320,56 @@ class _NoteWidgetState extends State<NoteWidget> {
     );
   }
 
+  Widget _buildInteractionAvatars() {
+    final Set<String> npubs = {};
+
+    final reactions = widget.dataService.reactionsMap[widget.note.id] ?? [];
+    npubs.addAll(reactions.map((r) => r.author));
+
+    final replies = widget.dataService.repliesMap[widget.note.id] ?? [];
+    npubs.addAll(replies.map((r) => r.author));
+
+    final reposts = widget.dataService.repostsMap[widget.note.id] ?? [];
+    npubs.addAll(reposts.map((r) => r.repostedBy));
+
+    if (npubs.isEmpty) return const SizedBox.shrink();
+
+    return ListView.builder(
+      scrollDirection: Axis.horizontal,
+      itemCount: npubs.length,
+      itemBuilder: (context, index) {
+        final npubList = npubs.toList();
+        final npub = npubList[index];
+        return FutureBuilder<Map<String, String>>(
+          future: widget.dataService.getCachedUserProfile(npub),
+          builder: (context, snapshot) {
+            String profileImage = '';
+            if (snapshot.hasData) {
+              profileImage = snapshot.data!['profileImage'] ?? '';
+            }
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4.0),
+              child: GestureDetector(
+                onTap: () => _navigateToProfile(npub),
+                child: CircleAvatar(
+                  radius: 14,
+                  backgroundImage: profileImage.isNotEmpty
+                      ? CachedNetworkImageProvider(profileImage)
+                      : null,
+                  backgroundColor:
+                      profileImage.isEmpty ? Colors.grey : Colors.transparent,
+                  child: profileImage.isEmpty
+                      ? const Icon(Icons.person, size: 16, color: Colors.white)
+                      : null,
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _onOpen(LinkableElement link) async {
     final Uri url = Uri.parse(link.url);
     if (await canLaunchUrl(url)) {
@@ -407,23 +474,23 @@ class _NoteWidgetState extends State<NoteWidget> {
                             children: [
                               SvgPicture.asset(
                                 'assets/reaction_button.svg',
-                                width: 18.0,
-                                height: 18.0,
-                                color: _isReactionGlowing
-                                    ? Colors.red
+                                width: 20.00,
+                                height: 20.00,
+                                color: (_isReactionGlowing || _hasReacted())
+                                    ? Colors.red.shade400
                                     : Colors.white,
                               ),
                               const SizedBox(width: 4.0),
                               Text(
                                 widget.reactionCount.toString(),
                                 style: const TextStyle(
-                                    fontSize: 12.0, color: Colors.white),
+                                    fontSize: 13.0, color: Colors.white),
                               ),
                             ],
                           ),
                         ),
                       ),
-                      const SizedBox(width: 14),
+                      const SizedBox(width: 16),
                       TweenAnimationBuilder<double>(
                         tween: Tween<double>(begin: 1.0, end: _replyScale),
                         duration: const Duration(milliseconds: 300),
@@ -439,23 +506,23 @@ class _NoteWidgetState extends State<NoteWidget> {
                             children: [
                               SvgPicture.asset(
                                 'assets/reply_button.svg',
-                                width: 18.0,
-                                height: 18.0,
-                                color: _isReplyGlowing
-                                    ? Colors.blue
+                                width: 20.00,
+                                height: 20.00,
+                                color: (_isReplyGlowing || _hasReplied())
+                                    ? Colors.blue.shade200
                                     : Colors.white,
                               ),
                               const SizedBox(width: 4.0),
                               Text(
                                 widget.replyCount.toString(),
                                 style: const TextStyle(
-                                    fontSize: 12.0, color: Colors.white),
+                                    fontSize: 13.0, color: Colors.white),
                               ),
                             ],
                           ),
                         ),
                       ),
-                      const SizedBox(width: 14),
+                      const SizedBox(width: 16),
                       TweenAnimationBuilder<double>(
                         tween: Tween<double>(begin: 1.0, end: _repostScale),
                         duration: const Duration(milliseconds: 300),
@@ -471,20 +538,27 @@ class _NoteWidgetState extends State<NoteWidget> {
                             children: [
                               SvgPicture.asset(
                                 'assets/repost_button.svg',
-                                width: 18.0,
-                                height: 18.0,
-                                color: _isRepostGlowing
-                                    ? Colors.green
+                                width: 20.00,
+                                height: 20.00,
+                                color: (_isRepostGlowing || _hasReposted())
+                                    ? Colors.green.shade400
                                     : Colors.white,
                               ),
                               const SizedBox(width: 4.0),
                               Text(
                                 widget.repostCount.toString(),
                                 style: const TextStyle(
-                                    fontSize: 12.0, color: Colors.white),
+                                    fontSize: 13.0, color: Colors.white),
                               ),
                             ],
                           ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: SizedBox(
+                          height: 36,
+                          child: _buildInteractionAvatars(),
                         ),
                       ),
                     ],

@@ -201,13 +201,13 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                 }
                 final note = notes[index];
                 return NoteWidget(
-                  key: ValueKey(note.id),
-                  note: note,
-                  reactionCount: _reactionCounts[note.id] ?? 0,
-                  replyCount: _replyCounts[note.id] ?? 0,
-                  repostCount: _repostCounts[note.id] ?? 0,
-                  dataService: _dataService,
-                );
+                    key: ValueKey(note.id),
+                    note: note,
+                    reactionCount: _reactionCounts[note.id] ?? 0,
+                    replyCount: _replyCounts[note.id] ?? 0,
+                    repostCount: _repostCounts[note.id] ?? 0,
+                    dataService: _dataService,
+                    currentUserNpub: widget.npub);
               },
             );
           },
