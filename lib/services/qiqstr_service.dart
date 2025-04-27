@@ -959,6 +959,68 @@ class DataService {
     return following;
   }
 
+  Future<List<String>> getGlobalFollowers(String targetNpub) async {
+    if (_isClosed) {
+      print('[DataService] Service is closed. Skipping global follower fetch.');
+      return [];
+    }
+
+    List<String> followers = [];
+    final allRelays = _socketManager.relayUrls;
+
+    await Future.wait(allRelays.map((relayUrl) async {
+      try {
+        final ws = await WebSocket.connect(relayUrl)
+            .timeout(const Duration(seconds: 2));
+
+        if (_isClosed) {
+          await ws.close();
+          return;
+        }
+
+        final filter = Filter(
+          kinds: [3],
+          p: [targetNpub],
+          limit: 1000,
+        );
+
+        final request = Request(generateUUID(), [filter]);
+        final completer = Completer<void>();
+
+        ws.listen((event) {
+          final decoded = jsonDecode(event);
+          if (decoded[0] == 'EVENT') {
+            final author = decoded[2]['pubkey'];
+            followers.add(author);
+          }
+          if (decoded[0] == 'EOSE') {
+            if (!completer.isCompleted) completer.complete();
+          }
+        }, onDone: () {
+          if (!completer.isCompleted) completer.complete();
+        }, onError: (error) {
+          if (!completer.isCompleted) completer.complete();
+        });
+
+        ws.add(request.serialize());
+
+        await completer.future.timeout(const Duration(seconds: 3),
+            onTimeout: () async {
+          await ws.close();
+        });
+
+        await ws.close();
+      } catch (e) {
+        print(
+            '[DataService] Error fetching global followers from $relayUrl: $e');
+      }
+    }));
+
+    followers = followers.toSet().toList();
+
+    return followers;
+  }
+
   Future<void> fetchOlderNotes(
       List<String> targetNpubs, Function(NoteModel) onOlderNote) async {
     if (_isClosed || notes.isEmpty) return;

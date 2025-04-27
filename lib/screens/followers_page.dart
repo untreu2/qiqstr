@@ -5,20 +5,20 @@ import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/qiqstr_service.dart';
 import 'package:qiqstr/screens/profile_page.dart';
 
-class FollowingPage extends StatefulWidget {
+class FollowersPage extends StatefulWidget {
   final String npub;
-  const FollowingPage({Key? key, required this.npub}) : super(key: key);
+  const FollowersPage({Key? key, required this.npub}) : super(key: key);
 
   @override
-  _FollowingPageState createState() => _FollowingPageState();
+  _FollowersPageState createState() => _FollowersPageState();
 }
 
-class _FollowingPageState extends State<FollowingPage> {
+class _FollowersPageState extends State<FollowersPage> {
   UserModel? user;
   late DataService dataService;
   bool isLoading = true;
   String? errorMessage;
-  List<UserModel> followingUsers = [];
+  List<UserModel> followerUsers = [];
 
   final ScrollController _scrollController = ScrollController();
 
@@ -26,17 +26,17 @@ class _FollowingPageState extends State<FollowingPage> {
   void initState() {
     super.initState();
     dataService = DataService(npub: widget.npub, dataType: DataType.Profile);
-    _loadUserProfileAndFollowing();
+    _loadUserProfileAndFollowers();
   }
 
-  Future<void> _loadUserProfileAndFollowing() async {
+  Future<void> _loadUserProfileAndFollowers() async {
     try {
       await dataService.initialize();
       final profileData = await dataService.getCachedUserProfile(widget.npub);
-      final fetchedFollowingNpubs =
-          await dataService.getFollowingList(widget.npub);
+      final fetchedFollowerNpubs =
+          await dataService.getGlobalFollowers(widget.npub);
 
-      final futures = fetchedFollowingNpubs.map((npub) async {
+      final futures = fetchedFollowerNpubs.map((npub) async {
         final profile = await dataService.getCachedUserProfile(npub);
         return UserModel.fromCachedProfile(npub, profile);
       }).toList();
@@ -45,11 +45,11 @@ class _FollowingPageState extends State<FollowingPage> {
 
       setState(() {
         user = UserModel.fromCachedProfile(widget.npub, profileData);
-        followingUsers = fetchedUsers;
+        followerUsers = fetchedUsers;
       });
     } catch (e) {
       setState(() {
-        errorMessage = 'An error occurred while loading following list.';
+        errorMessage = 'An error occurred while loading followers.';
       });
     } finally {
       setState(() => isLoading = false);
@@ -57,11 +57,11 @@ class _FollowingPageState extends State<FollowingPage> {
   }
 
   String _buildTitle() {
-    if (user == null) return 'Following';
+    if (user == null) return 'Followers';
     final name = user!.name.isNotEmpty
         ? user!.name
         : (user!.nip05.isNotEmpty ? user!.nip05 : 'User');
-    return "$name's Followings";
+    return "$name's Followers";
   }
 
   @override
@@ -70,12 +70,12 @@ class _FollowingPageState extends State<FollowingPage> {
     super.dispose();
   }
 
-  Widget _buildFollowingList() {
-    if (followingUsers.isEmpty) {
+  Widget _buildFollowerList() {
+    if (followerUsers.isEmpty) {
       return const SliverFillRemaining(
         child: Center(
           child: Text(
-            'No following yet.',
+            'No followers yet.',
             style: TextStyle(color: Colors.white70, fontSize: 16),
           ),
         ),
@@ -85,27 +85,25 @@ class _FollowingPageState extends State<FollowingPage> {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
-          final followedUser = followingUsers[index];
+          final follower = followerUsers[index];
 
           return ListTile(
             leading: CircleAvatar(
               radius: 24,
               backgroundColor: Colors.grey[700],
-              backgroundImage: followedUser.profileImage.isNotEmpty
-                  ? CachedNetworkImageProvider(followedUser.profileImage)
+              backgroundImage: follower.profileImage.isNotEmpty
+                  ? CachedNetworkImageProvider(follower.profileImage)
                   : null,
-              child: followedUser.profileImage.isEmpty
+              child: follower.profileImage.isEmpty
                   ? const Icon(Icons.person, color: Colors.white)
                   : null,
             ),
             title: Text(
-              followedUser.name.isNotEmpty ? followedUser.name : 'Anonymous',
+              follower.name.isNotEmpty ? follower.name : 'Anonymous',
               style: const TextStyle(color: Colors.white),
             ),
             subtitle: Text(
-              followedUser.nip05.isNotEmpty
-                  ? followedUser.nip05
-                  : followedUser.npub,
+              follower.nip05.isNotEmpty ? follower.nip05 : follower.npub,
               style: const TextStyle(color: Colors.white70, fontSize: 12),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -113,13 +111,13 @@ class _FollowingPageState extends State<FollowingPage> {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => ProfilePage(user: followedUser),
+                  builder: (_) => ProfilePage(user: follower),
                 ),
               );
             },
           );
         },
-        childCount: followingUsers.length,
+        childCount: followerUsers.length,
       ),
     );
   }
@@ -133,7 +131,8 @@ class _FollowingPageState extends State<FollowingPage> {
         bottom: false,
         child: isLoading
             ? const Center(
-                child: CircularProgressIndicator(color: Colors.white))
+                child: CircularProgressIndicator(color: Colors.white),
+              )
             : errorMessage != null
                 ? Center(
                     child: Text(
@@ -162,7 +161,7 @@ class _FollowingPageState extends State<FollowingPage> {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                "${followingUsers.length} following",
+                                "${followerUsers.length} followers",
                                 style: const TextStyle(
                                   color: Colors.white70,
                                   fontSize: 14,
@@ -172,7 +171,7 @@ class _FollowingPageState extends State<FollowingPage> {
                           ),
                         ),
                       ),
-                      _buildFollowingList(),
+                      _buildFollowerList(),
                     ],
                   ),
       ),
