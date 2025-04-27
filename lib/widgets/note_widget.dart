@@ -286,56 +286,61 @@ class _NoteWidgetState extends State<NoteWidget> {
     return FutureBuilder<Map<String, String>>(
       future: widget.dataService.getCachedUserProfile(npub),
       builder: (_, snap) {
-        String name = 'Anonymous';
-        String nip05 = '';
-        String img = '';
-        if (snap.hasData) {
-          final u = UserModel.fromCachedProfile(npub, snap.data!);
-          name = u.name;
-          nip05 = u.nip05;
-          img = u.profileImage;
+        if (!snap.hasData) {
+          return Row(
+            children: [
+              const CircleAvatar(radius: 20, backgroundColor: Colors.grey),
+              const SizedBox(width: 8),
+              Container(width: 100, height: 12, color: Colors.grey[700]),
+            ],
+          );
         }
-        final tr = name.length > 25 ? '${name.substring(0, 25)}...' : name;
+
+        final user = UserModel.fromCachedProfile(npub, snap.data!);
+        final displayName = user.name.length > 25
+            ? '${user.name.substring(0, 25)}...'
+            : user.name;
+        final nip05 = user.nip05;
+        final imgUrl = user.profileImage;
+
         return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             GestureDetector(
               onTap: () => _navigateToProfile(npub),
-              child: Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.black, width: 2),
-                ),
-                child: CircleAvatar(
-                  radius: 20,
-                  backgroundImage:
-                      img.isNotEmpty ? CachedNetworkImageProvider(img) : null,
-                  backgroundColor:
-                      img.isEmpty ? Colors.grey : Colors.transparent,
-                  child: img.isEmpty
-                      ? const Icon(Icons.person, size: 20, color: Colors.white)
-                      : null,
-                ),
+              child: CircleAvatar(
+                radius: 20,
+                backgroundImage: imgUrl.isNotEmpty
+                    ? CachedNetworkImageProvider(imgUrl)
+                    : null,
+                backgroundColor:
+                    imgUrl.isEmpty ? Colors.grey : Colors.transparent,
+                child: imgUrl.isEmpty
+                    ? const Icon(Icons.person, size: 20, color: Colors.white)
+                    : null,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             GestureDetector(
               onTap: () => _navigateToProfile(npub),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    tr,
+                    displayName,
                     style: const TextStyle(
-                      fontSize: 15.5,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
                       color: Colors.white,
                     ),
                   ),
                   if (nip05.isNotEmpty)
                     Text(
                       nip05,
-                      style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey[400],
+                      ),
                     ),
                 ],
               ),
@@ -351,10 +356,8 @@ class _NoteWidgetState extends State<NoteWidget> {
       future: widget.dataService.getCachedUserProfile(npub),
       builder: (_, snap) {
         String name = 'Unknown';
-        String img = '';
         if (snap.hasData) {
           name = snap.data!['name'] ?? 'Unknown';
-          img = snap.data!['profileImage'] ?? '';
         }
         return GestureDetector(
           onTap: () => _navigateToProfile(npub),
@@ -362,77 +365,27 @@ class _NoteWidgetState extends State<NoteWidget> {
             children: [
               const Icon(Icons.repeat, size: 16, color: Colors.grey),
               const SizedBox(width: 8),
-              img.isNotEmpty
-                  ? CircleAvatar(
-                      radius: 12,
-                      backgroundImage: CachedNetworkImageProvider(img),
-                      backgroundColor: Colors.transparent,
-                    )
-                  : const CircleAvatar(
-                      radius: 12,
-                      child: Icon(Icons.person, size: 12),
-                    ),
-              const SizedBox(width: 6),
               Expanded(
                 child: Row(
                   children: [
-                    Text('Reposted by $name',
-                        style:
-                            const TextStyle(fontSize: 12, color: Colors.grey),
-                        overflow: TextOverflow.ellipsis),
+                    Text(
+                      'Reposted by $name',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     if (ts != null) ...[
                       const SizedBox(width: 6),
-                      Text('• ${_formatTimestamp(ts)}',
-                          style: const TextStyle(
-                              fontSize: 12, color: Colors.grey)),
+                      Text(
+                        '• ${_formatTimestamp(ts)}',
+                        style:
+                            const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
                     ],
                   ],
                 ),
               ),
             ],
           ),
-        );
-      },
-    );
-  }
-
-  Widget _buildInteractionAvatars() {
-    final set = <String>{};
-    set.addAll((widget.dataService.reactionsMap[widget.note.id] ?? [])
-        .map((e) => e.author));
-    set.addAll((widget.dataService.repliesMap[widget.note.id] ?? [])
-        .map((e) => e.author));
-    set.addAll((widget.dataService.repostsMap[widget.note.id] ?? [])
-        .map((e) => e.repostedBy));
-    if (set.isEmpty) return const SizedBox.shrink();
-    final list = set.toList();
-    return ListView.builder(
-      scrollDirection: Axis.horizontal,
-      itemCount: list.length,
-      itemBuilder: (_, i) {
-        final npub = list[i];
-        return FutureBuilder<Map<String, String>>(
-          future: widget.dataService.getCachedUserProfile(npub),
-          builder: (_, snap) {
-            String img = '';
-            if (snap.hasData) img = snap.data!['profileImage'] ?? '';
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: GestureDetector(
-                onTap: () => _navigateToProfile(npub),
-                child: CircleAvatar(
-                  radius: 14,
-                  backgroundImage:
-                      img.isNotEmpty ? CachedNetworkImageProvider(img) : null,
-                  backgroundColor:
-                      img.isEmpty ? Colors.grey : Colors.transparent,
-                  child: img.isEmpty
-                      ? const Icon(Icons.person, size: 16, color: Colors.white)
-                      : null,
-                ),
-              ),
-            );
-          },
         );
       },
     );
@@ -476,6 +429,15 @@ class _NoteWidgetState extends State<NoteWidget> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (widget.note.isRepost && widget.note.repostedBy != null) ...[
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                child: _buildRepostInfo(
+                    widget.note.repostedBy!, widget.note.repostTimestamp),
+              ),
+              const SizedBox(height: 8),
+            ],
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
@@ -487,13 +449,6 @@ class _NoteWidgetState extends State<NoteWidget> {
                 ],
               ),
             ),
-            if (widget.note.isRepost && widget.note.repostedBy != null)
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                child: _buildRepostInfo(
-                    widget.note.repostedBy!, widget.note.repostTimestamp),
-              ),
             if ((parsed['textParts'] as List).isNotEmpty)
               Padding(
                 padding:
@@ -522,6 +477,7 @@ class _NoteWidgetState extends State<NoteWidget> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   _buildAction(
                     scale: _reactionScale,
@@ -532,7 +488,6 @@ class _NoteWidgetState extends State<NoteWidget> {
                     count: widget.reactionCount,
                     onTap: _handleReactionTap,
                   ),
-                  const SizedBox(width: 16),
                   _buildAction(
                     scale: _replyScale,
                     svg: 'assets/reply_button.svg',
@@ -542,7 +497,6 @@ class _NoteWidgetState extends State<NoteWidget> {
                     count: widget.replyCount,
                     onTap: _handleReplyTap,
                   ),
-                  const SizedBox(width: 16),
                   _buildAction(
                     scale: _repostScale,
                     svg: 'assets/repost_button.svg',
@@ -552,10 +506,19 @@ class _NoteWidgetState extends State<NoteWidget> {
                     count: widget.repostCount,
                     onTap: _handleRepostTap,
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child:
-                        SizedBox(height: 36, child: _buildInteractionAvatars()),
+                  InkWell(
+                    splashColor: Colors.transparent,
+                    highlightColor: Colors.transparent,
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("I'm working on it"),
+                          duration: Duration(seconds: 1),
+                        ),
+                      );
+                    },
+                    child: Icon(Icons.bookmark_border,
+                        color: Colors.white, size: 24),
                   ),
                 ],
               ),
