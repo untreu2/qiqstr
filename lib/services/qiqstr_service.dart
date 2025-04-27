@@ -705,16 +705,18 @@ class DataService {
 
     if (eventIds.contains(eventId) || noteContent.trim().isEmpty) return;
 
-    if (dataType == DataType.Profile) {
-      if (!(noteAuthor == npub || (isRepost && author == npub))) {
-        return;
+    if (dataType == DataType.Feed) {
+      if (isRepost) {
+        if (!targetNpubs.contains(author)) {
+          return;
+        }
+      } else {
+        if (!targetNpubs.contains(noteAuthor)) {
+          return;
+        }
       }
-    } else {
-      if (rootEventId == null &&
-          dataType == DataType.Feed &&
-          targetNpubs.isNotEmpty &&
-          !targetNpubs.contains(noteAuthor) &&
-          (!isRepost || !targetNpubs.contains(author))) {
+    } else if (dataType == DataType.Profile) {
+      if (!(noteAuthor == npub || (isRepost && author == npub))) {
         return;
       }
     }
