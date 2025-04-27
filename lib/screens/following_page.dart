@@ -61,7 +61,7 @@ class _FollowingPageState extends State<FollowingPage> {
     final name = user!.name.isNotEmpty
         ? user!.name
         : (user!.nip05.isNotEmpty ? user!.nip05 : 'User');
-    return "$name's Following";
+    return "$name's Followings";
   }
 
   @override
