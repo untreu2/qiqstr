@@ -841,7 +841,6 @@ class DataService {
               if (decoded.containsKey('id')) {
                 originalId = decoded['id'] as String;
               }
-
               originalRawWs = jsonEncode(decoded);
             } else {
               finalContent = rawContent;
@@ -863,6 +862,13 @@ class DataService {
               eventData['created_at'] * 1000),
           rawWs: originalRawWs ?? jsonEncode(eventData),
         );
+
+        if (dataType == DataType.Profile) {
+          if (!(note.author == npub ||
+              (note.isRepost && note.repostedBy == npub))) {
+            return;
+          }
+        }
 
         if (!eventIds.contains(note.id)) {
           notes.add(note);

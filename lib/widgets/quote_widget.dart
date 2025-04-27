@@ -66,7 +66,6 @@ class QuoteWidget extends StatelessWidget {
           parts.where((p) => p['type'] == 'mention').toList()),
       builder: (context, snapshot) {
         final mentions = snapshot.data ?? {};
-
         List<InlineSpan> spans = [];
 
         for (var p in parts) {
@@ -83,7 +82,6 @@ class QuoteWidget extends StatelessWidget {
                   style: const TextStyle(fontSize: 14, color: Colors.white70),
                 ));
               }
-
               final url = text.substring(match.start, match.end);
               spans.add(
                 TextSpan(
@@ -121,9 +119,7 @@ class QuoteWidget extends StatelessWidget {
           }
         }
 
-        return RichText(
-          text: TextSpan(children: spans),
-        );
+        return RichText(text: TextSpan(children: spans));
       },
     );
   }
@@ -152,20 +148,23 @@ class QuoteWidget extends StatelessWidget {
         return Row(
           children: [
             CircleAvatar(
-              radius: 12,
+              radius: 14,
               backgroundImage:
                   img.isNotEmpty ? CachedNetworkImageProvider(img) : null,
               backgroundColor: img.isEmpty ? Colors.grey : Colors.transparent,
               child: img.isEmpty
-                  ? const Icon(Icons.person, size: 12, color: Colors.white)
+                  ? const Icon(Icons.person, size: 14, color: Colors.white)
                   : null,
             ),
-            const SizedBox(width: 6),
-            Text(name,
-                style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white)),
+            const SizedBox(width: 8),
+            Text(
+              name,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
           ],
         );
       },
@@ -177,16 +176,51 @@ class QuoteWidget extends StatelessWidget {
     return FutureBuilder<NoteModel?>(
       future: _fetchNote(),
       builder: (_, snap) {
-        if (!snap.hasData) return const SizedBox.shrink();
+        if (!snap.hasData || snap.data == null) {
+          return Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white, width: 0.8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.white.withOpacity(0.05),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: const Center(
+              child: Text(
+                'Event not found',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          );
+        }
+
         final n = snap.data!;
         final parsed = parseContent(n.content);
+
         return Container(
-          margin: const EdgeInsets.only(top: 6, left: 12, right: 12),
-          padding: const EdgeInsets.all(8),
+          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.white24, width: .5),
-            borderRadius: BorderRadius.circular(6),
-            color: Colors.white10,
+            color: Colors.black,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white, width: 0.8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.white.withOpacity(0.05),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -195,22 +229,24 @@ class QuoteWidget extends StatelessWidget {
                 children: [
                   _authorInfo(n.author),
                   const Spacer(),
-                  Text(_formatTimestamp(n.timestamp),
-                      style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                  Text(
+                    _formatTimestamp(n.timestamp),
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                 ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 8),
               _contentText(parsed),
               if ((parsed['mediaUrls'] as List).isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.only(top: 8),
                   child: MediaPreviewWidget(
                     mediaUrls: parsed['mediaUrls'] as List<String>,
                   ),
                 ),
               if ((parsed['linkUrls'] as List).isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.only(top: 8),
                   child: Column(
                     children: (parsed['linkUrls'] as List<String>)
                         .map((u) => LinkPreviewWidget(url: u))
