@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:hive/hive.dart';
 import 'package:nostr/nostr.dart';
+import 'package:qiqstr/constants/constants.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/user_model.dart';
@@ -244,12 +245,7 @@ class DataService {
       }),
     ]);
 
-    _socketManager = WebSocketManager(relayUrls: [
-      'wss://relay.damus.io',
-      'wss://nos.lol',
-      'wss://relay.primal.net',
-      'wss://vitor.nostr1.com',
-    ]);
+    _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
 
     await loadNotesFromCache((loadedNotes) {
       print('[DataService] Cache loaded with ${loadedNotes.length} notes.');
@@ -668,6 +664,7 @@ class DataService {
       repostTimestamp =
           DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000);
       repostRawWs = eventData['content'];
+
       if (repostRawWs is String && repostRawWs.isNotEmpty) {
         try {
           originalEventData = jsonDecode(repostRawWs) as Map<String, dynamic>;
@@ -675,6 +672,7 @@ class DataService {
           originalEventData = null;
         }
       }
+
       if (originalEventData == null) {
         String? originalEventId;
         for (var tag in eventData['tags']) {
@@ -683,24 +681,35 @@ class DataService {
             break;
           }
         }
+
         if (originalEventId != null) {
-          originalEventData = await _fetchEventById(originalEventId);
+          final fetchedNote = await fetchNoteByIdIndependently(originalEventId);
+          if (fetchedNote != null) {
+            originalEventData = {
+              'id': fetchedNote.id,
+              'pubkey': fetchedNote.author,
+              'content': fetchedNote.content,
+              'created_at':
+                  fetchedNote.timestamp.millisecondsSinceEpoch ~/ 1000,
+              'kind': fetchedNote.isRepost ? 6 : 1,
+              'tags': [],
+            };
+          }
         }
       }
+
       if (originalEventData == null) return;
       eventData = originalEventData;
     }
 
     final eventId = eventData['id'] as String?;
-    if (eventId == null) {
-      return;
-    }
+    if (eventId == null) return;
 
     final noteAuthor = eventData['pubkey'] as String;
     final noteContentRaw = eventData['content'];
     String noteContent =
         noteContentRaw is String ? noteContentRaw : jsonEncode(noteContentRaw);
-    final tags = eventData['tags'] as List<dynamic>;
+    final tags = eventData['tags'] as List<dynamic>? ?? [];
     final rootEventId = _extractRootEventId(tags);
 
     if (eventIds.contains(eventId) || noteContent.trim().isEmpty) return;
@@ -1093,25 +1102,14 @@ class DataService {
       if (inHive != null) return inHive;
     }
 
-    final raw = await _fetchEventById(eventIdHex);
-    if (raw == null) return null;
+    final fetchedNote = await fetchNoteByIdIndependently(eventIdHex);
+    if (fetchedNote == null) return null;
 
-    final model = NoteModel(
-      id: raw['id'],
-      content: raw['content'] is String
-          ? raw['content']
-          : jsonEncode(raw['content']),
-      author: raw['pubkey'],
-      timestamp: DateTime.fromMillisecondsSinceEpoch(raw['created_at'] * 1000),
-      isRepost: raw['kind'] == 6,
-      rawWs: jsonEncode(raw),
-    );
+    notes.add(fetchedNote);
+    eventIds.add(fetchedNote.id);
+    await notesBox?.put(fetchedNote.id, fetchedNote);
 
-    notes.add(model);
-    eventIds.add(model.id);
-    await notesBox?.put(model.id, model);
-
-    return model;
+    return fetchedNote;
   }
 
   Future<List<String>> getFollowingList(String targetNpub) async {
@@ -1616,6 +1614,7 @@ class DataService {
 
   Future<void> sendRepost(NoteModel note) async {
     if (_isClosed) return;
+
     try {
       final privateKey = await _secureStorage.read(key: 'privateKey');
       if (privateKey == null || privateKey.isEmpty) {
@@ -1625,9 +1624,18 @@ class DataService {
       String? content = note.rawWs;
 
       if (content == null || content.isEmpty) {
-        final originalEvent = await _fetchEventById(note.id);
-        if (originalEvent != null) {
-          content = jsonEncode(originalEvent);
+        final fetchedNote = await fetchNoteByIdIndependently(note.id);
+        if (fetchedNote != null) {
+          content = fetchedNote.rawWs ??
+              jsonEncode({
+                'id': fetchedNote.id,
+                'pubkey': fetchedNote.author,
+                'content': fetchedNote.content,
+                'created_at':
+                    fetchedNote.timestamp.millisecondsSinceEpoch ~/ 1000,
+                'kind': fetchedNote.isRepost ? 6 : 1,
+                'tags': [],
+              });
         } else {
           throw Exception('Original event could not be fetched.');
         }
@@ -1646,14 +1654,17 @@ class DataService {
       );
 
       final serializedEvent = event.serialize();
+
       await _socketManager.broadcast(serializedEvent);
 
       final repost = RepostModel.fromEvent(event.toJson(), note.id);
+
       repostsMap.putIfAbsent(note.id, () => []);
       if (!repostsMap[note.id]!.any((r) => r.id == repost.id)) {
         repostsMap[note.id]!.add(repost);
         onRepostsUpdated?.call(note.id, repostsMap[note.id]!);
         onRepostCountUpdated?.call(note.id, repostsMap[note.id]!.length);
+
         if (repostsBox != null && repostsBox!.isOpen) {
           await repostsBox!.put(repost.id, repost);
         }
@@ -1945,52 +1956,63 @@ class DataService {
     await _fetchProfilesBatch(allAuthors.toList());
   }
 
-  Future<Map<String, dynamic>?> _fetchEventById(String eventId) async {
-    if (_isClosed) return null;
+  Future<NoteModel?> fetchNoteByIdIndependently(String eventId) async {
+    final List<String> relayUrls = relaySetIndependentFetch;
 
-    final completer = Completer<Map<String, dynamic>?>();
-    final subscriptionId = generateUUID();
-    final request = Request(subscriptionId, [
-      Filter(ids: [eventId], limit: 1)
-    ]);
+    for (final relayUrl in relayUrls) {
+      try {
+        final ws = await WebSocket.connect(relayUrl)
+            .timeout(const Duration(seconds: 5));
 
-    final List<StreamSubscription> subscriptions = [];
+        final subscriptionId = Uuid().v4();
+        final filter = Filter(ids: [eventId], limit: 1);
+        final request = Request(subscriptionId, [filter]);
 
-    for (final ws in _socketManager.activeSockets) {
-      if (ws.readyState == WebSocket.open) {
-        final sub = ws.listen((event) {
+        final completer = Completer<Map<String, dynamic>?>();
+
+        ws.listen((event) {
           final decoded = jsonDecode(event);
+
           if (decoded[0] == 'EVENT' && decoded[1] == subscriptionId) {
-            if (!completer.isCompleted) {
-              completer.complete(decoded[2] as Map<String, dynamic>);
-            }
-          }
-          if (decoded[0] == 'EOSE' && decoded[1] == subscriptionId) {
-            if (!completer.isCompleted) {
-              completer.complete(null);
-            }
+            completer.complete(decoded[2] as Map<String, dynamic>);
+          } else if (decoded[0] == 'EOSE' && decoded[1] == subscriptionId) {
+            if (!completer.isCompleted) completer.complete(null);
           }
         }, onError: (error) {
-          if (!completer.isCompleted) {
-            completer.complete(null);
-          }
+          if (!completer.isCompleted) completer.complete(null);
+        }, onDone: () {
+          if (!completer.isCompleted) completer.complete(null);
         });
 
-        subscriptions.add(sub);
         ws.add(request.serialize());
+
+        final eventData = await completer.future
+            .timeout(const Duration(seconds: 5), onTimeout: () => null);
+
+        await ws.close();
+
+        if (eventData != null) {
+          final note = NoteModel(
+            id: eventData['id'],
+            content: eventData['content'] is String
+                ? eventData['content']
+                : jsonEncode(eventData['content']),
+            author: eventData['pubkey'],
+            timestamp: DateTime.fromMillisecondsSinceEpoch(
+                eventData['created_at'] * 1000),
+            isRepost: eventData['kind'] == 6,
+            rawWs: jsonEncode(eventData),
+          );
+          return note;
+        }
+      } catch (e) {
+        print('[fetchNoteByIdIndependently] Error with relay $relayUrl: $e');
+        continue;
       }
     }
 
-    final result = await completer.future.timeout(
-      const Duration(seconds: 5),
-      onTimeout: () => null,
-    );
-
-    for (final sub in subscriptions) {
-      await sub.cancel();
-    }
-
-    return result;
+    print('[fetchNoteByIdIndependently] Failed to fetch note from all relays.');
+    return null;
   }
 
   String generateUUID() => _uuid.v4().replaceAll('-', '');
