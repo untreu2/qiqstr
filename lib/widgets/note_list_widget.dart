@@ -19,7 +19,7 @@ class NoteListWidget extends StatefulWidget {
   });
 
   @override
-  _NoteListWidgetState createState() => _NoteListWidgetState();
+  State<NoteListWidget> createState() => _NoteListWidgetState();
 }
 
 class _NoteListWidgetState extends State<NoteListWidget> {
@@ -31,6 +31,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   String? _currentUserNpub;
   bool _isInitializing = true;
 
+  final List<NoteModel> _pendingNotes = [];
+
   final Map<String, int> _reactionCounts = {};
   final Map<String, int> _replyCounts = {};
   final Map<String, int> _repostCounts = {};
@@ -40,6 +42,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     super.initState();
     _itemsTree = SplayTreeSet<NoteModel>(_compareNotes);
     _notesNotifier = ValueNotifier<List<NoteModel>>([]);
+
     _dataService = DataService(
       npub: widget.npub,
       dataType: widget.dataType,
@@ -51,6 +54,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       onRepostsUpdated: _handleRepostsUpdated,
       onRepostCountUpdated: _updateRepostCount,
     );
+
     _initialize();
     _loadCurrentUserNpub();
   }
@@ -62,15 +66,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         _currentUserNpub = npub;
       });
     }
-  }
-
-  int _compareNotes(NoteModel a, NoteModel b) {
-    DateTime aTime =
-        a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
-    DateTime bTime =
-        b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
-    int result = bTime.compareTo(aTime);
-    return result == 0 ? a.id.compareTo(b.id) : result;
   }
 
   Future<void> _initialize() async {
@@ -91,7 +86,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       });
       await _dataService.initializeConnections();
     } catch (e) {
-      _showErrorSnackBar('Failed to initialize: $e');
+      _showErrorSnackBar('Initialization error: $e');
     } finally {
       if (mounted) {
         setState(() => _isInitializing = false);
@@ -99,12 +94,22 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     }
   }
 
+  int _compareNotes(NoteModel a, NoteModel b) {
+    final aTime = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
+    final bTime = b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
+    final result = bTime.compareTo(aTime);
+    return result == 0 ? a.id.compareTo(b.id) : result;
+  }
+
   void _handleNewNote(NoteModel newNote) {
-    if (_itemsTree.add(newNote)) {
-      _reactionCounts[newNote.id] = 0;
-      _replyCounts[newNote.id] = 0;
-      _repostCounts[newNote.id] = 0;
-      _notesNotifier.value = _itemsTree.toList();
+    _pendingNotes.add(newNote);
+
+    _dataService.fetchReactionsForEvents([newNote.id]);
+    _dataService.fetchRepliesForEvents([newNote.id]);
+    _dataService.fetchRepostsForEvents([newNote.id]);
+
+    if (mounted) {
+      setState(() {});
     }
   }
 
@@ -156,6 +161,19 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     }
   }
 
+  void _addPendingNotes() {
+    for (var note in _pendingNotes) {
+      _itemsTree.add(note);
+      _reactionCounts[note.id] =
+          _dataService.reactionsMap[note.id]?.length ?? 0;
+      _replyCounts[note.id] = _dataService.repliesMap[note.id]?.length ?? 0;
+      _repostCounts[note.id] = _dataService.repostsMap[note.id]?.length ?? 0;
+    }
+    _pendingNotes.clear();
+    _notesNotifier.value = _itemsTree.toList();
+    setState(() {});
+  }
+
   void _showErrorSnackBar(String message) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -183,7 +201,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     return ValueListenableBuilder<List<NoteModel>>(
       valueListenable: _notesNotifier,
       builder: (context, notes, child) {
-        if (notes.isEmpty) {
+        if (notes.isEmpty && _pendingNotes.isEmpty) {
           return const SliverToBoxAdapter(
             child: Center(
               child: Padding(
@@ -196,10 +214,47 @@ class _NoteListWidgetState extends State<NoteListWidget> {
             ),
           );
         }
+
         return SliverList(
           delegate: SliverChildBuilderDelegate(
             (context, index) {
-              final note = notes[index];
+              if (_pendingNotes.isNotEmpty && index == 0) {
+                return Align(
+                  alignment: Alignment.topCenter,
+                  child: GestureDetector(
+                    onTap: _addPendingNotes,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      margin: const EdgeInsets.only(top: 8, bottom: 24),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.9),
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        "Show ${_pendingNotes.length} new note${_pendingNotes.length > 1 ? 's' : ''}",
+                        style: const TextStyle(
+                          color: Colors.black87,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }
+
+              final realIndex = _pendingNotes.isNotEmpty ? index - 1 : index;
+              if (realIndex >= notes.length) return null;
+              final note = notes[realIndex];
+
               return NoteWidget(
                 key: ValueKey(note.id),
                 note: note,
@@ -210,7 +265,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                 currentUserNpub: _currentUserNpub!,
               );
             },
-            childCount: notes.length,
+            childCount: notes.length + (_pendingNotes.isNotEmpty ? 1 : 0),
           ),
         );
       },
