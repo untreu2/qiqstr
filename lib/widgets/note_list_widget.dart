@@ -1,5 +1,6 @@
 import 'dart:collection';
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/models/reaction_model.dart';
 import 'package:qiqstr/models/reply_model.dart';
@@ -25,8 +26,11 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   late SplayTreeSet<NoteModel> _itemsTree;
   late ValueNotifier<List<NoteModel>> _notesNotifier;
   late DataService _dataService;
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
+  String? _currentUserNpub;
   bool _isInitializing = true;
+
   final Map<String, int> _reactionCounts = {};
   final Map<String, int> _replyCounts = {};
   final Map<String, int> _repostCounts = {};
@@ -48,6 +52,16 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       onRepostCountUpdated: _updateRepostCount,
     );
     _initialize();
+    _loadCurrentUserNpub();
+  }
+
+  Future<void> _loadCurrentUserNpub() async {
+    final npub = await _secureStorage.read(key: 'npub');
+    if (mounted) {
+      setState(() {
+        _currentUserNpub = npub;
+      });
+    }
   }
 
   int _compareNotes(NoteModel a, NoteModel b) {
@@ -160,7 +174,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isInitializing) {
+    if (_isInitializing || _currentUserNpub == null) {
       return const SliverToBoxAdapter(
         child: Center(child: CircularProgressIndicator()),
       );
@@ -193,7 +207,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                 replyCount: _replyCounts[note.id] ?? 0,
                 repostCount: _repostCounts[note.id] ?? 0,
                 dataService: _dataService,
-                currentUserNpub: widget.npub,
+                currentUserNpub: _currentUserNpub!,
               );
             },
             childCount: notes.length,
