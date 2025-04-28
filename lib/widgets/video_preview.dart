@@ -17,7 +17,7 @@ class _VPState extends State<VP> with SingleTickerProviderStateMixin {
   Duration _currentPosition = Duration.zero;
   Duration _totalDuration = Duration.zero;
 
-  static const double borderRadius = 16.0;
+  static const double borderRadius = 0;
 
   @override
   void initState() {
