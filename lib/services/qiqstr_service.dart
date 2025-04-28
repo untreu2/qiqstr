@@ -195,77 +195,56 @@ class DataService {
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
-  DataService(
-      {required this.npub,
-      required this.dataType,
-      this.onNewNote,
-      this.onReactionsUpdated,
-      this.onRepliesUpdated,
-      this.onReactionCountUpdated,
-      this.onReplyCountUpdated,
-      this.onRepostsUpdated,
-      this.onRepostCountUpdated});
+  DataService({
+    required this.npub,
+    required this.dataType,
+    this.onNewNote,
+    this.onReactionsUpdated,
+    this.onRepliesUpdated,
+    this.onReactionCountUpdated,
+    this.onReplyCountUpdated,
+    this.onRepostsUpdated,
+    this.onRepostCountUpdated,
+  });
 
   int get connectedRelaysCount => _socketManager.activeSockets.length;
 
   Future<void> initialize() async {
-    await Future.wait([
-      _initializeEventProcessorIsolate(),
-      _initializeFetchProcessorIsolate(),
-      _initializeIsolate(),
-    ]);
+    await _initializeEventProcessorIsolate();
+    await _initializeFetchProcessorIsolate();
+    await _initializeIsolate();
 
     notesBox =
         await _openHiveBox<NoteModel>('notes_${dataType.toString()}_$npub');
     print('[DataService] Hive notes box opened successfully.');
 
-    await Future.wait([
-      _openHiveBox<ReactionModel>('reactions_${dataType.toString()}_$npub')
-          .then((box) {
-        reactionsBox = box;
-        print('[DataService] Hive reactions box opened successfully.');
-      }),
-      _openHiveBox<ReplyModel>('replies_${dataType.toString()}_$npub')
-          .then((box) {
-        repliesBox = box;
-        print('[DataService] Hive replies box opened successfully.');
-      }),
-      _openHiveBox<RepostModel>('reposts_${dataType.toString()}_$npub')
-          .then((box) {
-        repostsBox = box;
-        print('[DataService] Hive reposts box opened successfully.');
-      }),
-      _openHiveBox<UserModel>('users').then((box) {
-        usersBox = box;
-        print('[DataService] Hive users box opened successfully.');
-      }),
-      _openHiveBox<FollowingModel>('followingBox').then((box) {
-        followingBox = box;
-        print('[DataService] Hive following box opened successfully.');
-      }),
-    ]);
-
-    _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
+    usersBox = await _openHiveBox<UserModel>('users');
+    print('[DataService] Hive users box opened successfully.');
 
     await loadNotesFromCache((loadedNotes) {
       print('[DataService] Cache loaded with ${loadedNotes.length} notes.');
     });
 
-    if (notes.isNotEmpty) {
-      List<String> noteIds = notes.map((note) => note.id).toList();
+    Future.microtask(() async {
       await Future.wait([
-        fetchReactionsForEvents(noteIds),
-        fetchRepliesForEvents(noteIds),
-        fetchRepostsForEvents(noteIds),
+        _openHiveBox<ReactionModel>('reactions_${dataType.toString()}_$npub')
+            .then((box) => reactionsBox = box),
+        _openHiveBox<ReplyModel>('replies_${dataType.toString()}_$npub')
+            .then((box) => repliesBox = box),
+        _openHiveBox<RepostModel>('reposts_${dataType.toString()}_$npub')
+            .then((box) => repostsBox = box),
+        _openHiveBox<UserModel>('users').then((box) => usersBox = box),
+        _openHiveBox<FollowingModel>('followingBox')
+            .then((box) => followingBox = box),
       ]);
-      print(
-          '[DataService] Fetched reactions, replies, and reposts for cached notes.');
-    }
 
-    await _fetchUserData();
+      _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
 
-    _startCacheCleanup();
-    _isInitialized = true;
+      await _fetchUserData();
+
+      _startCacheCleanup();
+      _isInitialized = true;
+    });
   }
 
   Future<void> _initializeEventProcessorIsolate() async {

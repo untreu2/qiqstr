@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/models/user_model.dart';
@@ -20,12 +21,34 @@ class _FeedPageState extends State<FeedPage> {
   late DataService dataService;
   bool isLoading = true;
   String? errorMessage;
+  bool isFirstOpen = false;
 
   @override
   void initState() {
     super.initState();
     dataService = DataService(npub: widget.npub, dataType: DataType.Feed);
     _loadUserProfile();
+    _checkFirstOpen();
+  }
+
+  Future<void> _checkFirstOpen() async {
+    final prefs = await SharedPreferences.getInstance();
+    final alreadyOpened = prefs.getBool('feed_page_opened') ?? false;
+
+    if (!alreadyOpened) {
+      isFirstOpen = true;
+      await prefs.setBool('feed_page_opened', true);
+
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) setState(() {});
+      });
+      Future.delayed(const Duration(milliseconds: 600), () {
+        if (mounted) setState(() {});
+      });
+      Future.delayed(const Duration(milliseconds: 900), () {
+        if (mounted) setState(() {});
+      });
+    }
   }
 
   Future<void> _loadUserProfile() async {

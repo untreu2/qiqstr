@@ -1,7 +1,9 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:nostr/nostr.dart';
-import 'feed_page.dart';
+import 'package:qiqstr/services/qiqstr_service.dart';
+import 'package:qiqstr/screens/feed_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -10,15 +12,40 @@ class LoginPage extends StatefulWidget {
   _LoginPageState createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _LoginPageState extends State<LoginPage>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _nsecController = TextEditingController();
   String _message = '';
-  final FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  bool _isLoading = false;
+  late AnimationController _progressController;
+  DataService? _tempService;
+
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+
+  @override
+  void initState() {
+    super.initState();
+    _progressController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 10),
+    );
+  }
+
+  @override
+  void dispose() {
+    _nsecController.dispose();
+    _progressController.dispose();
+    _tempService?.closeConnections();
+    super.dispose();
+  }
 
   Future<void> _saveNsecAndNpub(String nsecBech32) async {
+    setState(() {
+      _isLoading = true;
+    });
+
     try {
       final nsecHex = Nip19.decodePrivkey(nsecBech32);
-
       if (nsecHex.isEmpty) {
         throw Exception('Invalid nsec format.');
       }
@@ -29,54 +56,154 @@ class _LoginPageState extends State<LoginPage> {
       await _secureStorage.write(key: 'privateKey', value: nsecHex);
       await _secureStorage.write(key: 'npub', value: npubHex);
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (context) => FeedPage(npub: npubHex),
-        ),
-      );
+      _tempService = DataService(npub: npubHex, dataType: DataType.Feed);
+      await _tempService!.initialize();
+
+      _progressController.forward();
+
+      await Future.delayed(const Duration(seconds: 10));
+
+      await _tempService?.closeConnections();
+      _tempService = null;
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => FeedPage(npub: npubHex),
+          ),
+        );
+      }
     } catch (e) {
-      setState(() {
-        _message = 'Error: Invalid nsec input.';
-      });
+      if (mounted) {
+        setState(() {
+          _message = 'Error: Invalid nsec input.';
+          _isLoading = false;
+        });
+      }
     }
+  }
+
+  Widget _buildLoginForm() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Welcome to Qiqstr!',
+            style: TextStyle(
+              fontSize: 36,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              letterSpacing: -1,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Login securely with your private key.',
+            style: TextStyle(
+              fontSize: 16,
+              color: Colors.white70,
+              height: 1.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 40),
+          TextField(
+            controller: _nsecController,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              labelText: 'Enter your nsec...',
+              labelStyle: const TextStyle(color: Colors.white70),
+              filled: true,
+              fillColor: Colors.white10,
+              enabledBorder: OutlineInputBorder(
+                borderSide: const BorderSide(color: Colors.white24),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide: const BorderSide(color: Colors.white),
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            obscureText: true,
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () {
+                if (_nsecController.text.trim().isNotEmpty) {
+                  _saveNsecAndNpub(_nsecController.text.trim());
+                }
+              },
+              child: const Text('LOGIN', style: TextStyle(fontSize: 16)),
+            ),
+          ),
+          const SizedBox(height: 20),
+          if (_message.isNotEmpty)
+            Text(
+              _message,
+              style: const TextStyle(color: Colors.redAccent),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingScreen() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const CircularProgressIndicator(color: Colors.white),
+        const SizedBox(height: 20),
+        const Text(
+          'Setting things up for you...',
+          style: TextStyle(color: Colors.white70, fontSize: 16),
+        ),
+        const SizedBox(height: 30),
+        SizedBox(
+          width: 200,
+          child: AnimatedBuilder(
+            animation: _progressController,
+            builder: (context, child) {
+              return LinearProgressIndicator(
+                value: _progressController.value,
+                backgroundColor: Colors.white10,
+                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+              );
+            },
+          ),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('WELCOME TO QIQSTR!'),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            TextField(
-              controller: _nsecController,
-              decoration: const InputDecoration(
-                labelText: 'ENTER YOUR NSEC...',
-              ),
-              obscureText: true,
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Center(
+          child: _isLoading
+              ? _buildLoadingScreen()
+              : SingleChildScrollView(
+                  child: _buildLoginForm(),
                 ),
-                onPressed: () {
-                  _saveNsecAndNpub(_nsecController.text);
-                },
-                child: const Text('LOGIN'),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text(_message),
-          ],
         ),
       ),
     );

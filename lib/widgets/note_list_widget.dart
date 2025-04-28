@@ -206,10 +206,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
             child: Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
-                child: Text(
-                  "No notes yet.",
-                  style: TextStyle(color: Colors.white70),
-                ),
               ),
             ),
           );
