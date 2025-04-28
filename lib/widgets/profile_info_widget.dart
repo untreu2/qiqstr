@@ -1,9 +1,6 @@
-import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:shimmer/shimmer.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -17,53 +14,6 @@ class ProfileInfoWidget extends StatefulWidget {
 }
 
 class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
-  bool? _isVerified;
-
-  @override
-  void initState() {
-    super.initState();
-    _verifyIfNeeded();
-  }
-
-  Future<void> _verifyIfNeeded() async {
-    final nip05 = widget.user.nip05;
-    final pubkey = widget.user.npub;
-
-    if (nip05.contains('@')) {
-      final result = await _verifyNip05(nip05, pubkey);
-      setState(() {
-        _isVerified = result;
-      });
-    }
-  }
-
-  Future<bool> _verifyNip05(String nip05, String expectedPubkey) async {
-    try {
-      if (!nip05.contains('@')) return false;
-      final parts = nip05.split('@');
-      if (parts.length != 2) return false;
-      final localPart = parts[0].toLowerCase();
-      final domain = parts[1];
-      final url = 'https://$domain/.well-known/nostr.json?name=$localPart';
-      final client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 2);
-      final request = await client.getUrl(Uri.parse(url));
-      final response = await request.close();
-      if (response.statusCode != 200) return false;
-      final responseBody = await response.transform(utf8.decoder).join();
-      final jsonResponse = jsonDecode(responseBody);
-      if (jsonResponse['names'] == null) return false;
-      final nameMapping = jsonResponse['names'];
-      if (nameMapping[localPart] == null) return false;
-      final returnedPubKey = nameMapping[localPart];
-      return (returnedPubKey.toString().toLowerCase() ==
-          expectedPubkey.toLowerCase());
-    } catch (e) {
-      print('Error verifying NIP-05 for $nip05: $e');
-      return false;
-    }
-  }
-
   Future<void> _onOpen(LinkableElement link) async {
     final uri = Uri.parse(link.url);
     if (await canLaunchUrl(uri)) {
@@ -213,34 +163,13 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     }
 
     final domain = '@${user.nip05.split('@').last}';
-
-    if (_isVerified == true) {
-      return WidgetSpan(
-        alignment: PlaceholderAlignment.baseline,
-        baseline: TextBaseline.alphabetic,
-        child: Shimmer.fromColors(
-          baseColor: const Color(0xFFBB86FC),
-          highlightColor: Colors.white,
-          child: Text(
-            domain,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFFBB86FC),
-            ),
-          ),
-        ),
-      );
-    } else {
-      return TextSpan(
-        text: domain,
-        style: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-          color: const Color(0xFFBB86FC),
-          decoration: _isVerified == false ? TextDecoration.lineThrough : null,
-        ),
-      );
-    }
+    return TextSpan(
+      text: domain,
+      style: const TextStyle(
+        fontSize: 24,
+        fontWeight: FontWeight.bold,
+        color: Color(0xFFBB86FC),
+      ),
+    );
   }
 }
