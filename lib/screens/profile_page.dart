@@ -17,6 +17,7 @@ class ProfilePage extends StatelessWidget {
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),
         ),
+        cacheExtent: 1500,
         slivers: [
           SliverToBoxAdapter(
             child: ProfileInfoWidget(user: user),

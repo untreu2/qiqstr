@@ -148,6 +148,7 @@ class _FeedPageState extends State<FeedPage> {
                   physics: const AlwaysScrollableScrollPhysics(
                     parent: BouncingScrollPhysics(),
                   ),
+                  cacheExtent: 1500,
                   slivers: [
                     SliverToBoxAdapter(
                       child: _buildInfoSection(),

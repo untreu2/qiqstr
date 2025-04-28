@@ -38,7 +38,10 @@ class NoteWidget extends StatefulWidget {
   _NoteWidgetState createState() => _NoteWidgetState();
 }
 
-class _NoteWidgetState extends State<NoteWidget> {
+class _NoteWidgetState extends State<NoteWidget>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   bool _isReactionGlowing = false;
   bool _isReplyGlowing = false;
   bool _isRepostGlowing = false;
@@ -447,6 +450,7 @@ class _NoteWidgetState extends State<NoteWidget> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final parsed = parseContent(widget.note.content);
     return GestureDetector(
       onDoubleTapDown: (_) => _handleReactionTap(),
