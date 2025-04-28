@@ -179,7 +179,6 @@ class DataService {
 
   final Map<String, Completer<Map<String, String>>> _pendingProfileRequests =
       {};
-  final Map<String, String> _profileSubscriptionIds = {};
 
   late ReceivePort _receivePort;
   late Isolate _isolate;
@@ -1034,42 +1033,37 @@ class DataService {
       }
     }
 
-    if (_pendingProfileRequests.containsKey(npub)) {
-      return await _pendingProfileRequests[npub]!.future;
+    final fetched = await fetchUserProfileIndependently(npub);
+    if (fetched != null) {
+      profileCache[npub] = CachedProfile(fetched, DateTime.now());
+
+      if (usersBox != null && usersBox!.isOpen) {
+        final model = UserModel(
+          npub: npub,
+          name: fetched['name'] ?? '',
+          about: fetched['about'] ?? '',
+          nip05: fetched['nip05'] ?? '',
+          banner: fetched['banner'] ?? '',
+          profileImage: fetched['profileImage'] ?? '',
+          lud16: fetched['lud16'] ?? '',
+          website: fetched['website'] ?? '',
+          updatedAt: DateTime.now(),
+        );
+        await usersBox!.put(npub, model);
+      }
+
+      return fetched;
     }
 
-    final completer = Completer<Map<String, String>>();
-    _pendingProfileRequests[npub] = completer;
-
-    String subscriptionId = generateUUID();
-    _profileSubscriptionIds[subscriptionId] = npub;
-
-    final request =
-        _createRequest(Filter(authors: [npub], kinds: [0], limit: 1));
-    await _broadcastRequest(request);
-
-    try {
-      return await completer.future.timeout(const Duration(seconds: 3),
-          onTimeout: () => {
-                'name': 'Anonymous',
-                'profileImage': '',
-                'about': '',
-                'nip05': '',
-                'banner': '',
-                'lud16': '',
-                'website': ''
-              });
-    } catch (e) {
-      return {
-        'name': 'Anonymous',
-        'profileImage': '',
-        'about': '',
-        'nip05': '',
-        'banner': '',
-        'lud16': '',
-        'website': ''
-      };
-    }
+    return {
+      'name': 'Anonymous',
+      'profileImage': '',
+      'about': '',
+      'nip05': '',
+      'banner': '',
+      'lud16': '',
+      'website': ''
+    };
   }
 
   Future<NoteModel?> getCachedNote(String eventIdHex) async {
@@ -1953,6 +1947,90 @@ class DataService {
       }
     } catch (e) {
       print('[fetchNoteByIdIndependently] All fetch attempts failed: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, String>?> fetchUserProfileIndependently(
+      String npub) async {
+    for (final relayUrl in relaySetIndependentFetch) {
+      final result = await _fetchProfileFromSingleRelay(relayUrl, npub);
+      if (result != null) {
+        return result;
+      }
+    }
+    print('[fetchUserProfileIndependently] No result from any relay.');
+    return null;
+  }
+
+  Future<Map<String, String>?> _fetchProfileFromSingleRelay(
+      String relayUrl, String npub) async {
+    WebSocket? ws;
+    try {
+      ws =
+          await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
+      final subscriptionId = DateTime.now().millisecondsSinceEpoch.toString();
+      final request = jsonEncode([
+        "REQ",
+        subscriptionId,
+        {
+          "authors": [npub],
+          "kinds": [0],
+          "limit": 1
+        }
+      ]);
+
+      final completer = Completer<Map<String, dynamic>?>();
+
+      late StreamSubscription sub;
+      sub = ws.listen((event) {
+        final decoded = jsonDecode(event);
+        if (decoded is List && decoded.length >= 2) {
+          if (decoded[0] == 'EVENT' && decoded[1] == subscriptionId) {
+            completer.complete(decoded[2]);
+          } else if (decoded[0] == 'EOSE' && decoded[1] == subscriptionId) {
+            if (!completer.isCompleted) completer.complete(null);
+          }
+        }
+      }, onError: (error) {
+        if (!completer.isCompleted) completer.complete(null);
+      }, onDone: () {
+        if (!completer.isCompleted) completer.complete(null);
+      });
+
+      ws.add(request);
+      final eventData = await completer.future
+          .timeout(const Duration(seconds: 5), onTimeout: () => null);
+
+      await sub.cancel();
+      await ws.close();
+
+      if (eventData != null) {
+        final contentRaw = eventData['content'];
+        Map<String, dynamic> profileContent = {};
+        if (contentRaw is String && contentRaw.isNotEmpty) {
+          try {
+            profileContent = jsonDecode(contentRaw);
+          } catch (_) {}
+        }
+
+        return {
+          'name': profileContent['name'] ?? 'Anonymous',
+          'profileImage': profileContent['picture'] ?? '',
+          'about': profileContent['about'] ?? '',
+          'nip05': profileContent['nip05'] ?? '',
+          'banner': profileContent['banner'] ?? '',
+          'lud16': profileContent['lud16'] ?? '',
+          'website': profileContent['website'] ?? '',
+        };
+      } else {
+        return null;
+      }
+    } catch (e) {
+      print('[fetchProfileFromSingleRelay] Error fetching from $relayUrl: $e');
+      try {
+        await ws?.close();
+      } catch (_) {}
       return null;
     }
   }
