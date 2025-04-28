@@ -1957,62 +1957,96 @@ class DataService {
   }
 
   Future<NoteModel?> fetchNoteByIdIndependently(String eventId) async {
-    final List<String> relayUrls = relaySetIndependentFetch;
+    final List<Future<NoteModel?>> fetchTasks = [];
 
-    for (final relayUrl in relayUrls) {
-      try {
-        final ws = await WebSocket.connect(relayUrl)
-            .timeout(const Duration(seconds: 5));
-
-        final subscriptionId = Uuid().v4();
-        final filter = Filter(ids: [eventId], limit: 1);
-        final request = Request(subscriptionId, [filter]);
-
-        final completer = Completer<Map<String, dynamic>?>();
-
-        ws.listen((event) {
-          final decoded = jsonDecode(event);
-
-          if (decoded[0] == 'EVENT' && decoded[1] == subscriptionId) {
-            completer.complete(decoded[2] as Map<String, dynamic>);
-          } else if (decoded[0] == 'EOSE' && decoded[1] == subscriptionId) {
-            if (!completer.isCompleted) completer.complete(null);
-          }
-        }, onError: (error) {
-          if (!completer.isCompleted) completer.complete(null);
-        }, onDone: () {
-          if (!completer.isCompleted) completer.complete(null);
-        });
-
-        ws.add(request.serialize());
-
-        final eventData = await completer.future
-            .timeout(const Duration(seconds: 5), onTimeout: () => null);
-
-        await ws.close();
-
-        if (eventData != null) {
-          final note = NoteModel(
-            id: eventData['id'],
-            content: eventData['content'] is String
-                ? eventData['content']
-                : jsonEncode(eventData['content']),
-            author: eventData['pubkey'],
-            timestamp: DateTime.fromMillisecondsSinceEpoch(
-                eventData['created_at'] * 1000),
-            isRepost: eventData['kind'] == 6,
-            rawWs: jsonEncode(eventData),
-          );
-          return note;
-        }
-      } catch (e) {
-        print('[fetchNoteByIdIndependently] Error with relay $relayUrl: $e');
-        continue;
-      }
+    for (final relayUrl in relaySetIndependentFetch) {
+      fetchTasks.add(_fetchFromSingleRelay(relayUrl, eventId));
     }
 
-    print('[fetchNoteByIdIndependently] Failed to fetch note from all relays.');
-    return null;
+    try {
+      final result = await Future.any(fetchTasks);
+
+      if (result != null) {
+        return result;
+      } else {
+        print('[fetchNoteByIdIndependently] No result from any relay.');
+        return null;
+      }
+    } catch (e) {
+      print('[fetchNoteByIdIndependently] All fetch attempts failed: $e');
+      return null;
+    }
+  }
+
+  Future<NoteModel?> _fetchFromSingleRelay(
+      String relayUrl, String eventId) async {
+    WebSocket? ws;
+
+    try {
+      ws =
+          await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
+      final subscriptionId = DateTime.now().millisecondsSinceEpoch.toString();
+      final request = jsonEncode([
+        "REQ",
+        subscriptionId,
+        {
+          "ids": [eventId]
+        }
+      ]);
+
+      final completer = Completer<Map<String, dynamic>?>();
+
+      late StreamSubscription sub;
+      sub = ws.listen((event) {
+        final decoded = jsonDecode(event);
+
+        if (decoded is List && decoded.length >= 2) {
+          if (decoded[0] == 'EVENT' && decoded[1] == subscriptionId) {
+            completer.complete(decoded[2]);
+          } else if (decoded[0] == 'EOSE' && decoded[1] == subscriptionId) {
+            if (!completer.isCompleted) {
+              completer.complete(null);
+            }
+          }
+        }
+      }, onError: (error) {
+        if (!completer.isCompleted) completer.complete(null);
+      }, onDone: () {
+        if (!completer.isCompleted) completer.complete(null);
+      });
+
+      ws.add(request);
+
+      final eventData = await completer.future
+          .timeout(const Duration(seconds: 5), onTimeout: () {
+        return null;
+      });
+
+      await sub.cancel();
+      await ws.close();
+
+      if (eventData != null) {
+        return NoteModel(
+          id: eventData['id'],
+          content: eventData['content'] is String
+              ? eventData['content']
+              : jsonEncode(eventData['content']),
+          author: eventData['pubkey'],
+          timestamp: DateTime.fromMillisecondsSinceEpoch(
+              eventData['created_at'] * 1000),
+          isRepost: eventData['kind'] == 6,
+          rawWs: jsonEncode(eventData),
+        );
+      } else {
+        return null;
+      }
+    } catch (e) {
+      print('[fetchFromSingleRelay] Error fetching from $relayUrl: $e');
+      try {
+        await ws?.close();
+      } catch (_) {}
+      return null;
+    }
   }
 
   String generateUUID() => _uuid.v4().replaceAll('-', '');
