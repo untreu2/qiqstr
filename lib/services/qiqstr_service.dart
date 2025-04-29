@@ -97,8 +97,14 @@ class WebSocketManager {
     Timer(Duration(seconds: delaySeconds), () async {
       if (_isClosed) return;
       try {
-        final rawWs =
-            await WebSocket.connect(relayUrl).timeout(connectionTimeout);
+        WebSocket? rawWs;
+        try {
+          rawWs = await WebSocket.connect(relayUrl).timeout(connectionTimeout);
+        } catch (e) {
+          print('[WebSocketManager] Connection error to $relayUrl: $e');
+          return;
+        }
+
         final wsBroadcast = rawWs.asBroadcastStream();
         if (_isClosed) {
           await rawWs.close();
@@ -171,6 +177,9 @@ class DataService {
   Box<RepostModel>? repostsBox;
   Box<FollowingModel>? followingBox;
   Box<NotificationModel>? notificationsBox;
+
+  final List<Map<String, dynamic>> _pendingEvents = [];
+  Timer? _batchTimer;
 
   late WebSocketManager _socketManager;
   bool _isInitialized = false;
@@ -293,37 +302,37 @@ class DataService {
     sendPort.send(port.sendPort);
 
     port.listen((dynamic message) async {
-      if (message is Map<String, dynamic>) {
-        try {
-          final String eventRaw = message['eventRaw'];
-          final List<String> targetNpubs =
-              List<String>.from(message['targetNpubs']);
-          final int priority = message['priority'] ?? 2;
+      if (message is List) {
+        for (final event in message) {
+          try {
+            final decodedEvent = jsonDecode(event['eventRaw']);
+            final targetNpubs = List<String>.from(event['targetNpubs']);
+            final int priority = event['priority'] ?? 2;
 
-          final decodedEvent = jsonDecode(eventRaw);
+            if (decodedEvent is List && decodedEvent.length > 2) {
+              final kind = decodedEvent[2]['kind'] as int;
+              final eventId = decodedEvent[2]['id'] as String;
+              final author = decodedEvent[2]['pubkey'] as String;
 
-          if (decodedEvent is List && decodedEvent.length > 2) {
-            final kind = decodedEvent[2]['kind'] as int;
-            final eventId = decodedEvent[2]['id'] as String;
-            final author = decodedEvent[2]['pubkey'] as String;
-
-            sendPort.send({
-              'kind': kind,
-              'eventId': eventId,
-              'author': author,
-              'eventData': decodedEvent[2],
-              'targetNpubs': targetNpubs,
-              'priority': priority,
-            });
-          } else {
-            sendPort.send({
-              'error':
-                  'Unexpected event format or not an EVENT type: $decodedEvent'
-            });
+              sendPort.send({
+                'kind': kind,
+                'eventId': eventId,
+                'author': author,
+                'eventData': decodedEvent[2],
+                'targetNpubs': targetNpubs,
+                'priority': priority,
+              });
+            } else {
+              sendPort
+                  .send({'error': 'Unexpected event format: $decodedEvent'});
+            }
+          } catch (e) {
+            sendPort.send({'error': e.toString()});
           }
-        } catch (e) {
-          sendPort.send({'error': e.toString()});
         }
+      } else {
+        print(
+            '[EventProcessor] Unexpected message type: ${message.runtimeType}');
       }
     });
   }
@@ -614,13 +623,23 @@ class DataService {
     if (_isClosed) return;
     try {
       await _eventProcessorReady.future;
-      _eventProcessorSendPort.send({
+
+      _pendingEvents.add({
         'eventRaw': event,
         'targetNpubs': targetNpubs,
         'priority': 1,
       });
+
+      _batchTimer ??= Timer(const Duration(milliseconds: 200), () {
+        if (_pendingEvents.isNotEmpty) {
+          final batch = List<Map<String, dynamic>>.from(_pendingEvents);
+          _pendingEvents.clear();
+          _eventProcessorSendPort.send(batch); // topluca gönderiyoruz
+        }
+        _batchTimer = null;
+      });
     } catch (e) {
-      print('[DataService ERROR] Error sending event to isolate: $e');
+      print('[DataService ERROR] Error batching events: $e');
     }
   }
 
