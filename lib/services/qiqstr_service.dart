@@ -6,6 +6,7 @@ import 'dart:math';
 import 'package:hive/hive.dart';
 import 'package:nostr/nostr.dart';
 import 'package:qiqstr/constants/constants.dart';
+import 'package:qiqstr/models/notification_model.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/user_model.dart';
@@ -169,6 +170,7 @@ class DataService {
   Box<ReplyModel>? repliesBox;
   Box<RepostModel>? repostsBox;
   Box<FollowingModel>? followingBox;
+  Box<NotificationModel>? notificationsBox;
 
   late WebSocketManager _socketManager;
   bool _isInitialized = false;
@@ -235,6 +237,8 @@ class DataService {
         _openHiveBox<UserModel>('users').then((box) => usersBox = box),
         _openHiveBox<FollowingModel>('followingBox')
             .then((box) => followingBox = box),
+        _openHiveBox<NotificationModel>('notifications_$npub')
+            .then((box) => notificationsBox = box),
       ]);
 
       _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
@@ -439,12 +443,11 @@ class DataService {
   void _startRealTimeSubscription(List<String> targetNpubs) {
     final filterNotesAndReactions = Filter(
       authors: targetNpubs,
-      kinds: [1, 7],
+      kinds: [1, 6, 7],
       since: (notes.isNotEmpty)
           ? (notes.first.timestamp.millisecondsSinceEpoch ~/ 1000)
           : null,
     );
-
     final requestNotes = Request(generateUUID(), [filterNotesAndReactions]);
     _safeBroadcast(requestNotes.serialize());
 
@@ -461,6 +464,20 @@ class DataService {
 
     print(
         '[DataService] Started real-time subscription for notes, reactions, and reposts separately.');
+  }
+
+  void _startNotificationSubscription() {
+    final filter = Filter(
+      kinds: [1, 6, 7],
+      p: [npub],
+      since: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    );
+
+    final request = _createRequest(filter);
+    _safeBroadcast(request.serialize());
+
+    print(
+        '[DataService] Started notification subscription for tags with p:[$npub]');
   }
 
   Future<void> _subscribeToFollowing() async {
@@ -511,6 +528,7 @@ class DataService {
 
     await _subscribeToAllReactions();
     _startRealTimeSubscription(targetNpubs);
+    _startNotificationSubscription();
 
     await _subscribeToFollowing();
 
@@ -752,6 +770,58 @@ class DataService {
       }
     }
     return null;
+  }
+
+  Future<void> _handleNotificationEvent(
+      Map<String, dynamic> eventData, int kind) async {
+    if (_isClosed) return;
+    if (notificationsBox == null || !notificationsBox!.isOpen) return;
+
+    try {
+      final pubkey = eventData['pubkey'] as String;
+      final eventId = eventData['id'] as String;
+      final createdAt = DateTime.fromMillisecondsSinceEpoch(
+          (eventData['created_at'] as int) * 1000);
+      final tags = eventData['tags'] as List<dynamic>? ?? [];
+      final content = eventData['content'] as String? ?? '';
+
+      final isTargetedAtUser = tags.any((tag) =>
+          tag is List && tag.length >= 2 && tag[0] == 'p' && tag[1] == npub);
+
+      if (!isTargetedAtUser) return;
+
+      final targetEventIds = <String>[];
+      for (var tag in tags) {
+        if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
+          if (tag.length > 1) {
+            targetEventIds.add(tag[1] as String);
+          }
+        }
+      }
+
+      final type = switch (kind) {
+        1 => 'mention',
+        6 => 'repost',
+        7 => 'reaction',
+        _ => 'unknown',
+      };
+
+      final notification = NotificationModel(
+        id: eventId,
+        type: type,
+        eventId: eventId,
+        actorNpub: pubkey,
+        targetEventIds: targetEventIds,
+        createdAt: createdAt,
+        content: content,
+      );
+
+      await notificationsBox!.put(notification.id, notification);
+
+      print('[DataService] New $type notification from $pubkey');
+    } catch (e) {
+      print('[DataService ERROR] Error handling notification event: $e');
+    }
   }
 
   Future<void> _handleReactionEvent(Map<String, dynamic> eventData) async {
@@ -1873,6 +1943,8 @@ class DataService {
       } else if (kind == 6) {
         await _handleRepostEvent(eventData);
       }
+
+      await _handleNotificationEvent(eventData, kind);
     } catch (e) {
       print('[DataService ERROR] Error processing parsed event: $e');
     }

@@ -7,6 +7,7 @@ import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/share_note.dart';
 import 'package:qiqstr/services/qiqstr_service.dart';
+import 'package:qiqstr/screens/notifications_page.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -81,6 +82,20 @@ class _FeedPageState extends State<FeedPage> {
     );
   }
 
+  void _navigateToNotificationsPage() async {
+    final box = dataService.notificationsBox!;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => NotificationsPage(
+          npub: widget.npub,
+          notificationsBox: box,
+          dataService: dataService,
+        ),
+      ),
+    );
+  }
+
   Widget _buildInfoSection() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 60, 16, 20),
@@ -110,6 +125,12 @@ class _FeedPageState extends State<FeedPage> {
                   letterSpacing: -1,
                 ),
               ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.notifications_none,
+                    color: Colors.white, size: 24),
+                onPressed: _navigateToNotificationsPage,
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -130,7 +151,9 @@ class _FeedPageState extends State<FeedPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      drawer: SidebarWidget(user: user),
+      drawer: SidebarWidget(
+        user: user,
+      ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(right: 12, bottom: 12),

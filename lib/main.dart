@@ -9,6 +9,7 @@ import 'models/repost_model.dart';
 import 'models/user_model.dart';
 import 'models/following_model.dart';
 import 'models/link_preview_model.dart';
+import 'models/notification_model.dart';
 import 'screens/login_page.dart';
 import 'screens/feed_page.dart';
 
@@ -24,6 +25,7 @@ Future<void> main() async {
     Hive.registerAdapter(UserModelAdapter());
     Hive.registerAdapter(FollowingModelAdapter());
     Hive.registerAdapter(LinkPreviewModelAdapter());
+    Hive.registerAdapter(NotificationModelAdapter());
 
     await Hive.openBox<LinkPreviewModel>('link_preview_cache');
 
@@ -114,6 +116,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
         await Hive.openBox<UserModel>('users');
         await Hive.openBox<FollowingModel>('followingBox');
+        await Hive.openBox<NotificationModel>('notifications_$npub');
 
         Navigator.pushReplacement(
           context,
@@ -165,10 +168,10 @@ class HiveErrorApp extends StatelessWidget {
         appBar: AppBar(
           title: const Text('Initialization Error'),
         ),
-        body: Center(
+        body: const Center(
           child: Text(
             'An error occurred while initializing the application.',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18,
               color: Colors.white,
             ),
