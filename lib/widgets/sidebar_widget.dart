@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/profile_page.dart';
-import 'package:qiqstr/screens/following_page.dart';
-import 'package:qiqstr/screens/followers_page.dart';
 import 'package:qiqstr/utils/logout.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -81,36 +79,6 @@ class SidebarWidget extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (context) => ProfilePage(user: user!),
-                      ),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.group, color: Colors.white),
-                  title: const Text(
-                    'Followings',
-                    style: TextStyle(color: Colors.white, fontSize: 15),
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => FollowingPage(npub: user!.npub),
-                      ),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.group_add, color: Colors.white),
-                  title: const Text(
-                    'Followers',
-                    style: TextStyle(color: Colors.white, fontSize: 15),
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => FollowersPage(npub: user!.npub),
                       ),
                     );
                   },
