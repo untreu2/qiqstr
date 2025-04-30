@@ -909,10 +909,7 @@ class DataService {
     if (!eventIds.contains(newNote.id)) {
       notes.add(newNote);
       eventIds.add(newNote.id);
-      if (notesBox != null && notesBox!.isOpen) {
-        await notesBox!.put(newNote.id, newNote);
-      }
-
+      await addNoteToCache(newNote);
       onNewNote?.call(newNote);
       addPendingNote(newNote);
 
@@ -1523,11 +1520,11 @@ class DataService {
         timestamp: timestamp,
         isRepost: false,
       );
+
       notes.add(newNote);
       eventIds.add(newNote.id);
-      if (notesBox != null && notesBox!.isOpen) {
-        await notesBox!.put(newNote.id, newNote);
-      }
+      await addNoteToCache(newNote);
+
       onNewNote?.call(newNote);
       print('[DataService] Note shared successfully and added to cache.');
     } catch (e) {
@@ -1823,16 +1820,59 @@ class DataService {
   Future<void> saveNotesToCache() async {
     if (notesBox != null && notesBox!.isOpen) {
       try {
+        final List<NoteModel> limitedNotes = notes
+            .sorted((a, b) {
+              final aTime =
+                  a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
+              final bTime =
+                  b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
+              return bTime.compareTo(aTime);
+            })
+            .take(500)
+            .toList();
+
         final Map<String, NoteModel> notesMap = {
-          for (var note in notes.take(200)) note.id: note
+          for (var note in limitedNotes) note.id: note
         };
+
         await notesBox!.clear();
         await notesBox!.putAll(notesMap);
+
         print(
             '[DataService] Notes saved to cache successfully. (${notesMap.length} notes)');
       } catch (e) {
         print('[DataService ERROR] Error saving notes to cache: $e');
       }
+    }
+  }
+
+  Future<void> addNoteToCache(NoteModel note) async {
+    if (notesBox == null || !notesBox!.isOpen) return;
+
+    try {
+      if (notesBox!.containsKey(note.id)) return;
+
+      if (notesBox!.length >= 500) {
+        final allNotes = notesBox!.values.cast<NoteModel>().toList();
+
+        allNotes.sort((a, b) {
+          final aTime =
+              a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
+          final bTime =
+              b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
+          return aTime.compareTo(bTime);
+        });
+
+        final oldestNote = allNotes.first;
+        await notesBox!.delete(oldestNote.id);
+        print(
+            '[DataService] Cache full, removed oldest note: ${oldestNote.id}');
+      }
+
+      await notesBox!.put(note.id, note);
+      print('[DataService] Note cached: ${note.id}');
+    } catch (e) {
+      print('[DataService ERROR] Failed to cache note: $e');
     }
   }
 
@@ -1962,20 +2002,20 @@ class DataService {
           parseContentForNote(note);
           notes.add(note);
           eventIds.add(note.id);
-
-          await notesBox?.put(note.id, note);
+          await addNoteToCache(note);
           addPendingNote(note);
         }
       }
 
-      print('[DataService] Handled new notes: ${data.length} notes added.');
+      print('[DataService] Handled ${data.length} new notes.');
 
-      List<String> newEventIds = data.map((note) => note.id).toList();
+      final newEventIds = data.map((note) => note.id).toList();
       await Future.wait([
         fetchReactionsForEvents(newEventIds),
         fetchRepliesForEvents(newEventIds),
-        fetchRepostsForEvents(newEventIds)
+        fetchRepostsForEvents(newEventIds),
       ]);
+
       await _updateReactionSubscription();
     }
   }

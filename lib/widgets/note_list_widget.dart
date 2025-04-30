@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -20,73 +19,30 @@ class NoteListWidget extends StatefulWidget {
   State<NoteListWidget> createState() => _NoteListWidgetState();
 }
 
-class _NoteListWidgetState extends State<NoteListWidget>
-    with SingleTickerProviderStateMixin {
+class _NoteListWidgetState extends State<NoteListWidget> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final ScrollController _scrollController = ScrollController();
 
   String? _currentUserNpub;
-  bool _isInitializing = true;
-  bool _isFakeLoadingDone = false;
+  bool _isLoading = true;
 
   late DataService _dataService;
-  late Future<void> _renderReadyFuture;
-
-  final List<NoteModel> _pendingNotes = [];
-  List<Future<void>> _noteLoadFutures = [];
   int _selectedTabIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _runFakeScrollAndLoading().then((_) => _setupInitialService());
-    });
+    _initialize();
   }
 
-  Future<void> _runFakeScrollAndLoading() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    try {
-      await _scrollController.animateTo(
-        150.0,
-        duration: const Duration(milliseconds: 800),
-        curve: Curves.easeInOut,
-      );
-      await Future.delayed(const Duration(milliseconds: 200));
-
-      await _scrollController.animateTo(
-        300.0,
-        duration: const Duration(milliseconds: 1000),
-        curve: Curves.easeInOut,
-      );
-      await Future.delayed(const Duration(milliseconds: 300));
-
-      await _scrollController.animateTo(
-        0.0,
-        duration: const Duration(milliseconds: 1000),
-        curve: Curves.easeInOut,
-      );
-      await Future.delayed(const Duration(milliseconds: 400));
-    } catch (_) {}
-
-    await WidgetsBinding.instance.endOfFrame;
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    if (mounted) {
-      setState(() {
-        _isFakeLoadingDone = true;
-      });
-    }
-  }
-
-  Future<void> _setupInitialService() async {
+  Future<void> _initialize() async {
     _currentUserNpub = await _secureStorage.read(key: 'npub');
     if (!mounted) return;
 
     final prefs = await SharedPreferences.getInstance();
     final preloadKey =
         'note_preload_done_${widget.npub}_${widget.dataType.name}';
-    final preloadAlreadyDone = prefs.getBool(preloadKey) ?? false;
+    final preloadDone = prefs.getBool(preloadKey) ?? false;
 
     _dataService = DataService(
       npub: widget.npub,
@@ -103,10 +59,9 @@ class _NoteListWidgetState extends State<NoteListWidget>
     await _dataService.initialize();
     await _dataService.initializeConnections();
 
-    if (!preloadAlreadyDone) {
+    if (!preloadDone) {
       await Future.delayed(const Duration(seconds: 3));
       await _dataService.closeConnections();
-
       _dataService = DataService(
         npub: widget.npub,
         dataType: widget.dataType,
@@ -118,36 +73,20 @@ class _NoteListWidgetState extends State<NoteListWidget>
         onReplyCountUpdated: (_, __) {},
         onRepostCountUpdated: (_, __) {},
       );
-
       await _dataService.initialize();
       await _dataService.initializeConnections();
-      _applyPendingNotes();
       await prefs.setBool(preloadKey, true);
     }
 
     if (mounted) {
-      setState(() {
-        _isInitializing = false;
-      });
-
-      final notes = _dataService.notesNotifier.value;
-      _noteLoadFutures = List.generate(
-        notes.length,
-        (i) => Future.delayed(Duration(milliseconds: min(i * 50, 2500))),
-      );
-      _renderReadyFuture = Future.wait(_noteLoadFutures);
+      setState(() => _isLoading = false);
     }
   }
 
   void _handleNewNote(NoteModel note) {
+    if (_dataService.notesNotifier.value.length >= 500) return;
     _dataService.addPendingNote(note);
     _dataService.applyPendingNotes();
-  }
-
-  void _applyPendingNotes() {
-    _pendingNotes.forEach(_dataService.addPendingNote);
-    _dataService.applyPendingNotes();
-    _pendingNotes.clear();
   }
 
   @override
@@ -159,10 +98,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
   @override
   Widget build(BuildContext context) {
-    if (!_isFakeLoadingDone ||
-        _isInitializing ||
-        _currentUserNpub == null ||
-        _noteLoadFutures.isEmpty) {
+    if (_isLoading || _currentUserNpub == null) {
       return const SliverToBoxAdapter(
         child: SizedBox(
           height: 300,
@@ -171,28 +107,18 @@ class _NoteListWidgetState extends State<NoteListWidget>
       );
     }
 
-    return FutureBuilder(
-      future: _renderReadyFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const SliverToBoxAdapter(
-            child: SizedBox(
-              height: 300,
-              child: Center(child: CircularProgressIndicator()),
-            ),
-          );
-        }
+    return ValueListenableBuilder<List<NoteModel>>(
+      valueListenable: _dataService.notesNotifier,
+      builder: (context, notes, _) {
+        final filteredNotes = _selectedTabIndex == 0
+            ? notes
+            : notes.where((n) => n.hasMedia).toList();
 
-        return ValueListenableBuilder<List<NoteModel>>(
-          valueListenable: _dataService.notesNotifier,
-          builder: (context, notes, child) {
-            final filteredNotes = _selectedTabIndex == 0
-                ? notes
-                : notes.where((n) => n.hasMedia).toList();
-
-            return SliverList(
-              delegate: SliverChildListDelegate([
-                Padding(
+        return SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              if (index == 0) {
+                return Padding(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Row(
@@ -236,26 +162,25 @@ class _NoteListWidgetState extends State<NoteListWidget>
                       ),
                     ],
                   ),
+                );
+              }
+
+              final note = filteredNotes[index - 1];
+              return RepaintBoundary(
+                key: ValueKey(note.id),
+                child: NoteWidget(
+                  note: note,
+                  reactionCount: note.reactionCount,
+                  replyCount: note.replyCount,
+                  repostCount: note.repostCount,
+                  dataService: _dataService,
+                  currentUserNpub: _currentUserNpub!,
+                  notesNotifier: _dataService.notesNotifier,
                 ),
-                const SizedBox(height: 16),
-                ...List.generate(filteredNotes.length, (index) {
-                  final note = filteredNotes[index];
-                  return RepaintBoundary(
-                    key: ValueKey(note.id),
-                    child: NoteWidget(
-                      note: note,
-                      reactionCount: note.reactionCount,
-                      replyCount: note.replyCount,
-                      repostCount: note.repostCount,
-                      dataService: _dataService,
-                      currentUserNpub: _currentUserNpub!,
-                      notesNotifier: _dataService.notesNotifier,
-                    ),
-                  );
-                }),
-              ]),
-            );
-          },
+              );
+            },
+            childCount: filteredNotes.length + 1,
+          ),
         );
       },
     );
