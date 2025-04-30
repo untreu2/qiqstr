@@ -23,16 +23,17 @@ class NoteWidget extends StatefulWidget {
   final int repostCount;
   final DataService dataService;
   final String currentUserNpub;
+  final ValueNotifier<List<NoteModel>> notesNotifier;
 
-  const NoteWidget({
-    super.key,
-    required this.note,
-    required this.reactionCount,
-    required this.replyCount,
-    required this.repostCount,
-    required this.dataService,
-    required this.currentUserNpub,
-  });
+  const NoteWidget(
+      {super.key,
+      required this.note,
+      required this.reactionCount,
+      required this.replyCount,
+      required this.repostCount,
+      required this.dataService,
+      required this.currentUserNpub,
+      required this.notesNotifier});
 
   @override
   _NoteWidgetState createState() => _NoteWidgetState();
@@ -439,9 +440,13 @@ class _NoteWidgetState extends State<NoteWidget>
         child: Row(
           children: [
             SvgPicture.asset(svg, width: 20, height: 20, color: color),
-            const SizedBox(width: 4),
-            Text('$count',
-                style: const TextStyle(fontSize: 13, color: Colors.white)),
+            if (count > 0) ...[
+              const SizedBox(width: 4),
+              Text(
+                '$count',
+                style: const TextStyle(fontSize: 13, color: Colors.white),
+              ),
+            ],
           ],
         ),
       ),
@@ -451,112 +456,129 @@ class _NoteWidgetState extends State<NoteWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final parsed = parseContent(widget.note.content);
-    return GestureDetector(
-      onDoubleTapDown: (_) => _handleReactionTap(),
-      child: Container(
-        color: Colors.black,
-        padding: const EdgeInsets.only(bottom: 2),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (widget.note.isRepost && widget.note.repostedBy != null) ...[
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                child: _buildRepostInfo(
-                    widget.note.repostedBy!, widget.note.repostTimestamp),
-              ),
-              const SizedBox(height: 8),
-            ],
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                children: [
-                  _buildAuthorInfo(widget.note.author),
-                  const Spacer(),
-                  Text(_formatTimestamp(widget.note.timestamp),
-                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
+
+    return ValueListenableBuilder<List<NoteModel>>(
+      valueListenable: widget.notesNotifier,
+      builder: (context, notes, _) {
+        final updatedNote = notes.firstWhere(
+          (n) => n.id == widget.note.id,
+          orElse: () => widget.note,
+        );
+
+        final parsed = parseContent(updatedNote.content);
+
+        return GestureDetector(
+          onDoubleTapDown: (_) => _handleReactionTap(),
+          child: Container(
+            color: Colors.black,
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (updatedNote.isRepost && updatedNote.repostedBy != null) ...[
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    child: _buildRepostInfo(
+                        updatedNote.repostedBy!, updatedNote.repostTimestamp),
+                  ),
+                  const SizedBox(height: 8),
                 ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            if ((parsed['textParts'] as List).isNotEmpty)
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                child: _buildContentText(parsed),
-              ),
-            const SizedBox(height: 6),
-            if ((parsed['mediaUrls'] as List).isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: MediaPreviewWidget(
-                    mediaUrls: parsed['mediaUrls'] as List<String>),
-              ),
-            if ((parsed['linkUrls'] as List).isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Column(
-                  children: (parsed['linkUrls'] as List<String>)
-                      .map((u) => LinkPreviewWidget(url: u))
-                      .toList(),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      _buildAuthorInfo(updatedNote.author),
+                      const Spacer(),
+                      Text(_formatTimestamp(updatedNote.timestamp),
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.grey)),
+                    ],
+                  ),
                 ),
-              ),
-            if ((parsed['quoteIds'] as List).isNotEmpty) ...[
-              for (final q in parsed['quoteIds'] as List<String>)
-                QuoteWidget(bech32: q, dataService: widget.dataService),
-            ],
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _buildAction(
-                    scale: _reactionScale,
-                    svg: 'assets/reaction_button.svg',
-                    color: _isReactionGlowing || _hasReacted()
-                        ? Colors.red.shade400
-                        : Colors.white,
-                    count: widget.reactionCount,
-                    onTap: _handleReactionTap,
+                const SizedBox(height: 8),
+                if ((parsed['textParts'] as List).isNotEmpty)
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    child: _buildContentText(parsed),
                   ),
-                  _buildAction(
-                    scale: _replyScale,
-                    svg: 'assets/reply_button.svg',
-                    color: _isReplyGlowing || _hasReplied()
-                        ? Colors.blue.shade200
-                        : Colors.white,
-                    count: widget.replyCount,
-                    onTap: _handleReplyTap,
+                const SizedBox(height: 6),
+                if ((parsed['mediaUrls'] as List).isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: MediaPreviewWidget(
+                        mediaUrls: parsed['mediaUrls'] as List<String>),
                   ),
-                  _buildAction(
-                    scale: _repostScale,
-                    svg: 'assets/repost_button.svg',
-                    color: _isRepostGlowing || _hasReposted()
-                        ? Colors.green.shade400
-                        : Colors.white,
-                    count: widget.repostCount,
-                    onTap: _handleRepostTap,
+                if ((parsed['linkUrls'] as List).isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Column(
+                      children: (parsed['linkUrls'] as List<String>)
+                          .map((u) => LinkPreviewWidget(url: u))
+                          .toList(),
+                    ),
                   ),
-                  _buildAction(
-                    scale: _zapScale,
-                    svg: 'assets/zap_button.svg',
-                    color: _isZapGlowing ? Colors.amber.shade300 : Colors.white,
-                    count: 0,
-                    onTap: _handleZapTap,
-                  ),
+                if ((parsed['quoteIds'] as List).isNotEmpty) ...[
+                  for (final q in parsed['quoteIds'] as List<String>)
+                    QuoteWidget(bech32: q, dataService: widget.dataService),
                 ],
-              ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildAction(
+                        scale: _reactionScale,
+                        svg: 'assets/reaction_button.svg',
+                        color: _isReactionGlowing || _hasReacted()
+                            ? Colors.red.shade400
+                            : Colors.white,
+                        count: updatedNote.reactionCount,
+                        onTap: _handleReactionTap,
+                      ),
+                      _buildAction(
+                        scale: _replyScale,
+                        svg: 'assets/reply_button.svg',
+                        color: _isReplyGlowing || _hasReplied()
+                            ? Colors.blue.shade200
+                            : Colors.white,
+                        count: updatedNote.replyCount,
+                        onTap: _handleReplyTap,
+                      ),
+                      _buildAction(
+                        scale: _repostScale,
+                        svg: 'assets/repost_button.svg',
+                        color: _isRepostGlowing || _hasReposted()
+                            ? Colors.green.shade400
+                            : Colors.white,
+                        count: updatedNote.repostCount,
+                        onTap: _handleRepostTap,
+                      ),
+                      _buildAction(
+                        scale: _zapScale,
+                        svg: 'assets/zap_button.svg',
+                        color: _isZapGlowing
+                            ? Colors.amber.shade300
+                            : Colors.white,
+                        count: 0,
+                        onTap: _handleZapTap,
+                      ),
+                    ],
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 6),
+                  child:
+                      Divider(height: 4, thickness: .5, color: Colors.white24),
+                ),
+              ],
             ),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 6),
-              child: Divider(height: 4, thickness: .5, color: Colors.white24),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

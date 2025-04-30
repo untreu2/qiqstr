@@ -862,12 +862,16 @@ class DataService {
 
       if (!reactionsMap[targetEventId]!.any((r) => r.id == reaction.id)) {
         reactionsMap[targetEventId]!.add(reaction);
-        onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
-        onReactionCountUpdated?.call(
-            targetEventId, reactionsMap[targetEventId]!.length);
-
         await reactionsBox?.put(reaction.id, reaction);
 
+        onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
+
+        final note = notes.firstWhereOrNull((n) => n.id == targetEventId);
+        if (note != null) {
+          note.reactionCount = reactionsMap[targetEventId]!.length;
+        }
+
+        notesNotifier.value = _itemsTree.toList();
         await _fetchProfilesBatch([reaction.author]);
       }
     } catch (e) {
@@ -892,90 +896,16 @@ class DataService {
 
       if (!repostsMap[originalNoteId]!.any((r) => r.id == repost.id)) {
         repostsMap[originalNoteId]!.add(repost);
+        await repostsBox?.put(repost.id, repost);
 
         onRepostsUpdated?.call(originalNoteId, repostsMap[originalNoteId]!);
-        onRepostCountUpdated?.call(
-            originalNoteId, repostsMap[originalNoteId]!.length);
 
-        if (repostsBox != null && repostsBox!.isOpen) {
-          await repostsBox!.put(repost.id, repost);
+        final note = notes.firstWhereOrNull((n) => n.id == originalNoteId);
+        if (note != null) {
+          note.repostCount = repostsMap[originalNoteId]!.length;
         }
 
-        final rawContent = eventData['content'];
-        String finalContent = '';
-        String originalAuthor = '';
-        String originalId = originalNoteId;
-        String? originalRawWs;
-        DateTime originalTimestamp =
-            DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000);
-
-        if (rawContent is String && rawContent.isNotEmpty) {
-          try {
-            final decoded = jsonDecode(rawContent);
-            if (decoded is Map<String, dynamic>) {
-              if (decoded.containsKey('content')) {
-                finalContent = decoded['content'] as String;
-              }
-              if (decoded.containsKey('pubkey')) {
-                originalAuthor = decoded['pubkey'] as String;
-              }
-              if (decoded.containsKey('id')) {
-                originalId = decoded['id'] as String;
-              }
-              if (decoded.containsKey('created_at')) {
-                originalTimestamp = DateTime.fromMillisecondsSinceEpoch(
-                    (decoded['created_at'] as int) * 1000);
-              }
-              originalRawWs = jsonEncode(decoded);
-            } else {
-              finalContent = rawContent;
-            }
-          } catch (e) {
-            finalContent = rawContent;
-          }
-        }
-
-        final repostTimestamp =
-            DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000);
-
-        final note = NoteModel(
-          id: originalId,
-          content: finalContent,
-          author:
-              originalAuthor.isNotEmpty ? originalAuthor : eventData['pubkey'],
-          timestamp: originalTimestamp,
-          isRepost: true,
-          repostedBy: eventData['pubkey'],
-          repostTimestamp: repostTimestamp,
-          rawWs: originalRawWs ?? jsonEncode(eventData),
-        );
-
-        if (dataType == DataType.Profile) {
-          if (!(note.author == npub ||
-              (note.isRepost && note.repostedBy == npub))) {
-            return;
-          }
-        }
-
-        if (!eventIds.contains(note.id)) {
-          notes.add(note);
-          eventIds.add(note.id);
-
-          if (notesBox != null && notesBox!.isOpen) {
-            await notesBox!.put(note.id, note);
-          }
-
-          onNewNote?.call(note);
-
-          await Future.wait([
-            fetchReactionsForEvents([note.id]),
-            fetchRepliesForEvents([note.id]),
-            fetchRepostsForEvents([note.id]),
-          ]);
-
-          await _updateReactionSubscription();
-        }
-
+        notesNotifier.value = _itemsTree.toList();
         await _fetchProfilesBatch([repost.repostedBy]);
       }
     } catch (e) {
@@ -992,15 +922,16 @@ class DataService {
 
       if (!repliesMap[parentEventId]!.any((r) => r.id == reply.id)) {
         repliesMap[parentEventId]!.add(reply);
+        await repliesBox?.put(reply.id, reply);
 
         onRepliesUpdated?.call(parentEventId, repliesMap[parentEventId]!);
-        onReplyCountUpdated?.call(
-            parentEventId, repliesMap[parentEventId]!.length);
 
-        if (repliesBox != null && repliesBox!.isOpen) {
-          await repliesBox!.put(reply.id, reply);
+        final note = notes.firstWhereOrNull((n) => n.id == parentEventId);
+        if (note != null) {
+          note.replyCount = repliesMap[parentEventId]!.length;
         }
 
+        notesNotifier.value = _itemsTree.toList();
         await _fetchProfilesBatch([reply.author]);
 
         await Future.wait([
@@ -1363,15 +1294,8 @@ class DataService {
     notesNotifier.value = _itemsTree.toList();
   }
 
-  final Map<String, int> reactionCounts = {};
-  final Map<String, int> replyCounts = {};
-  final Map<String, int> repostCounts = {};
-
   void _addNote(NoteModel note) {
     _itemsTree.add(note);
-    reactionCounts[note.id] = reactionsMap[note.id]?.length ?? 0;
-    replyCounts[note.id] = repliesMap[note.id]?.length ?? 0;
-    repostCounts[note.id] = repostsMap[note.id]?.length ?? 0;
   }
 
   Future<void> _subscribeToAllReactions() async {
@@ -1635,21 +1559,21 @@ class DataService {
         content: reactionContent,
         privkey: privateKey,
       );
-      final serializedEvent = event.serialize();
-      await _socketManager.broadcast(serializedEvent);
+
+      await _socketManager.broadcast(event.serialize());
 
       final reaction = ReactionModel.fromEvent(event.toJson());
       reactionsMap.putIfAbsent(targetEventId, () => []);
-      if (!reactionsMap[targetEventId]!.any((r) => r.id == reaction.id)) {
-        reactionsMap[targetEventId]!.add(reaction);
-        onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
-        onReactionCountUpdated?.call(
-            targetEventId, reactionsMap[targetEventId]!.length);
-        if (reactionsBox != null && reactionsBox!.isOpen) {
-          await reactionsBox!.put(reaction.id, reaction);
-        }
+      reactionsMap[targetEventId]!.add(reaction);
+      await reactionsBox?.put(reaction.id, reaction);
+
+      final note = notes.firstWhereOrNull((n) => n.id == targetEventId);
+      if (note != null) {
+        note.reactionCount = reactionsMap[targetEventId]!.length;
       }
-      print('[DataService] Reaction sent and added to cache.');
+
+      onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
+      notesNotifier.value = _itemsTree.toList();
     } catch (e) {
       print('[DataService ERROR] Error sending reaction: $e');
       throw e;
@@ -1667,13 +1591,11 @@ class DataService {
       final parentNote =
           notes.firstWhereOrNull((note) => note.id == parentEventId);
       if (parentNote == null) {
-        throw Exception('Parent event not found for reply.');
+        throw Exception('Parent note not found.');
       }
 
-      final rootId = parentNote.id;
-
       final tags = [
-        ['e', rootId, '', 'root'],
+        ['e', parentNote.id, '', 'root'],
         ['e', parentEventId, '', 'reply'],
         ['p', parentNote.author],
       ];
@@ -1685,25 +1607,20 @@ class DataService {
         privkey: privateKey,
       );
 
-      final serializedEvent = event.serialize();
-      await _socketManager.broadcast(serializedEvent);
+      await _socketManager.broadcast(event.serialize());
 
       final reply = ReplyModel.fromEvent(event.toJson());
+      repliesMap.putIfAbsent(parentEventId, () => []);
+      repliesMap[parentEventId]!.add(reply);
+      await repliesBox?.put(reply.id, reply);
 
-      repliesMap.putIfAbsent(reply.parentEventId, () => []);
-      if (!repliesMap[reply.parentEventId]!.any((r) => r.id == reply.id)) {
-        repliesMap[reply.parentEventId]!.add(reply);
-        onRepliesUpdated?.call(
-            reply.parentEventId, repliesMap[reply.parentEventId]!);
-        onReplyCountUpdated?.call(
-            reply.parentEventId, repliesMap[reply.parentEventId]!.length);
-
-        if (repliesBox != null && repliesBox!.isOpen) {
-          await repliesBox!.put(reply.id, reply);
-        }
+      final note = notes.firstWhereOrNull((n) => n.id == parentEventId);
+      if (note != null) {
+        note.replyCount = repliesMap[parentEventId]!.length;
       }
 
-      print('[DataService] Reply sent and added to cache.');
+      onRepliesUpdated?.call(parentEventId, repliesMap[parentEventId]!);
+      notesNotifier.value = _itemsTree.toList();
     } catch (e) {
       print('[DataService ERROR] Error sending reply: $e');
       throw e;
@@ -1712,37 +1629,26 @@ class DataService {
 
   Future<void> sendRepost(NoteModel note) async {
     if (_isClosed) return;
-
     try {
       final privateKey = await _secureStorage.read(key: 'privateKey');
       if (privateKey == null || privateKey.isEmpty) {
         throw Exception('Private key not found.');
       }
 
-      String? content = note.rawWs;
-
-      if (content == null || content.isEmpty) {
-        final fetchedNote = await fetchNoteByIdIndependently(note.id);
-        if (fetchedNote != null) {
-          content = fetchedNote.rawWs ??
-              jsonEncode({
-                'id': fetchedNote.id,
-                'pubkey': fetchedNote.author,
-                'content': fetchedNote.content,
-                'created_at':
-                    fetchedNote.timestamp.millisecondsSinceEpoch ~/ 1000,
-                'kind': fetchedNote.isRepost ? 6 : 1,
-                'tags': [],
-              });
-        } else {
-          throw Exception('Original event could not be fetched.');
-        }
-      }
-
       final tags = [
         ['e', note.id],
-        ['p', note.author]
+        ['p', note.author],
       ];
+
+      final content = note.rawWs ??
+          jsonEncode({
+            'id': note.id,
+            'pubkey': note.author,
+            'content': note.content,
+            'created_at': note.timestamp.millisecondsSinceEpoch ~/ 1000,
+            'kind': note.isRepost ? 6 : 1,
+            'tags': [],
+          });
 
       final event = Event.from(
         kind: 6,
@@ -1751,44 +1657,20 @@ class DataService {
         privkey: privateKey,
       );
 
-      final serializedEvent = event.serialize();
-
-      await _socketManager.broadcast(serializedEvent);
+      await _socketManager.broadcast(event.serialize());
 
       final repost = RepostModel.fromEvent(event.toJson(), note.id);
-
       repostsMap.putIfAbsent(note.id, () => []);
-      if (!repostsMap[note.id]!.any((r) => r.id == repost.id)) {
-        repostsMap[note.id]!.add(repost);
-        onRepostsUpdated?.call(note.id, repostsMap[note.id]!);
-        onRepostCountUpdated?.call(note.id, repostsMap[note.id]!.length);
+      repostsMap[note.id]!.add(repost);
+      await repostsBox?.put(repost.id, repost);
 
-        if (repostsBox != null && repostsBox!.isOpen) {
-          await repostsBox!.put(repost.id, repost);
-        }
+      final updatedNote = notes.firstWhereOrNull((n) => n.id == note.id);
+      if (updatedNote != null) {
+        updatedNote.repostCount = repostsMap[note.id]!.length;
       }
 
-      final repostedNote = NoteModel(
-        id: note.id,
-        content: note.content,
-        author: note.author,
-        timestamp: DateTime.now(),
-        isRepost: true,
-        repostedBy: npub,
-        repostTimestamp: DateTime.now(),
-        rawWs: serializedEvent,
-      );
-
-      if (!eventIds.contains(repostedNote.id)) {
-        notes.add(repostedNote);
-        eventIds.add(repostedNote.id);
-        if (notesBox != null && notesBox!.isOpen) {
-          await notesBox!.put(repostedNote.id, repostedNote);
-        }
-        onNewNote?.call(repostedNote);
-      }
-
-      print('[DataService] Repost sent and added to cache.');
+      onRepostsUpdated?.call(note.id, repostsMap[note.id]!);
+      notesNotifier.value = _itemsTree.toList();
     } catch (e) {
       print('[DataService ERROR] Error sending repost: $e');
       throw e;
@@ -1955,8 +1837,13 @@ class DataService {
     for (final targetEventId in eventIdsToFetch) {
       final reactions = reactionsMap[targetEventId] ?? [];
       onReactionsUpdated?.call(targetEventId, reactions);
-      reactionCounts[targetEventId] = reactions.length;
+
+      final note = notes.firstWhereOrNull((n) => n.id == targetEventId);
+      if (note != null) {
+        note.reactionCount = reactions.length;
+      }
     }
+    notesNotifier.value = _itemsTree.toList();
 
     notesNotifier.value = _itemsTree.toList();
     _fetchProcessorSendPort.send({
@@ -1973,8 +1860,13 @@ class DataService {
     for (final parentEventId in parentEventIds) {
       final replies = repliesMap[parentEventId] ?? [];
       onRepliesUpdated?.call(parentEventId, replies);
-      replyCounts[parentEventId] = replies.length;
+
+      final note = notes.firstWhereOrNull((n) => n.id == parentEventId);
+      if (note != null) {
+        note.replyCount = replies.length;
+      }
     }
+    notesNotifier.value = _itemsTree.toList();
 
     notesNotifier.value = _itemsTree.toList();
     _fetchProcessorSendPort.send({
@@ -1991,8 +1883,13 @@ class DataService {
     for (final originalNoteId in eventIdsToFetch) {
       final reposts = repostsMap[originalNoteId] ?? [];
       onRepostsUpdated?.call(originalNoteId, reposts);
-      repostCounts[originalNoteId] = reposts.length;
+
+      final note = notes.firstWhereOrNull((n) => n.id == originalNoteId);
+      if (note != null) {
+        note.repostCount = reposts.length;
+      }
     }
+    notesNotifier.value = _itemsTree.toList();
 
     notesNotifier.value = _itemsTree.toList();
     _fetchProcessorSendPort.send({

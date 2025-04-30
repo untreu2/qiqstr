@@ -134,18 +134,16 @@ class _NoteListWidgetState extends State<NoteListWidget> {
               if (realIndex >= notes.length) return null;
 
               final note = notes[realIndex];
-              final reactionCount = _dataService.reactionCounts[note.id] ?? 0;
-              final replyCount = _dataService.replyCounts[note.id] ?? 0;
-              final repostCount = _dataService.repostCounts[note.id] ?? 0;
 
               return NoteWidget(
                 key: ValueKey(note.id),
                 note: note,
-                reactionCount: reactionCount,
-                replyCount: replyCount,
-                repostCount: repostCount,
+                reactionCount: note.reactionCount,
+                replyCount: note.replyCount,
+                repostCount: note.repostCount,
                 dataService: _dataService,
                 currentUserNpub: _currentUserNpub!,
+                notesNotifier: _dataService.notesNotifier,
               );
             },
             childCount: _dataService.notesNotifier.value.length +
