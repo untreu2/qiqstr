@@ -9,7 +9,6 @@ import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/qiqstr_service.dart';
 import 'package:qiqstr/widgets/link_preview_widget.dart';
 import 'package:qiqstr/widgets/media_preview_widget.dart';
-import 'content_parser.dart';
 
 class QuoteWidget extends StatelessWidget {
   final String bech32;
@@ -205,7 +204,8 @@ class QuoteWidget extends StatelessWidget {
         }
 
         final n = snap.data!;
-        final parsed = parseContent(n.content);
+        dataService.parseContentForNote(n);
+        final parsed = n.parsedContent!;
 
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

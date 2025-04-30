@@ -3,7 +3,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qiqstr/models/user_model.dart';
@@ -11,9 +10,7 @@ import 'package:qiqstr/screens/send_reply.dart';
 import 'package:qiqstr/widgets/link_preview_widget.dart';
 import 'package:qiqstr/widgets/media_preview_widget.dart';
 import '../models/note_model.dart';
-import '../screens/profile_page.dart';
 import '../services/qiqstr_service.dart';
-import 'content_parser.dart';
 import 'quote_widget.dart';
 
 class NoteWidget extends StatefulWidget {
@@ -63,60 +60,21 @@ class _NoteWidgetState extends State<NoteWidget>
     return '${(d.inDays / 365).floor()}y';
   }
 
-  Future<void> _navigateToMentionProfile(String id) async {
-    try {
-      String? pubHex;
-      if (id.startsWith('npub1')) {
-        pubHex = decodeBasicBech32(id, 'npub');
-      } else if (id.startsWith('nprofile1')) {
-        pubHex = decodeTlvBech32Full(id, 'nprofile')['type_0_main'];
-      }
-      if (pubHex == null) return;
-      final data = await widget.dataService.getCachedUserProfile(pubHex);
-      final user = UserModel.fromCachedProfile(pubHex, data);
-      if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => ProfilePage(user: user)),
-      );
-    } catch (_) {}
-  }
-
-  Future<Map<String, String>> _fetchAllMentions(
-      List<Map<String, dynamic>> mentionParts) async {
-    final Map<String, String> results = {};
-
-    for (final part in mentionParts) {
-      final id = part['id'] as String;
-      try {
-        String? pubHex;
-        if (id.startsWith('npub1')) {
-          pubHex = decodeBasicBech32(id, 'npub');
-        } else if (id.startsWith('nprofile1')) {
-          pubHex = decodeTlvBech32Full(id, 'nprofile')['type_0_main'];
-        }
-        if (pubHex != null) {
-          final data = await widget.dataService.getCachedUserProfile(pubHex);
-          final user = UserModel.fromCachedProfile(pubHex, data);
-          if (user.name.isNotEmpty) {
-            results[id] = user.name;
-          }
-        }
-      } catch (_) {}
-    }
-
-    return results;
+  void _navigateToMentionProfile(String id) {
+    widget.dataService.openUserProfile(context, id);
   }
 
   Widget _buildContentText(Map<String, dynamic> parsed) {
     final parts = parsed['textParts'] as List<Map<String, dynamic>>;
+    final mentionIds = parts
+        .where((p) => p['type'] == 'mention')
+        .map((p) => p['id'] as String)
+        .toList();
 
     return FutureBuilder<Map<String, String>>(
-      future: _fetchAllMentions(
-          parts.where((p) => p['type'] == 'mention').toList()),
+      future: widget.dataService.resolveMentions(mentionIds),
       builder: (context, snapshot) {
         final mentions = snapshot.data ?? {};
-
         List<InlineSpan> spans = [];
 
         for (var p in parts) {
@@ -124,8 +82,8 @@ class _NoteWidgetState extends State<NoteWidget>
             final text = p['text'] as String;
             final regex = RegExp(r'(https?:\/\/[^\s]+)');
             final matches = regex.allMatches(text);
-
             int lastMatchEnd = 0;
+
             for (final match in matches) {
               if (match.start > lastMatchEnd) {
                 spans.add(TextSpan(
@@ -138,18 +96,16 @@ class _NoteWidgetState extends State<NoteWidget>
               }
 
               final url = text.substring(match.start, match.end);
-              spans.add(
-                TextSpan(
-                  text: url,
-                  style: const TextStyle(
-                    color: Colors.amberAccent,
-                    fontStyle: FontStyle.italic,
-                    fontSize: 15.5,
-                  ),
-                  recognizer: TapGestureRecognizer()
-                    ..onTap = () => _onOpen(LinkableElement(url, url)),
+              spans.add(TextSpan(
+                text: url,
+                style: const TextStyle(
+                  color: Colors.amberAccent,
+                  fontStyle: FontStyle.italic,
+                  fontSize: 15.5,
                 ),
-              );
+                recognizer: TapGestureRecognizer()
+                  ..onTap = () => _onOpen(LinkableElement(url, url)),
+              ));
               lastMatchEnd = match.end;
             }
 
@@ -181,9 +137,7 @@ class _NoteWidgetState extends State<NoteWidget>
           }
         }
 
-        return RichText(
-          text: TextSpan(children: spans),
-        );
+        return RichText(text: TextSpan(children: spans));
       },
     );
   }
@@ -301,16 +255,8 @@ class _NoteWidgetState extends State<NoteWidget>
     if (await canLaunchUrl(url)) await launchUrl(url);
   }
 
-  Future<void> _navigateToProfile(String npub) async {
-    try {
-      final data = await widget.dataService.getCachedUserProfile(npub);
-      final user = UserModel.fromCachedProfile(npub, data);
-      if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => ProfilePage(user: user)),
-      );
-    } catch (_) {}
+  void _navigateToProfile(String npub) {
+    widget.dataService.openUserProfile(context, npub);
   }
 
   Widget _buildAuthorInfo(String npub) {
@@ -465,7 +411,8 @@ class _NoteWidgetState extends State<NoteWidget>
           orElse: () => widget.note,
         );
 
-        final parsed = parseContent(updatedNote.content);
+        widget.dataService.parseContentForNote(updatedNote);
+        final parsed = updatedNote.parsedContent!;
 
         return GestureDetector(
           onDoubleTapDown: (_) => _handleReactionTap(),

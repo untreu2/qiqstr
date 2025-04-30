@@ -7,8 +7,10 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'package:nostr/nostr.dart';
+import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:qiqstr/constants/constants.dart';
 import 'package:qiqstr/models/notification_model.dart';
+import 'package:qiqstr/screens/profile_page.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/user_model.dart';
@@ -272,6 +274,30 @@ class DataService {
     notesNotifier.value = _itemsTree.toList();
   }
 
+  Future<Map<String, String>> resolveMentions(List<String> ids) async {
+    final Map<String, String> results = {};
+
+    for (final id in ids) {
+      try {
+        String? pubHex;
+        if (id.startsWith('npub1')) {
+          pubHex = decodeBasicBech32(id, 'npub');
+        } else if (id.startsWith('nprofile1')) {
+          pubHex = decodeTlvBech32Full(id, 'nprofile')['type_0_main'];
+        }
+        if (pubHex != null) {
+          final profile = await getCachedUserProfile(pubHex);
+          final user = UserModel.fromCachedProfile(pubHex, profile);
+          if (user.name.isNotEmpty) {
+            results[id] = user.name;
+          }
+        }
+      } catch (_) {}
+    }
+
+    return results;
+  }
+
   Future<void> _initializeEventProcessorIsolate() async {
     final ReceivePort receivePort = ReceivePort();
     _eventProcessorIsolate =
@@ -436,6 +462,104 @@ class DataService {
         isolateReceivePort.close();
       }
     });
+  }
+
+  Map<String, dynamic> parseContent(String content) {
+    final RegExp mediaRegExp = RegExp(
+      r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|mp4|mov))',
+      caseSensitive: false,
+    );
+    final mediaMatches = mediaRegExp.allMatches(content);
+    final List<String> mediaUrls =
+        mediaMatches.map((m) => m.group(0)!).toList();
+
+    final RegExp linkRegExp = RegExp(r'(https?:\/\/\S+)', caseSensitive: false);
+    final linkMatches = linkRegExp.allMatches(content);
+    final List<String> linkUrls = linkMatches
+        .map((m) => m.group(0)!)
+        .where((u) =>
+            !mediaUrls.contains(u) &&
+            !u.toLowerCase().endsWith('.mp4') &&
+            !u.toLowerCase().endsWith('.mov'))
+        .toList();
+
+    final RegExp quoteRegExp = RegExp(
+        r'nostr:(note1[0-9a-z]+|nevent1[0-9a-z]+)',
+        caseSensitive: false);
+    final quoteMatches = quoteRegExp.allMatches(content);
+    final List<String> quoteIds = quoteMatches
+        .map((m) => m.group(0)!.replaceFirst('nostr:', ''))
+        .toList();
+
+    String cleanedText = content;
+    for (final m in [...mediaMatches, ...quoteMatches]) {
+      cleanedText = cleanedText.replaceFirst(m.group(0)!, '');
+    }
+    cleanedText = cleanedText.trim();
+
+    final RegExp mentionRegExp = RegExp(
+        r'nostr:(npub1[0-9a-z]+|nprofile1[0-9a-z]+)',
+        caseSensitive: false);
+    final mentionMatches = mentionRegExp.allMatches(cleanedText);
+
+    final List<Map<String, dynamic>> textParts = [];
+    int lastEnd = 0;
+    for (final m in mentionMatches) {
+      if (m.start > lastEnd) {
+        textParts.add({
+          'type': 'text',
+          'text': cleanedText.substring(lastEnd, m.start),
+        });
+      }
+
+      final id = m.group(0)!.replaceFirst('nostr:', '');
+      textParts.add({'type': 'mention', 'id': id});
+      lastEnd = m.end;
+    }
+
+    if (lastEnd < cleanedText.length) {
+      textParts.add({
+        'type': 'text',
+        'text': cleanedText.substring(lastEnd),
+      });
+    }
+
+    return {
+      'mediaUrls': mediaUrls,
+      'linkUrls': linkUrls,
+      'quoteIds': quoteIds,
+      'textParts': textParts,
+    };
+  }
+
+  Future<void> openUserProfile(BuildContext context, String bech32OrHex) async {
+    try {
+      String? pubHex;
+
+      if (bech32OrHex.startsWith('npub1')) {
+        pubHex = decodeBasicBech32(bech32OrHex, 'npub');
+      } else if (bech32OrHex.startsWith('nprofile1')) {
+        pubHex = decodeTlvBech32Full(bech32OrHex, 'nprofile')['type_0_main'];
+      } else {
+        pubHex = bech32OrHex;
+      }
+
+      if (pubHex == null) return;
+
+      final data = await getCachedUserProfile(pubHex);
+      final user = UserModel.fromCachedProfile(pubHex, data);
+
+      if (!context.mounted) return;
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ProfilePage(user: user)),
+      );
+    } catch (e) {}
+  }
+
+  void parseContentForNote(NoteModel note) {
+    note.parsedContent ??= parseContent(note.content);
   }
 
   static void _processCacheLoad(String data, SendPort sendPort) {
