@@ -19,17 +19,19 @@ class NoteListWidget extends StatefulWidget {
   State<NoteListWidget> createState() => _NoteListWidgetState();
 }
 
-class _NoteListWidgetState extends State<NoteListWidget> {
+class _NoteListWidgetState extends State<NoteListWidget>
+    with SingleTickerProviderStateMixin {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final ScrollController _scrollController = ScrollController();
 
   String? _currentUserNpub;
-
   bool _isInitializing = true;
   bool _preloadDone = false;
 
   late DataService _dataService;
   List<NoteModel> _pendingNotes = [];
+
+  int _selectedTabIndex = 0;
 
   @override
   void initState() {
@@ -63,7 +65,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
     if (!preloadAlreadyDone) {
       await Future.delayed(const Duration(seconds: 2));
-
       await _dataService.closeConnections();
 
       _dataService = DataService(
@@ -152,10 +153,65 @@ class _NoteListWidgetState extends State<NoteListWidget> {
           );
         }
 
+        final filteredNotes = _selectedTabIndex == 0
+            ? notes
+            : notes.where((n) => n.hasMedia).toList();
+
         return SliverList(
-          delegate: SliverChildBuilderDelegate(
-            (context, index) {
-              final note = notes[index];
+          delegate: SliverChildListDelegate([
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _selectedTabIndex == 0
+                            ? Colors.amber.withOpacity(0.2)
+                            : Colors.grey.withOpacity(0.1),
+                        foregroundColor: _selectedTabIndex == 0
+                            ? Colors.amber[800]
+                            : Colors.grey,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _selectedTabIndex = 0;
+                        });
+                      },
+                      child: const Text("All Notes"),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _selectedTabIndex == 1
+                            ? Colors.amber.withOpacity(0.2)
+                            : Colors.grey.withOpacity(0.1),
+                        foregroundColor: _selectedTabIndex == 1
+                            ? Colors.amber[800]
+                            : Colors.grey,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _selectedTabIndex = 1;
+                        });
+                      },
+                      child: const Text("Media"),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            ...List.generate(filteredNotes.length, (index) {
+              final note = filteredNotes[index];
               return NoteWidget(
                 key: ValueKey(note.id),
                 note: note,
@@ -166,9 +222,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                 currentUserNpub: _currentUserNpub!,
                 notesNotifier: _dataService.notesNotifier,
               );
-            },
-            childCount: notes.length,
-          ),
+            }),
+          ]),
         );
       },
     );
