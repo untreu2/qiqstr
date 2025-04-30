@@ -1,13 +1,53 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/services/qiqstr_service.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/widgets/profile_info_widget.dart';
 
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
   final UserModel user;
 
   const ProfilePage({super.key, required this.user});
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  @override
+  void initState() {
+    super.initState();
+    _checkAndMaybeRestart();
+  }
+
+  Future<void> _checkAndMaybeRestart() async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'profile_refresh_done_${widget.user.npub}';
+
+    final alreadyDone = prefs.getBool(key) ?? false;
+
+    if (!alreadyDone) {
+      await Future.delayed(const Duration(seconds: 3));
+
+      if (!mounted) return;
+
+      Navigator.of(context).pop();
+
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      if (mounted) {
+        await prefs.setBool(key, true);
+
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => ProfilePage(user: widget.user),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -20,10 +60,10 @@ class ProfilePage extends StatelessWidget {
         cacheExtent: 1500,
         slivers: [
           SliverToBoxAdapter(
-            child: ProfileInfoWidget(user: user),
+            child: ProfileInfoWidget(user: widget.user),
           ),
           NoteListWidget(
-            npub: user.npub,
+            npub: widget.user.npub,
             dataType: DataType.Profile,
           ),
         ],

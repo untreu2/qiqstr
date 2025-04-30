@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/services/qiqstr_service.dart';
 import 'package:qiqstr/widgets/note_widget.dart';
@@ -20,15 +21,31 @@ class NoteListWidget extends StatefulWidget {
 
 class _NoteListWidgetState extends State<NoteListWidget> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  String? _currentUserNpub;
-  bool _isInitializing = true;
+  final ScrollController _scrollController = ScrollController();
 
-  late final DataService _dataService;
+  String? _currentUserNpub;
+
+  bool _isInitializing = true;
+  bool _preloadDone = false;
+
+  late DataService _dataService;
   List<NoteModel> _pendingNotes = [];
 
   @override
   void initState() {
     super.initState();
+    _setupInitialService();
+  }
+
+  Future<void> _setupInitialService() async {
+    _currentUserNpub = await _secureStorage.read(key: 'npub');
+    if (!mounted) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final preloadKey =
+        'note_preload_done_${widget.npub}_${widget.dataType.name}';
+    final preloadAlreadyDone = prefs.getBool(preloadKey) ?? false;
+
     _dataService = DataService(
       npub: widget.npub,
       dataType: widget.dataType,
@@ -40,22 +57,54 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       onReplyCountUpdated: (_, __) => setState(() {}),
       onRepostCountUpdated: (_, __) => setState(() {}),
     );
-    _loadNpubAndInit();
-  }
-
-  Future<void> _loadNpubAndInit() async {
-    _currentUserNpub = await _secureStorage.read(key: 'npub');
-    if (!mounted) return;
 
     await _dataService.initialize();
     await _dataService.initializeConnections();
 
-    setState(() => _isInitializing = false);
+    if (!preloadAlreadyDone) {
+      await Future.delayed(const Duration(seconds: 2));
+
+      await _dataService.closeConnections();
+
+      _dataService = DataService(
+        npub: widget.npub,
+        dataType: widget.dataType,
+        onNewNote: _handleNewNote,
+        onReactionsUpdated: _handleReactionsUpdated,
+        onRepliesUpdated: _handleRepliesUpdated,
+        onRepostsUpdated: _handleRepostsUpdated,
+        onReactionCountUpdated: (_, __) => setState(() {}),
+        onReplyCountUpdated: (_, __) => setState(() {}),
+        onRepostCountUpdated: (_, __) => setState(() {}),
+      );
+
+      await _dataService.initialize();
+      await _dataService.initializeConnections();
+
+      _applyPendingNotes();
+
+      for (int i = 0; i < 3; i++) {
+        if (!mounted) return;
+        await Future.delayed(const Duration(milliseconds: 100));
+        setState(() {});
+      }
+
+      await prefs.setBool(preloadKey, true);
+    }
+
+    if (mounted) {
+      setState(() {
+        _isInitializing = false;
+        _preloadDone = true;
+      });
+    }
   }
 
   void _handleNewNote(NoteModel note) {
     _pendingNotes.add(note);
-    setState(() {});
+    if (_preloadDone) {
+      _applyPendingNotes();
+    }
   }
 
   void _handleReactionsUpdated(String noteId, _) => setState(() {});
@@ -71,6 +120,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _dataService.closeConnections();
     super.dispose();
   }
@@ -79,14 +129,19 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   Widget build(BuildContext context) {
     if (_isInitializing || _currentUserNpub == null) {
       return const SliverToBoxAdapter(
-        child: Center(child: CircularProgressIndicator()),
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.only(top: 100),
+            child: CircularProgressIndicator(),
+          ),
+        ),
       );
     }
 
     return ValueListenableBuilder<List<NoteModel>>(
       valueListenable: _dataService.notesNotifier,
       builder: (context, notes, child) {
-        if (notes.isEmpty && _pendingNotes.isEmpty) {
+        if (notes.isEmpty) {
           return const SliverToBoxAdapter(
             child: Center(
               child: Padding(
@@ -100,41 +155,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         return SliverList(
           delegate: SliverChildBuilderDelegate(
             (context, index) {
-              if (_pendingNotes.isNotEmpty && index == 0) {
-                return GestureDetector(
-                  onTap: _applyPendingNotes,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(
-                        vertical: 16, horizontal: 24),
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.95),
-                      borderRadius: BorderRadius.circular(24),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 6,
-                          offset: const Offset(0, 3),
-                        )
-                      ],
-                    ),
-                    child: Text(
-                      'Show ${_pendingNotes.length} new note${_pendingNotes.length > 1 ? "s" : ""}',
-                      style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.black),
-                    ),
-                  ),
-                );
-              }
-
-              final realIndex = _pendingNotes.isNotEmpty ? index - 1 : index;
-              if (realIndex >= notes.length) return null;
-
-              final note = notes[realIndex];
-
+              final note = notes[index];
               return NoteWidget(
                 key: ValueKey(note.id),
                 note: note,
@@ -146,8 +167,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                 notesNotifier: _dataService.notesNotifier,
               );
             },
-            childCount: _dataService.notesNotifier.value.length +
-                (_pendingNotes.isNotEmpty ? 1 : 0),
+            childCount: notes.length,
           ),
         );
       },
