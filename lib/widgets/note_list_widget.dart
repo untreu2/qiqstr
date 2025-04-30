@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -26,17 +27,56 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
   String? _currentUserNpub;
   bool _isInitializing = true;
-  bool _preloadDone = false;
+  bool _isFakeLoadingDone = false;
 
   late DataService _dataService;
-  List<NoteModel> _pendingNotes = [];
+  late Future<void> _renderReadyFuture;
 
+  final List<NoteModel> _pendingNotes = [];
+  List<Future<void>> _noteLoadFutures = [];
   int _selectedTabIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    _setupInitialService();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _runFakeScrollAndLoading().then((_) => _setupInitialService());
+    });
+  }
+
+  Future<void> _runFakeScrollAndLoading() async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    try {
+      await _scrollController.animateTo(
+        150.0,
+        duration: const Duration(milliseconds: 800),
+        curve: Curves.easeInOut,
+      );
+      await Future.delayed(const Duration(milliseconds: 200));
+
+      await _scrollController.animateTo(
+        300.0,
+        duration: const Duration(milliseconds: 1000),
+        curve: Curves.easeInOut,
+      );
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      await _scrollController.animateTo(
+        0.0,
+        duration: const Duration(milliseconds: 1000),
+        curve: Curves.easeInOut,
+      );
+      await Future.delayed(const Duration(milliseconds: 400));
+    } catch (_) {}
+
+    await WidgetsBinding.instance.endOfFrame;
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (mounted) {
+      setState(() {
+        _isFakeLoadingDone = true;
+      });
+    }
   }
 
   Future<void> _setupInitialService() async {
@@ -52,71 +92,62 @@ class _NoteListWidgetState extends State<NoteListWidget>
       npub: widget.npub,
       dataType: widget.dataType,
       onNewNote: _handleNewNote,
-      onReactionsUpdated: _handleReactionsUpdated,
-      onRepliesUpdated: _handleRepliesUpdated,
-      onRepostsUpdated: _handleRepostsUpdated,
-      onReactionCountUpdated: (_, __) => setState(() {}),
-      onReplyCountUpdated: (_, __) => setState(() {}),
-      onRepostCountUpdated: (_, __) => setState(() {}),
+      onReactionsUpdated: (_, __) {},
+      onRepliesUpdated: (_, __) {},
+      onRepostsUpdated: (_, __) {},
+      onReactionCountUpdated: (_, __) {},
+      onReplyCountUpdated: (_, __) {},
+      onRepostCountUpdated: (_, __) {},
     );
 
     await _dataService.initialize();
     await _dataService.initializeConnections();
 
     if (!preloadAlreadyDone) {
-      await Future.delayed(const Duration(seconds: 2));
+      await Future.delayed(const Duration(seconds: 3));
       await _dataService.closeConnections();
 
       _dataService = DataService(
         npub: widget.npub,
         dataType: widget.dataType,
         onNewNote: _handleNewNote,
-        onReactionsUpdated: _handleReactionsUpdated,
-        onRepliesUpdated: _handleRepliesUpdated,
-        onRepostsUpdated: _handleRepostsUpdated,
-        onReactionCountUpdated: (_, __) => setState(() {}),
-        onReplyCountUpdated: (_, __) => setState(() {}),
-        onRepostCountUpdated: (_, __) => setState(() {}),
+        onReactionsUpdated: (_, __) {},
+        onRepliesUpdated: (_, __) {},
+        onRepostsUpdated: (_, __) {},
+        onReactionCountUpdated: (_, __) {},
+        onReplyCountUpdated: (_, __) {},
+        onRepostCountUpdated: (_, __) {},
       );
 
       await _dataService.initialize();
       await _dataService.initializeConnections();
-
       _applyPendingNotes();
-
-      for (int i = 0; i < 3; i++) {
-        if (!mounted) return;
-        await Future.delayed(const Duration(milliseconds: 100));
-        setState(() {});
-      }
-
       await prefs.setBool(preloadKey, true);
     }
 
     if (mounted) {
       setState(() {
         _isInitializing = false;
-        _preloadDone = true;
       });
+
+      final notes = _dataService.notesNotifier.value;
+      _noteLoadFutures = List.generate(
+        notes.length,
+        (i) => Future.delayed(Duration(milliseconds: min(i * 50, 2500))),
+      );
+      _renderReadyFuture = Future.wait(_noteLoadFutures);
     }
   }
 
   void _handleNewNote(NoteModel note) {
-    _pendingNotes.add(note);
-    if (_preloadDone) {
-      _applyPendingNotes();
-    }
+    _dataService.addPendingNote(note);
+    _dataService.applyPendingNotes();
   }
-
-  void _handleReactionsUpdated(String noteId, _) => setState(() {});
-  void _handleRepliesUpdated(String noteId, _) => setState(() {});
-  void _handleRepostsUpdated(String noteId, _) => setState(() {});
 
   void _applyPendingNotes() {
     _pendingNotes.forEach(_dataService.addPendingNote);
     _dataService.applyPendingNotes();
     _pendingNotes.clear();
-    setState(() {});
   }
 
   @override
@@ -128,102 +159,103 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
   @override
   Widget build(BuildContext context) {
-    if (_isInitializing || _currentUserNpub == null) {
+    if (!_isFakeLoadingDone ||
+        _isInitializing ||
+        _currentUserNpub == null ||
+        _noteLoadFutures.isEmpty) {
       return const SliverToBoxAdapter(
-        child: Center(
-          child: Padding(
-            padding: EdgeInsets.only(top: 100),
-            child: CircularProgressIndicator(),
-          ),
+        child: SizedBox(
+          height: 300,
+          child: Center(child: CircularProgressIndicator()),
         ),
       );
     }
 
-    return ValueListenableBuilder<List<NoteModel>>(
-      valueListenable: _dataService.notesNotifier,
-      builder: (context, notes, child) {
-        if (notes.isEmpty) {
+    return FutureBuilder(
+      future: _renderReadyFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
           return const SliverToBoxAdapter(
-            child: Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: Text('No notes found.'),
-              ),
+            child: SizedBox(
+              height: 300,
+              child: Center(child: CircularProgressIndicator()),
             ),
           );
         }
 
-        final filteredNotes = _selectedTabIndex == 0
-            ? notes
-            : notes.where((n) => n.hasMedia).toList();
+        return ValueListenableBuilder<List<NoteModel>>(
+          valueListenable: _dataService.notesNotifier,
+          builder: (context, notes, child) {
+            final filteredNotes = _selectedTabIndex == 0
+                ? notes
+                : notes.where((n) => n.hasMedia).toList();
 
-        return SliverList(
-          delegate: SliverChildListDelegate([
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _selectedTabIndex == 0
-                            ? Colors.amber.withOpacity(0.2)
-                            : Colors.grey.withOpacity(0.1),
-                        foregroundColor: _selectedTabIndex == 0
-                            ? Colors.amber[800]
-                            : Colors.grey,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+            return SliverList(
+              delegate: SliverChildListDelegate([
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () =>
+                              setState(() => _selectedTabIndex = 0),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _selectedTabIndex == 0
+                                ? Colors.amber.withOpacity(0.2)
+                                : Colors.grey.withOpacity(0.1),
+                            foregroundColor: _selectedTabIndex == 0
+                                ? Colors.amber[800]
+                                : Colors.grey,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: const Text("All Notes"),
                         ),
                       ),
-                      onPressed: () {
-                        setState(() {
-                          _selectedTabIndex = 0;
-                        });
-                      },
-                      child: const Text("All Notes"),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _selectedTabIndex == 1
-                            ? Colors.amber.withOpacity(0.2)
-                            : Colors.grey.withOpacity(0.1),
-                        foregroundColor: _selectedTabIndex == 1
-                            ? Colors.amber[800]
-                            : Colors.grey,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () =>
+                              setState(() => _selectedTabIndex = 1),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _selectedTabIndex == 1
+                                ? Colors.amber.withOpacity(0.2)
+                                : Colors.grey.withOpacity(0.1),
+                            foregroundColor: _selectedTabIndex == 1
+                                ? Colors.amber[800]
+                                : Colors.grey,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: const Text("Media"),
                         ),
                       ),
-                      onPressed: () {
-                        setState(() {
-                          _selectedTabIndex = 1;
-                        });
-                      },
-                      child: const Text("Media"),
-                    ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            ...List.generate(filteredNotes.length, (index) {
-              final note = filteredNotes[index];
-              return NoteWidget(
-                key: ValueKey(note.id),
-                note: note,
-                reactionCount: note.reactionCount,
-                replyCount: note.replyCount,
-                repostCount: note.repostCount,
-                dataService: _dataService,
-                currentUserNpub: _currentUserNpub!,
-                notesNotifier: _dataService.notesNotifier,
-              );
-            }),
-          ]),
+                ),
+                const SizedBox(height: 16),
+                ...List.generate(filteredNotes.length, (index) {
+                  final note = filteredNotes[index];
+                  return RepaintBoundary(
+                    key: ValueKey(note.id),
+                    child: NoteWidget(
+                      note: note,
+                      reactionCount: note.reactionCount,
+                      replyCount: note.replyCount,
+                      repostCount: note.repostCount,
+                      dataService: _dataService,
+                      currentUserNpub: _currentUserNpub!,
+                      notesNotifier: _dataService.notesNotifier,
+                    ),
+                  );
+                }),
+              ]),
+            );
+          },
         );
       },
     );
