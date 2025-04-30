@@ -27,28 +27,68 @@ class NotificationsPage extends StatefulWidget {
 
 class _NotificationsPageState extends State<NotificationsPage> {
   UserModel? user;
+  List<NotificationModel> _notifications = [];
+  Map<String, UserModel?> _userProfilesCache = {};
   bool isLoading = true;
   String? errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _loadUserProfile();
+    _initialize();
   }
 
-  Future<void> _loadUserProfile() async {
+  Future<void> _initialize() async {
     try {
       final profileData =
           await widget.dataService.getCachedUserProfile(widget.npub);
+      user = UserModel.fromCachedProfile(widget.npub, profileData);
+
+      final notifications = widget.notificationsBox.values
+          .where((n) =>
+              (n.type == 'mention' ||
+                  n.type == 'repost' ||
+                  n.type == 'reaction') &&
+              n.actorNpub != widget.npub)
+          .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
       setState(() {
-        user = UserModel.fromCachedProfile(widget.npub, profileData);
+        _notifications = notifications;
+        isLoading = false;
       });
+
+      _lazyLoadProfiles(notifications);
     } catch (e) {
       setState(() {
-        errorMessage = 'Failed to load user profile.';
+        errorMessage = 'Failed to load notifications.';
+        isLoading = false;
       });
-    } finally {
-      setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> _lazyLoadProfiles(List<NotificationModel> notifications) async {
+    final uniqueNpubs = notifications.map((n) => n.actorNpub).toSet();
+
+    for (final npub in uniqueNpubs) {
+      if (_userProfilesCache.containsKey(npub)) continue;
+
+      try {
+        final data = await widget.dataService.getCachedUserProfile(npub);
+        final profile = UserModel.fromCachedProfile(npub, data);
+
+        if (mounted) {
+          setState(() {
+            _userProfilesCache[npub] = profile;
+          });
+        }
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            _userProfilesCache[npub] = null;
+          });
+        }
+      }
     }
   }
 
@@ -56,7 +96,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 60, 16, 20),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Builder(
             builder: (context) => IconButton(
@@ -81,6 +120,73 @@ class _NotificationsPageState extends State<NotificationsPage> {
     );
   }
 
+  Widget _buildNotificationTile(NotificationModel n) {
+    final profile = _userProfilesCache[n.actorNpub];
+    final name = profile?.name.isNotEmpty == true ? profile!.name : 'Anonymous';
+    final img = profile?.profileImage ?? '';
+    final selectedTargetId =
+        n.targetEventIds.isNotEmpty ? n.targetEventIds.first : null;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+            leading: CircleAvatar(
+              radius: 18,
+              backgroundColor: Colors.grey[800],
+              backgroundImage:
+                  img.isNotEmpty ? CachedNetworkImageProvider(img) : null,
+              child: img.isEmpty
+                  ? const Icon(Icons.person, size: 18, color: Colors.white)
+                  : null,
+            ),
+            title: Text(
+              _formatNotificationTitle(name, n),
+              style: const TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 15,
+                color: Colors.white,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (selectedTargetId != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: QuoteWidget(
+                bech32: encodeBasicBech32(selectedTargetId, 'note'),
+                dataService: widget.dataService,
+              ),
+            ),
+          if (n.type == 'mention' && n.content!.trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text(
+                n.content!,
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _formatNotificationTitle(String name, NotificationModel n) {
+    switch (n.type) {
+      case 'mention':
+        return '$name mentioned you';
+      case 'reaction':
+        return '$name reacted ${n.content?.trim()} to your post';
+      case 'repost':
+        return '$name reposted you';
+      default:
+        return '';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -96,27 +202,13 @@ class _NotificationsPageState extends State<NotificationsPage> {
                   ),
                 )
               : CustomScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(
-                      parent: BouncingScrollPhysics()),
+                  physics: const BouncingScrollPhysics(),
                   cacheExtent: 1500,
                   slivers: [
                     SliverToBoxAdapter(child: _buildHeader()),
-                    SliverToBoxAdapter(
-                      child: ValueListenableBuilder(
-                        valueListenable: widget.notificationsBox.listenable(),
-                        builder: (context, Box<NotificationModel> box, _) {
-                          final notifications = box.values
-                              .where((n) =>
-                                  (n.type == 'mention' ||
-                                      n.type == 'repost' ||
-                                      n.type == 'reaction') &&
-                                  n.actorNpub != widget.npub)
-                              .toList()
-                            ..sort(
-                                (a, b) => b.createdAt.compareTo(a.createdAt));
-
-                          if (notifications.isEmpty) {
-                            return const Center(
+                    _notifications.isEmpty
+                        ? const SliverToBoxAdapter(
+                            child: Center(
                               child: Padding(
                                 padding: EdgeInsets.only(top: 64),
                                 child: Text(
@@ -124,127 +216,19 @@ class _NotificationsPageState extends State<NotificationsPage> {
                                   style: TextStyle(color: Colors.white54),
                                 ),
                               ),
-                            );
-                          }
-
-                          return ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            padding: const EdgeInsets.only(bottom: 16),
-                            itemCount: notifications.length,
-                            itemBuilder: (context, index) {
-                              final n = notifications[index];
-                              final selectedTargetId =
-                                  n.targetEventIds.isNotEmpty
-                                      ? n.targetEventIds.first
-                                      : null;
-
-                              return Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 8),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    FutureBuilder<Map<String, String>>(
-                                      future: widget.dataService
-                                          .getCachedUserProfile(n.actorNpub),
-                                      builder: (_, snap) {
-                                        String name = 'Anonymous';
-                                        String img = '';
-                                        if (snap.hasData) {
-                                          final u = UserModel.fromCachedProfile(
-                                              n.actorNpub, snap.data!);
-                                          name = u.name.isNotEmpty
-                                              ? u.name
-                                              : 'Anonymous';
-                                          img = u.profileImage;
-                                        }
-                                        return Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 16, vertical: 4),
-                                          child: Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.center,
-                                            children: [
-                                              CircleAvatar(
-                                                radius: 18,
-                                                backgroundColor:
-                                                    Colors.grey[800],
-                                                backgroundImage: img.isNotEmpty
-                                                    ? CachedNetworkImageProvider(
-                                                        img)
-                                                    : null,
-                                                child: img.isEmpty
-                                                    ? const Icon(Icons.person,
-                                                        size: 18,
-                                                        color: Colors.white)
-                                                    : null,
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Expanded(
-                                                child: Text(
-                                                  _formatNotificationTitle(
-                                                      name, n),
-                                                  style: const TextStyle(
-                                                    fontWeight: FontWeight.w500,
-                                                    fontSize: 15,
-                                                    color: Colors.white,
-                                                  ),
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                    if (selectedTargetId != null)
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 16),
-                                        child: QuoteWidget(
-                                          bech32: encodeBasicBech32(
-                                              selectedTargetId, 'note'),
-                                          dataService: widget.dataService,
-                                        ),
-                                      ),
-                                    if (n.type == 'mention' &&
-                                        n.content!.trim().isNotEmpty)
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 16, vertical: 8),
-                                        child: Text(
-                                          n.content!,
-                                          style: const TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 14,
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    )
+                            ),
+                          )
+                        : SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
+                                final n = _notifications[index];
+                                return _buildNotificationTile(n);
+                              },
+                              childCount: _notifications.length,
+                            ),
+                          ),
                   ],
                 ),
     );
-  }
-
-  String _formatNotificationTitle(String name, NotificationModel n) {
-    switch (n.type) {
-      case 'mention':
-        return '$name mentioned you';
-      case 'reaction':
-        return '$name reacted ${n.content?.trim()} to your post';
-      case 'repost':
-        return '$name reposted you';
-      default:
-        return '';
-    }
   }
 }
