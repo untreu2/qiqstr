@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:isolate';
 import 'dart:io';
 import 'dart:math';
+import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'package:nostr/nostr.dart';
 import 'package:qiqstr/constants/constants.dart';
@@ -634,7 +636,7 @@ class DataService {
         if (_pendingEvents.isNotEmpty) {
           final batch = List<Map<String, dynamic>>.from(_pendingEvents);
           _pendingEvents.clear();
-          _eventProcessorSendPort.send(batch); // topluca gönderiyoruz
+          _eventProcessorSendPort.send(batch);
         }
         _batchTimer = null;
       });
@@ -1338,6 +1340,40 @@ class DataService {
     };
   }
 
+  final SplayTreeSet<NoteModel> _itemsTree = SplayTreeSet(_compareNotes);
+  final ValueNotifier<List<NoteModel>> notesNotifier = ValueNotifier([]);
+
+  static int _compareNotes(NoteModel a, NoteModel b) {
+    final aTime = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
+    final bTime = b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
+    final result = bTime.compareTo(aTime);
+    return result == 0 ? a.id.compareTo(b.id) : result;
+  }
+
+  final List<NoteModel> pendingNotes = [];
+  void addPendingNote(NoteModel note) {
+    pendingNotes.add(note);
+  }
+
+  void applyPendingNotes() {
+    for (var note in pendingNotes) {
+      _addNote(note);
+    }
+    pendingNotes.clear();
+    notesNotifier.value = _itemsTree.toList();
+  }
+
+  final Map<String, int> reactionCounts = {};
+  final Map<String, int> replyCounts = {};
+  final Map<String, int> repostCounts = {};
+
+  void _addNote(NoteModel note) {
+    _itemsTree.add(note);
+    reactionCounts[note.id] = reactionsMap[note.id]?.length ?? 0;
+    replyCounts[note.id] = repliesMap[note.id]?.length ?? 0;
+    repostCounts[note.id] = repostsMap[note.id]?.length ?? 0;
+  }
+
   Future<void> _subscribeToAllReactions() async {
     if (_isClosed) return;
     String subscriptionId = generateUUID();
@@ -1795,11 +1831,12 @@ class DataService {
         if (!eventIds.contains(note.id)) {
           notes.add(note);
           eventIds.add(note.id);
+          _addNote(note);
         }
       }
 
+      notesNotifier.value = _itemsTree.toList();
       onLoad(limitedNotes);
-      print('[DataService] Cache loaded with ${limitedNotes.length} notes.');
 
       List<String> cachedEventIds =
           limitedNotes.map((note) => note.id).toList();
@@ -1812,6 +1849,7 @@ class DataService {
     } catch (e) {
       print('[DataService ERROR] Error loading notes from cache: $e');
     }
+
     await _fetchProfilesForAllData();
   }
 
@@ -1892,10 +1930,12 @@ class DataService {
         if (!eventIds.contains(note.id)) {
           notes.add(note);
           eventIds.add(note.id);
-          await notesBox!.put(note.id, note);
+
+          await notesBox?.put(note.id, note);
+          addPendingNote(note);
         }
       }
-      onNewNote?.call(data.last);
+
       print('[DataService] Handled new notes: ${data.length} notes added.');
 
       List<String> newEventIds = data.map((note) => note.id).toList();
@@ -1911,6 +1951,14 @@ class DataService {
   Future<void> fetchReactionsForEvents(List<String> eventIdsToFetch) async {
     if (_isClosed) return;
     await _fetchProcessorReady.future;
+
+    for (final targetEventId in eventIdsToFetch) {
+      final reactions = reactionsMap[targetEventId] ?? [];
+      onReactionsUpdated?.call(targetEventId, reactions);
+      reactionCounts[targetEventId] = reactions.length;
+    }
+
+    notesNotifier.value = _itemsTree.toList();
     _fetchProcessorSendPort.send({
       'type': 'reaction',
       'eventIds': eventIdsToFetch,
@@ -1921,6 +1969,14 @@ class DataService {
   Future<void> fetchRepliesForEvents(List<String> parentEventIds) async {
     if (_isClosed) return;
     await _fetchProcessorReady.future;
+
+    for (final parentEventId in parentEventIds) {
+      final replies = repliesMap[parentEventId] ?? [];
+      onRepliesUpdated?.call(parentEventId, replies);
+      replyCounts[parentEventId] = replies.length;
+    }
+
+    notesNotifier.value = _itemsTree.toList();
     _fetchProcessorSendPort.send({
       'type': 'reply',
       'eventIds': parentEventIds,
@@ -1931,6 +1987,14 @@ class DataService {
   Future<void> fetchRepostsForEvents(List<String> eventIdsToFetch) async {
     if (_isClosed) return;
     await _fetchProcessorReady.future;
+
+    for (final originalNoteId in eventIdsToFetch) {
+      final reposts = repostsMap[originalNoteId] ?? [];
+      onRepostsUpdated?.call(originalNoteId, reposts);
+      repostCounts[originalNoteId] = reposts.length;
+    }
+
+    notesNotifier.value = _itemsTree.toList();
     _fetchProcessorSendPort.send({
       'type': 'repost',
       'eventIds': eventIdsToFetch,
