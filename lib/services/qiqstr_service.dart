@@ -256,9 +256,20 @@ class DataService {
 
       await _fetchUserData();
 
+      await reloadInteractionCounts();
+
       _startCacheCleanup();
       _isInitialized = true;
     });
+  }
+
+  Future<void> reloadInteractionCounts() async {
+    for (var note in notes) {
+      note.reactionCount = reactionsMap[note.id]?.length ?? 0;
+      note.replyCount = repliesMap[note.id]?.length ?? 0;
+      note.repostCount = repostsMap[note.id]?.length ?? 0;
+    }
+    notesNotifier.value = _itemsTree.toList();
   }
 
   Future<void> _initializeEventProcessorIsolate() async {
@@ -1695,6 +1706,7 @@ class DataService {
 
   Future<void> loadNotesFromCache(Function(List<NoteModel>) onLoad) async {
     if (notesBox == null || !notesBox!.isOpen) return;
+
     try {
       final allNotes = notesBox!.values.cast<NoteModel>().toList();
       if (allNotes.isEmpty) return;
@@ -1715,6 +1727,10 @@ class DataService {
           eventIds.add(note.id);
           _addNote(note);
         }
+
+        note.reactionCount = reactionsMap[note.id]?.length ?? 0;
+        note.replyCount = repliesMap[note.id]?.length ?? 0;
+        note.repostCount = repostsMap[note.id]?.length ?? 0;
       }
 
       notesNotifier.value = _itemsTree.toList();
