@@ -40,6 +40,9 @@ class NoteModel extends HiveObject {
   @HiveField(11)
   Map<String, dynamic>? parsedContent;
 
+  @HiveField(12)
+  bool hasMedia;
+
   NoteModel({
     required this.id,
     required this.content,
@@ -53,6 +56,7 @@ class NoteModel extends HiveObject {
     this.reactionCount = 0,
     this.replyCount = 0,
     this.parsedContent,
+    this.hasMedia = false,
   });
 
   factory NoteModel.fromJson(Map<String, dynamic> json) {
@@ -61,18 +65,23 @@ class NoteModel extends HiveObject {
       content: json['content'] as String,
       author: json['author'] as String,
       timestamp: DateTime.fromMillisecondsSinceEpoch(
-          (json['timestamp'] as int) * 1000),
+        (json['timestamp'] as int) * 1000,
+      ),
       isRepost: json['isRepost'] as bool? ?? false,
       repostedBy: json['repostedBy'] as String?,
       repostTimestamp: json['repostTimestamp'] != null
           ? DateTime.fromMillisecondsSinceEpoch(
-              (json['repostTimestamp'] as int) * 1000)
+              (json['repostTimestamp'] as int) * 1000,
+            )
           : null,
       repostCount: json['repostCount'] as int? ?? 0,
       rawWs: json['rawWs'] as String?,
       reactionCount: json['reactionCount'] as int? ?? 0,
       replyCount: json['replyCount'] as int? ?? 0,
-      parsedContent: json['parsedContent'] as Map<String, dynamic>?,
+      parsedContent: json['parsedContent'] != null
+          ? Map<String, dynamic>.from(json['parsedContent'])
+          : null,
+      hasMedia: json['hasMedia'] as bool? ?? false,
     );
   }
 
@@ -90,6 +99,7 @@ class NoteModel extends HiveObject {
       'reactionCount': reactionCount,
       'replyCount': replyCount,
       'parsedContent': parsedContent,
+      'hasMedia': hasMedia,
     };
   }
 }

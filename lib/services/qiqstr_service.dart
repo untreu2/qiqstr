@@ -559,7 +559,9 @@ class DataService {
   }
 
   void parseContentForNote(NoteModel note) {
-    note.parsedContent ??= parseContent(note.content);
+    final parsed = parseContent(note.content);
+    note.parsedContent = parsed;
+    note.hasMedia = (parsed['mediaUrls'] as List).isNotEmpty;
   }
 
   static void _processCacheLoad(String data, SendPort sendPort) {
@@ -897,6 +899,8 @@ class DataService {
         repostTimestamp: repostTimestamp,
         rawWs: isRepost ? repostRawWs : rawWs,
       );
+
+      parseContentForNote(newNote);
 
       if (!eventIds.contains(newNote.id)) {
         notes.add(newNote);
@@ -1389,6 +1393,7 @@ class DataService {
     _onCacheLoad = (List<NoteModel> newNotes) async {
       for (var note in newNotes) {
         if (!eventIds.contains(note.id)) {
+          parseContentForNote(note);
           notes.add(note);
           eventIds.add(note.id);
           onOlderNote(note);
@@ -1847,6 +1852,7 @@ class DataService {
 
       for (var note in limitedNotes) {
         if (!eventIds.contains(note.id)) {
+          parseContentForNote(note);
           notes.add(note);
           eventIds.add(note.id);
           _addNote(note);
@@ -1950,6 +1956,7 @@ class DataService {
     if (data is List<NoteModel> && data.isNotEmpty) {
       for (var note in data) {
         if (!eventIds.contains(note.id)) {
+          parseContentForNote(note);
           notes.add(note);
           eventIds.add(note.id);
 

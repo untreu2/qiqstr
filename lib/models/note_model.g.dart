@@ -29,13 +29,14 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       reactionCount: fields[9] as int,
       replyCount: fields[10] as int,
       parsedContent: (fields[11] as Map?)?.cast<String, dynamic>(),
+      hasMedia: fields[12] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, NoteModel obj) {
     writer
-      ..writeByte(12)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -59,7 +60,9 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       ..writeByte(10)
       ..write(obj.replyCount)
       ..writeByte(11)
-      ..write(obj.parsedContent);
+      ..write(obj.parsedContent)
+      ..writeByte(12)
+      ..write(obj.hasMedia);
   }
 
   @override
