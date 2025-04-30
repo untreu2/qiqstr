@@ -805,8 +805,10 @@ class DataService {
   }
 
   Future<void> _processNoteEvent(
-      Map<String, dynamic> eventData, List<String> targetNpubs,
-      {String? rawWs}) async {
+    Map<String, dynamic> eventData,
+    List<String> targetNpubs, {
+    String? rawWs,
+  }) async {
     int kind = eventData['kind'] as int;
     final author = eventData['pubkey'] as String;
     bool isRepost = kind == 6;
@@ -822,9 +824,7 @@ class DataService {
       if (repostRawWs is String && repostRawWs.isNotEmpty) {
         try {
           originalEventData = jsonDecode(repostRawWs) as Map<String, dynamic>;
-        } catch (e) {
-          originalEventData = null;
-        }
+        } catch (_) {}
       }
 
       if (originalEventData == null) {
@@ -852,7 +852,11 @@ class DataService {
         }
       }
 
-      if (originalEventData == null) return;
+      if (originalEventData == null) {
+        print('[DataService] Skipped repost: original event missing');
+        return;
+      }
+
       eventData = originalEventData;
     }
 
@@ -870,56 +874,55 @@ class DataService {
 
     if (dataType == DataType.Feed) {
       if (isRepost) {
-        if (!targetNpubs.contains(author)) {
-          return;
-        }
+        if (!targetNpubs.contains(author)) return;
       } else {
-        if (!targetNpubs.contains(noteAuthor)) {
-          return;
-        }
+        if (!targetNpubs.contains(noteAuthor)) return;
       }
     } else if (dataType == DataType.Profile) {
-      if (!(noteAuthor == npub || (isRepost && author == npub))) {
-        return;
+      if (isRepost) {
+        if (author != npub) return;
+      } else {
+        if (noteAuthor != npub) return;
       }
     }
 
     if (rootEventId != null) {
       await _handleReplyEvent(eventData, rootEventId);
-    } else {
-      final timestamp = DateTime.fromMillisecondsSinceEpoch(
-          (eventData['created_at'] as int) * 1000);
-      final newNote = NoteModel(
-        id: eventId,
-        content: noteContent,
-        author: noteAuthor,
-        timestamp: timestamp,
-        isRepost: isRepost,
-        repostedBy: isRepost ? author : null,
-        repostTimestamp: repostTimestamp,
-        rawWs: isRepost ? repostRawWs : rawWs,
-      );
+      return;
+    }
 
-      parseContentForNote(newNote);
+    final timestamp = DateTime.fromMillisecondsSinceEpoch(
+        (eventData['created_at'] as int) * 1000);
+    final newNote = NoteModel(
+      id: eventId,
+      content: noteContent,
+      author: noteAuthor,
+      timestamp: timestamp,
+      isRepost: isRepost,
+      repostedBy: isRepost ? author : null,
+      repostTimestamp: repostTimestamp,
+      rawWs: isRepost ? repostRawWs : rawWs,
+    );
 
-      if (!eventIds.contains(newNote.id)) {
-        notes.add(newNote);
-        eventIds.add(newNote.id);
+    parseContentForNote(newNote);
 
-        if (notesBox != null && notesBox!.isOpen) {
-          await notesBox!.put(newNote.id, newNote);
-        }
-
-        onNewNote?.call(newNote);
-
-        List<String> newEventIds = [newNote.id];
-        await Future.wait([
-          fetchReactionsForEvents(newEventIds),
-          fetchRepliesForEvents(newEventIds),
-          fetchRepostsForEvents(newEventIds)
-        ]);
-        await _updateReactionSubscription();
+    if (!eventIds.contains(newNote.id)) {
+      notes.add(newNote);
+      eventIds.add(newNote.id);
+      if (notesBox != null && notesBox!.isOpen) {
+        await notesBox!.put(newNote.id, newNote);
       }
+
+      onNewNote?.call(newNote);
+      addPendingNote(newNote);
+
+      List<String> newEventIds = [newNote.id];
+      await Future.wait([
+        fetchReactionsForEvents(newEventIds),
+        fetchRepliesForEvents(newEventIds),
+        fetchRepostsForEvents(newEventIds),
+      ]);
+      await _updateReactionSubscription();
     }
   }
 
@@ -2064,10 +2067,10 @@ class DataService {
           await _handleReplyEvent(
               eventData, _extractRootEventId(eventData['tags']) ?? '');
         } else {
-          await _processNoteEvent(eventData, targetNpubs,
-              rawWs: jsonEncode(eventData));
+          await _processNoteEvent(eventData, targetNpubs);
         }
       } else if (kind == 6) {
+        await _processNoteEvent(eventData, targetNpubs);
         await _handleRepostEvent(eventData);
       }
 
