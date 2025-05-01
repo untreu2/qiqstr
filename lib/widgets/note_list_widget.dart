@@ -77,6 +77,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     if (_dataService.notesNotifier.value.length >= 75) return;
     _dataService.addPendingNote(note);
     _dataService.applyPendingNotes();
+
+    _dataService.fetchInteractionsForEvents([note.id]);
   }
 
   @override
