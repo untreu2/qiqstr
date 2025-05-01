@@ -43,6 +43,9 @@ class NoteModel extends HiveObject {
   @HiveField(12)
   bool hasMedia;
 
+  @HiveField(13)
+  double? estimatedHeight;
+
   NoteModel({
     required this.id,
     required this.content,
@@ -57,6 +60,7 @@ class NoteModel extends HiveObject {
     this.replyCount = 0,
     this.parsedContent,
     this.hasMedia = false,
+    this.estimatedHeight,
   });
 
   factory NoteModel.fromJson(Map<String, dynamic> json) {
@@ -82,6 +86,7 @@ class NoteModel extends HiveObject {
           ? Map<String, dynamic>.from(json['parsedContent'])
           : null,
       hasMedia: json['hasMedia'] as bool? ?? false,
+      estimatedHeight: (json['estimatedHeight'] as num?)?.toDouble(),
     );
   }
 
@@ -100,6 +105,7 @@ class NoteModel extends HiveObject {
       'replyCount': replyCount,
       'parsedContent': parsedContent,
       'hasMedia': hasMedia,
+      'estimatedHeight': estimatedHeight,
     };
   }
 }

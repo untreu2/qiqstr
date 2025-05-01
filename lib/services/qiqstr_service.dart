@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:isolate';
 import 'dart:io';
 import 'dart:math';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'package:nostr/nostr.dart';
@@ -82,13 +83,28 @@ class WebSocketManager {
   Future<void> executeOnActiveSockets(
       FutureOr<void> Function(WebSocket ws) action) async {
     final futures = _webSockets.values.map((ws) async {
-      if (ws.readyState == WebSocket.open) await action(ws);
+      try {
+        if (ws.readyState == WebSocket.open) {
+          await action(ws);
+        }
+      } catch (e) {
+        print('[WebSocketManager] Socket error in executeOnActiveSockets: $e');
+      }
     });
+
     await Future.wait(futures);
   }
 
   Future<void> broadcast(String message) async {
-    await executeOnActiveSockets((ws) async => ws.add(message));
+    try {
+      await executeOnActiveSockets((ws) async {
+        if (ws.readyState == WebSocket.open) {
+          ws.add(message);
+        }
+      });
+    } catch (e) {
+      print('[WebSocketManager] Broadcast error: $e');
+    }
   }
 
   void reconnectRelay(String relayUrl, List<String> targetNpubs,
@@ -224,45 +240,54 @@ class DataService {
   int get connectedRelaysCount => _socketManager.activeSockets.length;
 
   Future<void> initialize() async {
+    await initializeLight();
+
+    Timer(const Duration(seconds: 1), () async {
+      await initializeHeavy();
+
+      if (dataType == DataType.Feed) {
+        _startNotificationSubscription();
+      }
+    });
+  }
+
+  Future<void> initializeLight() async {
     await _initializeEventProcessorIsolate();
     await _initializeFetchProcessorIsolate();
     await _initializeIsolate();
 
     notesBox =
         await _openHiveBox<NoteModel>('notes_${dataType.toString()}_$npub');
-    print('[DataService] Hive notes box opened successfully.');
-
     usersBox = await _openHiveBox<UserModel>('users');
-    print('[DataService] Hive users box opened successfully.');
 
     await loadNotesFromCache((loadedNotes) {
       print('[DataService] Cache loaded with ${loadedNotes.length} notes.');
     });
 
-    Future.microtask(() async {
-      await Future.wait([
-        _openHiveBox<ReactionModel>('reactions_${dataType.toString()}_$npub')
-            .then((box) => reactionsBox = box),
-        _openHiveBox<ReplyModel>('replies_${dataType.toString()}_$npub')
-            .then((box) => repliesBox = box),
-        _openHiveBox<RepostModel>('reposts_${dataType.toString()}_$npub')
-            .then((box) => repostsBox = box),
-        _openHiveBox<UserModel>('users').then((box) => usersBox = box),
-        _openHiveBox<FollowingModel>('followingBox')
-            .then((box) => followingBox = box),
-        _openHiveBox<NotificationModel>('notifications_$npub')
-            .then((box) => notificationsBox = box),
-      ]);
+    _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
 
-      _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
+    _isInitialized = true;
+  }
 
-      await _fetchUserData();
+  Future<void> initializeHeavy() async {
+    if (!_isInitialized || _isClosed) return;
 
-      await reloadInteractionCounts();
+    await Future.wait([
+      _openHiveBox<ReactionModel>('reactions_${dataType.toString()}_$npub')
+          .then((box) => reactionsBox = box),
+      _openHiveBox<ReplyModel>('replies_${dataType.toString()}_$npub')
+          .then((box) => repliesBox = box),
+      _openHiveBox<RepostModel>('reposts_${dataType.toString()}_$npub')
+          .then((box) => repostsBox = box),
+      _openHiveBox<FollowingModel>('followingBox')
+          .then((box) => followingBox = box),
+      _openHiveBox<NotificationModel>('notifications_$npub')
+          .then((box) => notificationsBox = box),
+    ]);
 
-      _startCacheCleanup();
-      _isInitialized = true;
-    });
+    await _fetchUserData();
+    await reloadInteractionCounts();
+    _startCacheCleanup();
   }
 
   Future<void> reloadInteractionCounts() async {
@@ -559,9 +584,102 @@ class DataService {
   }
 
   void parseContentForNote(NoteModel note) {
-    final parsed = parseContent(note.content);
-    note.parsedContent = parsed;
-    note.hasMedia = (parsed['mediaUrls'] as List).isNotEmpty;
+    final RegExp mediaRegExp = RegExp(
+      r'(https?:\/\/\S+\.(jpg|jpeg|png|webp|gif|mp4|mov))',
+      caseSensitive: false,
+    );
+    final mediaMatches = mediaRegExp.allMatches(note.content);
+    final List<String> mediaUrls =
+        mediaMatches.map((m) => m.group(0)!).toList();
+
+    final RegExp linkRegExp = RegExp(r'(https?:\/\/\S+)', caseSensitive: false);
+    final linkMatches = linkRegExp.allMatches(note.content);
+    final List<String> linkUrls = linkMatches
+        .map((m) => m.group(0)!)
+        .where((u) =>
+            !mediaUrls.contains(u) &&
+            !u.toLowerCase().endsWith('.mp4') &&
+            !u.toLowerCase().endsWith('.mov'))
+        .toList();
+
+    final RegExp quoteRegExp = RegExp(
+        r'nostr:(note1[0-9a-z]+|nevent1[0-9a-z]+)',
+        caseSensitive: false);
+    final quoteMatches = quoteRegExp.allMatches(note.content);
+    final List<String> quoteIds = quoteMatches
+        .map((m) => m.group(0)!.replaceFirst('nostr:', ''))
+        .toList();
+
+    String cleanedText = note.content;
+    for (final m in [...mediaMatches, ...quoteMatches]) {
+      cleanedText = cleanedText.replaceFirst(m.group(0)!, '');
+    }
+    cleanedText = cleanedText.trim();
+
+    final RegExp mentionRegExp = RegExp(
+        r'nostr:(npub1[0-9a-z]+|nprofile1[0-9a-z]+)',
+        caseSensitive: false);
+    final mentionMatches = mentionRegExp.allMatches(cleanedText);
+
+    final List<Map<String, dynamic>> textParts = [];
+    int lastEnd = 0;
+    for (final m in mentionMatches) {
+      if (m.start > lastEnd) {
+        textParts.add({
+          'type': 'text',
+          'text': cleanedText.substring(lastEnd, m.start),
+        });
+      }
+
+      final id = m.group(0)!.replaceFirst('nostr:', '');
+      textParts.add({'type': 'mention', 'id': id});
+      lastEnd = m.end;
+    }
+
+    if (lastEnd < cleanedText.length) {
+      textParts.add({
+        'type': 'text',
+        'text': cleanedText.substring(lastEnd),
+      });
+    }
+
+    bool allMediaOk = true;
+    for (final url in mediaUrls) {
+      if (url.endsWith('.mp4') || url.endsWith('.mov')) {
+        continue;
+      }
+
+      try {
+        final provider = CachedNetworkImageProvider(url);
+        final stream = provider.resolve(const ImageConfiguration());
+        stream.addListener(ImageStreamListener((_, __) {}, onError: (d, s) {
+          allMediaOk = false;
+        }));
+      } catch (_) {
+        allMediaOk = false;
+      }
+    }
+
+    note.hasMedia = mediaUrls.isNotEmpty && allMediaOk;
+
+    note.parsedContent = {
+      'mediaUrls': mediaUrls,
+      'linkUrls': linkUrls,
+      'quoteIds': quoteIds,
+      'textParts': textParts,
+    };
+
+    final base = 64.0;
+    final lineHeight = 20.0;
+    final textLineCount = (cleanedText.length / 40).ceil().clamp(1, 10);
+    final textBlockHeight = lineHeight * textLineCount;
+
+    final mediaBlockHeight = note.hasMedia ? 200.0 : 0.0;
+    final buttonHeight = 48.0;
+    final padding = 24.0;
+
+    note.estimatedHeight =
+        base + textBlockHeight + mediaBlockHeight + buttonHeight + padding;
   }
 
   static void _processCacheLoad(String data, SendPort sendPort) {
@@ -1011,7 +1129,7 @@ class DataService {
         }
 
         notesNotifier.value = _itemsTree.toList();
-        await _fetchProfilesBatch([reaction.author]);
+        requestProfileBatch(reaction.author);
       }
     } catch (e) {
       print('[DataService ERROR] Error handling reaction event: $e');
@@ -1045,7 +1163,7 @@ class DataService {
         }
 
         notesNotifier.value = _itemsTree.toList();
-        await _fetchProfilesBatch([repost.repostedBy]);
+        requestProfileBatch(repost.repostedBy);
       }
     } catch (e) {
       print('[DataService ERROR] Error handling repost event: $e');
@@ -1071,7 +1189,8 @@ class DataService {
         }
 
         notesNotifier.value = _itemsTree.toList();
-        await _fetchProfilesBatch([reply.author]);
+
+        requestProfileBatch(reply.author);
 
         await Future.wait([
           fetchReactionsForEvents([reply.id]),
@@ -1152,6 +1271,23 @@ class DataService {
     } catch (e) {
       print('[DataService ERROR] Error handling profile event: $e');
     }
+  }
+
+  final Set<String> _pendingProfileNpubs = {};
+  Timer? _profileBatchTimer;
+
+  void requestProfileBatch(String npub) {
+    if (_isClosed) return;
+    if (profileCache.containsKey(npub)) return;
+
+    _pendingProfileNpubs.add(npub);
+
+    _profileBatchTimer?.cancel();
+    _profileBatchTimer = Timer(const Duration(milliseconds: 300), () {
+      final batch = _pendingProfileNpubs.toList();
+      _pendingProfileNpubs.clear();
+      _fetchProfilesBatch(batch);
+    });
   }
 
   Future<Map<String, String>> getCachedUserProfile(String npub) async {
@@ -1247,17 +1383,11 @@ class DataService {
   }
 
   Future<List<String>> getFollowingList(String targetNpub) async {
-    if (targetNpub != npub) {
-      print(
-          '[DataService] Skipping following fetch for non-logged-in user: $targetNpub');
-      return [];
-    }
-
     if (followingBox != null && followingBox!.isOpen) {
-      final cachedFollowing = followingBox!.get('following_$targetNpub');
-      if (cachedFollowing != null) {
+      final cached = followingBox!.get('following_$targetNpub');
+      if (cached != null) {
         print('[DataService] Using cached following list for $targetNpub.');
-        return cachedFollowing.pubkeys;
+        return cached.pubkeys;
       }
     }
 
@@ -1272,8 +1402,11 @@ class DataService {
           await ws.close();
           return;
         }
+
         final request = _createRequest(
-            Filter(authors: [targetNpub], kinds: [3], limit: 1000));
+          Filter(authors: [targetNpub], kinds: [3], limit: 1),
+        );
+
         final completer = Completer<void>();
 
         ws.listen((event) {
@@ -1288,29 +1421,29 @@ class DataService {
           }
         }, onDone: () {
           if (!completer.isCompleted) completer.complete();
-        }, onError: (error) {
+        }, onError: (_) {
           if (!completer.isCompleted) completer.complete();
         });
 
         ws.add(request.serialize());
-        await completer.future.timeout(const Duration(seconds: 3),
-            onTimeout: () async {
-          await ws.close();
-        });
+        await completer.future.timeout(const Duration(seconds: 3));
         await ws.close();
       } catch (e) {
-        print('[DataService] Error fetching following from $relayUrl: $e');
+        print('[getFollowingList] Error fetching from $relayUrl: $e');
       }
     }));
 
     following = following.toSet().toList();
 
     if (followingBox != null && followingBox!.isOpen) {
-      final newFollowingModel = FollowingModel(
-          pubkeys: following, updatedAt: DateTime.now(), npub: targetNpub);
-      await followingBox!.put('following_$targetNpub', newFollowingModel);
-      print('[DataService] Updated Hive following model for $targetNpub.');
+      final model = FollowingModel(
+        pubkeys: following,
+        updatedAt: DateTime.now(),
+        npub: targetNpub,
+      );
+      await followingBox!.put('following_$targetNpub', model);
     }
+
     return following;
   }
 
@@ -1828,7 +1961,7 @@ class DataService {
                   b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
               return bTime.compareTo(aTime);
             })
-            .take(500)
+            .take(100)
             .toList();
 
         final Map<String, NoteModel> notesMap = {
@@ -1852,7 +1985,7 @@ class DataService {
     try {
       if (notesBox!.containsKey(note.id)) return;
 
-      if (notesBox!.length >= 500) {
+      if (notesBox!.length >= 100) {
         final allNotes = notesBox!.values.cast<NoteModel>().toList();
 
         allNotes.sort((a, b) {

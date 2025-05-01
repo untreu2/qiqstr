@@ -84,7 +84,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   }
 
   void _handleNewNote(NoteModel note) {
-    if (_dataService.notesNotifier.value.length >= 500) return;
+    if (_dataService.notesNotifier.value.length >= 75) return;
     _dataService.addPendingNote(note);
     _dataService.applyPendingNotes();
   }
