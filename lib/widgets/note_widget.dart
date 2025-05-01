@@ -471,7 +471,7 @@ class _NoteWidgetState extends State<NoteWidget>
                                 );
                               },
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 2),
                             if ((parsed['textParts'] as List).isNotEmpty)
                               _buildContentText(parsed),
                             if ((parsed['mediaUrls'] as List).isNotEmpty)
