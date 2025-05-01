@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:qiqstr/screens/users_search_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/widgets/sidebar_widget.dart';
@@ -126,6 +127,17 @@ class _FeedPageState extends State<FeedPage> {
                 ),
               ),
               const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.person_search,
+                    color: Colors.white, size: 24),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const UserSearchPage()),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
               IconButton(
                 icon: const Icon(Icons.notifications_none,
                     color: Colors.white, size: 24),
