@@ -8,13 +8,7 @@ import 'package:qiqstr/widgets/note_widget.dart';
 class NoteListWidget extends StatefulWidget {
   final String npub;
   final DataType dataType;
-
-  const NoteListWidget({
-    super.key,
-    required this.npub,
-    required this.dataType,
-  });
-
+  const NoteListWidget({super.key, required this.npub, required this.dataType});
   @override
   State<NoteListWidget> createState() => _NoteListWidgetState();
 }
@@ -22,10 +16,10 @@ class NoteListWidget extends StatefulWidget {
 class _NoteListWidgetState extends State<NoteListWidget> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final ScrollController _scrollController = ScrollController();
-
+  final ValueNotifier<int> _visibleIndexNotifier = ValueNotifier<int>(-1);
   String? _currentUserNpub;
   bool _isLoading = true;
-
+  bool _delayElapsed = false;
   late DataService _dataService;
   int _selectedTabIndex = 0;
 
@@ -33,17 +27,18 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   void initState() {
     super.initState();
     _initialize();
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _delayElapsed = true);
+    });
   }
 
   Future<void> _initialize() async {
     _currentUserNpub = await _secureStorage.read(key: 'npub');
     if (!mounted) return;
-
     final prefs = await SharedPreferences.getInstance();
     final preloadKey =
         'note_preload_done_${widget.npub}_${widget.dataType.name}';
     final preloadDone = prefs.getBool(preloadKey) ?? false;
-
     _dataService = DataService(
       npub: widget.npub,
       dataType: widget.dataType,
@@ -55,12 +50,10 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       onReplyCountUpdated: (_, __) {},
       onRepostCountUpdated: (_, __) {},
     );
-
     await _dataService.initialize();
     await _dataService.initializeConnections();
-
     if (!preloadDone) {
-      await Future.delayed(const Duration(seconds: 3));
+      await Future.delayed(const Duration(milliseconds: 1500));
       await _dataService.closeConnections();
       _dataService = DataService(
         npub: widget.npub,
@@ -77,10 +70,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       await _dataService.initializeConnections();
       await prefs.setBool(preloadKey, true);
     }
-
-    if (mounted) {
-      setState(() => _isLoading = false);
-    }
+    if (mounted) setState(() => _isLoading = false);
   }
 
   void _handleNewNote(NoteModel note) {
@@ -98,25 +88,32 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading || _currentUserNpub == null) {
+    if (_isLoading || _currentUserNpub == null || !_delayElapsed) {
       return const SliverToBoxAdapter(
         child: SizedBox(
           height: 300,
-          child: Center(child: CircularProgressIndicator()),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 12),
+                Text('Loading...', style: TextStyle(color: Colors.white)),
+              ],
+            ),
+          ),
         ),
       );
     }
-
     return ValueListenableBuilder<List<NoteModel>>(
       valueListenable: _dataService.notesNotifier,
-      builder: (context, notes, _) {
+      builder: (_, notes, __) {
         final filteredNotes = _selectedTabIndex == 0
             ? notes
             : notes.where((n) => n.hasMedia).toList();
-
         return SliverList(
           delegate: SliverChildBuilderDelegate(
-            (context, index) {
+            (ctx, index) {
               if (index == 0) {
                 return Padding(
                   padding:
@@ -138,7 +135,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                           ),
-                          child: const Text("All Notes"),
+                          child: const Text('All Notes'),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -157,18 +154,19 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                           ),
-                          child: const Text("Media"),
+                          child: const Text('Media'),
                         ),
                       ),
                     ],
                   ),
                 );
               }
-
               final note = filteredNotes[index - 1];
               return RepaintBoundary(
                 key: ValueKey(note.id),
                 child: NoteWidget(
+                  index: index - 1,
+                  visibleIndexNotifier: _visibleIndexNotifier,
                   note: note,
                   reactionCount: note.reactionCount,
                   replyCount: note.replyCount,
