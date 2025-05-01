@@ -447,25 +447,19 @@ class _NoteWidgetState extends State<NoteWidget>
                                                       color: Colors.grey,
                                                     ),
                                                   ),
+                                                TextSpan(
+                                                  text:
+                                                      ' • ${_formatTimestamp(updatedNote.timestamp)}',
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
                                               ],
                                             ),
                                           ),
                                         ],
                                       ),
-                                    ),
-                                    if (updatedNote.hasMedia)
-                                      const Padding(
-                                        padding: EdgeInsets.only(right: 4),
-                                        child: Icon(
-                                          Icons.perm_media,
-                                          size: 14,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
-                                    Text(
-                                      _formatTimestamp(updatedNote.timestamp),
-                                      style: const TextStyle(
-                                          fontSize: 12, color: Colors.grey),
                                     ),
                                   ],
                                 );
