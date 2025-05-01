@@ -677,6 +677,8 @@ class DataService {
     ]);
 
     await _subscribeToAllReactions();
+    await _subscribeToAllReplies();
+    await _subscribeToAllReposts();
     _startRealTimeSubscription(targetNpubs);
     await _subscribeToFollowing();
     await getCachedUserProfile(npub);
@@ -709,6 +711,8 @@ class DataService {
     ]);
 
     await _subscribeToAllReactions();
+    await _subscribeToAllReplies();
+    await _subscribeToAllReposts();
     _startRealTimeSubscription(targetNpubs);
   }
 
@@ -1432,6 +1436,22 @@ class DataService {
     final filter = Filter(kinds: [7], e: allEventIds, limit: 1000);
     final request = Request(subscriptionId, [filter]);
     await _broadcastRequest(request);
+  }
+
+  Future<void> _subscribeToAllReplies() async {
+    if (_isClosed) return;
+    List<String> allEventIds = notes.map((n) => n.id).toList();
+    if (allEventIds.isEmpty) return;
+    final filter = Filter(kinds: [1], e: allEventIds, limit: 1000);
+    await _broadcastRequest(_createRequest(filter));
+  }
+
+  Future<void> _subscribeToAllReposts() async {
+    if (_isClosed) return;
+    List<String> allEventIds = notes.map((n) => n.id).toList();
+    if (allEventIds.isEmpty) return;
+    final filter = Filter(kinds: [6], e: allEventIds, limit: 1000);
+    await _broadcastRequest(_createRequest(filter));
   }
 
   void _startCacheCleanup() {
