@@ -1,57 +1,31 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:qiqstr/screens/discover_page.dart';
-import 'package:qiqstr/screens/users_search_page.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:qiqstr/screens/share_note.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/screens/share_note.dart';
 import 'package:qiqstr/services/qiqstr_service.dart';
-import 'package:qiqstr/screens/notifications_page.dart';
 
-class FeedPage extends StatefulWidget {
+class DiscoverPage extends StatefulWidget {
   final String npub;
-  const FeedPage({Key? key, required this.npub}) : super(key: key);
+  const DiscoverPage({Key? key, required this.npub}) : super(key: key);
 
   @override
-  _FeedPageState createState() => _FeedPageState();
+  State<DiscoverPage> createState() => _DiscoverPageState();
 }
 
-class _FeedPageState extends State<FeedPage> {
+class _DiscoverPageState extends State<DiscoverPage> {
   UserModel? user;
   late DataService dataService;
   bool isLoading = true;
   String? errorMessage;
-  bool isFirstOpen = false;
 
   @override
   void initState() {
     super.initState();
-    dataService = DataService(npub: widget.npub, dataType: DataType.Feed);
+    dataService = DataService(npub: widget.npub, dataType: DataType.Discover);
     _loadUserProfile();
-    _checkFirstOpen();
-  }
-
-  Future<void> _checkFirstOpen() async {
-    final prefs = await SharedPreferences.getInstance();
-    final alreadyOpened = prefs.getBool('feed_page_opened') ?? false;
-
-    if (!alreadyOpened) {
-      isFirstOpen = true;
-      await prefs.setBool('feed_page_opened', true);
-
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted) setState(() {});
-      });
-      Future.delayed(const Duration(milliseconds: 600), () {
-        if (mounted) setState(() {});
-      });
-      Future.delayed(const Duration(milliseconds: 900), () {
-        if (mounted) setState(() {});
-      });
-    }
   }
 
   Future<void> _loadUserProfile() async {
@@ -66,7 +40,7 @@ class _FeedPageState extends State<FeedPage> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          errorMessage = 'An error occurred while loading profile.';
+          errorMessage = 'An error occurred while loading discover feed.';
         });
       }
     } finally {
@@ -80,20 +54,6 @@ class _FeedPageState extends State<FeedPage> {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ShareNotePage(dataService: dataService),
-      ),
-    );
-  }
-
-  void _navigateToNotificationsPage() async {
-    final box = dataService.notificationsBox!;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => NotificationsPage(
-          npub: widget.npub,
-          notificationsBox: box,
-          dataService: dataService,
-        ),
       ),
     );
   }
@@ -119,7 +79,7 @@ class _FeedPageState extends State<FeedPage> {
               ),
               const SizedBox(width: 8),
               const Text(
-                'Feed',
+                'Discover',
                 style: TextStyle(
                   fontSize: 36,
                   fontWeight: FontWeight.w700,
@@ -128,40 +88,11 @@ class _FeedPageState extends State<FeedPage> {
                 ),
               ),
               const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.explore, color: Colors.white, size: 24),
-                tooltip: 'Discover',
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => DiscoverPage(npub: widget.npub),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.person_search,
-                    color: Colors.white, size: 24),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const UserSearchPage()),
-                  );
-                },
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.notifications_none,
-                    color: Colors.white, size: 24),
-                onPressed: _navigateToNotificationsPage,
-              ),
             ],
           ),
           const SizedBox(height: 8),
           const Text(
-            "Here are the notes from people you follow.",
+            "Explore notes from random users in the network.",
             style: TextStyle(
               fontSize: 16,
               color: Colors.white70,
@@ -177,9 +108,7 @@ class _FeedPageState extends State<FeedPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      drawer: SidebarWidget(
-        user: user,
-      ),
+      drawer: SidebarWidget(user: user),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(right: 12, bottom: 12),
@@ -227,7 +156,7 @@ class _FeedPageState extends State<FeedPage> {
                     ),
                     NoteListWidget(
                       npub: widget.npub,
-                      dataType: DataType.Feed,
+                      dataType: DataType.Discover,
                     ),
                   ],
                 ),

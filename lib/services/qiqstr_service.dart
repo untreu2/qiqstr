@@ -22,7 +22,7 @@ import '../models/following_model.dart';
 import 'dart:typed_data';
 import 'package:collection/collection.dart';
 
-enum DataType { Feed, Profile, Note }
+enum DataType { Feed, Profile, Note, Discover }
 
 enum MessageType { NewNotes, CacheLoad, Error, Close }
 
@@ -655,6 +655,22 @@ class DataService {
             .where((followedNpub) => followedNpub != npub)
             .map((followedNpub) => getFollowingList(followedNpub)),
       );
+    } else if (dataType == DataType.Discover) {
+      if (usersBox == null || !usersBox!.isOpen) {
+        usersBox = await _openHiveBox<UserModel>('users');
+      }
+
+      final allCachedUsers = usersBox!.values.toList();
+
+      if (allCachedUsers.isEmpty) {
+        print('[DataService] Discover: No cached users available.');
+        targetNpubs = [];
+      } else {
+        allCachedUsers.shuffle(Random());
+        targetNpubs = allCachedUsers.take(250).map((u) => u.npub).toList();
+        print(
+            '[DataService] Discover: Selected ${targetNpubs.length} random users.');
+      }
     } else {
       targetNpubs = [npub];
     }
@@ -679,8 +695,12 @@ class DataService {
     await _subscribeToAllReactions();
     await _subscribeToAllReplies();
     await _subscribeToAllReposts();
-    _startRealTimeSubscription(targetNpubs);
-    await _subscribeToFollowing();
+
+    if (dataType == DataType.Feed) {
+      _startRealTimeSubscription(targetNpubs);
+      await _subscribeToFollowing();
+    }
+
     await getCachedUserProfile(npub);
   }
 
