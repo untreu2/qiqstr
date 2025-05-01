@@ -212,15 +212,26 @@ class _NoteListWidgetState extends State<NoteListWidget>
             const SizedBox(height: 16),
             ...List.generate(filteredNotes.length, (index) {
               final note = filteredNotes[index];
-              return NoteWidget(
-                key: ValueKey(note.id),
-                note: note,
-                reactionCount: note.reactionCount,
-                replyCount: note.replyCount,
-                repostCount: note.repostCount,
-                dataService: _dataService,
-                currentUserNpub: _currentUserNpub!,
-                notesNotifier: _dataService.notesNotifier,
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  NoteWidget(
+                    key: ValueKey(note.id),
+                    note: note,
+                    reactionCount: note.reactionCount,
+                    replyCount: note.replyCount,
+                    repostCount: note.repostCount,
+                    dataService: _dataService,
+                    currentUserNpub: _currentUserNpub!,
+                    notesNotifier: _dataService.notesNotifier,
+                  ),
+                  if (index < filteredNotes.length - 1)
+                    const Divider(
+                      height: 0,
+                      thickness: 0.5,
+                      color: Colors.white24,
+                    ),
+                ],
               );
             }),
           ]),

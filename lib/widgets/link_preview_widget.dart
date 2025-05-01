@@ -80,15 +80,17 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Padding(
-        padding: EdgeInsets.all(12.0),
-        child: Center(child: CircularProgressIndicator(strokeWidth: 1.5)),
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: CircularProgressIndicator(strokeWidth: 1.5),
+        ),
       );
     }
 
     if (_title == null) {
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+        padding: const EdgeInsets.symmetric(vertical: 4.0),
         child: Text(
           widget.url,
           style: const TextStyle(
@@ -101,7 +103,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
       child: GestureDetector(
         onTap: () => _launchUrl(widget.url),
         child: ClipRRect(

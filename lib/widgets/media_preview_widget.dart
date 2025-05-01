@@ -25,10 +25,7 @@ class MediaPreviewWidget extends StatelessWidget {
     }).toList();
 
     if (videoUrls.isNotEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-        child: VP(url: videoUrls.first),
-      );
+      return VP(url: videoUrls.first);
     }
 
     final List<String> imageUrls = mediaUrls.where((url) {
@@ -44,10 +41,7 @@ class MediaPreviewWidget extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: _buildAdaptiveMediaGrid(context, imageUrls),
-    );
+    return _buildAdaptiveMediaGrid(context, imageUrls);
   }
 
   Widget _buildAdaptiveMediaGrid(BuildContext context, List<String> imageUrls) {

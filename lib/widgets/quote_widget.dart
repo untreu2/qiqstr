@@ -208,7 +208,7 @@ class QuoteWidget extends StatelessWidget {
         final parsed = n.parsedContent!;
 
         return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: Colors.black,

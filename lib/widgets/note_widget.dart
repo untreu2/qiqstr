@@ -89,7 +89,7 @@ class _NoteWidgetState extends State<NoteWidget>
                 spans.add(TextSpan(
                   text: text.substring(lastMatchEnd, match.start),
                   style: TextStyle(
-                    fontSize: text.length < 21 ? 20 : 15.5,
+                    fontSize: 15.5,
                     color: Colors.white,
                   ),
                 ));
@@ -113,7 +113,7 @@ class _NoteWidgetState extends State<NoteWidget>
               spans.add(TextSpan(
                 text: text.substring(lastMatchEnd),
                 style: TextStyle(
-                  fontSize: text.length < 21 ? 20 : 16,
+                  fontSize: 15.5,
                   color: Colors.white,
                 ),
               ));
@@ -259,75 +259,6 @@ class _NoteWidgetState extends State<NoteWidget>
     widget.dataService.openUserProfile(context, npub);
   }
 
-  Widget _buildAuthorInfo(String npub) {
-    return FutureBuilder<Map<String, String>>(
-      future: widget.dataService.getCachedUserProfile(npub),
-      builder: (_, snap) {
-        if (!snap.hasData) {
-          return Row(
-            children: [
-              const CircleAvatar(radius: 20, backgroundColor: Colors.grey),
-              const SizedBox(width: 8),
-              Container(width: 100, height: 12, color: Colors.grey[700]),
-            ],
-          );
-        }
-
-        final user = UserModel.fromCachedProfile(npub, snap.data!);
-        final displayName = user.name.length > 25
-            ? '${user.name.substring(0, 25)}...'
-            : user.name;
-        final nip05 = user.nip05;
-        final imgUrl = user.profileImage;
-
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            GestureDetector(
-              onTap: () => _navigateToProfile(npub),
-              child: CircleAvatar(
-                radius: 20,
-                backgroundImage: imgUrl.isNotEmpty
-                    ? CachedNetworkImageProvider(imgUrl)
-                    : null,
-                backgroundColor:
-                    imgUrl.isEmpty ? Colors.grey : Colors.transparent,
-                child: imgUrl.isEmpty
-                    ? const Icon(Icons.person, size: 20, color: Colors.white)
-                    : null,
-              ),
-            ),
-            const SizedBox(width: 10),
-            GestureDetector(
-              onTap: () => _navigateToProfile(npub),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    displayName,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                  if (nip05.isNotEmpty)
-                    Text(
-                      nip05,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[400],
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   Widget _buildRepostInfo(String npub, DateTime? ts) {
     return FutureBuilder<Map<String, String>>(
       future: widget.dataService.getCachedUserProfile(npub),
@@ -385,7 +316,7 @@ class _NoteWidgetState extends State<NoteWidget>
         onTap: onTap,
         child: Row(
           children: [
-            SvgPicture.asset(svg, width: 20, height: 20, color: color),
+            SvgPicture.asset(svg, width: 18, height: 18, color: color),
             if (count > 0) ...[
               const SizedBox(width: 4),
               Text(
@@ -422,6 +353,7 @@ class _NoteWidgetState extends State<NoteWidget>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const SizedBox(height: 12),
                 if (updatedNote.isRepost && updatedNote.repostedBy != null) ...[
                   Padding(
                     padding:
@@ -434,103 +366,187 @@ class _NoteWidgetState extends State<NoteWidget>
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildAuthorInfo(updatedNote.author),
-                      const Spacer(),
-                      if (updatedNote.hasMedia)
-                        const Padding(
-                          padding: EdgeInsets.only(right: 4),
-                          child: Icon(
-                            Icons.perm_media,
-                            size: 14,
-                            color: Colors.grey,
-                          ),
+                      FutureBuilder<Map<String, String>>(
+                        future: widget.dataService
+                            .getCachedUserProfile(updatedNote.author),
+                        builder: (_, snap) {
+                          String imgUrl = '';
+                          if (snap.hasData) {
+                            final user = UserModel.fromCachedProfile(
+                                updatedNote.author, snap.data!);
+                            imgUrl = user.profileImage;
+                          }
+                          return GestureDetector(
+                            onTap: () => _navigateToProfile(updatedNote.author),
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: CircleAvatar(
+                                radius: 23,
+                                backgroundImage: imgUrl.isNotEmpty
+                                    ? CachedNetworkImageProvider(imgUrl)
+                                    : null,
+                                backgroundColor: imgUrl.isEmpty
+                                    ? Colors.grey
+                                    : Colors.transparent,
+                                child: imgUrl.isEmpty
+                                    ? const Icon(Icons.person,
+                                        size: 20, color: Colors.white)
+                                    : null,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            FutureBuilder<Map<String, String>>(
+                              future: widget.dataService
+                                  .getCachedUserProfile(updatedNote.author),
+                              builder: (_, snap) {
+                                if (!snap.hasData) {
+                                  return Container(
+                                      height: 20,
+                                      width: 100,
+                                      color: Colors.grey[700]);
+                                }
+                                final user = UserModel.fromCachedProfile(
+                                    updatedNote.author, snap.data!);
+                                return Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          RichText(
+                                            text: TextSpan(
+                                              children: [
+                                                TextSpan(
+                                                  text: user.name.length > 25
+                                                      ? '${user.name.substring(0, 25)}'
+                                                      : user.name,
+                                                  style: const TextStyle(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                                if (user.nip05.isNotEmpty &&
+                                                    user.nip05.contains('@'))
+                                                  TextSpan(
+                                                    text:
+                                                        ' @${user.nip05.split('@').last}',
+                                                    style: const TextStyle(
+                                                      fontSize: 15,
+                                                      color: Colors.grey,
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    if (updatedNote.hasMedia)
+                                      const Padding(
+                                        padding: EdgeInsets.only(right: 4),
+                                        child: Icon(
+                                          Icons.perm_media,
+                                          size: 14,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    Text(
+                                      _formatTimestamp(updatedNote.timestamp),
+                                      style: const TextStyle(
+                                          fontSize: 12, color: Colors.grey),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                            const SizedBox(height: 8),
+                            if ((parsed['textParts'] as List).isNotEmpty)
+                              _buildContentText(parsed),
+                            if ((parsed['mediaUrls'] as List).isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: MediaPreviewWidget(
+                                  mediaUrls:
+                                      parsed['mediaUrls'] as List<String>,
+                                ),
+                              ),
+                            if ((parsed['linkUrls'] as List).isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Column(
+                                  children: (parsed['linkUrls'] as List<String>)
+                                      .map((u) => LinkPreviewWidget(url: u))
+                                      .toList(),
+                                ),
+                              ),
+                            if ((parsed['quoteIds'] as List).isNotEmpty)
+                              Column(
+                                children: (parsed['quoteIds'] as List<String>)
+                                    .map((q) => QuoteWidget(
+                                        bech32: q,
+                                        dataService: widget.dataService))
+                                    .toList(),
+                              ),
+                            const SizedBox(height: 20),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                _buildAction(
+                                  scale: _reactionScale,
+                                  svg: 'assets/reaction_button.svg',
+                                  color: _isReactionGlowing || _hasReacted()
+                                      ? Colors.red.shade400
+                                      : Colors.white,
+                                  count: updatedNote.reactionCount,
+                                  onTap: _handleReactionTap,
+                                ),
+                                _buildAction(
+                                  scale: _replyScale,
+                                  svg: 'assets/reply_button.svg',
+                                  color: _isReplyGlowing || _hasReplied()
+                                      ? Colors.blue.shade200
+                                      : Colors.white,
+                                  count: updatedNote.replyCount,
+                                  onTap: _handleReplyTap,
+                                ),
+                                _buildAction(
+                                  scale: _repostScale,
+                                  svg: 'assets/repost_button.svg',
+                                  color: _isRepostGlowing || _hasReposted()
+                                      ? Colors.green.shade400
+                                      : Colors.white,
+                                  count: updatedNote.repostCount,
+                                  onTap: _handleRepostTap,
+                                ),
+                                _buildAction(
+                                  scale: _zapScale,
+                                  svg: 'assets/zap_button.svg',
+                                  color: _isZapGlowing
+                                      ? Colors.amber.shade300
+                                      : Colors.white,
+                                  count: 0,
+                                  onTap: _handleZapTap,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                          ],
                         ),
-                      Text(
-                        _formatTimestamp(updatedNote.timestamp),
-                        style:
-                            const TextStyle(fontSize: 12, color: Colors.grey),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 8),
-                if ((parsed['textParts'] as List).isNotEmpty)
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    child: _buildContentText(parsed),
-                  ),
-                const SizedBox(height: 6),
-                if ((parsed['mediaUrls'] as List).isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: MediaPreviewWidget(
-                        mediaUrls: parsed['mediaUrls'] as List<String>),
-                  ),
-                if ((parsed['linkUrls'] as List).isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Column(
-                      children: (parsed['linkUrls'] as List<String>)
-                          .map((u) => LinkPreviewWidget(url: u))
-                          .toList(),
-                    ),
-                  ),
-                if ((parsed['quoteIds'] as List).isNotEmpty) ...[
-                  for (final q in parsed['quoteIds'] as List<String>)
-                    QuoteWidget(bech32: q, dataService: widget.dataService),
-                ],
-                const SizedBox(height: 8),
-                Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _buildAction(
-                        scale: _reactionScale,
-                        svg: 'assets/reaction_button.svg',
-                        color: _isReactionGlowing || _hasReacted()
-                            ? Colors.red.shade400
-                            : Colors.white,
-                        count: updatedNote.reactionCount,
-                        onTap: _handleReactionTap,
-                      ),
-                      _buildAction(
-                        scale: _replyScale,
-                        svg: 'assets/reply_button.svg',
-                        color: _isReplyGlowing || _hasReplied()
-                            ? Colors.blue.shade200
-                            : Colors.white,
-                        count: updatedNote.replyCount,
-                        onTap: _handleReplyTap,
-                      ),
-                      _buildAction(
-                        scale: _repostScale,
-                        svg: 'assets/repost_button.svg',
-                        color: _isRepostGlowing || _hasReposted()
-                            ? Colors.green.shade400
-                            : Colors.white,
-                        count: updatedNote.repostCount,
-                        onTap: _handleRepostTap,
-                      ),
-                      _buildAction(
-                        scale: _zapScale,
-                        svg: 'assets/zap_button.svg',
-                        color: _isZapGlowing
-                            ? Colors.amber.shade300
-                            : Colors.white,
-                        count: 0,
-                        onTap: _handleZapTap,
-                      ),
-                    ],
-                  ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 6),
-                  child:
-                      Divider(height: 4, thickness: .5, color: Colors.white24),
                 ),
               ],
             ),
