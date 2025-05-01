@@ -9,9 +9,10 @@ class MediaPreviewWidget extends StatelessWidget {
   const MediaPreviewWidget({Key? key, required this.mediaUrls})
       : super(key: key);
 
-  static const double borderRadius = 0.0;
+  static const double borderRadius = 12.0;
   static const EdgeInsets mediaPadding = EdgeInsets.zero;
 
+  @override
   @override
   Widget build(BuildContext context) {
     if (mediaUrls.isEmpty) return const SizedBox.shrink();
@@ -24,7 +25,10 @@ class MediaPreviewWidget extends StatelessWidget {
     }).toList();
 
     if (videoUrls.isNotEmpty) {
-      return VP(url: videoUrls.first);
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0),
+        child: VP(url: videoUrls.first),
+      );
     }
 
     final List<String> imageUrls = mediaUrls.where((url) {
@@ -40,7 +44,10 @@ class MediaPreviewWidget extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return _buildAdaptiveMediaGrid(context, imageUrls);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+      child: _buildAdaptiveMediaGrid(context, imageUrls),
+    );
   }
 
   Widget _buildAdaptiveMediaGrid(BuildContext context, List<String> imageUrls) {

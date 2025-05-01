@@ -30,7 +30,7 @@ class VP extends StatelessWidget {
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.grey.shade900,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
           ),
