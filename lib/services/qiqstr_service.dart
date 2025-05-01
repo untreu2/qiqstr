@@ -873,13 +873,14 @@ class DataService {
 
     if (dataType == DataType.Feed) {
       if (isRepost) {
-        if (!targetNpubs.contains(author)) return;
+        if (!targetNpubs.contains(author) && !targetNpubs.contains(noteAuthor))
+          return;
       } else {
         if (!targetNpubs.contains(noteAuthor)) return;
       }
     } else if (dataType == DataType.Profile) {
       if (isRepost) {
-        if (author != npub) return;
+        if (author != npub && noteAuthor != npub) return;
       } else {
         if (noteAuthor != npub) return;
       }
@@ -892,6 +893,7 @@ class DataService {
 
     final timestamp = DateTime.fromMillisecondsSinceEpoch(
         (eventData['created_at'] as int) * 1000);
+
     final newNote = NoteModel(
       id: eventId,
       content: noteContent,
@@ -2043,6 +2045,7 @@ class DataService {
         }
       } else if (kind == 6) {
         await _handleRepostEvent(eventData);
+        await _processNoteEvent(eventData, targetNpubs);
       }
 
       await _handleNotificationEvent(eventData, kind);
