@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,7 +32,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
   late DataService _dataService;
   List<NoteModel> _pendingNotes = [];
 
-  int _selectedTabIndex = 0;
+  int _selectedTabIndex = 1;
 
   @override
   void initState() {
@@ -126,6 +127,39 @@ class _NoteListWidgetState extends State<NoteListWidget>
     super.dispose();
   }
 
+  Widget buildButton(int index, String label) {
+    final isSelected = _selectedTabIndex == index;
+
+    return Expanded(
+      child: Container(
+        decoration: BoxDecoration(
+          color:
+              isSelected ? Colors.white.withOpacity(0.08) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isSelected ? Colors.white30 : Colors.white12,
+            width: 1,
+          ),
+        ),
+        child: TextButton(
+          onPressed: () {
+            setState(() {
+              _selectedTabIndex = index;
+            });
+          },
+          style: TextButton.styleFrom(
+            foregroundColor: isSelected ? Colors.white : Colors.white60,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            textStyle: const TextStyle(fontSize: 13),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            minimumSize: Size.zero,
+          ),
+          child: Text(label, textAlign: TextAlign.center),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isInitializing || _currentUserNpub == null) {
@@ -153,63 +187,34 @@ class _NoteListWidgetState extends State<NoteListWidget>
           );
         }
 
-        final filteredNotes = _selectedTabIndex == 0
-            ? notes
-            : notes.where((n) => n.hasMedia).toList();
+        List<NoteModel> filteredNotes = notes;
+
+        if (_selectedTabIndex == 0) {
+          final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+          filteredNotes = notes
+              .where((n) => n.timestamp.isAfter(cutoff))
+              .toList()
+            ..sort((a, b) => (b.reactionCount + b.replyCount + b.repostCount)
+                .compareTo(a.reactionCount + a.replyCount + a.repostCount));
+        } else if (_selectedTabIndex == 2) {
+          filteredNotes = notes.where((n) => n.hasMedia).toList();
+        }
 
         return SliverList(
           delegate: SliverChildListDelegate([
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
               child: Row(
                 children: [
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _selectedTabIndex == 0
-                            ? Colors.amber.withOpacity(0.2)
-                            : Colors.grey.withOpacity(0.1),
-                        foregroundColor: _selectedTabIndex == 0
-                            ? Colors.amber[800]
-                            : Colors.grey,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _selectedTabIndex = 0;
-                        });
-                      },
-                      child: const Text("All Notes"),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: _selectedTabIndex == 1
-                            ? Colors.amber.withOpacity(0.2)
-                            : Colors.grey.withOpacity(0.1),
-                        foregroundColor: _selectedTabIndex == 1
-                            ? Colors.amber[800]
-                            : Colors.grey,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _selectedTabIndex = 1;
-                        });
-                      },
-                      child: const Text("Media"),
-                    ),
-                  ),
+                  buildButton(0, "Popular (24h)"),
+                  const SizedBox(width: 6),
+                  buildButton(1, "Latest"),
+                  const SizedBox(width: 6),
+                  buildButton(2, "Media"),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
             ...List.generate(filteredNotes.length, (index) {
               final note = filteredNotes[index];
               return Column(
