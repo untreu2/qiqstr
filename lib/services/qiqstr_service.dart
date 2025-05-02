@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'package:nostr/nostr.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
-import 'package:qiqstr/constants/constants.dart';
+import 'package:qiqstr/constants/relays.dart';
 import 'package:qiqstr/models/notification_model.dart';
 import 'package:qiqstr/screens/profile_page.dart';
 import 'package:uuid/uuid.dart';
