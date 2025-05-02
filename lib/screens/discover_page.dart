@@ -77,7 +77,7 @@ class _DiscoverPageState extends State<DiscoverPage> {
               const Text(
                 'Discover',
                 style: TextStyle(
-                  fontSize: 36,
+                  fontSize: 28,
                   fontWeight: FontWeight.w700,
                   color: Colors.white,
                   letterSpacing: -1,

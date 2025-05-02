@@ -121,10 +121,10 @@ class _FeedPageState extends State<FeedPage> {
               const Text(
                 'Feed',
                 style: TextStyle(
-                  fontSize: 36,
+                  fontSize: 28,
                   fontWeight: FontWeight.w700,
                   color: Colors.white,
-                  letterSpacing: -1,
+                  letterSpacing: -0.5,
                 ),
               ),
               const Spacer(),
@@ -161,7 +161,7 @@ class _FeedPageState extends State<FeedPage> {
           ),
           const SizedBox(height: 8),
           const Text(
-            "Here are the notes from people you follow.",
+            "“If you don't believe me or don't get it, I don't have time to try to convince you, sorry.”",
             style: TextStyle(
               fontSize: 16,
               color: Colors.white70,

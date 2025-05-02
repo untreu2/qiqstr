@@ -106,7 +106,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
           const Text(
             'Notifications',
             style: TextStyle(
-              fontSize: 36,
+              fontSize: 28,
               fontWeight: FontWeight.w700,
               color: Colors.white,
               letterSpacing: -1,
