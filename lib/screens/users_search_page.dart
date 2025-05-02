@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/screens/profile_page.dart';
 
 class UserSearchPage extends StatefulWidget {
@@ -36,12 +35,10 @@ class _UserSearchPageState extends State<UserSearchPage> {
 
   void _onSearchChanged() {
     final query = _searchController.text.toLowerCase().trim();
-
     if (query.isEmpty) {
       setState(() => _filteredUsers = _allUsers);
       return;
     }
-
     final filtered = _allUsers.where((user) {
       return user.name.toLowerCase().contains(query) ||
           user.nip05.toLowerCase().contains(query) ||
@@ -64,7 +61,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
     if (name == query) return 0;
     if (nip05 == query) return 1;
     if (npub == query) return 2;
-
     if (name.contains(query)) return 3;
     if (nip05.contains(query)) return 4;
     if (npub.contains(query)) return 5;
@@ -74,33 +70,29 @@ class _UserSearchPageState extends State<UserSearchPage> {
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 60, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 60, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Builder(
-                builder: (context) => IconButton(
-                  icon: const Icon(Icons.menu, color: Colors.white, size: 24),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: () => Scaffold.of(context).openDrawer(),
-                ),
+              IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
               ),
               const SizedBox(width: 8),
               const Text(
-                'Search',
+                'Search users',
                 style: TextStyle(
-                  fontSize: 36,
+                  fontSize: 28,
                   fontWeight: FontWeight.w700,
                   color: Colors.white,
-                  letterSpacing: -1,
+                  letterSpacing: -0.5,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             "There are ${_allUsers.length} users cached on your device.",
             style: const TextStyle(
@@ -116,7 +108,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
 
   Widget _buildSearchInput() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
       child: TextField(
         controller: _searchController,
         style: const TextStyle(color: Colors.white),
@@ -166,18 +158,21 @@ class _UserSearchPageState extends State<UserSearchPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      drawer: const SidebarWidget(user: null),
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildHeader(),
           _buildSearchInput(),
           Expanded(
             child: _filteredUsers.isEmpty
                 ? const Center(
-                    child: Text('No users found.',
-                        style: TextStyle(color: Colors.white70)),
+                    child: Text(
+                      'No users found.',
+                      style: TextStyle(color: Colors.white70),
+                    ),
                   )
                 : ListView.separated(
+                    padding: EdgeInsets.zero,
                     itemCount: _filteredUsers.length,
                     itemBuilder: (context, index) =>
                         _buildUserTile(_filteredUsers[index]),
