@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'models/note_model.dart';
 import 'models/reaction_model.dart';
 import 'models/reply_model.dart';
@@ -29,11 +30,7 @@ Future<void> main() async {
 
     await Hive.openBox<LinkPreviewModel>('link_preview_cache');
 
-    runApp(
-      const ProviderScope(
-        child: QiqstrApp(),
-      ),
-    );
+    runApp(const ProviderScope(child: QiqstrApp()));
   } catch (e) {
     print('Error initializing Hive: $e');
     runApp(const HiveErrorApp());
@@ -45,13 +42,24 @@ class QiqstrApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final baseTheme = Theme.of(context).textTheme;
+
     return MaterialApp(
       title: 'Qiqstr',
       theme: ThemeData(
         scaffoldBackgroundColor: Colors.black,
-        textTheme: Theme.of(context).textTheme.apply(
+        textTheme: GoogleFonts.interTextTheme(baseTheme)
+            .apply(
               bodyColor: Colors.white,
               displayColor: Colors.white,
+            )
+            .copyWith(
+              bodyLarge: GoogleFonts.inter(height: 2.1),
+              bodyMedium: GoogleFonts.inter(height: 2.1),
+              bodySmall: GoogleFonts.inter(height: 2.1),
+              titleLarge: GoogleFonts.inter(height: 2.1),
+              titleMedium: GoogleFonts.inter(height: 2.1),
+              titleSmall: GoogleFonts.inter(height: 2.1),
             ),
         colorScheme: const ColorScheme.dark(
           primary: Colors.white,
@@ -67,10 +75,11 @@ class QiqstrApp extends ConsumerWidget {
           backgroundColor: Colors.black,
           elevation: 0,
           centerTitle: true,
-          titleTextStyle: const TextStyle(
+          titleTextStyle: GoogleFonts.inter(
             fontSize: 20,
             fontWeight: FontWeight.w600,
             color: Colors.white,
+            height: 2.1,
           ),
         ),
         buttonTheme: const ButtonThemeData(
@@ -162,7 +171,12 @@ class HiveErrorApp extends StatelessWidget {
     return MaterialApp(
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: Colors.black,
-        textTheme: ThemeData.dark().textTheme,
+        textTheme: GoogleFonts.interTextTheme(
+          ThemeData.dark().textTheme,
+        ).copyWith(
+          bodyLarge: GoogleFonts.inter(height: 2.1),
+          bodyMedium: GoogleFonts.inter(height: 2.1),
+        ),
       ),
       home: Scaffold(
         appBar: AppBar(
@@ -174,6 +188,7 @@ class HiveErrorApp extends StatelessWidget {
             style: TextStyle(
               fontSize: 18,
               color: Colors.white,
+              height: 2.1,
             ),
             textAlign: TextAlign.center,
           ),
