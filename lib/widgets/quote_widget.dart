@@ -87,7 +87,7 @@ class QuoteWidget extends StatelessWidget {
                   text: url,
                   style: const TextStyle(
                     color: Colors.amberAccent,
-                    fontStyle: FontStyle.italic,
+                    fontStyle: FontStyle.normal,
                     fontSize: 14,
                   ),
                   recognizer: TapGestureRecognizer()
@@ -111,7 +111,7 @@ class QuoteWidget extends StatelessWidget {
                 style: const TextStyle(
                   color: Colors.amberAccent,
                   fontSize: 14,
-                  fontStyle: FontStyle.italic,
+                  fontStyle: FontStyle.normal,
                 ),
               ),
             );
