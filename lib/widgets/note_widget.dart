@@ -488,9 +488,14 @@ class _NoteWidgetState extends State<NoteWidget>
                             if ((parsed['quoteIds'] as List).isNotEmpty)
                               Column(
                                 children: (parsed['quoteIds'] as List<String>)
-                                    .map((q) => QuoteWidget(
-                                        bech32: q,
-                                        dataService: widget.dataService))
+                                    .map((q) => Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 8),
+                                          child: QuoteWidget(
+                                            bech32: q,
+                                            dataService: widget.dataService,
+                                          ),
+                                        ))
                                     .toList(),
                               ),
                             const SizedBox(height: 20),

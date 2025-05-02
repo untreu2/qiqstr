@@ -208,17 +208,16 @@ class QuoteWidget extends StatelessWidget {
         final parsed = n.parsedContent!;
 
         return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 0, vertical: 8),
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white, width: 0.8),
+            color: const Color(0xFF1E1E1E),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.grey.shade800, width: 1),
             boxShadow: [
               BoxShadow(
-                color: Colors.white.withOpacity(0.05),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
               ),
             ],
           ),
@@ -231,22 +230,29 @@ class QuoteWidget extends StatelessWidget {
                   const Spacer(),
                   Text(
                     _formatTimestamp(n.timestamp),
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade500,
+                      fontWeight: FontWeight.w400,
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              _contentText(parsed),
+              const SizedBox(height: 10),
+              DefaultTextStyle(
+                style: const TextStyle(fontSize: 15, color: Colors.white),
+                child: _contentText(parsed),
+              ),
               if ((parsed['mediaUrls'] as List).isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.only(top: 12),
                   child: MediaPreviewWidget(
                     mediaUrls: parsed['mediaUrls'] as List<String>,
                   ),
                 ),
               if ((parsed['linkUrls'] as List).isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.only(top: 12),
                   child: Column(
                     children: (parsed['linkUrls'] as List<String>)
                         .map((u) => LinkPreviewWidget(url: u))
