@@ -100,7 +100,7 @@ class _NoteWidgetState extends State<NoteWidget>
                 text: url,
                 style: const TextStyle(
                   color: Colors.amberAccent,
-                  fontStyle: FontStyle.italic,
+                  fontStyle: FontStyle.normal,
                   fontSize: 15.5,
                 ),
                 recognizer: TapGestureRecognizer()
@@ -128,7 +128,7 @@ class _NoteWidgetState extends State<NoteWidget>
                   color: Colors.amberAccent,
                   fontSize: 15.5,
                   fontWeight: FontWeight.w500,
-                  fontStyle: FontStyle.italic,
+                  fontStyle: FontStyle.normal,
                 ),
                 recognizer: TapGestureRecognizer()
                   ..onTap = () => _navigateToMentionProfile(p['id']),
