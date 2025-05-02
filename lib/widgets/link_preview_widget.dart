@@ -1,8 +1,10 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:palette_generator/palette_generator.dart';
 
 import '../models/link_preview_model.dart';
 
@@ -19,6 +21,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
   String? _title;
   String? _imageUrl;
   bool _isLoading = true;
+  Color? _dominantColor;
 
   late final Box<LinkPreviewModel> _cacheBox;
 
@@ -37,6 +40,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
         _imageUrl = cached.imageUrl;
         _isLoading = false;
       });
+      _updateDominantColor();
     } else {
       _fetchPreviewData();
     }
@@ -47,7 +51,6 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
       final response = await http.get(Uri.parse(widget.url));
       if (response.statusCode == 200) {
         final document = html_parser.parse(response.body);
-
         final metaOgTitle = document.querySelector('meta[property="og:title"]');
         final metaTitle = document.querySelector('title');
         final metaOgImage = document.querySelector('meta[property="og:image"]');
@@ -67,6 +70,8 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
           _imageUrl = parsedImage;
           _isLoading = false;
         });
+
+        _updateDominantColor();
       } else {
         if (!mounted) return;
         setState(() => _isLoading = false);
@@ -75,6 +80,28 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
       if (!mounted) return;
       setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _updateDominantColor() async {
+    if (_imageUrl == null) return;
+    try {
+      final PaletteGenerator palette = await PaletteGenerator.fromImageProvider(
+        NetworkImage(_imageUrl!),
+        size: const Size(200, 100),
+      );
+      if (!mounted) return;
+
+      final dominant = palette.dominantColor?.color ?? Colors.black;
+
+      final darkened = HSLColor.fromColor(dominant)
+          .withLightness(
+              (HSLColor.fromColor(dominant).lightness * 0.5).clamp(0.0, 1.0))
+          .toColor();
+
+      setState(() {
+        _dominantColor = darkened;
+      });
+    } catch (_) {}
   }
 
   @override
@@ -108,50 +135,66 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
         onTap: () => _launchUrl(widget.url),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
-          child: Stack(
-            alignment: Alignment.bottomLeft,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              AspectRatio(
-                aspectRatio: 16 / 9,
-                child: _imageUrl != null
-                    ? Image.network(
-                        _imageUrl!,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        errorBuilder: (_, __, ___) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted) {
-                              setState(() {
-                                _imageUrl = null;
-                              });
-                            }
-                          });
-                          return _placeholder();
-                        },
-                      )
-                    : _placeholder(),
-              ),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      Colors.black.withOpacity(0.8),
-                      Colors.transparent,
-                    ],
-                  ),
+              ClipRRect(
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(16)),
+                child: AspectRatio(
+                  aspectRatio: 16 / 9,
+                  child: _imageUrl != null
+                      ? Image.network(
+                          _imageUrl!,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          errorBuilder: (_, __, ___) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) {
+                                setState(() {
+                                  _imageUrl = null;
+                                });
+                              }
+                            });
+                            return _placeholder();
+                          },
+                        )
+                      : _placeholder(),
                 ),
-                child: Text(
-                  _title!,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.white,
+              ),
+              ClipRRect(
+                borderRadius:
+                    const BorderRadius.vertical(bottom: Radius.circular(16)),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    color: (_dominantColor ?? Colors.black).withOpacity(0.7),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _title!,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          Uri.parse(widget.url).host.replaceFirst('www.', ''),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
