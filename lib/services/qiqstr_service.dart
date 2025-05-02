@@ -448,6 +448,13 @@ class DataService {
         for (final event in message) {
           try {
             final decodedEvent = jsonDecode(event['eventRaw']);
+
+            if (decodedEvent is List &&
+                decodedEvent.isNotEmpty &&
+                decodedEvent[0] == 'EOSE') {
+              continue;
+            }
+
             final targetNpubs = List<String>.from(event['targetNpubs']);
             final int priority = event['priority'] ?? 2;
 
