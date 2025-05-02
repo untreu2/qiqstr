@@ -10,7 +10,7 @@ import 'package:qiqstr/screens/send_reply.dart';
 import 'package:qiqstr/widgets/link_preview_widget.dart';
 import 'package:qiqstr/widgets/media_preview_widget.dart';
 import '../models/note_model.dart';
-import '../services/qiqstr_service.dart';
+import '../services/data_service.dart';
 import 'quote_widget.dart';
 
 class NoteWidget extends StatefulWidget {

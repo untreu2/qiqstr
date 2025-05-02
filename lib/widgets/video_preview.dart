@@ -1,61 +1,72 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 class VP extends StatefulWidget {
   final String url;
 
-  const VP({super.key, required this.url});
+  const VP({
+    super.key,
+    required this.url,
+  });
 
   @override
   State<VP> createState() => _VPState();
 }
 
 class _VPState extends State<VP> {
-  late VideoPlayerController _controller;
-  bool _isVisible = false;
+  VideoPlayerController? _controller;
   bool _isInitialized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = VideoPlayerController.network(widget.url)
-      ..setLooping(true)
-      ..setVolume(0)
-      ..initialize().then((_) {
-        setState(() => _isInitialized = true);
-        if (_isVisible) _controller.play();
-      });
-  }
+  bool _hasStartedInit = false;
+  String? _cachedFilePath;
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
-  void _handleVisibilityChanged(VisibilityInfo info) {
-    final isVisibleNow = info.visibleFraction > 0.5;
-    if (isVisibleNow != _isVisible) {
-      setState(() => _isVisible = isVisibleNow);
-      if (_isVisible && _controller.value.isInitialized) {
-        _controller.play();
+  void _handleVisibilityChanged(VisibilityInfo info) async {
+    final isNowVisible = info.visibleFraction > 0.5;
+
+    if (isNowVisible && !_hasStartedInit) {
+      _hasStartedInit = true;
+
+      final file = await DefaultCacheManager().getSingleFile(widget.url);
+      _cachedFilePath = file.path;
+
+      _controller = VideoPlayerController.file(file)
+        ..setLooping(true)
+        ..setVolume(0)
+        ..initialize().then((_) {
+          setState(() => _isInitialized = true);
+          _controller!.play();
+        });
+    }
+
+    if (_controller?.value.isInitialized ?? false) {
+      if (isNowVisible) {
+        _controller?.play();
       } else {
-        _controller.pause();
+        _controller?.pause();
       }
     }
   }
 
   void _openFullScreen() {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(8),
-        child: VideoDialogPlayer(url: widget.url),
-      ),
-    );
+    if (_isInitialized && _cachedFilePath != null) {
+      showDialog(
+        context: context,
+        barrierColor: Colors.black87,
+        builder: (_) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(8),
+          child: VideoDialogPlayer(filePath: _cachedFilePath!),
+        ),
+      );
+    }
   }
 
   @override
@@ -65,35 +76,44 @@ class _VPState extends State<VP> {
       onVisibilityChanged: _handleVisibilityChanged,
       child: GestureDetector(
         onTap: _openFullScreen,
-        child: _isInitialized
-            ? ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: AspectRatio(
-                  aspectRatio: 1,
-                  child: FittedBox(
-                    fit: BoxFit.cover,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: AspectRatio(
+            aspectRatio: 1,
+            child: _isInitialized && _controller != null
+                ? FittedBox(
+                    fit: BoxFit.contain,
                     alignment: Alignment.center,
                     child: SizedBox(
-                      width: _controller.value.size.width,
-                      height: _controller.value.size.height,
-                      child: VideoPlayer(_controller),
+                      width: _controller!.value.size.width,
+                      height: _controller!.value.size.height,
+                      child: VideoPlayer(_controller!),
+                    ),
+                  )
+                : Container(
+                    color: Colors.grey.shade800,
+                    child: const Center(
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              )
-            : const AspectRatio(
-                aspectRatio: 1,
-                child: Center(child: CircularProgressIndicator()),
-              ),
+          ),
+        ),
       ),
     );
   }
 }
 
 class VideoDialogPlayer extends StatefulWidget {
-  final String url;
+  final String filePath;
 
-  const VideoDialogPlayer({super.key, required this.url});
+  const VideoDialogPlayer({super.key, required this.filePath});
 
   @override
   State<VideoDialogPlayer> createState() => _VideoDialogPlayerState();
@@ -107,7 +127,7 @@ class _VideoDialogPlayerState extends State<VideoDialogPlayer> {
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.network(widget.url)
+    _controller = VideoPlayerController.file(File(widget.filePath))
       ..initialize().then((_) {
         setState(() => _isInitialized = true);
         _controller.setVolume(1);
@@ -191,7 +211,7 @@ class _VideoDialogPlayerState extends State<VideoDialogPlayer> {
                           _controller,
                           allowScrubbing: true,
                           padding: const EdgeInsets.symmetric(horizontal: 12),
-                          colors: VideoProgressColors(
+                          colors: const VideoProgressColors(
                             playedColor: Colors.amber,
                             bufferedColor: Colors.white38,
                             backgroundColor: Colors.white24,

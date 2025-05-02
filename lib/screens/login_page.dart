@@ -2,7 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:nostr/nostr.dart';
-import 'package:qiqstr/services/qiqstr_service.dart';
+import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/screens/feed_page.dart';
 
 class LoginPage extends StatefulWidget {

@@ -6,7 +6,7 @@ import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/services/qiqstr_service.dart';
+import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/widgets/link_preview_widget.dart';
 import 'package:qiqstr/widgets/media_preview_widget.dart';
 

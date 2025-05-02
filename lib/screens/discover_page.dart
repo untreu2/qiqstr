@@ -4,7 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qiqstr/screens/share_note.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/services/qiqstr_service.dart';
+import 'package:qiqstr/services/data_service.dart';
 
 class DiscoverPage extends StatefulWidget {
   final String npub;

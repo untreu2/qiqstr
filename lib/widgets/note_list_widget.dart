@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qiqstr/models/note_model.dart';
-import 'package:qiqstr/services/qiqstr_service.dart';
+import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/widgets/note_widget.dart';
 
 class NoteListWidget extends StatefulWidget {

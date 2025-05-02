@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/qiqstr_service.dart';
+import '../services/data_service.dart';
 
 class SendReplyDialog extends StatefulWidget {
   final DataService dataService;

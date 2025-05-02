@@ -23,7 +23,9 @@ class MediaPreviewWidget extends StatelessWidget {
     }).toList();
 
     if (videoUrls.isNotEmpty) {
-      return VP(url: videoUrls.first);
+      final videoUrl = videoUrls.first;
+
+      return VP(url: videoUrl);
     }
 
     final imageUrls = mediaUrls.where((url) {

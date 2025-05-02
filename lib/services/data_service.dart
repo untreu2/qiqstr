@@ -11,6 +11,7 @@ import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:qiqstr/constants/relays.dart';
 import 'package:qiqstr/models/notification_model.dart';
 import 'package:qiqstr/screens/profile_page.dart';
+import 'package:qiqstr/services/media_service.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/user_model.dart';
@@ -672,6 +673,11 @@ class DataService {
     final parsed = parseContent(note.content);
     note.parsedContent = parsed;
     note.hasMedia = (parsed['mediaUrls'] as List).isNotEmpty;
+
+    final List<String> mediaUrls = List<String>.from(parsed['mediaUrls']);
+    if (mediaUrls.isNotEmpty) {
+      MediaService().cacheMediaUrls(mediaUrls);
+    }
   }
 
   static void _processCacheLoad(String data, SendPort sendPort) {

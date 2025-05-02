@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import '../services/qiqstr_service.dart';
+import '../services/data_service.dart';
 
 class ShareNotePage extends StatefulWidget {
   final DataService dataService;

@@ -5,7 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:qiqstr/models/notification_model.dart';
 import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/services/qiqstr_service.dart';
+import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/widgets/quote_widget.dart';
 
 class NotificationsPage extends StatefulWidget {
