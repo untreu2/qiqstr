@@ -353,7 +353,7 @@ class _NoteWidgetState extends State<NoteWidget>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 12),
+                const SizedBox(height: 2),
                 if (updatedNote.isRepost && updatedNote.repostedBy != null) ...[
                   Padding(
                     padding:
@@ -383,7 +383,7 @@ class _NoteWidgetState extends State<NoteWidget>
                             child: Padding(
                               padding: const EdgeInsets.only(top: 2),
                               child: CircleAvatar(
-                                radius: 23,
+                                radius: 22,
                                 backgroundImage: imgUrl.isNotEmpty
                                     ? CachedNetworkImageProvider(imgUrl)
                                     : null,
@@ -540,7 +540,6 @@ class _NoteWidgetState extends State<NoteWidget>
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 12),
                           ],
                         ),
                       ),

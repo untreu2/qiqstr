@@ -231,9 +231,10 @@ class _NoteListWidgetState extends State<NoteListWidget>
                     notesNotifier: _dataService.notesNotifier,
                   ),
                   if (index < filteredNotes.length - 1)
-                    const Divider(
-                      height: 0,
-                      thickness: 0.5,
+                    Container(
+                      margin: const EdgeInsets.symmetric(vertical: 10),
+                      height: 1,
+                      width: double.infinity,
                       color: Colors.white24,
                     ),
                 ],
