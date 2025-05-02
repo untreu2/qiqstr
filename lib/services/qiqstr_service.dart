@@ -146,6 +146,105 @@ class WebSocketManager {
   }
 }
 
+class PrimalCacheClient {
+  static const Duration _timeout = Duration(seconds: 5);
+
+  Future<Map<String, String>?> fetchUserProfile(String pubkey) async {
+    return _sendRequest([
+      "REQ",
+      _generateId(),
+      {
+        "cache": [
+          "user_profile",
+          {"pubkey": pubkey}
+        ]
+      }
+    ]).then(_decodeUserProfile);
+  }
+
+  Future<Map<String, dynamic>?> fetchEvent(String eventId) async {
+    return _sendRequest([
+      "REQ",
+      _generateId(),
+      {
+        "cache": [
+          "events",
+          {
+            "event_ids": [eventId]
+          }
+        ]
+      }
+    ]);
+  }
+
+  Future<Map<String, dynamic>?> _sendRequest(List<dynamic> request) async {
+    WebSocket? ws;
+    final subscriptionId = request[1];
+    final encodedRequest = jsonEncode(request);
+
+    try {
+      ws = await WebSocket.connect(cachingServerUrl).timeout(_timeout);
+      final completer = Completer<Map<String, dynamic>?>();
+      late StreamSubscription sub;
+
+      sub = ws.listen((message) {
+        final decoded = jsonDecode(message);
+        if (decoded is List &&
+            decoded.length >= 3 &&
+            decoded[0] == 'EVENT' &&
+            decoded[1] == subscriptionId) {
+          completer.complete(decoded[2]);
+        } else if (decoded[0] == 'EOSE' && decoded[1] == subscriptionId) {
+          if (!completer.isCompleted) completer.complete(null);
+        }
+      }, onError: (_) {
+        if (!completer.isCompleted) completer.complete(null);
+      }, onDone: () {
+        if (!completer.isCompleted) completer.complete(null);
+      });
+
+      ws.add(encodedRequest);
+      final result =
+          await completer.future.timeout(_timeout, onTimeout: () => null);
+
+      await sub.cancel();
+      await ws.close();
+      return result;
+    } catch (e) {
+      print('[PrimalCacheClient] Error: $e');
+      try {
+        await ws?.close();
+      } catch (_) {}
+      return null;
+    }
+  }
+
+  Map<String, String>? _decodeUserProfile(Map<String, dynamic>? event) {
+    if (event == null) return null;
+
+    try {
+      final contentRaw = event['content'];
+      final profile =
+          (contentRaw is String) ? jsonDecode(contentRaw) : <String, dynamic>{};
+
+      return {
+        'name': profile['name'] ?? 'Anonymous',
+        'profileImage': profile['picture'] ?? '',
+        'about': profile['about'] ?? '',
+        'nip05': profile['nip05'] ?? '',
+        'banner': profile['banner'] ?? '',
+        'lud16': profile['lud16'] ?? '',
+        'website': profile['website'] ?? '',
+      };
+    } catch (e) {
+      print('[PrimalCacheClient] Error decoding profile: $e');
+      return null;
+    }
+  }
+
+  String _generateId() => DateTime.now().millisecondsSinceEpoch.toString();
+}
+
 class DataService {
   late Isolate _eventProcessorIsolate;
   late SendPort _eventProcessorSendPort;
@@ -770,15 +869,60 @@ class DataService {
   Future<void> _fetchProfilesBatch(List<String> npubs) async {
     if (_isClosed) return;
 
-    final uniqueNpubs =
-        npubs.toSet().difference(profileCache.keys.toSet()).toList();
-    if (uniqueNpubs.isEmpty) return;
+    final primal = PrimalCacheClient();
+    final now = DateTime.now();
 
-    final filter =
-        Filter(authors: uniqueNpubs, kinds: [0], limit: uniqueNpubs.length);
-    await _broadcastRequest(_createRequest(filter));
-    print(
-        '[DataService] Sent profile fetch request for ${uniqueNpubs.length} authors.');
+    final List<String> remainingForRelay = [];
+
+    for (final pub in npubs.toSet()) {
+      if (profileCache.containsKey(pub)) {
+        if (now.difference(profileCache[pub]!.fetchedAt) < profileCacheTTL) {
+          continue;
+        } else {
+          profileCache.remove(pub);
+        }
+      }
+
+      final user = usersBox?.get(pub);
+      if (user != null) {
+        final data = {
+          'name': user.name,
+          'profileImage': user.profileImage,
+          'about': user.about,
+          'nip05': user.nip05,
+          'banner': user.banner,
+          'lud16': user.lud16,
+          'website': user.website,
+        };
+        profileCache[pub] = CachedProfile(data, user.updatedAt);
+        continue;
+      }
+
+      final primalProfile = await primal.fetchUserProfile(pub);
+      if (primalProfile != null) {
+        profileCache[pub] = CachedProfile(primalProfile, now);
+
+        if (usersBox != null && usersBox!.isOpen) {
+          final userModel = UserModel.fromCachedProfile(pub, primalProfile);
+          await usersBox!.put(pub, userModel);
+        }
+        continue;
+      }
+
+      remainingForRelay.add(pub);
+    }
+
+    if (remainingForRelay.isNotEmpty) {
+      final filter = Filter(
+        authors: remainingForRelay,
+        kinds: [0],
+        limit: remainingForRelay.length,
+      );
+
+      await _broadcastRequest(_createRequest(filter));
+      print(
+          '[DataService] Relay profile fetch fallback for ${remainingForRelay.length} npubs.');
+    }
   }
 
   Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {
@@ -1171,7 +1315,7 @@ class DataService {
   }
 
   Future<Map<String, String>> getCachedUserProfile(String npub) async {
-    if (_isClosed) {
+    if (_isClosed)
       return {
         'name': 'Anonymous',
         'profileImage': '',
@@ -1181,7 +1325,6 @@ class DataService {
         'lud16': '',
         'website': ''
       };
-    }
 
     final now = DateTime.now();
     if (profileCache.containsKey(npub)) {
@@ -1193,42 +1336,24 @@ class DataService {
       }
     }
 
-    if (usersBox != null && usersBox!.isOpen) {
-      final user = usersBox!.get(npub);
-      if (user != null) {
-        final data = {
-          'name': user.name,
-          'profileImage': user.profileImage,
-          'about': user.about,
-          'nip05': user.nip05,
-          'banner': user.banner,
-          'lud16': user.lud16,
-          'website': user.website,
-        };
-        profileCache[npub] = CachedProfile(data, user.updatedAt);
-        return data;
+    final primal = PrimalCacheClient();
+    final primalProfile = await primal.fetchUserProfile(npub);
+    if (primalProfile != null) {
+      final cached = CachedProfile(primalProfile, DateTime.now());
+      profileCache[npub] = cached;
+
+      if (usersBox != null && usersBox!.isOpen) {
+        final userModel = UserModel.fromCachedProfile(npub, primalProfile);
+        await usersBox!.put(npub, userModel);
       }
+
+      return primalProfile;
     }
 
     final fetched = await fetchUserProfileIndependently(npub);
     if (fetched != null) {
       profileCache[npub] = CachedProfile(fetched, DateTime.now());
-
-      if (usersBox != null && usersBox!.isOpen) {
-        final model = UserModel(
-          npub: npub,
-          name: fetched['name'] ?? '',
-          about: fetched['about'] ?? '',
-          nip05: fetched['nip05'] ?? '',
-          banner: fetched['banner'] ?? '',
-          profileImage: fetched['profileImage'] ?? '',
-          lud16: fetched['lud16'] ?? '',
-          website: fetched['website'] ?? '',
-          updatedAt: DateTime.now(),
-        );
-        await usersBox!.put(npub, model);
-      }
-
+      await usersBox?.put(npub, UserModel.fromCachedProfile(npub, fetched));
       return fetched;
     }
 
@@ -2146,21 +2271,30 @@ class DataService {
   }
 
   Future<NoteModel?> fetchNoteByIdIndependently(String eventId) async {
-    final List<Future<NoteModel?>> fetchTasks = [];
+    final primal = PrimalCacheClient();
 
-    for (final relayUrl in relaySetIndependentFetch) {
-      fetchTasks.add(_fetchFromSingleRelay(relayUrl, eventId));
+    final primalEvent = await primal.fetchEvent(eventId);
+    if (primalEvent != null) {
+      return NoteModel(
+        id: primalEvent['id'],
+        content: primalEvent['content'] is String
+            ? primalEvent['content']
+            : jsonEncode(primalEvent['content']),
+        author: primalEvent['pubkey'],
+        timestamp: DateTime.fromMillisecondsSinceEpoch(
+            primalEvent['created_at'] * 1000),
+        isRepost: primalEvent['kind'] == 6,
+        rawWs: jsonEncode(primalEvent),
+      );
     }
+
+    final fetchTasks = relaySetIndependentFetch
+        .map((relayUrl) => _fetchFromSingleRelay(relayUrl, eventId))
+        .toList();
 
     try {
       final result = await Future.any(fetchTasks);
-
-      if (result != null) {
-        return result;
-      } else {
-        print('[fetchNoteByIdIndependently] No result from any relay.');
-        return null;
-      }
+      return result;
     } catch (e) {
       print('[fetchNoteByIdIndependently] All fetch attempts failed: $e');
       return null;

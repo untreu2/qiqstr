@@ -24,3 +24,5 @@ const List<String> relaySetIndependentFetch = [
   'wss://nostr.bitcoiner.social',
   'wss://nostr.swiss-enigma.ch',
 ];
+
+const String cachingServerUrl = 'wss://cache2.primal.net/v1';
