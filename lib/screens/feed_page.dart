@@ -1,8 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:qiqstr/screens/discover_page.dart';
-import 'package:qiqstr/screens/users_search_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/widgets/sidebar_widget.dart';
@@ -26,12 +25,36 @@ class _FeedPageState extends State<FeedPage> {
   String? errorMessage;
   bool isFirstOpen = false;
 
+  late ScrollController _scrollController;
+  bool _showAppBar = true;
+
   @override
   void initState() {
     super.initState();
     dataService = DataService(npub: widget.npub, dataType: DataType.Feed);
     _loadUserProfile();
     _checkFirstOpen();
+
+    _scrollController = ScrollController();
+    _scrollController.addListener(() {
+      if (_scrollController.position.userScrollDirection ==
+          ScrollDirection.reverse) {
+        if (_showAppBar) {
+          setState(() => _showAppBar = false);
+        }
+      } else if (_scrollController.position.userScrollDirection ==
+          ScrollDirection.forward) {
+        if (!_showAppBar) {
+          setState(() => _showAppBar = true);
+        }
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _checkFirstOpen() async {
@@ -41,7 +64,6 @@ class _FeedPageState extends State<FeedPage> {
     if (!alreadyOpened) {
       isFirstOpen = true;
       await prefs.setBool('feed_page_opened', true);
-
       Future.delayed(const Duration(milliseconds: 300), () {
         if (mounted) setState(() {});
       });
@@ -84,7 +106,7 @@ class _FeedPageState extends State<FeedPage> {
     );
   }
 
-  void _navigateToNotificationsPage() async {
+  void _navigateToNotificationsPage() {
     final box = dataService.notificationsBox!;
     Navigator.push(
       context,
@@ -98,77 +120,63 @@ class _FeedPageState extends State<FeedPage> {
     );
   }
 
-  Widget _buildInfoSection() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 60, 16, 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Builder(
-                builder: (context) => IconButton(
-                  icon: const Icon(Icons.menu, color: Colors.white, size: 24),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: () {
-                    Scaffold.of(context).openDrawer();
-                  },
+  SliverPersistentHeader _buildAnimatedHeader() {
+    return SliverPersistentHeader(
+      floating: true,
+      delegate: _PinnedHeaderDelegate(
+        child: AnimatedOpacity(
+          opacity: _showAppBar ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 300),
+          child: ClipRRect(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: Container(
+                color: Colors.black.withOpacity(0.5),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  MediaQuery.of(context).padding.top + 4,
+                  16,
+                  8,
                 ),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'Feed',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.explore, color: Colors.white, size: 24),
-                tooltip: 'Discover',
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => DiscoverPage(npub: widget.npub),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Builder(
+                      builder: (context) => IconButton(
+                        icon: const Icon(Icons.menu,
+                            color: Colors.white, size: 24),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => Scaffold.of(context).openDrawer(),
+                      ),
                     ),
-                  );
-                },
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () {
+                        _scrollController.animateTo(
+                          0,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOut,
+                        );
+                      },
+                      child: Image.asset(
+                        'assets/main_icon.png',
+                        height: 32,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.notifications_none,
+                          color: Colors.white, size: 24),
+                      onPressed: _navigateToNotificationsPage,
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.person_search,
-                    color: Colors.white, size: 24),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const UserSearchPage()),
-                  );
-                },
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.notifications_none,
-                    color: Colors.white, size: 24),
-                onPressed: _navigateToNotificationsPage,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            "“If you don't believe me or don't get it, I don't have time to try to convince you, sorry.”",
-            style: TextStyle(
-              fontSize: 16,
-              color: Colors.white70,
-              height: 1.5,
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -177,9 +185,7 @@ class _FeedPageState extends State<FeedPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      drawer: SidebarWidget(
-        user: user,
-      ),
+      drawer: SidebarWidget(user: user),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(right: 12, bottom: 12),
@@ -217,14 +223,13 @@ class _FeedPageState extends State<FeedPage> {
                   ),
                 )
               : CustomScrollView(
+                  controller: _scrollController,
                   physics: const AlwaysScrollableScrollPhysics(
                     parent: BouncingScrollPhysics(),
                   ),
                   cacheExtent: 1500,
                   slivers: [
-                    SliverToBoxAdapter(
-                      child: _buildInfoSection(),
-                    ),
+                    _buildAnimatedHeader(),
                     NoteListWidget(
                       npub: widget.npub,
                       dataType: DataType.Feed,
@@ -233,4 +238,26 @@ class _FeedPageState extends State<FeedPage> {
                 ),
     );
   }
+}
+
+class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final Widget child;
+
+  _PinnedHeaderDelegate({required this.child});
+
+  @override
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return child;
+  }
+
+  @override
+  double get maxExtent => 125;
+
+  @override
+  double get minExtent => 125;
+
+  @override
+  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) =>
+      false;
 }
