@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qiqstr/screens/share_note.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
-import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/qiqstr_service.dart';
 
@@ -67,15 +66,12 @@ class _DiscoverPageState extends State<DiscoverPage> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Builder(
-                builder: (context) => IconButton(
-                  icon: const Icon(Icons.menu, color: Colors.white, size: 24),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: () {
-                    Scaffold.of(context).openDrawer();
-                  },
-                ),
+              IconButton(
+                icon:
+                    const Icon(Icons.arrow_back, color: Colors.white, size: 24),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () => Navigator.pop(context),
               ),
               const SizedBox(width: 8),
               const Text(
@@ -108,7 +104,6 @@ class _DiscoverPageState extends State<DiscoverPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      drawer: SidebarWidget(user: user),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       floatingActionButton: Padding(
         padding: const EdgeInsets.only(right: 12, bottom: 12),

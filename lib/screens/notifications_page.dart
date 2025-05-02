@@ -7,7 +7,6 @@ import 'package:qiqstr/models/notification_model.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/qiqstr_service.dart';
 import 'package:qiqstr/widgets/quote_widget.dart';
-import 'package:qiqstr/widgets/sidebar_widget.dart';
 
 class NotificationsPage extends StatefulWidget {
   final String npub;
@@ -97,13 +96,11 @@ class _NotificationsPageState extends State<NotificationsPage> {
       padding: const EdgeInsets.fromLTRB(16, 60, 16, 20),
       child: Row(
         children: [
-          Builder(
-            builder: (context) => IconButton(
-              icon: const Icon(Icons.menu, color: Colors.white, size: 24),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              onPressed: () => Scaffold.of(context).openDrawer(),
-            ),
+          IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            onPressed: () => Navigator.pop(context),
           ),
           const SizedBox(width: 8),
           const Text(
@@ -191,7 +188,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      drawer: SidebarWidget(user: user),
       body: isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : errorMessage != null
