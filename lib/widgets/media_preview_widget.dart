@@ -10,14 +10,12 @@ class MediaPreviewWidget extends StatelessWidget {
       : super(key: key);
 
   static const double borderRadius = 12.0;
-  static const EdgeInsets mediaPadding = EdgeInsets.zero;
 
-  @override
   @override
   Widget build(BuildContext context) {
     if (mediaUrls.isEmpty) return const SizedBox.shrink();
 
-    final List<String> videoUrls = mediaUrls.where((url) {
+    final videoUrls = mediaUrls.where((url) {
       final lower = url.toLowerCase();
       return lower.endsWith('.mp4') ||
           lower.endsWith('.mkv') ||
@@ -28,7 +26,7 @@ class MediaPreviewWidget extends StatelessWidget {
       return VP(url: videoUrls.first);
     }
 
-    final List<String> imageUrls = mediaUrls.where((url) {
+    final imageUrls = mediaUrls.where((url) {
       final lower = url.toLowerCase();
       return lower.endsWith('.jpg') ||
           lower.endsWith('.jpeg') ||
@@ -37,16 +35,17 @@ class MediaPreviewWidget extends StatelessWidget {
           lower.endsWith('.gif');
     }).toList();
 
-    if (imageUrls.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    if (imageUrls.isEmpty) return const SizedBox.shrink();
 
-    return _buildAdaptiveMediaGrid(context, imageUrls);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: _buildMediaGrid(context, imageUrls),
+    );
   }
 
-  Widget _buildAdaptiveMediaGrid(BuildContext context, List<String> imageUrls) {
+  Widget _buildMediaGrid(BuildContext context, List<String> imageUrls) {
     if (imageUrls.length == 1) {
-      return _buildRoundedImage(
+      return _buildImage(
         context,
         imageUrls[0],
         0,
@@ -56,10 +55,9 @@ class MediaPreviewWidget extends StatelessWidget {
       );
     } else if (imageUrls.length == 2) {
       return Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
           Expanded(
-            child: _buildRoundedImage(
+            child: _buildImage(
               context,
               imageUrls[0],
               0,
@@ -69,7 +67,7 @@ class MediaPreviewWidget extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           Expanded(
-            child: _buildRoundedImage(
+            child: _buildImage(
               context,
               imageUrls[1],
               1,
@@ -81,11 +79,10 @@ class MediaPreviewWidget extends StatelessWidget {
       );
     } else if (imageUrls.length == 3) {
       return Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
           Expanded(
             flex: 2,
-            child: _buildRoundedImage(
+            child: _buildImage(
               context,
               imageUrls[0],
               0,
@@ -97,9 +94,8 @@ class MediaPreviewWidget extends StatelessWidget {
           Expanded(
             flex: 1,
             child: Column(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                _buildRoundedImage(
+                _buildImage(
                   context,
                   imageUrls[1],
                   1,
@@ -107,7 +103,7 @@ class MediaPreviewWidget extends StatelessWidget {
                   aspectRatio: 1,
                 ),
                 const SizedBox(height: 4),
-                _buildRoundedImage(
+                _buildImage(
                   context,
                   imageUrls[2],
                   2,
@@ -135,7 +131,7 @@ class MediaPreviewWidget extends StatelessWidget {
         itemBuilder: (context, index) {
           return Stack(
             children: [
-              _buildRoundedImage(
+              _buildImage(
                 context,
                 imageUrls[index],
                 index,
@@ -144,9 +140,7 @@ class MediaPreviewWidget extends StatelessWidget {
               ),
               if (index == 3 && imageUrls.length > 4)
                 Container(
-                  decoration: const BoxDecoration(
-                    color: Colors.black54,
-                  ),
+                  color: Colors.black54,
                   alignment: Alignment.center,
                   child: Text(
                     '+${imageUrls.length - 4}',
@@ -164,7 +158,7 @@ class MediaPreviewWidget extends StatelessWidget {
     }
   }
 
-  Widget _buildRoundedImage(
+  Widget _buildImage(
     BuildContext context,
     String url,
     int index,
@@ -178,7 +172,7 @@ class MediaPreviewWidget extends StatelessWidget {
       fit: fit,
       placeholder: (context, url) =>
           const Center(child: CircularProgressIndicator()),
-      errorWidget: (context, url, error) => const Icon(Icons.error, size: 20),
+      errorWidget: (context, url, error) => const Icon(Icons.error),
     );
 
     if (useAspectRatio && aspectRatio != null) {
@@ -197,10 +191,7 @@ class MediaPreviewWidget extends StatelessWidget {
           ),
         );
       },
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(borderRadius),
-        child: image,
-      ),
+      child: image,
     );
   }
 }
