@@ -27,6 +27,7 @@ class _FeedPageState extends State<FeedPage> {
 
   late ScrollController _scrollController;
   bool _showAppBar = true;
+  bool _showFAB = true;
 
   @override
   void initState() {
@@ -39,13 +40,19 @@ class _FeedPageState extends State<FeedPage> {
     _scrollController.addListener(() {
       if (_scrollController.position.userScrollDirection ==
           ScrollDirection.reverse) {
-        if (_showAppBar) {
-          setState(() => _showAppBar = false);
+        if (_showAppBar || _showFAB) {
+          setState(() {
+            _showAppBar = false;
+            _showFAB = false;
+          });
         }
       } else if (_scrollController.position.userScrollDirection ==
           ScrollDirection.forward) {
-        if (!_showAppBar) {
-          setState(() => _showAppBar = true);
+        if (!_showAppBar || !_showFAB) {
+          setState(() {
+            _showAppBar = true;
+            _showFAB = true;
+          });
         }
       }
     });
@@ -67,7 +74,7 @@ class _FeedPageState extends State<FeedPage> {
       Future.delayed(const Duration(milliseconds: 300), () {
         if (mounted) setState(() {});
       });
-      Future.delayed(const Duration(milliseconds: 600), () {
+      Future.delayed(const Duration(milliseconds: 650), () {
         if (mounted) setState(() {});
       });
       Future.delayed(const Duration(milliseconds: 900), () {
@@ -187,27 +194,37 @@ class _FeedPageState extends State<FeedPage> {
       backgroundColor: Colors.black,
       drawer: SidebarWidget(user: user),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(right: 12, bottom: 12),
-        child: ClipOval(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.5),
-                shape: BoxShape.circle,
-              ),
-              child: IconButton(
-                onPressed: _navigateToShareNotePage,
-                icon: SvgPicture.asset(
-                  'assets/new_post_button.svg',
-                  color: Colors.white,
-                  width: 24,
-                  height: 24,
+      floatingActionButton: AnimatedSlide(
+        offset: _showFAB ? Offset.zero : const Offset(0, 2),
+        duration: const Duration(milliseconds: 650),
+        curve: Curves.easeInOutCubic,
+        child: AnimatedOpacity(
+          opacity: _showFAB ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 650),
+          curve: Curves.easeInOutCubic,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 12, bottom: 12),
+            child: ClipOval(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withOpacity(0.3),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    onPressed: _navigateToShareNotePage,
+                    icon: SvgPicture.asset(
+                      'assets/new_post_button.svg',
+                      color: Colors.white,
+                      width: 24,
+                      height: 24,
+                    ),
+                    tooltip: 'New Note',
+                  ),
                 ),
-                tooltip: 'New Note',
               ),
             ),
           ),
