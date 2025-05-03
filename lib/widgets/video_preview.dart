@@ -1,8 +1,6 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
-import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 class VP extends StatefulWidget {
   final String url;
@@ -20,7 +18,6 @@ class _VPState extends State<VP> {
   VideoPlayerController? _controller;
   bool _isInitialized = false;
   bool _hasStartedInit = false;
-  String? _cachedFilePath;
 
   @override
   void dispose() {
@@ -34,10 +31,7 @@ class _VPState extends State<VP> {
     if (isNowVisible && !_hasStartedInit) {
       _hasStartedInit = true;
 
-      final file = await DefaultCacheManager().getSingleFile(widget.url);
-      _cachedFilePath = file.path;
-
-      _controller = VideoPlayerController.file(file)
+      _controller = VideoPlayerController.network(widget.url)
         ..setLooping(true)
         ..setVolume(0)
         ..initialize().then((_) {
@@ -56,14 +50,14 @@ class _VPState extends State<VP> {
   }
 
   void _openFullScreen() {
-    if (_isInitialized && _cachedFilePath != null) {
+    if (_isInitialized) {
       showDialog(
         context: context,
         barrierColor: Colors.black87,
         builder: (_) => Dialog(
           backgroundColor: Colors.transparent,
           insetPadding: const EdgeInsets.all(8),
-          child: VideoDialogPlayer(filePath: _cachedFilePath!),
+          child: VideoDialogPlayer(url: widget.url),
         ),
       );
     }
@@ -111,9 +105,9 @@ class _VPState extends State<VP> {
 }
 
 class VideoDialogPlayer extends StatefulWidget {
-  final String filePath;
+  final String url;
 
-  const VideoDialogPlayer({super.key, required this.filePath});
+  const VideoDialogPlayer({super.key, required this.url});
 
   @override
   State<VideoDialogPlayer> createState() => _VideoDialogPlayerState();
@@ -127,7 +121,7 @@ class _VideoDialogPlayerState extends State<VideoDialogPlayer> {
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.file(File(widget.filePath))
+    _controller = VideoPlayerController.network(widget.url)
       ..initialize().then((_) {
         setState(() => _isInitialized = true);
         _controller.setVolume(1);
