@@ -137,7 +137,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
               isSelected ? Colors.white.withOpacity(0.08) : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: isSelected ? Colors.white30 : Colors.white12,
+            color: isSelected ? Colors.amber : Colors.white12,
             width: 1,
           ),
         ),
