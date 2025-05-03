@@ -304,7 +304,7 @@ class DataService {
 
   final Uuid _uuid = Uuid();
 
-  final Duration profileCacheTTL = const Duration(hours: 24);
+  final Duration profileCacheTTL = const Duration(hours: 1);
   final Duration cacheCleanupInterval = const Duration(hours: 12);
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
