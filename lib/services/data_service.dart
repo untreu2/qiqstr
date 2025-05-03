@@ -675,6 +675,23 @@ class DataService {
     note.hasMedia = (parsed['mediaUrls'] as List).isNotEmpty;
 
     final List<String> mediaUrls = List<String>.from(parsed['mediaUrls']);
+
+    final videoUrl = mediaUrls.firstWhere(
+      (url) =>
+          url.toLowerCase().endsWith('.mp4') ||
+          url.toLowerCase().endsWith('.mov') ||
+          url.toLowerCase().endsWith('.mkv'),
+      orElse: () => '',
+    );
+
+    if (videoUrl.isNotEmpty) {
+      note.isVideo = true;
+      note.videoUrl = videoUrl;
+    } else {
+      note.isVideo = false;
+      note.videoUrl = null;
+    }
+
     if (mediaUrls.isNotEmpty) {
       MediaService().cacheMediaUrls(mediaUrls);
     }

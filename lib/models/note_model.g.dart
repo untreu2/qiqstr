@@ -31,13 +31,15 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       parsedContent: (fields[11] as Map?)?.cast<String, dynamic>(),
       hasMedia: fields[12] as bool,
       estimatedHeight: fields[13] as double?,
+      isVideo: fields[14] as bool,
+      videoUrl: fields[15] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, NoteModel obj) {
     writer
-      ..writeByte(14)
+      ..writeByte(16)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -65,7 +67,11 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       ..writeByte(12)
       ..write(obj.hasMedia)
       ..writeByte(13)
-      ..write(obj.estimatedHeight);
+      ..write(obj.estimatedHeight)
+      ..writeByte(14)
+      ..write(obj.isVideo)
+      ..writeByte(15)
+      ..write(obj.videoUrl);
   }
 
   @override
