@@ -206,9 +206,9 @@ class _NoteListWidgetState extends State<NoteListWidget>
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
               child: Row(
                 children: [
-                  buildButton(0, "Popular (24h)"),
-                  const SizedBox(width: 6),
                   buildButton(1, "Latest"),
+                  const SizedBox(width: 6),
+                  buildButton(0, "Popular (24h)"),
                   const SizedBox(width: 6),
                   buildButton(2, "Media"),
                 ],
