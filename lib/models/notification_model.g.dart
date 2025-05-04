@@ -24,14 +24,13 @@ class NotificationModelAdapter extends TypeAdapter<NotificationModel> {
       targetEventIds: (fields[4] as List).cast<String>(),
       createdAt: fields[6] as DateTime,
       content: fields[5] as String?,
-      zapAmount: fields[7] as int?,
     );
   }
 
   @override
   void write(BinaryWriter writer, NotificationModel obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -45,9 +44,7 @@ class NotificationModelAdapter extends TypeAdapter<NotificationModel> {
       ..writeByte(5)
       ..write(obj.content)
       ..writeByte(6)
-      ..write(obj.createdAt)
-      ..writeByte(7)
-      ..write(obj.zapAmount);
+      ..write(obj.createdAt);
   }
 
   @override

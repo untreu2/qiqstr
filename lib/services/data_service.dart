@@ -1154,17 +1154,17 @@ class DataService {
       final tags = eventData['tags'] as List<dynamic>? ?? [];
       final content = eventData['content'] as String? ?? '';
 
-      final isTargetedAtUser = tags.any(
-        (tag) =>
-            tag is List && tag.length >= 2 && tag[0] == 'p' && tag[1] == npub,
-      );
+      final isTargetedAtUser = tags.any((tag) =>
+          tag is List && tag.length >= 2 && tag[0] == 'p' && tag[1] == npub);
 
       if (!isTargetedAtUser) return;
 
       final targetEventIds = <String>[];
       for (var tag in tags) {
-        if (tag is List && tag.length >= 2 && tag[0] == 'e') {
-          targetEventIds.add(tag[1] as String);
+        if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
+          if (tag.length > 1) {
+            targetEventIds.add(tag[1] as String);
+          }
         }
       }
 
@@ -1172,7 +1172,6 @@ class DataService {
         1 => 'mention',
         6 => 'repost',
         7 => 'reaction',
-        9735 => 'zap',
         _ => 'unknown',
       };
 

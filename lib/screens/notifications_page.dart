@@ -47,8 +47,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
           .where((n) =>
               (n.type == 'mention' ||
                   n.type == 'repost' ||
-                  n.type == 'reaction' ||
-                  n.type == 'zap') &&
+                  n.type == 'reaction') &&
               n.actorNpub != widget.npub)
           .toList()
         ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
@@ -92,6 +91,32 @@ class _NotificationsPageState extends State<NotificationsPage> {
     }
   }
 
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 60, 16, 20),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            onPressed: () => Navigator.pop(context),
+          ),
+          const SizedBox(width: 8),
+          const Text(
+            'Notifications',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+              letterSpacing: -1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildNotificationTile(NotificationModel n) {
     final profile = _userProfilesCache[n.actorNpub];
     final name = profile?.name.isNotEmpty == true ? profile!.name : 'Anonymous';
@@ -133,26 +158,12 @@ class _NotificationsPageState extends State<NotificationsPage> {
                 dataService: widget.dataService,
               ),
             ),
-          if (n.type == 'mention' && n.content?.trim().isNotEmpty == true)
+          if (n.type == 'mention' && n.content!.trim().isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Text(
                 n.content!,
                 style: const TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-            ),
-          if (n.type == 'zap' && n.zapAmount != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              child: Row(
-                children: [
-                  const Icon(Icons.flash_on, size: 16, color: Colors.amber),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${(n.zapAmount! ~/ 1000)} sats',
-                    style: const TextStyle(color: Colors.amber, fontSize: 14),
-                  ),
-                ],
               ),
             ),
         ],
@@ -168,13 +179,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
         return '$name reacted ${n.content?.trim()} to your post';
       case 'repost':
         return '$name reposted you';
-      case 'zap':
-        final sats = (n.zapAmount ?? 0) ~/ 1000;
-        return sats > 0
-            ? '$name zapped you with $sats sats ⚡'
-            : '$name zapped you ⚡';
       default:
-        return '$name interacted with your post';
+        return '';
     }
   }
 
@@ -182,71 +188,43 @@ class _NotificationsPageState extends State<NotificationsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back,
-                        color: Colors.white, size: 24),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Notifications',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(color: Colors.white12, height: 1),
-            if (isLoading)
-              const Expanded(
-                child: Center(
-                    child: CircularProgressIndicator(color: Colors.white)),
-              )
-            else if (errorMessage != null)
-              Expanded(
-                child: Center(
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          : errorMessage != null
+              ? Center(
                   child: Text(
                     errorMessage!,
                     style: const TextStyle(color: Colors.white70),
                   ),
-                ),
-              )
-            else if (_notifications.isEmpty)
-              const Expanded(
-                child: Center(
-                  child: Text(
-                    'No notifications yet.',
-                    style: TextStyle(color: Colors.white54),
-                  ),
-                ),
-              )
-            else
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.only(bottom: 16),
+                )
+              : CustomScrollView(
                   physics: const BouncingScrollPhysics(),
-                  itemCount: _notifications.length,
-                  itemBuilder: (context, index) {
-                    final n = _notifications[index];
-                    return _buildNotificationTile(n);
-                  },
+                  cacheExtent: 1500,
+                  slivers: [
+                    SliverToBoxAdapter(child: _buildHeader()),
+                    _notifications.isEmpty
+                        ? const SliverToBoxAdapter(
+                            child: Center(
+                              child: Padding(
+                                padding: EdgeInsets.only(top: 64),
+                                child: Text(
+                                  'No notifications yet.',
+                                  style: TextStyle(color: Colors.white54),
+                                ),
+                              ),
+                            ),
+                          )
+                        : SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
+                                final n = _notifications[index];
+                                return _buildNotificationTile(n);
+                              },
+                              childCount: _notifications.length,
+                            ),
+                          ),
+                  ],
                 ),
-              ),
-          ],
-        ),
-      ),
     );
   }
 }
