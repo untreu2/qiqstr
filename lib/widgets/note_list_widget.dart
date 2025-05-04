@@ -183,12 +183,8 @@ class _NoteListWidgetState extends State<NoteListWidget>
           filteredNotes = notes
               .where((n) => n.timestamp.isAfter(cutoff))
               .toList()
-            ..sort((a, b) =>
-                (b.reactionCount + b.replyCount + b.repostCount + b.zapAmount)
-                    .compareTo(a.reactionCount +
-                        a.replyCount +
-                        a.repostCount +
-                        a.zapAmount));
+            ..sort((a, b) => (b.reactionCount + b.replyCount + b.repostCount)
+                .compareTo(a.reactionCount + a.replyCount + a.repostCount));
         } else if (_selectedTabIndex == 2) {
           filteredNotes = notes.where((n) => n.hasMedia).toList();
         }

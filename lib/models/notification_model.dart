@@ -25,6 +25,9 @@ class NotificationModel extends HiveObject {
   @HiveField(6)
   DateTime createdAt;
 
+  @HiveField(7)
+  int? zapAmount;
+
   NotificationModel({
     required this.id,
     required this.type,
@@ -33,5 +36,6 @@ class NotificationModel extends HiveObject {
     required this.targetEventIds,
     required this.createdAt,
     this.content,
+    this.zapAmount,
   });
 }
