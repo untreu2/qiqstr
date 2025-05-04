@@ -39,7 +39,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           CachedNetworkImage(
             imageUrl: user.banner,
             width: screenWidth,
-            height: 160,
+            height: 130,
             fit: BoxFit.cover,
             placeholder: (context, url) => Container(
               height: 160,
@@ -54,7 +54,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             ),
           ),
           Container(
-            transform: Matrix4.translationValues(0, -40, 0),
+            transform: Matrix4.translationValues(0, -30, 0),
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
