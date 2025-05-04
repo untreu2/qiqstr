@@ -145,52 +145,61 @@ class _FeedPageState extends State<FeedPage> {
                   16,
                   8,
                 ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Builder(
-                      builder: (context) => GestureDetector(
-                        onTap: () => Scaffold.of(context).openDrawer(),
-                        child: CircleAvatar(
-                          radius: 16,
-                          backgroundColor: Colors.white24,
-                          backgroundImage: user?.profileImage != null
-                              ? NetworkImage(user!.profileImage)
-                              : null,
-                          child: user?.profileImage == null
-                              ? const Icon(Icons.person,
-                                  color: Colors.white, size: 18)
-                              : null,
+                child: SizedBox(
+                  height: 40,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Builder(
+                          builder: (context) => GestureDetector(
+                            onTap: () => Scaffold.of(context).openDrawer(),
+                            child: CircleAvatar(
+                              radius: 16,
+                              backgroundColor: Colors.white24,
+                              backgroundImage: user?.profileImage != null
+                                  ? NetworkImage(user!.profileImage)
+                                  : null,
+                              child: user?.profileImage == null
+                                  ? const Icon(Icons.person,
+                                      color: Colors.white, size: 18)
+                                  : null,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                    const Spacer(),
-                    GestureDetector(
-                      onTap: () {
-                        _scrollController.animateTo(
-                          0,
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeOut,
-                        );
-                      },
-                      child: Image.asset(
-                        'assets/main_icon.png',
-                        height: 30,
-                        fit: BoxFit.contain,
+                      Center(
+                        child: GestureDetector(
+                          onTap: () {
+                            _scrollController.animateTo(
+                              0,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeOut,
+                            );
+                          },
+                          child: Image.asset(
+                            'assets/main_icon.png',
+                            height: 30,
+                            fit: BoxFit.contain,
+                          ),
+                        ),
                       ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: SvgPicture.asset(
-                        'assets/notification_button.svg',
-                        width: 19,
-                        height: 19,
-                        color: Colors.white,
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: IconButton(
+                          icon: SvgPicture.asset(
+                            'assets/notification_button.svg',
+                            width: 19,
+                            height: 19,
+                            color: Colors.white,
+                          ),
+                          onPressed: _navigateToNotificationsPage,
+                          tooltip: 'Notifications',
+                        ),
                       ),
-                      onPressed: _navigateToNotificationsPage,
-                      tooltip: 'Notifications',
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
