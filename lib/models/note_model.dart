@@ -52,6 +52,9 @@ class NoteModel extends HiveObject {
   @HiveField(15)
   String? videoUrl;
 
+  @HiveField(16)
+  int zapAmount;
+
   NoteModel({
     required this.id,
     required this.content,
@@ -69,6 +72,7 @@ class NoteModel extends HiveObject {
     this.estimatedHeight,
     this.isVideo = false,
     this.videoUrl,
+    this.zapAmount = 0,
   });
 
   factory NoteModel.fromJson(Map<String, dynamic> json) {
@@ -97,6 +101,7 @@ class NoteModel extends HiveObject {
       estimatedHeight: (json['estimatedHeight'] as num?)?.toDouble(),
       isVideo: json['isVideo'] as bool? ?? false,
       videoUrl: json['videoUrl'] as String?,
+      zapAmount: json['zapAmount'] as int? ?? 0,
     );
   }
 
@@ -118,6 +123,7 @@ class NoteModel extends HiveObject {
       'estimatedHeight': estimatedHeight,
       'isVideo': isVideo,
       'videoUrl': videoUrl,
+      'zapAmount': zapAmount,
     };
   }
 }

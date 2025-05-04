@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import 'models/note_model.dart';
 import 'models/reaction_model.dart';
 import 'models/reply_model.dart';
@@ -11,6 +12,8 @@ import 'models/user_model.dart';
 import 'models/following_model.dart';
 import 'models/link_preview_model.dart';
 import 'models/notification_model.dart';
+import 'models/zap_model.dart';
+
 import 'screens/login_page.dart';
 import 'screens/feed_page.dart';
 
@@ -27,6 +30,7 @@ Future<void> main() async {
     Hive.registerAdapter(FollowingModelAdapter());
     Hive.registerAdapter(LinkPreviewModelAdapter());
     Hive.registerAdapter(NotificationModelAdapter());
+    Hive.registerAdapter(ZapModelAdapter());
 
     await Hive.openBox<LinkPreviewModel>('link_preview_cache');
 
@@ -126,6 +130,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         await Hive.openBox<UserModel>('users');
         await Hive.openBox<FollowingModel>('followingBox');
         await Hive.openBox<NotificationModel>('notifications_$npub');
+        await Hive.openBox<ZapModel>('zaps_$npub');
 
         Navigator.pushReplacement(
           context,

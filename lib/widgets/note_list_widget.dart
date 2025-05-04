@@ -49,17 +49,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
         'note_preload_done_${widget.npub}_${widget.dataType.name}';
     final preloadAlreadyDone = prefs.getBool(preloadKey) ?? false;
 
-    _dataService = DataService(
-      npub: widget.npub,
-      dataType: widget.dataType,
-      onNewNote: _handleNewNote,
-      onReactionsUpdated: _handleReactionsUpdated,
-      onRepliesUpdated: _handleRepliesUpdated,
-      onRepostsUpdated: _handleRepostsUpdated,
-      onReactionCountUpdated: (_, __) => setState(() {}),
-      onReplyCountUpdated: (_, __) => setState(() {}),
-      onRepostCountUpdated: (_, __) => setState(() {}),
-    );
+    _dataService = _createDataService();
 
     await _dataService.initialize();
     await _dataService.initializeConnections();
@@ -68,18 +58,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
       await Future.delayed(const Duration(seconds: 2));
       await _dataService.closeConnections();
 
-      _dataService = DataService(
-        npub: widget.npub,
-        dataType: widget.dataType,
-        onNewNote: _handleNewNote,
-        onReactionsUpdated: _handleReactionsUpdated,
-        onRepliesUpdated: _handleRepliesUpdated,
-        onRepostsUpdated: _handleRepostsUpdated,
-        onReactionCountUpdated: (_, __) => setState(() {}),
-        onReplyCountUpdated: (_, __) => setState(() {}),
-        onRepostCountUpdated: (_, __) => setState(() {}),
-      );
-
+      _dataService = _createDataService();
       await _dataService.initialize();
       await _dataService.initializeConnections();
 
@@ -102,16 +81,26 @@ class _NoteListWidgetState extends State<NoteListWidget>
     }
   }
 
+  DataService _createDataService() {
+    return DataService(
+      npub: widget.npub,
+      dataType: widget.dataType,
+      onNewNote: _handleNewNote,
+      onReactionsUpdated: (id, _) => setState(() {}),
+      onRepliesUpdated: (id, _) => setState(() {}),
+      onRepostsUpdated: (id, _) => setState(() {}),
+      onReactionCountUpdated: (id, _) => setState(() {}),
+      onReplyCountUpdated: (id, _) => setState(() {}),
+      onRepostCountUpdated: (id, _) => setState(() {}),
+    );
+  }
+
   void _handleNewNote(NoteModel note) {
     _pendingNotes.add(note);
     if (_preloadDone) {
       _applyPendingNotes();
     }
   }
-
-  void _handleReactionsUpdated(String noteId, _) => setState(() {});
-  void _handleRepliesUpdated(String noteId, _) => setState(() {});
-  void _handleRepostsUpdated(String noteId, _) => setState(() {});
 
   void _applyPendingNotes() {
     _pendingNotes.forEach(_dataService.addPendingNote);
@@ -194,8 +183,12 @@ class _NoteListWidgetState extends State<NoteListWidget>
           filteredNotes = notes
               .where((n) => n.timestamp.isAfter(cutoff))
               .toList()
-            ..sort((a, b) => (b.reactionCount + b.replyCount + b.repostCount)
-                .compareTo(a.reactionCount + a.replyCount + a.repostCount));
+            ..sort((a, b) =>
+                (b.reactionCount + b.replyCount + b.repostCount + b.zapAmount)
+                    .compareTo(a.reactionCount +
+                        a.replyCount +
+                        a.repostCount +
+                        a.zapAmount));
         } else if (_selectedTabIndex == 2) {
           filteredNotes = notes.where((n) => n.hasMedia).toList();
         }

@@ -10,6 +10,7 @@ import 'package:nostr/nostr.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:qiqstr/constants/relays.dart';
 import 'package:qiqstr/models/notification_model.dart';
+import 'package:qiqstr/models/zap_model.dart';
 import 'package:qiqstr/screens/profile_page.dart';
 import 'package:qiqstr/services/media_service.dart';
 import 'package:uuid/uuid.dart';
@@ -271,6 +272,7 @@ class DataService {
   final Map<String, List<ReactionModel>> reactionsMap = {};
   final Map<String, List<ReplyModel>> repliesMap = {};
   final Map<String, List<RepostModel>> repostsMap = {};
+  final Map<String, List<ZapModel>> zapsMap = {};
 
   final Map<String, CachedProfile> profileCache = {};
 
@@ -281,6 +283,7 @@ class DataService {
   Box<RepostModel>? repostsBox;
   Box<FollowingModel>? followingBox;
   Box<NotificationModel>? notificationsBox;
+  Box<ZapModel>? zapsBox;
 
   final List<Map<String, dynamic>> _pendingEvents = [];
   Timer? _batchTimer;
@@ -339,34 +342,34 @@ class DataService {
       print('[DataService] Cache loaded with ${loadedNotes.length} notes.');
     });
 
-    Future.microtask(() async {
-      await Future.wait([
-        _openHiveBox<ReactionModel>('reactions_${dataType.toString()}_$npub')
-            .then((box) => reactionsBox = box),
-        _openHiveBox<ReplyModel>('replies_${dataType.toString()}_$npub')
-            .then((box) => repliesBox = box),
-        _openHiveBox<RepostModel>('reposts_${dataType.toString()}_$npub')
-            .then((box) => repostsBox = box),
-        _openHiveBox<UserModel>('users').then((box) => usersBox = box),
-        _openHiveBox<FollowingModel>('followingBox')
-            .then((box) => followingBox = box),
-        _openHiveBox<NotificationModel>('notifications_$npub')
-            .then((box) => notificationsBox = box),
-      ]);
+    await Future.wait([
+      _openHiveBox<ReactionModel>('reactions_${dataType.toString()}_$npub')
+          .then((box) => reactionsBox = box),
+      _openHiveBox<ReplyModel>('replies_${dataType.toString()}_$npub')
+          .then((box) => repliesBox = box),
+      _openHiveBox<RepostModel>('reposts_${dataType.toString()}_$npub')
+          .then((box) => repostsBox = box),
+      _openHiveBox<ZapModel>('zaps_${dataType.toString()}_$npub')
+          .then((box) => zapsBox = box),
+      _openHiveBox<UserModel>('users').then((box) => usersBox = box),
+      _openHiveBox<FollowingModel>('followingBox')
+          .then((box) => followingBox = box),
+      _openHiveBox<NotificationModel>('notifications_$npub')
+          .then((box) => notificationsBox = box),
+    ]);
 
-      _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
+    _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
 
-      await _fetchUserData();
+    await _fetchUserData();
 
-      if (dataType == DataType.Feed) {
-        _startNotificationSubscription();
-      }
+    if (dataType == DataType.Feed) {
+      _startNotificationSubscription();
+    }
 
-      await reloadInteractionCounts();
+    await reloadInteractionCounts();
 
-      _startCacheCleanup();
-      _isInitialized = true;
-    });
+    _startCacheCleanup();
+    _isInitialized = true;
   }
 
   Future<void> reloadInteractionCounts() async {
@@ -824,6 +827,7 @@ class DataService {
     await _subscribeToAllReactions();
     await _subscribeToAllReplies();
     await _subscribeToAllReposts();
+    await _subscribeToAllZaps();
 
     if (dataType == DataType.Feed) {
       _startRealTimeSubscription(targetNpubs);
@@ -862,6 +866,8 @@ class DataService {
     await _subscribeToAllReactions();
     await _subscribeToAllReplies();
     await _subscribeToAllReposts();
+    await _subscribeToAllZaps();
+
     _startRealTimeSubscription(targetNpubs);
   }
 
@@ -1115,6 +1121,15 @@ class DataService {
       onNewNote?.call(newNote);
       addPendingNote(newNote);
     }
+
+    Future.microtask(() async {
+      await Future.wait([
+        fetchReactionsForEvents([newNote.id]),
+        fetchRepliesForEvents([newNote.id]),
+        fetchRepostsForEvents([newNote.id]),
+        fetchZapsForEvents([newNote.id]),
+      ]);
+    });
   }
 
   String? _extractRootEventId(List<dynamic> tags) {
@@ -1602,6 +1617,14 @@ class DataService {
     _itemsTree.add(note);
   }
 
+  Future<void> _subscribeToAllZaps() async {
+    if (_isClosed) return;
+    List<String> allEventIds = notes.map((n) => n.id).toList();
+    if (allEventIds.isEmpty) return;
+    final filter = Filter(kinds: [9735], e: allEventIds, limit: 1000);
+    await _broadcastRequest(_createRequest(filter));
+  }
+
   Future<void> _subscribeToAllReactions() async {
     if (_isClosed) return;
     String subscriptionId = generateUUID();
@@ -2038,6 +2061,8 @@ class DataService {
         note.reactionCount = reactionsMap[note.id]?.length ?? 0;
         note.replyCount = repliesMap[note.id]?.length ?? 0;
         note.repostCount = repostsMap[note.id]?.length ?? 0;
+        note.zapAmount =
+            zapsMap[note.id]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
       }
 
       notesNotifier.value = _itemsTree.toList();
@@ -2046,16 +2071,84 @@ class DataService {
       List<String> cachedEventIds =
           limitedNotes.map((note) => note.id).toList();
 
-      await Future.wait([
-        fetchReactionsForEvents(cachedEventIds),
-        fetchRepliesForEvents(cachedEventIds),
-        fetchRepostsForEvents(cachedEventIds)
-      ]);
+      Future.microtask(() async {
+        await Future.wait([
+          fetchReactionsForEvents(cachedEventIds),
+          fetchRepliesForEvents(cachedEventIds),
+          fetchRepostsForEvents(cachedEventIds),
+          fetchZapsForEvents(cachedEventIds),
+        ]);
+      });
     } catch (e) {
       print('[DataService ERROR] Error loading notes from cache: $e');
     }
 
     await _fetchProfilesForAllData();
+  }
+
+  Future<void> loadZapsFromCache() async {
+    if (zapsBox == null || !zapsBox!.isOpen) return;
+    try {
+      final allZaps = zapsBox!.values.cast<ZapModel>().toList();
+      if (allZaps.isEmpty) return;
+
+      for (var zap in allZaps) {
+        zapsMap.putIfAbsent(zap.targetEventId, () => []);
+        if (!zapsMap[zap.targetEventId]!.any((r) => r.id == zap.id)) {
+          zapsMap[zap.targetEventId]!.add(zap);
+        }
+      }
+    } catch (e) {
+      print('[DataService ERROR] Error loading zaps from cache: $e');
+    }
+  }
+
+  Future<void> _handleZapEvent(Map<String, dynamic> eventData) async {
+    try {
+      final zap = ZapModel.fromEvent(eventData);
+      final key = zap.targetEventId;
+
+      if (key.isEmpty) {
+        return;
+      }
+
+      if (!zapsMap.containsKey(key)) {
+        zapsMap[key] = [];
+      }
+
+      if (zapsMap[key]!.any((z) => z.id == zap.id)) return;
+
+      zapsMap[key]!.add(zap);
+      await zapsBox?.put(zap.id, zap);
+
+      final note = notes.firstWhereOrNull((n) => n.id == key);
+      if (note != null) {
+        note.zapAmount = zapsMap[key]!.fold(0, (sum, z) => sum + z.amount);
+        notesNotifier.value = _itemsTree.toList();
+      }
+    } catch (e) {
+      print("error: $e");
+    }
+  }
+
+  Future<void> fetchZapsForEvents(List<String> eventIdsToFetch) async {
+    if (_isClosed) return;
+    await _fetchProcessorReady.future;
+
+    for (final targetEventId in eventIdsToFetch) {
+      final zaps = zapsMap[targetEventId] ?? [];
+      final note = notes.firstWhereOrNull((n) => n.id == targetEventId);
+      if (note != null) {
+        note.zapAmount = zaps.fold<int>(0, (sum, zap) => sum + zap.amount);
+      }
+    }
+    notesNotifier.value = _itemsTree.toList();
+
+    _fetchProcessorSendPort.send({
+      'type': 'zap',
+      'eventIds': eventIdsToFetch,
+      'priority': 2,
+    });
   }
 
   Future<void> loadReactionsFromCache() async {
@@ -2097,11 +2190,14 @@ class DataService {
 
       final replyIds = allReplies.map((r) => r.id).toList();
       if (replyIds.isNotEmpty) {
-        await Future.wait([
-          fetchReactionsForEvents(replyIds),
-          fetchRepliesForEvents(replyIds),
-          fetchRepostsForEvents(replyIds),
-        ]);
+        Future.microtask(() async {
+          await Future.wait([
+            fetchReactionsForEvents(replyIds),
+            fetchRepliesForEvents(replyIds),
+            fetchRepostsForEvents(replyIds),
+            fetchZapsForEvents(replyIds),
+          ]);
+        });
       }
     } catch (e) {
       print('[DataService ERROR] Error loading replies from cache: $e');
@@ -2229,6 +2325,8 @@ class DataService {
         await _handleFollowingEvent(eventData);
       } else if (kind == 7) {
         await _handleReactionEvent(eventData);
+      } else if (kind == 9735) {
+        await _handleZapEvent(eventData);
       } else if (kind == 1) {
         if ((eventData['tags'] as List<dynamic>)
             .any((tag) => tag is List && tag.isNotEmpty && tag[0] == 'e')) {
@@ -2266,6 +2364,10 @@ class DataService {
       } else if (type == 'repost') {
         request = Request(generateUUID(), [
           Filter(kinds: [6], e: eventIds, limit: 1000)
+        ]);
+      } else if (type == 'zap') {
+        request = Request(generateUUID(), [
+          Filter(kinds: [9735], e: eventIds, limit: 1000)
         ]);
       } else {
         return;

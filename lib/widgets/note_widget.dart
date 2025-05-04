@@ -535,7 +535,7 @@ class _NoteWidgetState extends State<NoteWidget>
                                   color: _isZapGlowing
                                       ? Colors.amber.shade300
                                       : Colors.white,
-                                  count: 0,
+                                  count: updatedNote.zapAmount,
                                   onTap: _handleZapTap,
                                 ),
                               ],
