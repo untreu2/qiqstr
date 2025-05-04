@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
+import 'package:qiqstr/utils/verify_nip05.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qiqstr/models/user_model.dart';
@@ -38,6 +39,7 @@ class NoteWidget extends StatefulWidget {
 
 class _NoteWidgetState extends State<NoteWidget>
     with AutomaticKeepAliveClientMixin {
+  bool? _isVerified;
   @override
   bool get wantKeepAlive => true;
   bool _isReactionGlowing = false;
@@ -58,6 +60,26 @@ class _NoteWidgetState extends State<NoteWidget>
     if (d.inDays < 30) return '${(d.inDays / 7).floor()}w';
     if (d.inDays < 365) return '${(d.inDays / 30).floor()}mo';
     return '${(d.inDays / 365).floor()}y';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _verifyNip05IfNeeded();
+  }
+
+  Future<void> _verifyNip05IfNeeded() async {
+    final profileData =
+        await widget.dataService.getCachedUserProfile(widget.note.author);
+    final user = UserModel.fromCachedProfile(widget.note.author, profileData);
+    if (user.nip05.contains('@')) {
+      final result = await verifyNip05(user.nip05, user.npub);
+      if (mounted) {
+        setState(() {
+          _isVerified = result;
+        });
+      }
+    }
   }
 
   void _navigateToMentionProfile(String id) {
@@ -99,7 +121,7 @@ class _NoteWidgetState extends State<NoteWidget>
               spans.add(TextSpan(
                 text: url,
                 style: const TextStyle(
-                  color: Colors.amberAccent,
+                  color: Color(0xFFECB200),
                   fontStyle: FontStyle.normal,
                   fontSize: 15.5,
                 ),
@@ -125,7 +147,7 @@ class _NoteWidgetState extends State<NoteWidget>
               TextSpan(
                 text: '@$username',
                 style: const TextStyle(
-                  color: Colors.amberAccent,
+                  color: Color(0xFFECB200),
                   fontSize: 15.5,
                   fontWeight: FontWeight.w500,
                   fontStyle: FontStyle.normal,
@@ -356,8 +378,7 @@ class _NoteWidgetState extends State<NoteWidget>
                 const SizedBox(height: 2),
                 if (updatedNote.isRepost && updatedNote.repostedBy != null) ...[
                   Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: _buildRepostInfo(
                         updatedNote.repostedBy!, updatedNote.repostTimestamp),
                   ),
@@ -381,7 +402,7 @@ class _NoteWidgetState extends State<NoteWidget>
                           return GestureDetector(
                             onTap: () => _navigateToProfile(updatedNote.author),
                             child: Padding(
-                              padding: const EdgeInsets.only(top: 2),
+                              padding: const EdgeInsets.only(top: 8),
                               child: CircleAvatar(
                                 radius: 22,
                                 backgroundImage: imgUrl.isNotEmpty
@@ -424,39 +445,48 @@ class _NoteWidgetState extends State<NoteWidget>
                                         crossAxisAlignment:
                                             CrossAxisAlignment.start,
                                         children: [
-                                          RichText(
-                                            text: TextSpan(
-                                              children: [
-                                                TextSpan(
-                                                  text: user.name.length > 25
-                                                      ? '${user.name.substring(0, 25)}'
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.center,
+                                            children: [
+                                              Flexible(
+                                                child: Text(
+                                                  user.name.length > 25
+                                                      ? user.name
+                                                          .substring(0, 25)
                                                       : user.name,
                                                   style: const TextStyle(
                                                     fontSize: 16,
                                                     fontWeight: FontWeight.w600,
                                                     color: Colors.white,
                                                   ),
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                 ),
-                                                if (user.nip05.isNotEmpty &&
-                                                    user.nip05.contains('@'))
-                                                  TextSpan(
-                                                    text:
-                                                        ' @${user.nip05.split('@').last}',
-                                                    style: const TextStyle(
-                                                      fontSize: 15,
-                                                      color: Colors.grey,
-                                                    ),
-                                                  ),
-                                                TextSpan(
-                                                  text:
-                                                      ' • ${_formatTimestamp(updatedNote.timestamp)}',
+                                              ),
+                                              if (_isVerified == true &&
+                                                  user.nip05.isNotEmpty &&
+                                                  user.nip05.contains('@'))
+                                                const Padding(
+                                                  padding:
+                                                      EdgeInsets.only(left: 4),
+                                                  child: Icon(Icons.verified,
+                                                      size: 16,
+                                                      color: Color(0xFFECB200)),
+                                                ),
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                    left: 6),
+                                                child: Text(
+                                                  '• ${_formatTimestamp(updatedNote.timestamp)}',
                                                   style: const TextStyle(
                                                     fontSize: 12,
                                                     color: Colors.grey,
                                                   ),
                                                 ),
-                                              ],
-                                            ),
+                                              ),
+                                            ],
                                           ),
                                         ],
                                       ),
@@ -533,7 +563,7 @@ class _NoteWidgetState extends State<NoteWidget>
                                   scale: _zapScale,
                                   svg: 'assets/zap_button.svg',
                                   color: _isZapGlowing
-                                      ? Colors.amber.shade300
+                                      ? Color(0xFFECB200)
                                       : Colors.white,
                                   count: updatedNote.zapAmount,
                                   onTap: _handleZapTap,

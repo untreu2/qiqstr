@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/models/user_model.dart';
+import 'package:qiqstr/utils/verify_nip05.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ProfileInfoWidget extends StatefulWidget {
@@ -14,6 +15,25 @@ class ProfileInfoWidget extends StatefulWidget {
 }
 
 class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
+  bool? _isVerified;
+
+  @override
+  void initState() {
+    super.initState();
+    _verifyIfNeeded();
+  }
+
+  Future<void> _verifyIfNeeded() async {
+    final nip05 = widget.user.nip05;
+    final pubkey = widget.user.npub;
+    if (nip05.contains('@')) {
+      final result = await verifyNip05(nip05, pubkey);
+      setState(() {
+        _isVerified = result;
+      });
+    }
+  }
+
   Future<void> _onOpen(LinkableElement link) async {
     final uri = Uri.parse(link.url);
     if (await canLaunchUrl(uri)) {
@@ -42,12 +62,12 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             height: 130,
             fit: BoxFit.cover,
             placeholder: (context, url) => Container(
-              height: 160,
+              height: 130,
               width: screenWidth,
               color: Colors.grey[700],
             ),
             errorWidget: (context, url, error) => Container(
-              height: 160,
+              height: 130,
               width: screenWidth,
               color: Colors.black,
               child: const Icon(Icons.error, color: Colors.red),
@@ -81,25 +101,53 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                 Row(
                   children: [
                     Flexible(
-                      child: RichText(
-                        text: TextSpan(
-                          children: [
-                            TextSpan(
-                              text: user.name.isNotEmpty
-                                  ? user.name
-                                  : user.nip05.split('@').first,
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: RichText(
+                              text: TextSpan(
+                                style: const TextStyle(fontSize: 24),
+                                children: [
+                                  TextSpan(
+                                    text: user.name.isNotEmpty
+                                        ? user.name
+                                        : user.nip05.split('@').first,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  if (_isVerified == true &&
+                                      user.nip05.contains('@'))
+                                    const WidgetSpan(
+                                      alignment: PlaceholderAlignment.middle,
+                                      child: Padding(
+                                        padding:
+                                            EdgeInsets.symmetric(horizontal: 6),
+                                        child: Icon(
+                                          Icons.verified,
+                                          color: Color(0xFFECB200),
+                                          size: 20,
+                                        ),
+                                      ),
+                                    ),
+                                  if (user.nip05.isNotEmpty &&
+                                      user.nip05.contains('@'))
+                                    TextSpan(
+                                      text: '@${user.nip05.split('@').last}',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFFECB200),
+                                        decoration: _isVerified == false
+                                            ? TextDecoration.lineThrough
+                                            : null,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
-                            if (user.nip05.isNotEmpty &&
-                                user.nip05.contains('@'))
-                              const TextSpan(text: ' '),
-                            _buildDomainPart(user),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -108,20 +156,15 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                 if (user.lud16.isNotEmpty)
                   Text(
                     user.lud16,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.amber[600],
-                    ),
+                    style: TextStyle(fontSize: 13, color: Colors.amber[600]),
                   ),
                 if (user.about.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8.0),
                     child: Text(
                       user.about,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.white70,
-                      ),
+                      style:
+                          const TextStyle(fontSize: 14, color: Colors.white70),
                     ),
                   ),
                 if (user.website.isNotEmpty)
@@ -129,7 +172,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                     padding: const EdgeInsets.only(top: 8.0, bottom: 1),
                     child: Row(
                       children: [
-                        const Icon(Icons.link, color: Colors.amber, size: 14),
+                        const Icon(Icons.link,
+                            color: Color(0xFFECB200), size: 14),
                         const SizedBox(width: 4),
                         Flexible(
                           child: Linkify(
@@ -137,11 +181,11 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                             text: websiteUrl,
                             style: const TextStyle(
                               fontSize: 13,
-                              color: Colors.amber,
+                              color: Color(0xFFECB200),
                             ),
                             linkStyle: const TextStyle(
                               fontSize: 13,
-                              color: Colors.amber,
+                              color: Color(0xFFECB200),
                               decoration: TextDecoration.underline,
                             ),
                           ),
@@ -153,22 +197,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  InlineSpan _buildDomainPart(UserModel user) {
-    if (user.nip05.isEmpty || !user.nip05.contains('@')) {
-      return const TextSpan(text: '');
-    }
-
-    final domain = '@${user.nip05.split('@').last}';
-    return TextSpan(
-      text: domain,
-      style: const TextStyle(
-        fontSize: 24,
-        fontWeight: FontWeight.bold,
-        color: Color(0xFFBB86FC),
       ),
     );
   }

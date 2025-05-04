@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'models/note_model.dart';
 import 'models/reaction_model.dart';
@@ -46,24 +45,23 @@ class QiqstrApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final baseTheme = Theme.of(context).textTheme;
-
     return MaterialApp(
       title: 'Qiqstr',
       theme: ThemeData(
         scaffoldBackgroundColor: Colors.black,
-        textTheme: GoogleFonts.interTextTheme(baseTheme)
+        textTheme: ThemeData.dark()
+            .textTheme
             .apply(
               bodyColor: Colors.white,
               displayColor: Colors.white,
             )
             .copyWith(
-              bodyLarge: GoogleFonts.inter(height: 2.1),
-              bodyMedium: GoogleFonts.inter(height: 2.1),
-              bodySmall: GoogleFonts.inter(height: 2.1),
-              titleLarge: GoogleFonts.inter(height: 2.1),
-              titleMedium: GoogleFonts.inter(height: 2.1),
-              titleSmall: GoogleFonts.inter(height: 2.1),
+              bodyLarge: const TextStyle(height: 2.1),
+              bodyMedium: const TextStyle(height: 2.1),
+              bodySmall: const TextStyle(height: 2.1),
+              titleLarge: const TextStyle(height: 2.1),
+              titleMedium: const TextStyle(height: 2.1),
+              titleSmall: const TextStyle(height: 2.1),
             ),
         colorScheme: const ColorScheme.dark(
           primary: Colors.white,
@@ -75,11 +73,11 @@ class QiqstrApp extends ConsumerWidget {
           onSurface: Colors.white,
           onError: Colors.black,
         ),
-        appBarTheme: AppBarTheme(
+        appBarTheme: const AppBarTheme(
           backgroundColor: Colors.black,
           elevation: 0,
           centerTitle: true,
-          titleTextStyle: GoogleFonts.inter(
+          titleTextStyle: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w600,
             color: Colors.white,
@@ -176,12 +174,10 @@ class HiveErrorApp extends StatelessWidget {
     return MaterialApp(
       theme: ThemeData.dark().copyWith(
         scaffoldBackgroundColor: Colors.black,
-        textTheme: GoogleFonts.interTextTheme(
-          ThemeData.dark().textTheme,
-        ).copyWith(
-          bodyLarge: GoogleFonts.inter(height: 2.1),
-          bodyMedium: GoogleFonts.inter(height: 2.1),
-        ),
+        textTheme: ThemeData.dark().textTheme.copyWith(
+              bodyLarge: const TextStyle(height: 2.1),
+              bodyMedium: const TextStyle(height: 2.1),
+            ),
       ),
       home: Scaffold(
         appBar: AppBar(

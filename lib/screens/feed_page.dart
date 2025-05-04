@@ -232,7 +232,7 @@ class _FeedPageState extends State<FeedPage> {
                   width: 56,
                   height: 56,
                   decoration: BoxDecoration(
-                    color: Colors.amber.withOpacity(0.3),
+                    color: Color(0xFFECB200).withOpacity(0.4),
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(
