@@ -149,12 +149,19 @@ class _FeedPageState extends State<FeedPage> {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Builder(
-                      builder: (context) => IconButton(
-                        icon: const Icon(Icons.menu,
-                            color: Colors.white, size: 24),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        onPressed: () => Scaffold.of(context).openDrawer(),
+                      builder: (context) => GestureDetector(
+                        onTap: () => Scaffold.of(context).openDrawer(),
+                        child: CircleAvatar(
+                          radius: 16,
+                          backgroundColor: Colors.white24,
+                          backgroundImage: user?.profileImage != null
+                              ? NetworkImage(user!.profileImage)
+                              : null,
+                          child: user?.profileImage == null
+                              ? const Icon(Icons.person,
+                                  color: Colors.white, size: 18)
+                              : null,
+                        ),
                       ),
                     ),
                     const Spacer(),
