@@ -168,15 +168,20 @@ class _FeedPageState extends State<FeedPage> {
                       },
                       child: Image.asset(
                         'assets/main_icon.png',
-                        height: 32,
+                        height: 30,
                         fit: BoxFit.contain,
                       ),
                     ),
                     const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.notifications_none,
-                          color: Colors.white, size: 24),
+                      icon: SvgPicture.asset(
+                        'assets/notification_button.svg',
+                        width: 19,
+                        height: 19,
+                        color: Colors.white,
+                      ),
                       onPressed: _navigateToNotificationsPage,
+                      tooltip: 'Notifications',
                     ),
                   ],
                 ),
