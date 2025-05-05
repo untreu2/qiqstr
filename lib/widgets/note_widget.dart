@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
+import 'package:qiqstr/screens/note_statistics_page.dart';
 import 'package:qiqstr/utils/verify_nip05.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -84,6 +85,18 @@ class _NoteWidgetState extends State<NoteWidget>
 
   void _navigateToMentionProfile(String id) {
     widget.dataService.openUserProfile(context, id);
+  }
+
+  void _navigateToStatisticsPage() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => NoteStatisticsPage(
+          note: widget.note,
+          dataService: widget.dataService,
+        ),
+      ),
+    );
   }
 
   Widget _buildContentText(Map<String, dynamic> parsed) {
@@ -468,12 +481,16 @@ class _NoteWidgetState extends State<NoteWidget>
                                               if (_isVerified == true &&
                                                   user.nip05.isNotEmpty &&
                                                   user.nip05.contains('@'))
-                                                const Padding(
-                                                  padding:
-                                                      EdgeInsets.only(left: 4),
-                                                  child: Icon(Icons.verified,
-                                                      size: 16,
-                                                      color: Color(0xFFECB200)),
+                                                Transform.translate(
+                                                  offset: const Offset(0, -1.0),
+                                                  child: const Padding(
+                                                    padding: EdgeInsets.only(
+                                                        left: 4),
+                                                    child: Icon(Icons.verified,
+                                                        size: 16,
+                                                        color:
+                                                            Color(0xFFECB200)),
+                                                  ),
                                                 ),
                                               Padding(
                                                 padding: const EdgeInsets.only(
@@ -567,6 +584,14 @@ class _NoteWidgetState extends State<NoteWidget>
                                       : Colors.white,
                                   count: updatedNote.zapAmount,
                                   onTap: _handleZapTap,
+                                ),
+                                GestureDetector(
+                                  onTap: _navigateToStatisticsPage,
+                                  child: const Padding(
+                                    padding: EdgeInsets.only(left: 6),
+                                    child: Icon(Icons.bar_chart,
+                                        size: 18, color: Colors.grey),
+                                  ),
                                 ),
                               ],
                             ),
