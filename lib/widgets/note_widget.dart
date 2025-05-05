@@ -263,6 +263,7 @@ class _NoteWidgetState extends State<NoteWidget>
   }
 
   void _handleReactionTap() async {
+    if (_hasReacted()) return;
     _animateReactionButton();
     try {
       await widget.dataService.sendReaction(widget.note.id, '💜');
