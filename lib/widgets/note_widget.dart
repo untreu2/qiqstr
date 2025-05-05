@@ -388,7 +388,6 @@ class _NoteWidgetState extends State<NoteWidget>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 2),
                 if (updatedNote.isRepost && updatedNote.repostedBy != null) ...[
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -512,9 +511,11 @@ class _NoteWidgetState extends State<NoteWidget>
                                 );
                               },
                             ),
-                            const SizedBox(height: 2),
                             if ((parsed['textParts'] as List).isNotEmpty)
-                              _buildContentText(parsed),
+                              Padding(
+                                padding: const EdgeInsets.all(0.0),
+                                child: _buildContentText(parsed),
+                              ),
                             if ((parsed['mediaUrls'] as List).isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(top: 8),
