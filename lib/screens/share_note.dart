@@ -14,10 +14,26 @@ class ShareNotePage extends StatefulWidget {
 
 class _ShareNotePageState extends State<ShareNotePage> {
   final TextEditingController _noteController = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
   bool _isPosting = false;
   bool _isMediaUploading = false;
   final List<String> _mediaUrls = [];
   final String _serverUrl = "https://nostr.build";
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
 
   Future<void> _selectMedia() async {
     final result = await FilePicker.platform.pickFiles(
@@ -89,15 +105,44 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   @override
-  void dispose() {
-    _noteController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        actions: [
+          IconButton(
+            onPressed: _selectMedia,
+            icon: const Icon(Icons.attach_file, color: Color(0xFFECB200)),
+            tooltip: 'Add Media',
+          ),
+          TextButton(
+            onPressed: _isPosting ? null : _shareNote,
+            child: _isPosting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Text(
+                    'Post!',
+                    style: TextStyle(
+                      color: Color(0xFFECB200),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -157,7 +202,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
               const SizedBox(height: 16),
               Expanded(
                 child: TextField(
-                  autofocus: true,
+                  focusNode: _focusNode,
                   controller: _noteController,
                   maxLines: null,
                   expands: true,
@@ -214,61 +259,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
           ),
         ),
       ),
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            ClipOval(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFECB200).withOpacity(0.8),
-                    shape: BoxShape.circle,
-                  ),
-                  child: IconButton(
-                    onPressed: _selectMedia,
-                    icon: const Icon(Icons.attach_file, color: Colors.white),
-                    tooltip: 'Add Media',
-                  ),
-                ),
-              ),
-            ),
-            ClipOval(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFECB200).withOpacity(0.8),
-                    shape: BoxShape.circle,
-                  ),
-                  child: IconButton(
-                    onPressed: _isPosting ? null : _shareNote,
-                    icon: _isPosting
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : const Icon(Icons.send, color: Colors.white),
-                    tooltip: 'Share Note',
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 }
