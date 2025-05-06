@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/data_service.dart';
@@ -96,6 +97,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.black,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -107,7 +109,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.start,
                       children: _mediaUrls.map((url) {
                         return Padding(
                           padding: const EdgeInsets.only(right: 8.0),
@@ -120,14 +121,12 @@ class _ShareNotePageState extends State<ShareNotePage> {
                                   width: 160,
                                   height: 160,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    return Container(
-                                      width: 160,
-                                      height: 160,
-                                      color: Colors.grey[300],
-                                      child: const Icon(Icons.broken_image),
-                                    );
-                                  },
+                                  errorBuilder: (_, __, ___) => Container(
+                                    width: 160,
+                                    height: 160,
+                                    color: Colors.grey[300],
+                                    child: const Icon(Icons.broken_image),
+                                  ),
                                 ),
                               ),
                               Positioned(
@@ -165,9 +164,12 @@ class _ShareNotePageState extends State<ShareNotePage> {
                   textAlignVertical: TextAlignVertical.top,
                   decoration: const InputDecoration(
                     hintText: "Write your note here...",
+                    hintStyle: TextStyle(color: Colors.white54),
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.zero,
                   ),
+                  style: const TextStyle(color: Colors.white),
+                  cursorColor: Colors.white,
                 ),
               ),
               AnimatedSwitcher(
@@ -217,19 +219,51 @@ class _ShareNotePageState extends State<ShareNotePage> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            FloatingActionButton(
-              onPressed: _selectMedia,
-              heroTag: 'addMedia',
-              child: const Icon(Icons.attach_file),
+            ClipOval(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECB200).withOpacity(0.8),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    onPressed: _selectMedia,
+                    icon: const Icon(Icons.attach_file, color: Colors.white),
+                    tooltip: 'Add Media',
+                  ),
+                ),
+              ),
             ),
-            FloatingActionButton(
-              onPressed: _shareNote,
-              heroTag: 'shareNote',
-              child: _isPosting
-                  ? const CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    )
-                  : const Icon(Icons.send),
+            ClipOval(
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECB200).withOpacity(0.8),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    onPressed: _isPosting ? null : _shareNote,
+                    icon: _isPosting
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(Icons.send, color: Colors.white),
+                    tooltip: 'Share Note',
+                  ),
+                ),
+              ),
             ),
           ],
         ),
