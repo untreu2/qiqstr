@@ -1676,6 +1676,160 @@ class DataService {
     return fileURL;
   }
 
+  Future<void> sendProfileEdit({
+    required String name,
+    required String about,
+    required String picture,
+    String nip05 = '',
+    String banner = '',
+    String lud16 = '',
+    String website = '',
+  }) async {
+    if (_isClosed) return;
+
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found.');
+      }
+
+      final Map<String, dynamic> profileContent = {
+        'name': name,
+        'about': about,
+        'picture': picture,
+      };
+
+      if (nip05.isNotEmpty) profileContent['nip05'] = nip05;
+      if (banner.isNotEmpty) profileContent['banner'] = banner;
+      if (lud16.isNotEmpty) profileContent['lud16'] = lud16;
+      if (website.isNotEmpty) profileContent['website'] = website;
+
+      final event = Event.from(
+        kind: 0,
+        tags: [],
+        content: jsonEncode(profileContent),
+        privkey: privateKey,
+      );
+
+      await _socketManager.broadcast(event.serialize());
+
+      final updatedAt =
+          DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000);
+
+      final userModel = UserModel(
+        npub: event.pubkey,
+        name: name,
+        about: about,
+        profileImage: picture,
+        nip05: nip05,
+        banner: banner,
+        lud16: lud16,
+        website: website,
+        updatedAt: updatedAt,
+      );
+
+      profileCache[event.pubkey] = CachedProfile(
+        profileContent.map((key, value) => MapEntry(key, value.toString())),
+        updatedAt,
+      );
+      await usersBox?.put(event.pubkey, userModel);
+
+      print('[DataService] Profile updated and sent successfully.');
+    } catch (e) {
+      print('[DataService ERROR] Error sending profile edit: $e');
+      throw e;
+    }
+  }
+
+  Future<void> sendFollow(String followNpub, String relayUrl,
+      {String petname = ''}) async {
+    if (_isClosed) return;
+
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found.');
+      }
+
+      final currentFollowing = await getFollowingList(npub);
+      if (currentFollowing.contains(followNpub)) {
+        print('[DataService] Already following $followNpub');
+        return;
+      }
+
+      currentFollowing.add(followNpub);
+
+      final tags = currentFollowing
+          .map((pubkey) =>
+              ['p', pubkey, relayUrl, petname.isNotEmpty ? petname : ''])
+          .toList();
+
+      final event = Event.from(
+        kind: 3,
+        tags: tags,
+        content: "",
+        privkey: privateKey,
+      );
+
+      await _socketManager.broadcast(event.serialize());
+
+      final updatedFollowingModel = FollowingModel(
+        pubkeys: currentFollowing,
+        updatedAt: DateTime.now(),
+        npub: npub,
+      );
+      await followingBox?.put('following_$npub', updatedFollowingModel);
+
+      print('[DataService] Follow event sent and following list updated.');
+    } catch (e) {
+      print('[DataService ERROR] Error sending follow: $e');
+      throw e;
+    }
+  }
+
+  Future<void> sendUnfollow(String unfollowNpub) async {
+    if (_isClosed) return;
+
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found.');
+      }
+
+      final currentFollowing = await getFollowingList(npub);
+      if (!currentFollowing.contains(unfollowNpub)) {
+        print('[DataService] Not following $unfollowNpub');
+        return;
+      }
+
+      currentFollowing.remove(unfollowNpub);
+
+      final tags =
+          currentFollowing.map((pubkey) => ['p', pubkey, '', '']).toList();
+
+      final event = Event.from(
+        kind: 3,
+        tags: tags,
+        content: "",
+        privkey: privateKey,
+      );
+
+      await _socketManager.broadcast(event.serialize());
+
+      final updatedFollowingModel = FollowingModel(
+        pubkeys: currentFollowing,
+        updatedAt: DateTime.now(),
+        npub: npub,
+      );
+      await followingBox?.put('following_$npub', updatedFollowingModel);
+
+      print('[DataService] Unfollow event sent and following list updated.');
+    } catch (e) {
+      print('[DataService ERROR] Error sending unfollow: $e');
+      throw e;
+    }
+  }
+
   Future<void> sendReaction(
       String targetEventId, String reactionContent) async {
     if (_isClosed) return;
