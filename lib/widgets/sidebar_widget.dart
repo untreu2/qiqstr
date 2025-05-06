@@ -6,6 +6,7 @@ import 'package:qiqstr/utils/logout.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/screens/discover_page.dart';
+import 'package:qiqstr/utils/verify_nip05.dart';
 
 class SidebarWidget extends StatefulWidget {
   final UserModel? user;
@@ -18,11 +19,13 @@ class SidebarWidget extends StatefulWidget {
 
 class _SidebarWidgetState extends State<SidebarWidget> {
   String? npub;
+  bool? _isVerified;
 
   @override
   void initState() {
     super.initState();
     _loadNpub();
+    _verifyNip05IfNeeded();
   }
 
   Future<void> _loadNpub() async {
@@ -32,6 +35,21 @@ class _SidebarWidgetState extends State<SidebarWidget> {
       setState(() {
         npub = storedNpub;
       });
+    }
+  }
+
+  Future<void> _verifyNip05IfNeeded() async {
+    final user = widget.user;
+    if (user != null &&
+        user.nip05.isNotEmpty &&
+        user.nip05.contains('@') &&
+        user.npub.isNotEmpty) {
+      final result = await verifyNip05(user.nip05, user.npub);
+      if (mounted) {
+        setState(() {
+          _isVerified = result;
+        });
+      }
     }
   }
 
@@ -68,14 +86,33 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              widget.user!.name,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    widget.user!.name,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (_isVerified == true)
+                                  Transform.translate(
+                                    offset: const Offset(0, -1.0),
+                                    child: const Padding(
+                                      padding: EdgeInsets.only(left: 4),
+                                      child: Icon(
+                                        Icons.verified,
+                                        size: 16,
+                                        color: Color(0xFFECB200),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                             if (widget.user!.nip05.isNotEmpty)
                               Text(
