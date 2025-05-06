@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/models/user_model.dart';
@@ -33,29 +34,28 @@ class _FeedPageState extends State<FeedPage> {
   void initState() {
     super.initState();
     dataService = DataService(npub: widget.npub, dataType: DataType.Feed);
-    _loadUserProfile();
-    _checkFirstOpen();
+    _scrollController = ScrollController()..addListener(_scrollListener);
 
-    _scrollController = ScrollController();
-    _scrollController.addListener(() {
-      if (_scrollController.position.userScrollDirection ==
-          ScrollDirection.reverse) {
-        if (_showAppBar || _showFAB) {
-          setState(() {
-            _showAppBar = false;
-            _showFAB = false;
-          });
-        }
-      } else if (_scrollController.position.userScrollDirection ==
-          ScrollDirection.forward) {
-        if (!_showAppBar || !_showFAB) {
-          setState(() {
-            _showAppBar = true;
-            _showFAB = true;
-          });
-        }
-      }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadUserProfile();
+      _checkFirstOpen();
     });
+  }
+
+  void _scrollListener() {
+    final direction = _scrollController.position.userScrollDirection;
+    if (direction == ScrollDirection.reverse && (_showAppBar || _showFAB)) {
+      setState(() {
+        _showAppBar = false;
+        _showFAB = false;
+      });
+    } else if (direction == ScrollDirection.forward &&
+        (!_showAppBar || !_showFAB)) {
+      setState(() {
+        _showAppBar = true;
+        _showFAB = true;
+      });
+    }
   }
 
   @override
@@ -71,15 +71,6 @@ class _FeedPageState extends State<FeedPage> {
     if (!alreadyOpened) {
       isFirstOpen = true;
       await prefs.setBool('feed_page_opened', true);
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (mounted) setState(() {});
-      });
-      Future.delayed(const Duration(milliseconds: 650), () {
-        if (mounted) setState(() {});
-      });
-      Future.delayed(const Duration(milliseconds: 900), () {
-        if (mounted) setState(() {});
-      });
     }
   }
 
@@ -87,21 +78,18 @@ class _FeedPageState extends State<FeedPage> {
     try {
       await dataService.initialize();
       final profileData = await dataService.getCachedUserProfile(widget.npub);
-      if (mounted) {
-        setState(() {
-          user = UserModel.fromCachedProfile(widget.npub, profileData);
-        });
-      }
-    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        user = UserModel.fromCachedProfile(widget.npub, profileData);
+      });
+    } catch (_) {
       if (mounted) {
         setState(() {
           errorMessage = 'An error occurred while loading profile.';
         });
       }
     } finally {
-      if (mounted) {
-        setState(() => isLoading = false);
-      }
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -136,7 +124,7 @@ class _FeedPageState extends State<FeedPage> {
           duration: const Duration(milliseconds: 300),
           child: ClipRRect(
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
               child: Container(
                 color: Colors.black.withOpacity(0.5),
                 padding: EdgeInsets.fromLTRB(
@@ -159,7 +147,8 @@ class _FeedPageState extends State<FeedPage> {
                               radius: 16,
                               backgroundColor: Colors.white24,
                               backgroundImage: user?.profileImage != null
-                                  ? NetworkImage(user!.profileImage)
+                                  ? CachedNetworkImageProvider(
+                                      user!.profileImage)
                                   : null,
                               child: user?.profileImage == null
                                   ? const Icon(Icons.person,
@@ -228,12 +217,12 @@ class _FeedPageState extends State<FeedPage> {
             padding: const EdgeInsets.only(right: 12, bottom: 12),
             child: ClipOval(
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
                 child: Container(
                   width: 56,
                   height: 56,
                   decoration: BoxDecoration(
-                    color: Color(0xFFECB200).withOpacity(0.4),
+                    color: const Color(0xFFECB200).withOpacity(0.8),
                     shape: BoxShape.circle,
                   ),
                   child: IconButton(

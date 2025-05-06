@@ -20,8 +20,7 @@ class NoteListWidget extends StatefulWidget {
   State<NoteListWidget> createState() => _NoteListWidgetState();
 }
 
-class _NoteListWidgetState extends State<NoteListWidget>
-    with SingleTickerProviderStateMixin {
+class _NoteListWidgetState extends State<NoteListWidget> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final ScrollController _scrollController = ScrollController();
 
@@ -30,19 +29,21 @@ class _NoteListWidgetState extends State<NoteListWidget>
   bool _preloadDone = false;
 
   late DataService _dataService;
-  List<NoteModel> _pendingNotes = [];
+  final List<NoteModel> _pendingNotes = [];
 
   int _selectedTabIndex = 1;
 
   @override
   void initState() {
     super.initState();
-    _setupInitialService();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _setupInitialService();
+    });
   }
 
   Future<void> _setupInitialService() async {
     _currentUserNpub = await _secureStorage.read(key: 'npub');
-    if (!mounted) return;
+    if (!mounted || _currentUserNpub == null) return;
 
     final prefs = await SharedPreferences.getInstance();
     final preloadKey =
@@ -55,7 +56,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
     await _dataService.initializeConnections();
 
     if (!preloadAlreadyDone) {
-      await Future.delayed(const Duration(seconds: 2));
+      await Future.delayed(const Duration(seconds: 0));
       await _dataService.closeConnections();
 
       _dataService = _createDataService();
@@ -63,13 +64,6 @@ class _NoteListWidgetState extends State<NoteListWidget>
       await _dataService.initializeConnections();
 
       _applyPendingNotes();
-
-      for (int i = 0; i < 3; i++) {
-        if (!mounted) return;
-        await Future.delayed(const Duration(milliseconds: 100));
-        setState(() {});
-      }
-
       await prefs.setBool(preloadKey, true);
     }
 
@@ -86,12 +80,12 @@ class _NoteListWidgetState extends State<NoteListWidget>
       npub: widget.npub,
       dataType: widget.dataType,
       onNewNote: _handleNewNote,
-      onReactionsUpdated: (id, _) => setState(() {}),
-      onRepliesUpdated: (id, _) => setState(() {}),
-      onRepostsUpdated: (id, _) => setState(() {}),
-      onReactionCountUpdated: (id, _) => setState(() {}),
-      onReplyCountUpdated: (id, _) => setState(() {}),
-      onRepostCountUpdated: (id, _) => setState(() {}),
+      onReactionsUpdated: (_, __) => _updateSafely(),
+      onRepliesUpdated: (_, __) => _updateSafely(),
+      onRepostsUpdated: (_, __) => _updateSafely(),
+      onReactionCountUpdated: (_, __) => _updateSafely(),
+      onReplyCountUpdated: (_, __) => _updateSafely(),
+      onRepostCountUpdated: (_, __) => _updateSafely(),
     );
   }
 
@@ -103,10 +97,16 @@ class _NoteListWidgetState extends State<NoteListWidget>
   }
 
   void _applyPendingNotes() {
-    _pendingNotes.forEach(_dataService.addPendingNote);
+    for (final note in _pendingNotes) {
+      _dataService.addPendingNote(note);
+    }
     _dataService.applyPendingNotes();
     _pendingNotes.clear();
-    setState(() {});
+    _updateSafely();
+  }
+
+  void _updateSafely() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -118,7 +118,6 @@ class _NoteListWidgetState extends State<NoteListWidget>
 
   Widget buildButton(int index, String label) {
     final isSelected = _selectedTabIndex == index;
-
     return Expanded(
       child: Container(
         decoration: BoxDecoration(
@@ -153,11 +152,9 @@ class _NoteListWidgetState extends State<NoteListWidget>
   Widget build(BuildContext context) {
     if (_isInitializing || _currentUserNpub == null) {
       return const SliverToBoxAdapter(
-        child: Center(
-          child: Padding(
-            padding: EdgeInsets.only(top: 100),
-            child: CircularProgressIndicator(),
-          ),
+        child: SizedBox(
+          height: 200,
+          child: ColoredBox(color: Colors.black),
         ),
       );
     }
@@ -170,46 +167,48 @@ class _NoteListWidgetState extends State<NoteListWidget>
             child: Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
-                child: Text('No notes found.'),
+                child: Text('No notes found.',
+                    style: TextStyle(color: Colors.white70)),
               ),
             ),
           );
         }
 
-        List<NoteModel> filteredNotes = notes;
-
-        if (_selectedTabIndex == 0) {
-          final cutoff = DateTime.now().subtract(const Duration(hours: 24));
-          filteredNotes = notes
-              .where((n) => n.timestamp.isAfter(cutoff))
+        List<NoteModel> filteredNotes = switch (_selectedTabIndex) {
+          0 => notes
+              .where((n) => n.timestamp
+                  .isAfter(DateTime.now().subtract(const Duration(hours: 24))))
               .toList()
             ..sort((a, b) =>
                 (b.reactionCount + b.replyCount + b.repostCount + b.zapAmount)
                     .compareTo(a.reactionCount +
                         a.replyCount +
                         a.repostCount +
-                        a.zapAmount));
-        } else if (_selectedTabIndex == 2) {
-          filteredNotes = notes.where((n) => n.hasMedia).toList();
-        }
+                        a.zapAmount)),
+          2 => notes.where((n) => n.hasMedia).toList(),
+          _ => notes,
+        };
 
         return SliverList(
-          delegate: SliverChildListDelegate([
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-              child: Row(
-                children: [
-                  buildButton(1, "Latest"),
-                  const SizedBox(width: 6),
-                  buildButton(0, "Popular (24h)"),
-                  const SizedBox(width: 6),
-                  buildButton(2, "Media"),
-                ],
-              ),
-            ),
-            const SizedBox(height: 10),
-            ...List.generate(filteredNotes.length, (index) {
-              final note = filteredNotes[index];
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              if (index == 0) {
+                return Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    children: [
+                      buildButton(1, "Latest"),
+                      const SizedBox(width: 6),
+                      buildButton(0, "Popular (24h)"),
+                      const SizedBox(width: 6),
+                      buildButton(2, "Media"),
+                    ],
+                  ),
+                );
+              }
+
+              final note = filteredNotes[index - 1];
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -223,7 +222,7 @@ class _NoteListWidgetState extends State<NoteListWidget>
                     currentUserNpub: _currentUserNpub!,
                     notesNotifier: _dataService.notesNotifier,
                   ),
-                  if (index < filteredNotes.length - 1)
+                  if (index < filteredNotes.length)
                     Container(
                       margin: const EdgeInsets.symmetric(vertical: 10),
                       height: 1,
@@ -232,8 +231,9 @@ class _NoteListWidgetState extends State<NoteListWidget>
                     ),
                 ],
               );
-            }),
-          ]),
+            },
+            childCount: filteredNotes.length + 1,
+          ),
         );
       },
     );

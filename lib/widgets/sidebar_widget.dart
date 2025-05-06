@@ -81,7 +81,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                               Text(
                                 '@${widget.user!.nip05.split('@').last}',
                                 style: const TextStyle(
-                                  color: Color(0xFFBB86FC),
+                                  color: Color(0xFFECB200),
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500,
                                 ),
