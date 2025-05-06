@@ -1741,8 +1741,7 @@ class DataService {
     }
   }
 
-  Future<void> sendFollow(String followNpub, String relayUrl,
-      {String petname = ''}) async {
+  Future<void> sendFollow(String followNpub) async {
     if (_isClosed) return;
 
     try {
@@ -1759,10 +1758,7 @@ class DataService {
 
       currentFollowing.add(followNpub);
 
-      final tags = currentFollowing
-          .map((pubkey) =>
-              ['p', pubkey, relayUrl, petname.isNotEmpty ? petname : ''])
-          .toList();
+      final tags = currentFollowing.map((pubkey) => ['p', pubkey, '']).toList();
 
       final event = Event.from(
         kind: 3,
@@ -1804,8 +1800,7 @@ class DataService {
 
       currentFollowing.remove(unfollowNpub);
 
-      final tags =
-          currentFollowing.map((pubkey) => ['p', pubkey, '', '']).toList();
+      final tags = currentFollowing.map((pubkey) => ['p', pubkey, '']).toList();
 
       final event = Event.from(
         kind: 3,

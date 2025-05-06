@@ -70,7 +70,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               height: 130,
               width: screenWidth,
               color: Colors.black,
-              child: const Icon(Icons.error, color: Colors.red),
             ),
           ),
           Container(
