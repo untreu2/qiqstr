@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-
 import 'models/note_model.dart';
 import 'models/reaction_model.dart';
 import 'models/reply_model.dart';
@@ -12,9 +11,9 @@ import 'models/following_model.dart';
 import 'models/link_preview_model.dart';
 import 'models/notification_model.dart';
 import 'models/zap_model.dart';
-
 import 'screens/login_page.dart';
 import 'screens/feed_page.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -181,10 +180,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       body: FadeTransition(
         opacity: _animation,
         child: Center(
-          child: Image.asset(
-            'assets/main_icon.png',
+          child: SvgPicture.asset(
+            'assets/main_icon_white.svg',
             width: 100,
             height: 100,
+            color: Colors.white,
           ),
         ),
       ),

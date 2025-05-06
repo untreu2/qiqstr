@@ -178,10 +178,11 @@ class _FeedPageState extends State<FeedPage> {
                               curve: Curves.easeOut,
                             );
                           },
-                          child: Image.asset(
-                            'assets/main_icon.png',
+                          child: SvgPicture.asset(
+                            'assets/main_icon_white.svg',
+                            width: 30,
                             height: 30,
-                            fit: BoxFit.contain,
+                            color: Colors.white,
                           ),
                         ),
                       ),
