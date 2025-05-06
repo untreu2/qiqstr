@@ -252,7 +252,7 @@ class _FeedPageState extends State<FeedPage> {
         ),
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          ? const ColoredBox(color: Colors.black)
           : errorMessage != null
               ? Center(
                   child: Text(
