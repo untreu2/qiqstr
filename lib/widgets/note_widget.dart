@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:qiqstr/screens/note_statistics_page.dart';
 import 'package:qiqstr/utils/verify_nip05.dart';
@@ -237,6 +238,11 @@ class _NoteWidgetState extends State<NoteWidget>
     });
   }
 
+  bool _hasZapped() {
+    final zaps = widget.dataService.zapsMap[widget.note.id] ?? [];
+    return zaps.any((z) => z.sender == widget.currentUserNpub);
+  }
+
   bool _hasReacted() {
     final r = widget.dataService.reactionsMap[widget.note.id] ?? [];
     return r.any((e) => e.author == widget.currentUserNpub);
@@ -254,11 +260,121 @@ class _NoteWidgetState extends State<NoteWidget>
 
   void _handleZapTap() {
     _animateZapButton();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("I'm working on it"),
-        duration: Duration(seconds: 1),
+
+    final TextEditingController amountController =
+        TextEditingController(text: '21');
+    final TextEditingController noteController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.black,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 40,
+            top: 8,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amountController,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Amount (sats)',
+                  labelStyle: TextStyle(color: Colors.grey),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: noteController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Comment... (Optional)',
+                  labelStyle: TextStyle(color: Colors.grey),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  foregroundColor: Colors.black,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+                onPressed: () async {
+                  final sats = int.tryParse(amountController.text.trim());
+                  if (sats == null || sats <= 0) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Enter a valid amount'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                    return;
+                  }
+
+                  Navigator.pop(context);
+
+                  try {
+                    final profile = await widget.dataService
+                        .getCachedUserProfile(widget.note.author);
+                    final user = UserModel.fromCachedProfile(
+                        widget.note.author, profile);
+
+                    final invoice = await widget.dataService.sendZap(
+                      recipientPubkey: user.npub,
+                      lud16: user.lud16,
+                      noteId: widget.note.id,
+                      amountSats: sats,
+                      content: noteController.text.trim(),
+                    );
+
+                    await Clipboard.setData(ClipboardData(text: invoice));
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('⚡ Copied!'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Zap failed: ${e.toString()}'),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Copy to send'),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -581,8 +697,8 @@ class _NoteWidgetState extends State<NoteWidget>
                                 _buildAction(
                                   scale: _zapScale,
                                   svg: 'assets/zap_button.svg',
-                                  color: _isZapGlowing
-                                      ? Color(0xFFECB200)
+                                  color: _isZapGlowing || _hasZapped()
+                                      ? const Color(0xFFECB200)
                                       : Colors.white,
                                   count: updatedNote.zapAmount,
                                   onTap: _handleZapTap,

@@ -24,6 +24,7 @@ import '../models/repost_model.dart';
 import '../models/following_model.dart';
 import 'dart:typed_data';
 import 'package:collection/collection.dart';
+import 'package:http/http.dart' as http;
 
 enum DataType { Feed, Profile, Note, Discover }
 
@@ -1823,6 +1824,92 @@ class DataService {
       print('[DataService ERROR] Error sending unfollow: $e');
       throw e;
     }
+  }
+
+  Future<String> sendZap({
+    required String recipientPubkey,
+    required String lud16,
+    required int amountSats,
+    String? noteId,
+    String content = '',
+  }) async {
+    final privateKey = await _secureStorage.read(key: 'privateKey');
+    if (privateKey == null || privateKey.isEmpty) {
+      throw Exception('Private key not found.');
+    }
+
+    if (!lud16.contains('@')) {
+      throw Exception('Invalid lud16 format.');
+    }
+
+    final parts = lud16.split('@');
+    if (parts.length != 2 || parts.any((p) => p.isEmpty)) {
+      throw Exception('Invalid lud16 format.');
+    }
+
+    final username = parts[0];
+    final domain = parts[1];
+
+    final uri = Uri.parse('https://$domain/.well-known/lnurlp/$username');
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception('LNURL fetch failed with status: ${response.statusCode}');
+    }
+
+    final lnurlJson = jsonDecode(response.body);
+    if (lnurlJson['allowsNostr'] != true || lnurlJson['nostrPubkey'] == null) {
+      throw Exception('Recipient does not support zaps.');
+    }
+
+    final callback = lnurlJson['callback'];
+    if (callback == null || callback.isEmpty) {
+      throw Exception('Zap callback is missing.');
+    }
+
+    final lnurlBech32 = lnurlJson['lnurl'] ?? '';
+    final amountMillisats = (amountSats * 1000).toString();
+    final relays = relaySetMainSockets;
+
+    if (relays.isEmpty) {
+      throw Exception('No relays available for zap.');
+    }
+
+    final List<List<String>> tags = [
+      ['relays', ...relays.map((e) => e.toString())],
+      ['amount', amountMillisats],
+      if (lnurlBech32.isNotEmpty) ['lnurl', lnurlBech32],
+      ['p', recipientPubkey],
+    ];
+
+    if (noteId != null && noteId.isNotEmpty) {
+      tags.add(['e', noteId]);
+    }
+
+    final zapRequest = Event.from(
+      kind: 9734,
+      tags: tags,
+      content: content,
+      privkey: privateKey,
+    );
+
+    final encodedZap = Uri.encodeComponent(jsonEncode(zapRequest.toJson()));
+    final zapUrl = Uri.parse(
+      '$callback?amount=$amountMillisats&nostr=$encodedZap${lnurlBech32.isNotEmpty ? '&lnurl=$lnurlBech32' : ''}',
+    );
+
+    final invoiceResponse = await http.get(zapUrl);
+    if (invoiceResponse.statusCode != 200) {
+      throw Exception('Zap callback failed: ${invoiceResponse.body}');
+    }
+
+    final invoiceJson = jsonDecode(invoiceResponse.body);
+    final invoice = invoiceJson['pr'];
+    if (invoice == null || invoice.toString().isEmpty) {
+      throw Exception('Invoice not returned by zap server.');
+    }
+
+    print('[sendZap] Invoice ready: $invoice');
+    return invoice;
   }
 
   Future<void> sendReaction(
