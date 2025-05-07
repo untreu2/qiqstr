@@ -124,7 +124,7 @@ class _FeedPageState extends State<FeedPage> {
           duration: const Duration(milliseconds: 300),
           child: ClipRRect(
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
               child: Container(
                 color: Colors.black.withOpacity(0.5),
                 padding: EdgeInsets.fromLTRB(
