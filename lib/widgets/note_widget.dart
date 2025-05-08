@@ -586,10 +586,11 @@ class _NoteWidgetState extends State<NoteWidget>
                                                           .substring(0, 25)
                                                       : user.name,
                                                   style: const TextStyle(
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: Colors.white,
-                                                  ),
+                                                      fontSize: 16,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: Colors.white,
+                                                      height: 0.8),
                                                   overflow:
                                                       TextOverflow.ellipsis,
                                                 ),
