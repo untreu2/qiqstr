@@ -152,9 +152,18 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   Widget build(BuildContext context) {
     if (_isInitializing || _currentUserNpub == null) {
       return const SliverToBoxAdapter(
-        child: SizedBox(
-          height: 200,
-          child: ColoredBox(color: Colors.black),
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: Center(
+            child: Text(
+              'Loading...',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
         ),
       );
     }
