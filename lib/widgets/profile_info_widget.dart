@@ -8,6 +8,7 @@ import 'package:qiqstr/services/data_service.dart';
 import 'package:hive/hive.dart';
 import 'package:qiqstr/models/following_model.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:shimmer/shimmer.dart';
 
 class ProfileInfoWidget extends StatefulWidget {
   final UserModel user;
@@ -26,11 +27,15 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   late Box<FollowingModel> _followingBox;
   DataService? _dataService;
 
+  int? _followingCount;
+  bool _isLoadingFollowing = true;
+
   @override
   void initState() {
     super.initState();
     _verifyIfNeeded();
     _initFollowStatus();
+    _loadFollowingCount();
   }
 
   Future<void> _verifyIfNeeded() async {
@@ -59,6 +64,24 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     _dataService =
         DataService(npub: _currentUserNpub!, dataType: DataType.Profile);
     await _dataService!.initialize();
+  }
+
+  Future<void> _loadFollowingCount() async {
+    try {
+      final dataService =
+          DataService(npub: widget.user.npub, dataType: DataType.Profile);
+      await dataService.initialize();
+      final followingList =
+          await dataService.getFollowingList(widget.user.npub);
+      setState(() {
+        _followingCount = followingList.length;
+        _isLoadingFollowing = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingFollowing = false;
+      });
+    }
   }
 
   Future<void> _toggleFollow() async {
@@ -201,6 +224,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                       ],
                     ),
                   ),
+                const SizedBox(height: 16),
+                _buildFollowingCount(),
               ],
             ),
           ),
@@ -268,6 +293,33 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               ],
             ),
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFollowingCount() {
+    if (_isLoadingFollowing) {
+      return Shimmer.fromColors(
+        baseColor: Colors.white24,
+        highlightColor: Colors.white54,
+        child: Container(
+          width: 80,
+          height: 20,
+          color: Colors.white,
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        Text(
+          'Following: ',
+          style: const TextStyle(color: Colors.white70, fontSize: 14),
+        ),
+        Text(
+          '$_followingCount',
+          style: const TextStyle(color: Colors.white, fontSize: 14),
         ),
       ],
     );
