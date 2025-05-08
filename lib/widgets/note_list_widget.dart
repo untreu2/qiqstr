@@ -118,32 +118,34 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   Widget buildButton(int index, String label) {
     final isSelected = _selectedTabIndex == index;
+
     return Expanded(
-      child: Container(
-        decoration: BoxDecoration(
-          color:
-              isSelected ? Colors.white.withOpacity(0.08) : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: isSelected ? Colors.white30 : Colors.white12,
-            width: 1,
+      child: TextButton(
+        onPressed: () {
+          setState(() {
+            _selectedTabIndex = index;
+          });
+        },
+        style: TextButton.styleFrom(
+          backgroundColor:
+              isSelected ? Colors.white.withOpacity(0.12) : Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: isSelected ? const Color(0xFFECB200) : Colors.white10,
+              width: 1.4,
+            ),
           ),
-        ),
-        child: TextButton(
-          onPressed: () {
-            setState(() {
-              _selectedTabIndex = index;
-            });
-          },
-          style: TextButton.styleFrom(
-            foregroundColor: isSelected ? Colors.white : Colors.white60,
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            textStyle: const TextStyle(fontSize: 13),
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            minimumSize: Size.zero,
+          foregroundColor: isSelected ? Colors.white : Colors.white70,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          textStyle: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
           ),
-          child: Text(label, textAlign: TextAlign.center),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
+        child: Text(label, textAlign: TextAlign.center),
       ),
     );
   }
@@ -204,7 +206,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
               if (index == 0) {
                 return Padding(
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   child: Row(
                     children: [
                       buildButton(1, "Latest"),
