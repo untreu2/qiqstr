@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/widgets/note_widget.dart';
-import 'package:visibility_detector/visibility_detector.dart';
 
 class NoteListWidget extends StatefulWidget {
   final String npub;
@@ -26,26 +25,20 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   final ScrollController _scrollController = ScrollController();
 
   String? _currentUserNpub;
+  bool _isInitializing = true;
+  bool _preloadDone = false;
+
   late DataService _dataService;
   final List<NoteModel> _pendingNotes = [];
+
   int _selectedTabIndex = 1;
-  late final Future<void> _initFuture;
-  int _visibleItemCount = 20;
 
   @override
   void initState() {
     super.initState();
-    _initFuture = _setupInitialService();
-    _scrollController.addListener(_onScroll);
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 100) {
-      setState(() {
-        _visibleItemCount += 10;
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _setupInitialService();
+    });
   }
 
   Future<void> _setupInitialService() async {
@@ -58,17 +51,27 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     final preloadAlreadyDone = prefs.getBool(preloadKey) ?? false;
 
     _dataService = _createDataService();
+
     await _dataService.initialize();
     await _dataService.initializeConnections();
 
     if (!preloadAlreadyDone) {
+      await Future.delayed(const Duration(seconds: 0));
       await _dataService.closeConnections();
+
       _dataService = _createDataService();
       await _dataService.initialize();
       await _dataService.initializeConnections();
 
       _applyPendingNotes();
       await prefs.setBool(preloadKey, true);
+    }
+
+    if (mounted) {
+      setState(() {
+        _isInitializing = false;
+        _preloadDone = true;
+      });
     }
   }
 
@@ -88,7 +91,9 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   void _handleNewNote(NoteModel note) {
     _pendingNotes.add(note);
-    _applyPendingNotes();
+    if (_preloadDone) {
+      _applyPendingNotes();
+    }
   }
 
   void _applyPendingNotes() {
@@ -119,7 +124,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         onPressed: () {
           setState(() {
             _selectedTabIndex = index;
-            _visibleItemCount = 20;
           });
         },
         style: TextButton.styleFrom(
@@ -134,7 +138,10 @@ class _NoteListWidgetState extends State<NoteListWidget> {
           ),
           foregroundColor: isSelected ? Colors.white : Colors.white70,
           padding: const EdgeInsets.symmetric(vertical: 12),
-          textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          textStyle: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
           minimumSize: Size.zero,
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),
@@ -145,114 +152,99 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<void>(
-      future: _initFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done ||
-            _currentUserNpub == null) {
+    if (_isInitializing || _currentUserNpub == null) {
+      return const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 40),
+          child: Center(
+            child: Text(
+              'Loading...',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return ValueListenableBuilder<List<NoteModel>>(
+      valueListenable: _dataService.notesNotifier,
+      builder: (context, notes, child) {
+        if (notes.isEmpty) {
           return const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 40),
-              child: Center(
-                child: Text(
-                  'Loading...',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text('No notes found.',
+                    style: TextStyle(color: Colors.white70)),
               ),
             ),
           );
         }
 
-        return ValueListenableBuilder<List<NoteModel>>(
-          valueListenable: _dataService.notesNotifier,
-          builder: (context, notes, child) {
-            if (notes.isEmpty) {
-              return const SliverToBoxAdapter(
-                child: Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Text('No notes found.',
-                        style: TextStyle(color: Colors.white70)),
-                  ),
-                ),
-              );
-            }
-
-            List<NoteModel> filteredNotes = switch (_selectedTabIndex) {
-              0 => notes
-                  .where((n) => n.timestamp.isAfter(
-                      DateTime.now().subtract(const Duration(hours: 24))))
-                  .toList()
-                ..sort((a, b) => (b.reactionCount +
-                        b.replyCount +
-                        b.repostCount +
-                        b.zapAmount)
+        List<NoteModel> filteredNotes = switch (_selectedTabIndex) {
+          0 => notes
+              .where((n) => n.timestamp
+                  .isAfter(DateTime.now().subtract(const Duration(hours: 24))))
+              .toList()
+            ..sort((a, b) =>
+                (b.reactionCount + b.replyCount + b.repostCount + b.zapAmount)
                     .compareTo(a.reactionCount +
                         a.replyCount +
                         a.repostCount +
                         a.zapAmount)),
-              2 => notes.where((n) => n.hasMedia).toList(),
-              _ => notes,
-            };
+          2 => notes.where((n) => n.hasMedia).toList(),
+          _ => notes,
+        };
 
-            final visibleNotes = filteredNotes.take(_visibleItemCount).toList();
+        return SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              if (index == 0) {
+                return Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  child: Row(
+                    children: [
+                      buildButton(1, "Latest"),
+                      const SizedBox(width: 6),
+                      buildButton(0, "Popular (24h)"),
+                      const SizedBox(width: 6),
+                      buildButton(2, "Media"),
+                    ],
+                  ),
+                );
+              }
 
-            return SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  if (index == 0) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 12),
-                      child: Row(
-                        children: [
-                          buildButton(1, "Latest"),
-                          const SizedBox(width: 6),
-                          buildButton(0, "Popular (24h)"),
-                          const SizedBox(width: 6),
-                          buildButton(2, "Media"),
-                        ],
-                      ),
-                    );
-                  }
-
-                  final note = visibleNotes[index - 1];
-                  return VisibilityDetector(
-                    key: ValueKey('note-${note.id}'),
-                    onVisibilityChanged: (info) {},
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        NoteWidget(
-                          key: ValueKey(note.id),
-                          note: note,
-                          reactionCount: note.reactionCount,
-                          replyCount: note.replyCount,
-                          repostCount: note.repostCount,
-                          dataService: _dataService,
-                          currentUserNpub: _currentUserNpub!,
-                          notesNotifier: _dataService.notesNotifier,
-                        ),
-                        if (index < visibleNotes.length)
-                          Container(
-                            margin: const EdgeInsets.symmetric(vertical: 10),
-                            height: 1,
-                            width: double.infinity,
-                            color: Colors.white24,
-                          ),
-                      ],
+              final note = filteredNotes[index - 1];
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  NoteWidget(
+                    key: ValueKey(note.id),
+                    note: note,
+                    reactionCount: note.reactionCount,
+                    replyCount: note.replyCount,
+                    repostCount: note.repostCount,
+                    dataService: _dataService,
+                    currentUserNpub: _currentUserNpub!,
+                    notesNotifier: _dataService.notesNotifier,
+                  ),
+                  if (index < filteredNotes.length)
+                    Container(
+                      margin: const EdgeInsets.symmetric(vertical: 10),
+                      height: 1,
+                      width: double.infinity,
+                      color: Colors.white24,
                     ),
-                  );
-                },
-                childCount: visibleNotes.length + 1,
-                addAutomaticKeepAlives: false,
-              ),
-            );
-          },
+                ],
+              );
+            },
+            childCount: filteredNotes.length + 1,
+          ),
         );
       },
     );
