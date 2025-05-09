@@ -3,7 +3,6 @@ import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/utils/verify_nip05.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:hive/hive.dart';
 import 'package:qiqstr/models/following_model.dart';
@@ -21,7 +20,6 @@ class ProfileInfoWidget extends StatefulWidget {
 
 class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  bool? _isVerified;
   bool? _isFollowing;
   String? _currentUserNpub;
   late Box<FollowingModel> _followingBox;
@@ -33,20 +31,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   @override
   void initState() {
     super.initState();
-    _verifyIfNeeded();
     _initFollowStatus();
     _loadFollowingCount();
-  }
-
-  Future<void> _verifyIfNeeded() async {
-    final nip05 = widget.user.nip05;
-    final pubkey = widget.user.npub;
-    if (nip05.contains('@')) {
-      final result = await verifyNip05(nip05, pubkey);
-      setState(() {
-        _isVerified = result;
-      });
-    }
   }
 
   Future<void> _initFollowStatus() async {
@@ -270,24 +256,12 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                     color: Colors.white,
                   ),
                 ),
-                if (_isVerified == true && user.nip05.contains('@'))
-                  const WidgetSpan(
-                    alignment: PlaceholderAlignment.middle,
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 6),
-                      child: Icon(Icons.verified,
-                          color: Color(0xFFECB200), size: 20),
-                    ),
-                  ),
                 if (user.nip05.isNotEmpty && user.nip05.contains('@'))
                   TextSpan(
                     text: '@${user.nip05.split('@').last}',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: const Color(0xFFECB200),
-                      decoration: _isVerified == false
-                          ? TextDecoration.lineThrough
-                          : null,
                     ),
                   ),
               ],

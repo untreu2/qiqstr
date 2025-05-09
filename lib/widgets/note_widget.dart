@@ -5,7 +5,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:qiqstr/screens/note_statistics_page.dart';
-import 'package:qiqstr/utils/verify_nip05.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qiqstr/models/user_model.dart';
@@ -41,7 +40,6 @@ class NoteWidget extends StatefulWidget {
 
 class _NoteWidgetState extends State<NoteWidget>
     with AutomaticKeepAliveClientMixin {
-  bool? _isVerified;
   @override
   bool get wantKeepAlive => true;
   bool _isReactionGlowing = false;
@@ -67,21 +65,6 @@ class _NoteWidgetState extends State<NoteWidget>
   @override
   void initState() {
     super.initState();
-    _verifyNip05IfNeeded();
-  }
-
-  Future<void> _verifyNip05IfNeeded() async {
-    final profileData =
-        await widget.dataService.getCachedUserProfile(widget.note.author);
-    final user = UserModel.fromCachedProfile(widget.note.author, profileData);
-    if (user.nip05.contains('@')) {
-      final result = await verifyNip05(user.nip05, user.npub);
-      if (mounted) {
-        setState(() {
-          _isVerified = result;
-        });
-      }
-    }
   }
 
   void _navigateToMentionProfile(String id) {
@@ -595,20 +578,6 @@ class _NoteWidgetState extends State<NoteWidget>
                                                       TextOverflow.ellipsis,
                                                 ),
                                               ),
-                                              if (_isVerified == true &&
-                                                  user.nip05.isNotEmpty &&
-                                                  user.nip05.contains('@'))
-                                                Transform.translate(
-                                                  offset: const Offset(0, -1.0),
-                                                  child: const Padding(
-                                                    padding: EdgeInsets.only(
-                                                        left: 4),
-                                                    child: Icon(Icons.verified,
-                                                        size: 16,
-                                                        color:
-                                                            Color(0xFFECB200)),
-                                                  ),
-                                                ),
                                               Padding(
                                                 padding: const EdgeInsets.only(
                                                     left: 6),
