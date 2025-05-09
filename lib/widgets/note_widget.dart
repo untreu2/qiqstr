@@ -24,15 +24,16 @@ class NoteWidget extends StatefulWidget {
   final String currentUserNpub;
   final ValueNotifier<List<NoteModel>> notesNotifier;
 
-  const NoteWidget(
-      {super.key,
-      required this.note,
-      required this.reactionCount,
-      required this.replyCount,
-      required this.repostCount,
-      required this.dataService,
-      required this.currentUserNpub,
-      required this.notesNotifier});
+  const NoteWidget({
+    super.key,
+    required this.note,
+    required this.reactionCount,
+    required this.replyCount,
+    required this.repostCount,
+    required this.dataService,
+    required this.currentUserNpub,
+    required this.notesNotifier,
+  });
 
   @override
   _NoteWidgetState createState() => _NoteWidgetState();
@@ -42,14 +43,27 @@ class _NoteWidgetState extends State<NoteWidget>
     with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
+
+  late Future<Map<String, String>> _userProfileFuture;
+  late final String _formattedTimestamp;
+
   bool _isReactionGlowing = false;
   bool _isReplyGlowing = false;
   bool _isRepostGlowing = false;
+  bool _isZapGlowing = false;
+
   double _reactionScale = 1.0;
   double _replyScale = 1.0;
   double _repostScale = 1.0;
-  bool _isZapGlowing = false;
   double _zapScale = 1.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _userProfileFuture =
+        widget.dataService.getCachedUserProfile(widget.note.author);
+    _formattedTimestamp = _formatTimestamp(widget.note.timestamp);
+  }
 
   String _formatTimestamp(DateTime timestamp) {
     final d = DateTime.now().difference(timestamp);
@@ -62,11 +76,6 @@ class _NoteWidgetState extends State<NoteWidget>
     return '${(d.inDays / 365).floor()}y';
   }
 
-  @override
-  void initState() {
-    super.initState();
-  }
-
   void _navigateToMentionProfile(String id) {
     widget.dataService.openUserProfile(context, id);
   }
@@ -76,11 +85,19 @@ class _NoteWidgetState extends State<NoteWidget>
       context,
       MaterialPageRoute(
         builder: (_) => NoteStatisticsPage(
-          note: widget.note,
-          dataService: widget.dataService,
-        ),
+            note: widget.note, dataService: widget.dataService),
       ),
     );
+  }
+
+  void _animateButton({
+    required void Function() onStart,
+    required void Function() onEnd,
+  }) {
+    setState(onStart);
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (mounted) setState(onEnd);
+    });
   }
 
   Widget _buildContentText(Map<String, dynamic> parsed) {
@@ -94,131 +111,54 @@ class _NoteWidgetState extends State<NoteWidget>
       future: widget.dataService.resolveMentions(mentionIds),
       builder: (context, snapshot) {
         final mentions = snapshot.data ?? {};
-        List<InlineSpan> spans = [];
+        final spans = <InlineSpan>[];
 
         for (var p in parts) {
           if (p['type'] == 'text') {
             final text = p['text'] as String;
             final regex = RegExp(r'(https?:\/\/[^\s]+)');
             final matches = regex.allMatches(text);
-            int lastMatchEnd = 0;
-
-            for (final match in matches) {
-              if (match.start > lastMatchEnd) {
+            var last = 0;
+            for (final m in matches) {
+              if (m.start > last) {
                 spans.add(TextSpan(
-                  text: text.substring(lastMatchEnd, match.start),
-                  style: TextStyle(
-                    fontSize: 15.5,
-                    color: Colors.white,
-                  ),
+                  text: text.substring(last, m.start),
+                  style: const TextStyle(fontSize: 15.5, color: Colors.white),
                 ));
               }
-
-              final url = text.substring(match.start, match.end);
+              final url = text.substring(m.start, m.end);
               spans.add(TextSpan(
                 text: url,
-                style: const TextStyle(
-                  color: Color(0xFFECB200),
-                  fontStyle: FontStyle.normal,
-                  fontSize: 15.5,
-                ),
+                style:
+                    const TextStyle(color: Color(0xFFECB200), fontSize: 15.5),
                 recognizer: TapGestureRecognizer()
                   ..onTap = () => _onOpen(LinkableElement(url, url)),
               ));
-              lastMatchEnd = match.end;
+              last = m.end;
             }
-
-            if (lastMatchEnd < text.length) {
+            if (last < text.length) {
               spans.add(TextSpan(
-                text: text.substring(lastMatchEnd),
-                style: TextStyle(
-                  fontSize: 15.5,
-                  color: Colors.white,
-                ),
+                text: text.substring(last),
+                style: const TextStyle(fontSize: 15.5, color: Colors.white),
               ));
             }
           } else if (p['type'] == 'mention') {
             final username =
                 mentions[p['id']] ?? '${p['id'].substring(0, 8)}...';
-            spans.add(
-              TextSpan(
-                text: '@$username',
-                style: const TextStyle(
+            spans.add(TextSpan(
+              text: '@$username',
+              style: const TextStyle(
                   color: Color(0xFFECB200),
                   fontSize: 15.5,
-                  fontWeight: FontWeight.w500,
-                  fontStyle: FontStyle.normal,
-                ),
-                recognizer: TapGestureRecognizer()
-                  ..onTap = () => _navigateToMentionProfile(p['id']),
-              ),
-            );
+                  fontWeight: FontWeight.w500),
+              recognizer: TapGestureRecognizer()
+                ..onTap = () => _navigateToMentionProfile(p['id']),
+            ));
           }
         }
-
         return RichText(text: TextSpan(children: spans));
       },
     );
-  }
-
-  void _animateZapButton() {
-    setState(() {
-      _zapScale = 1.2;
-      _isZapGlowing = true;
-    });
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) {
-        setState(() {
-          _zapScale = 1.0;
-          _isZapGlowing = false;
-        });
-      }
-    });
-  }
-
-  void _animateReactionButton() {
-    setState(() {
-      _reactionScale = 1.2;
-      _isReactionGlowing = true;
-    });
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) {
-        setState(() {
-          _reactionScale = 1.0;
-          _isReactionGlowing = false;
-        });
-      }
-    });
-  }
-
-  void _animateReplyButton() {
-    setState(() {
-      _replyScale = 1.2;
-      _isReplyGlowing = true;
-    });
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) {
-        setState(() {
-          _replyScale = 1.0;
-          _isReplyGlowing = false;
-        });
-      }
-    });
-  }
-
-  void _animateRepostButton() {
-    setState(() {
-      _repostScale = 1.2;
-      _isRepostGlowing = true;
-    });
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) {
-        setState(() {
-          _repostScale = 1.0;
-          _isRepostGlowing = false;
-        });
-      }
-    });
   }
 
   bool _hasZapped() {
@@ -242,135 +182,140 @@ class _NoteWidgetState extends State<NoteWidget>
   }
 
   void _handleZapTap() {
-    _animateZapButton();
+    _animateButton(
+      onStart: () {
+        _zapScale = 1.2;
+        _isZapGlowing = true;
+      },
+      onEnd: () {
+        _zapScale = 1.0;
+        _isZapGlowing = false;
+      },
+    );
 
-    final TextEditingController amountController =
-        TextEditingController(text: '21');
-    final TextEditingController noteController = TextEditingController();
+    final amountController = TextEditingController(text: '21');
+    final noteController = TextEditingController();
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.black,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 40,
-            top: 8,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: amountController,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Amount (sats)',
-                  labelStyle: TextStyle(color: Colors.grey),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white),
-                  ),
-                ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 40,
+          top: 8,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: amountController,
+              keyboardType: TextInputType.number,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'Amount (sats)',
+                labelStyle: TextStyle(color: Colors.grey),
+                enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey)),
+                focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white)),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: noteController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: 'Comment... (Optional)',
-                  labelStyle: TextStyle(color: Colors.grey),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white),
-                  ),
-                ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: noteController,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                labelText: 'Comment... (Optional)',
+                labelStyle: TextStyle(color: Colors.grey),
+                enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey)),
+                focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white)),
               ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.white,
                   foregroundColor: Colors.black,
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                ),
-                onPressed: () async {
-                  final sats = int.tryParse(amountController.text.trim());
-                  if (sats == null || sats <= 0) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Enter a valid amount'),
-                        duration: Duration(seconds: 2),
-                      ),
-                    );
-                    return;
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+              onPressed: () async {
+                final sats = int.tryParse(amountController.text.trim());
+                if (sats == null || sats <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text('Enter a valid amount'),
+                      duration: Duration(seconds: 2)));
+                  return;
+                }
+                Navigator.pop(context);
+                try {
+                  final profile = await widget.dataService
+                      .getCachedUserProfile(widget.note.author);
+                  final user =
+                      UserModel.fromCachedProfile(widget.note.author, profile);
+                  final invoice = await widget.dataService.sendZap(
+                    recipientPubkey: user.npub,
+                    lud16: user.lud16,
+                    noteId: widget.note.id,
+                    amountSats: sats,
+                    content: noteController.text.trim(),
+                  );
+                  await Clipboard.setData(ClipboardData(text: invoice));
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('⚡ Copied!'),
+                        duration: Duration(seconds: 2)));
                   }
-
-                  Navigator.pop(context);
-
-                  try {
-                    final profile = await widget.dataService
-                        .getCachedUserProfile(widget.note.author);
-                    final user = UserModel.fromCachedProfile(
-                        widget.note.author, profile);
-
-                    final invoice = await widget.dataService.sendZap(
-                      recipientPubkey: user.npub,
-                      lud16: user.lud16,
-                      noteId: widget.note.id,
-                      amountSats: sats,
-                      content: noteController.text.trim(),
-                    );
-
-                    await Clipboard.setData(ClipboardData(text: invoice));
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('⚡ Copied!'),
-                          duration: Duration(seconds: 2),
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Zap failed: ${e.toString()}'),
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text('Zap failed: $e'),
+                        duration: const Duration(seconds: 2)));
                   }
-                },
-                child: const Text('Copy to send'),
-              ),
-            ],
-          ),
-        );
-      },
+                }
+              },
+              child: const Text('Copy to send'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   void _handleReactionTap() async {
     if (_hasReacted()) return;
-    _animateReactionButton();
+    _animateButton(
+      onStart: () {
+        _reactionScale = 1.2;
+        _isReactionGlowing = true;
+      },
+      onEnd: () {
+        _reactionScale = 1.0;
+        _isReactionGlowing = false;
+      },
+    );
     try {
       await widget.dataService.sendReaction(widget.note.id, '💜');
     } catch (_) {}
   }
 
   void _handleReplyTap() {
-    _animateReplyButton();
+    _animateButton(
+      onStart: () {
+        _replyScale = 1.2;
+        _isReplyGlowing = true;
+      },
+      onEnd: () {
+        _replyScale = 1.0;
+        _isReplyGlowing = false;
+      },
+    );
     showDialog(
       context: context,
       builder: (_) => SendReplyDialog(
@@ -379,7 +324,16 @@ class _NoteWidgetState extends State<NoteWidget>
   }
 
   void _handleRepostTap() async {
-    _animateRepostButton();
+    _animateButton(
+      onStart: () {
+        _repostScale = 1.2;
+        _isRepostGlowing = true;
+      },
+      onEnd: () {
+        _repostScale = 1.0;
+        _isRepostGlowing = false;
+      },
+    );
     try {
       await widget.dataService.sendRepost(widget.note);
     } catch (_) {}
@@ -398,7 +352,7 @@ class _NoteWidgetState extends State<NoteWidget>
     return FutureBuilder<Map<String, String>>(
       future: widget.dataService.getCachedUserProfile(npub),
       builder: (_, snap) {
-        String name = 'Unknown';
+        var name = 'Unknown';
         if (snap.hasData) {
           name = snap.data!['name'] ?? 'Unknown';
         }
@@ -411,18 +365,15 @@ class _NoteWidgetState extends State<NoteWidget>
               Expanded(
                 child: Row(
                   children: [
-                    Text(
-                      'Reposted by $name',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (ts != null) ...[
-                      const SizedBox(width: 6),
-                      Text(
-                        '• ${_formatTimestamp(ts)}',
+                    Text('Reposted by $name',
                         style:
                             const TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
+                        overflow: TextOverflow.ellipsis),
+                    if (ts != null) ...[
+                      const SizedBox(width: 6),
+                      Text('• ${_formatTimestamp(ts)}',
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.grey)),
                     ],
                   ],
                 ),
@@ -454,10 +405,8 @@ class _NoteWidgetState extends State<NoteWidget>
             SvgPicture.asset(svg, width: 18, height: 18, color: color),
             if (count > 0) ...[
               const SizedBox(width: 4),
-              Text(
-                '$count',
-                style: const TextStyle(fontSize: 13, color: Colors.white),
-              ),
+              Text('$count',
+                  style: const TextStyle(fontSize: 13, color: Colors.white)),
             ],
           ],
         ),
@@ -468,14 +417,12 @@ class _NoteWidgetState extends State<NoteWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-
     return ValueListenableBuilder<List<NoteModel>>(
       valueListenable: widget.notesNotifier,
       builder: (context, notes, _) {
-        final updatedNote = notes.firstWhere(
-          (n) => n.id == widget.note.id,
-          orElse: () => widget.note,
-        );
+        final index = notes.indexWhere((n) => n.id == widget.note.id);
+        if (index == -1) return const SizedBox.shrink();
+        final updatedNote = notes[index];
 
         widget.dataService.parseContentForNote(updatedNote);
         final parsed = updatedNote.parsedContent!;
@@ -502,10 +449,9 @@ class _NoteWidgetState extends State<NoteWidget>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       FutureBuilder<Map<String, String>>(
-                        future: widget.dataService
-                            .getCachedUserProfile(updatedNote.author),
+                        future: _userProfileFuture,
                         builder: (_, snap) {
-                          String imgUrl = '';
+                          var imgUrl = '';
                           if (snap.hasData) {
                             final user = UserModel.fromCachedProfile(
                                 updatedNote.author, snap.data!);
@@ -538,8 +484,7 @@ class _NoteWidgetState extends State<NoteWidget>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             FutureBuilder<Map<String, String>>(
-                              future: widget.dataService
-                                  .getCachedUserProfile(updatedNote.author),
+                              future: _userProfileFuture,
                               builder: (_, snap) {
                                 if (!snap.hasData) {
                                   return Container(
@@ -558,7 +503,6 @@ class _NoteWidgetState extends State<NoteWidget>
                                             CrossAxisAlignment.start,
                                         children: [
                                           Row(
-                                            mainAxisSize: MainAxisSize.min,
                                             crossAxisAlignment:
                                                 CrossAxisAlignment.center,
                                             children: [
@@ -582,12 +526,10 @@ class _NoteWidgetState extends State<NoteWidget>
                                                 padding: const EdgeInsets.only(
                                                     left: 6),
                                                 child: Text(
-                                                  '• ${_formatTimestamp(updatedNote.timestamp)}',
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    color: Colors.grey,
-                                                  ),
-                                                ),
+                                                    '• $_formattedTimestamp',
+                                                    style: const TextStyle(
+                                                        fontSize: 12,
+                                                        color: Colors.grey)),
                                               ),
                                             ],
                                           ),
@@ -600,16 +542,15 @@ class _NoteWidgetState extends State<NoteWidget>
                             ),
                             if ((parsed['textParts'] as List).isNotEmpty)
                               Padding(
-                                padding: const EdgeInsets.all(0.0),
+                                padding: const EdgeInsets.all(0),
                                 child: _buildContentText(parsed),
                               ),
                             if ((parsed['mediaUrls'] as List).isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(top: 8),
                                 child: MediaPreviewWidget(
-                                  mediaUrls:
-                                      parsed['mediaUrls'] as List<String>,
-                                ),
+                                    mediaUrls:
+                                        parsed['mediaUrls'] as List<String>),
                               ),
                             if ((parsed['linkUrls'] as List).isNotEmpty)
                               Padding(
@@ -627,9 +568,8 @@ class _NoteWidgetState extends State<NoteWidget>
                                           padding: const EdgeInsets.symmetric(
                                               vertical: 8),
                                           child: QuoteWidget(
-                                            bech32: q,
-                                            dataService: widget.dataService,
-                                          ),
+                                              bech32: q,
+                                              dataService: widget.dataService),
                                         ))
                                     .toList(),
                               ),
