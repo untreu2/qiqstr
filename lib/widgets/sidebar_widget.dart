@@ -5,7 +5,6 @@ import 'package:qiqstr/screens/users_search_page.dart';
 import 'package:qiqstr/utils/logout.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:qiqstr/screens/discover_page.dart';
 
 class SidebarWidget extends StatefulWidget {
   final UserModel? user;
@@ -127,23 +126,6 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                         builder: (_) => const UserSearchPage(),
                       ),
                     );
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.explore, color: Colors.white),
-                  title: const Text(
-                    'Discover',
-                    style: TextStyle(color: Colors.white, fontSize: 15),
-                  ),
-                  onTap: () {
-                    if (npub != null) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => DiscoverPage(npub: npub!),
-                        ),
-                      );
-                    }
                   },
                 ),
                 ListTile(

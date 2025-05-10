@@ -3,7 +3,6 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:isolate';
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
 import 'package:nostr/nostr.dart';
@@ -26,7 +25,7 @@ import 'dart:typed_data';
 import 'package:collection/collection.dart';
 import 'package:http/http.dart' as http;
 
-enum DataType { Feed, Profile, Note, Discover }
+enum DataType { Feed, Profile, Note }
 
 enum MessageType { NewNotes, CacheLoad, Error, Close }
 
@@ -582,22 +581,6 @@ class DataService {
             .where((followedNpub) => followedNpub != npub)
             .map((followedNpub) => getFollowingList(followedNpub)),
       );
-    } else if (dataType == DataType.Discover) {
-      if (usersBox == null || !usersBox!.isOpen) {
-        usersBox = await _openHiveBox<UserModel>('users');
-      }
-
-      final allCachedUsers = usersBox!.values.toList();
-
-      if (allCachedUsers.isEmpty) {
-        print('[DataService] Discover: No cached users available.');
-        targetNpubs = [];
-      } else {
-        allCachedUsers.shuffle(Random());
-        targetNpubs = allCachedUsers.take(250).map((u) => u.npub).toList();
-        print(
-            '[DataService] Discover: Selected ${targetNpubs.length} random users.');
-      }
     } else {
       targetNpubs = [npub];
     }
