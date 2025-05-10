@@ -289,11 +289,13 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                   ),
                 ),
                 if (user.nip05.isNotEmpty && user.nip05.contains('@'))
+                  const TextSpan(text: '\u200A'),
+                if (user.nip05.isNotEmpty && user.nip05.contains('@'))
                   TextSpan(
                     text: '@${user.nip05.split('@').last}',
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: const Color(0xFFECB200),
+                      color: Color(0xFFECB200),
                     ),
                   ),
               ],
