@@ -3,6 +3,7 @@ import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/models/user_model.dart';
+import 'package:qiqstr/screens/edit_profile.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:hive/hive.dart';
 import 'package:qiqstr/models/following_model.dart';
@@ -138,32 +139,64 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                   children: [
                     _buildAvatar(user),
                     const Spacer(),
-                    if (_currentUserNpub != null &&
-                        widget.user.npub != _currentUserNpub &&
-                        _isFollowing != null)
+                    if (_currentUserNpub != null)
                       Padding(
                         padding: const EdgeInsets.only(top: 35.0),
-                        child: GestureDetector(
-                          onTap: _toggleFollow,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            height: 34,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: Colors.white10,
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(color: Colors.white30),
-                            ),
-                            child: Text(
-                              _isFollowing! ? 'Following' : 'Follow',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ),
+                        child: (widget.user.npub == _currentUserNpub)
+                            ? GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => EditOwnProfilePage(),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16),
+                                  height: 34,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white10,
+                                    borderRadius: BorderRadius.circular(24),
+                                    border: Border.all(color: Colors.white30),
+                                  ),
+                                  child: const Text(
+                                    'Edit profile',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : (_isFollowing != null)
+                                ? GestureDetector(
+                                    onTap: _toggleFollow,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 16),
+                                      height: 34,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white10,
+                                        borderRadius: BorderRadius.circular(24),
+                                        border:
+                                            Border.all(color: Colors.white30),
+                                      ),
+                                      child: Text(
+                                        _isFollowing! ? 'Following' : 'Follow',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : const SizedBox.shrink(),
                       ),
                   ],
                 ),
