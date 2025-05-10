@@ -8,7 +8,6 @@ import 'package:qiqstr/services/data_service.dart';
 import 'package:hive/hive.dart';
 import 'package:qiqstr/models/following_model.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:shimmer/shimmer.dart';
 
 class ProfileInfoWidget extends StatefulWidget {
   final UserModel user;
@@ -306,27 +305,28 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   }
 
   Widget _buildFollowingCount() {
-    if (_isLoadingFollowing) {
-      return Shimmer.fromColors(
-        baseColor: Colors.white24,
-        highlightColor: Colors.white54,
-        child: Container(
-          width: 80,
-          height: 20,
-          color: Colors.white,
-        ),
-      );
-    }
-
     return Row(
       children: [
-        Text(
+        const Text(
           'Following: ',
-          style: const TextStyle(color: Colors.white70, fontSize: 14),
+          style: TextStyle(color: Colors.white70, fontSize: 14),
         ),
-        Text(
-          '$_followingCount',
-          style: const TextStyle(color: Colors.white, fontSize: 14),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 500),
+          transitionBuilder: (child, animation) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          child: _isLoadingFollowing
+              ? const Text(
+                  '...',
+                  key: ValueKey('loading'),
+                  style: TextStyle(color: Colors.white54, fontSize: 14),
+                )
+              : Text(
+                  '$_followingCount',
+                  key: const ValueKey('count'),
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                ),
         ),
       ],
     );
