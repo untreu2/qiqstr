@@ -9,7 +9,6 @@ import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/share_note.dart';
 import 'package:qiqstr/services/data_service.dart';
-import 'package:qiqstr/screens/notifications_page.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -101,20 +100,6 @@ class _FeedPageState extends State<FeedPage> {
     );
   }
 
-  void _navigateToNotificationsPage() {
-    final box = dataService.notificationsBox!;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => NotificationsPage(
-          npub: widget.npub,
-          notificationsBox: box,
-          dataService: dataService,
-        ),
-      ),
-    );
-  }
-
   SliverPersistentHeader _buildAnimatedHeader() {
     return SliverPersistentHeader(
       floating: true,
@@ -184,10 +169,17 @@ class _FeedPageState extends State<FeedPage> {
                             height: 19,
                             color: Colors.white,
                           ),
-                          onPressed: _navigateToNotificationsPage,
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Redesigning'),
+                                duration: Duration(seconds: 2),
+                              ),
+                            );
+                          },
                           tooltip: 'Notifications',
                         ),
-                      ),
+                      )
                     ],
                   ),
                 ),

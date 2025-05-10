@@ -156,9 +156,7 @@ class DataService {
 
     await _fetchUserData();
 
-    if (dataType == DataType.Feed) {
-      _startNotificationSubscription();
-    }
+    if (dataType == DataType.Feed) {}
 
     await reloadInteractionCounts();
 
@@ -519,14 +517,14 @@ class DataService {
   Request _createRequest(Filter filter) => Request(generateUUID(), [filter]);
 
   void _startRealTimeSubscription(List<String> targetNpubs) {
-    final filterNotesAndReactions = Filter(
+    final filterNotes = Filter(
       authors: targetNpubs,
-      kinds: [1, 6, 7],
+      kinds: [1],
       since: (notes.isNotEmpty)
           ? (notes.first.timestamp.millisecondsSinceEpoch ~/ 1000)
           : null,
     );
-    final requestNotes = Request(generateUUID(), [filterNotesAndReactions]);
+    final requestNotes = Request(generateUUID(), [filterNotes]);
     _safeBroadcast(requestNotes.serialize());
 
     final filterReposts = Filter(
@@ -542,20 +540,6 @@ class DataService {
 
     print(
         '[DataService] Started real-time subscription for notes, reactions, and reposts separately.');
-  }
-
-  void _startNotificationSubscription() {
-    final filter = Filter(
-      kinds: [1, 6, 7],
-      p: [npub],
-      since: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-    );
-
-    final request = _createRequest(filter);
-    _safeBroadcast(request.serialize());
-
-    print(
-        '[DataService] Started notification subscription for tags with p:[$npub]');
   }
 
   Future<void> _subscribeToFollowing() async {
