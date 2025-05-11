@@ -833,7 +833,6 @@ class DataService {
     String noteContent =
         noteContentRaw is String ? noteContentRaw : jsonEncode(noteContentRaw);
     final tags = eventData['tags'] as List<dynamic>? ?? [];
-    final rootEventId = _extractRootEventId(tags);
 
     if (eventIds.contains(eventId) || noteContent.trim().isEmpty) return;
 
@@ -852,13 +851,21 @@ class DataService {
       }
     }
 
-    if (rootEventId != null) {
-      await _handleReplyEvent(eventData, rootEventId);
-      return;
-    }
-
     final timestamp = DateTime.fromMillisecondsSinceEpoch(
         (eventData['created_at'] as int) * 1000);
+
+    final rootTag = tags.firstWhereOrNull(
+      (tag) =>
+          tag is List && tag.length >= 4 && tag[0] == 'e' && tag[3] == 'root',
+    );
+    final replyTag = tags.firstWhereOrNull(
+      (tag) =>
+          tag is List && tag.length >= 4 && tag[0] == 'e' && tag[3] == 'reply',
+    );
+
+    final isReply = rootTag != null;
+    final rootId = rootTag != null ? rootTag[1] : null;
+    final parentId = replyTag != null ? replyTag[1] : rootId;
 
     final newNote = NoteModel(
       id: eventId,
@@ -869,6 +876,9 @@ class DataService {
       repostedBy: isRepost ? author : null,
       repostTimestamp: repostTimestamp,
       rawWs: isRepost ? repostRawWs : rawWs,
+      isReply: isReply,
+      rootId: rootId,
+      parentId: parentId,
     );
 
     parseContentForNote(newNote);
@@ -892,15 +902,6 @@ class DataService {
         fetchZapsForEvents([newNote.id]),
       ]);
     });
-  }
-
-  String? _extractRootEventId(List<dynamic> tags) {
-    for (var tag in tags) {
-      if (tag is List && tag.length >= 4 && tag[0] == 'e' && tag[3] == 'root') {
-        return tag[1] as String?;
-      }
-    }
-    return null;
   }
 
   Future<void> _handleNotificationEvent(
@@ -1041,12 +1042,21 @@ class DataService {
           parentNote.replyCount = repliesMap[parentEventId]!.length;
         }
 
+        final isRepost = eventData['kind'] == 6;
+        final repostTimestamp = isRepost
+            ? DateTime.fromMillisecondsSinceEpoch(
+                (eventData['created_at'] as int) * 1000)
+            : null;
+
         final noteModel = NoteModel(
           id: reply.id,
           content: reply.content,
           author: reply.author,
           timestamp: reply.timestamp,
           isReply: true,
+          isRepost: isRepost,
+          repostedBy: isRepost ? reply.author : null,
+          repostTimestamp: repostTimestamp,
           parentId: parentEventId,
           rootId: reply.rootEventId,
         );
