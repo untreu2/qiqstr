@@ -55,6 +55,15 @@ class NoteModel extends HiveObject {
   @HiveField(16)
   int zapAmount;
 
+  @HiveField(17)
+  final bool isReply;
+
+  @HiveField(18)
+  final String? parentId;
+
+  @HiveField(19)
+  final String? rootId;
+
   NoteModel({
     required this.id,
     required this.content,
@@ -73,6 +82,9 @@ class NoteModel extends HiveObject {
     this.isVideo = false,
     this.videoUrl,
     this.zapAmount = 0,
+    this.isReply = false,
+    this.parentId,
+    this.rootId,
   });
 
   factory NoteModel.fromJson(Map<String, dynamic> json) {
@@ -102,6 +114,9 @@ class NoteModel extends HiveObject {
       isVideo: json['isVideo'] as bool? ?? false,
       videoUrl: json['videoUrl'] as String?,
       zapAmount: json['zapAmount'] as int? ?? 0,
+      isReply: json['isReply'] as bool? ?? false,
+      parentId: json['parentId'] as String?,
+      rootId: json['rootId'] as String?,
     );
   }
 
@@ -124,6 +139,9 @@ class NoteModel extends HiveObject {
       'isVideo': isVideo,
       'videoUrl': videoUrl,
       'zapAmount': zapAmount,
+      'isReply': isReply,
+      'parentId': parentId,
+      'rootId': rootId,
     };
   }
 }

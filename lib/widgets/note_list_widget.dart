@@ -187,8 +187,10 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
         List<NoteModel> filteredNotes = switch (_selectedTabIndex) {
           0 => notes
-              .where((n) => n.timestamp
-                  .isAfter(DateTime.now().subtract(const Duration(hours: 24))))
+              .where((n) =>
+                  n.timestamp.isAfter(
+                      DateTime.now().subtract(const Duration(hours: 24))) &&
+                  (!n.isReply || n.isRepost))
               .toList()
             ..sort((a, b) =>
                 (b.reactionCount + b.replyCount + b.repostCount + b.zapAmount)
@@ -196,8 +198,10 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                         a.replyCount +
                         a.repostCount +
                         a.zapAmount)),
-          2 => notes.where((n) => n.hasMedia).toList(),
-          _ => notes,
+          2 => notes
+              .where((n) => n.hasMedia && (!n.isReply || n.isRepost))
+              .toList(),
+          _ => notes.where((n) => !n.isReply || n.isRepost).toList(),
         };
 
         return SliverList(

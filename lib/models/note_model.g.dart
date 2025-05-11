@@ -34,13 +34,16 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       isVideo: fields[14] as bool,
       videoUrl: fields[15] as String?,
       zapAmount: fields[16] as int,
+      isReply: fields[17] as bool,
+      parentId: fields[18] as String?,
+      rootId: fields[19] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, NoteModel obj) {
     writer
-      ..writeByte(17)
+      ..writeByte(20)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -74,7 +77,13 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       ..writeByte(15)
       ..write(obj.videoUrl)
       ..writeByte(16)
-      ..write(obj.zapAmount);
+      ..write(obj.zapAmount)
+      ..writeByte(17)
+      ..write(obj.isReply)
+      ..writeByte(18)
+      ..write(obj.parentId)
+      ..writeByte(19)
+      ..write(obj.rootId);
   }
 
   @override

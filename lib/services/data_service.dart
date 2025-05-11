@@ -1036,15 +1036,32 @@ class DataService {
 
         onRepliesUpdated?.call(parentEventId, repliesMap[parentEventId]!);
 
-        final note = notes.firstWhereOrNull((n) => n.id == parentEventId);
-        if (note != null) {
-          note.replyCount = repliesMap[parentEventId]!.length;
+        final parentNote = notes.firstWhereOrNull((n) => n.id == parentEventId);
+        if (parentNote != null) {
+          parentNote.replyCount = repliesMap[parentEventId]!.length;
+        }
+
+        final noteModel = NoteModel(
+          id: reply.id,
+          content: reply.content,
+          author: reply.author,
+          timestamp: reply.timestamp,
+          isReply: true,
+          parentId: parentEventId,
+          rootId: reply.rootEventId,
+        );
+
+        parseContentForNote(noteModel);
+
+        if (!eventIds.contains(noteModel.id)) {
+          notes.add(noteModel);
+          eventIds.add(noteModel.id);
+          await notesBox?.put(noteModel.id, noteModel);
+          addPendingNote(noteModel);
         }
 
         notesNotifier.value = _itemsTree.toList();
         await _fetchProfilesBatch([reply.author]);
-
-        await Future.wait([]);
       }
     } catch (e) {
       print('[DataService ERROR] Error handling reply event: $e');
