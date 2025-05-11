@@ -2325,10 +2325,19 @@ class DataService {
       } else if (kind == 9735) {
         await _handleZapEvent(eventData);
       } else if (kind == 1) {
-        if ((eventData['tags'] as List<dynamic>)
-            .any((tag) => tag is List && tag.isNotEmpty && tag[0] == 'e')) {
-          await _handleReplyEvent(
-              eventData, _extractRootEventId(eventData['tags']) ?? '');
+        final tags = eventData['tags'] as List<dynamic>;
+        final rootTag = tags.firstWhere(
+          (tag) =>
+              tag is List &&
+              tag.isNotEmpty &&
+              tag[0] == 'e' &&
+              tag.contains('root'),
+          orElse: () => null,
+        );
+
+        if (rootTag != null && rootTag is List && rootTag.length >= 2) {
+          final rootId = rootTag[1] as String;
+          await _handleReplyEvent(eventData, rootId);
         } else {
           await _processNoteEvent(eventData, targetNpubs,
               rawWs: jsonEncode(eventData));
