@@ -443,6 +443,40 @@ class _NoteWidgetState extends State<NoteWidget>
                   ),
                   const SizedBox(height: 8),
                 ],
+                if (updatedNote.isReply) ...[
+                  FutureBuilder<Map<String, String>>(
+                    future: widget.dataService
+                        .getCachedUserProfile(updatedNote.author),
+                    builder: (_, snap) {
+                      String name = 'Unknown';
+                      if (snap.hasData) {
+                        name = snap.data!['name'] ?? 'Unknown';
+                      }
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: GestureDetector(
+                          onTap: () => _navigateToProfile(updatedNote.author),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.reply,
+                                  size: 16, color: Colors.grey),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Replied by $name',
+                                  style: const TextStyle(
+                                      fontSize: 12, color: Colors.grey),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 6),
+                ],
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Row(
