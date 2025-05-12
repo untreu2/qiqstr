@@ -5,10 +5,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 class VP extends StatefulWidget {
   final String url;
 
-  const VP({
-    super.key,
-    required this.url,
-  });
+  const VP({super.key, required this.url});
 
   @override
   State<VP> createState() => _VPState();
@@ -51,13 +48,24 @@ class _VPState extends State<VP> {
 
   void _openFullScreen() {
     if (_isInitialized) {
-      showDialog(
-        context: context,
-        barrierColor: Colors.black87,
-        builder: (_) => Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.all(8),
-          child: VideoDialogPlayer(url: widget.url),
+      Navigator.of(context).push(
+        PageRouteBuilder(
+          transitionDuration: const Duration(milliseconds: 300),
+          reverseTransitionDuration: const Duration(milliseconds: 200),
+          pageBuilder: (_, __, ___) => FullScreenVideoPlayer(url: widget.url),
+          transitionsBuilder: (_, animation, __, child) {
+            final curved = CurvedAnimation(
+              parent: animation,
+              curve: Curves.easeOutCubic,
+            );
+            return FadeTransition(
+              opacity: curved,
+              child: ScaleTransition(
+                scale: Tween<double>(begin: 0.97, end: 1).animate(curved),
+                child: child,
+              ),
+            );
+          },
         ),
       );
     }
@@ -76,8 +84,7 @@ class _VPState extends State<VP> {
             aspectRatio: 1,
             child: _isInitialized && _controller != null
                 ? FittedBox(
-                    fit: BoxFit.contain,
-                    alignment: Alignment.center,
+                    fit: BoxFit.cover,
                     child: SizedBox(
                       width: _controller!.value.size.width,
                       height: _controller!.value.size.height,
@@ -87,13 +94,9 @@ class _VPState extends State<VP> {
                 : Container(
                     color: Colors.grey.shade800,
                     child: const Center(
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
                       ),
                     ),
                   ),
@@ -104,19 +107,20 @@ class _VPState extends State<VP> {
   }
 }
 
-class VideoDialogPlayer extends StatefulWidget {
+class FullScreenVideoPlayer extends StatefulWidget {
   final String url;
 
-  const VideoDialogPlayer({super.key, required this.url});
+  const FullScreenVideoPlayer({super.key, required this.url});
 
   @override
-  State<VideoDialogPlayer> createState() => _VideoDialogPlayerState();
+  State<FullScreenVideoPlayer> createState() => _FullScreenVideoPlayerState();
 }
 
-class _VideoDialogPlayerState extends State<VideoDialogPlayer> {
+class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
   late VideoPlayerController _controller;
   bool _isInitialized = false;
   Duration _position = Duration.zero;
+  double _dragOffset = 0;
 
   @override
   void initState() {
@@ -144,6 +148,20 @@ class _VideoDialogPlayerState extends State<VideoDialogPlayer> {
     super.dispose();
   }
 
+  void _handleVerticalDragUpdate(DragUpdateDetails details) {
+    setState(() {
+      _dragOffset += details.primaryDelta ?? 0;
+    });
+  }
+
+  void _handleVerticalDragEnd(DragEndDetails details) {
+    if (_dragOffset.abs() > 100) {
+      Navigator.of(context).pop();
+    } else {
+      setState(() => _dragOffset = 0);
+    }
+  }
+
   String _formatDuration(Duration duration) {
     final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
     final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
@@ -152,31 +170,37 @@ class _VideoDialogPlayerState extends State<VideoDialogPlayer> {
 
   @override
   Widget build(BuildContext context) {
-    return _isInitialized
-        ? Stack(
-            children: [
+    return Scaffold(
+      backgroundColor: Colors.black
+          .withOpacity(1.0 - (_dragOffset.abs() / 300).clamp(0.0, 1.0)),
+      body: GestureDetector(
+        onVerticalDragUpdate: _handleVerticalDragUpdate,
+        onVerticalDragEnd: _handleVerticalDragEnd,
+        child: Stack(
+          children: [
+            if (_isInitialized)
               Center(
                 child: AspectRatio(
                   aspectRatio: _controller.value.aspectRatio,
                   child: VideoPlayer(_controller),
                 ),
-              ),
+              )
+            else
+              const Center(
+                  child: CircularProgressIndicator(color: Colors.white)),
+            if (_isInitialized)
               Positioned(
-                top: 8,
-                right: 8,
-                child: IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ),
-              Positioned(
-                bottom: 0,
+                bottom: 64,
                 left: 0,
                 right: 0,
                 child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  color: Colors.black54,
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: Row(
                     children: [
                       IconButton(
@@ -216,18 +240,17 @@ class _VideoDialogPlayerState extends State<VideoDialogPlayer> {
                         _formatDuration(_controller.value.duration),
                         style: const TextStyle(color: Colors.white),
                       ),
-                      const SizedBox(width: 8),
                       IconButton(
-                        icon: const Icon(Icons.fullscreen_exit,
-                            color: Colors.white),
+                        icon: const Icon(Icons.close, color: Colors.white),
                         onPressed: () => Navigator.pop(context),
                       ),
                     ],
                   ),
                 ),
               ),
-            ],
-          )
-        : const Center(child: CircularProgressIndicator());
+          ],
+        ),
+      ),
+    );
   }
 }
