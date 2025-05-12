@@ -360,27 +360,34 @@ class _NoteWidgetState extends State<NoteWidget>
     return Stack(
       alignment: Alignment.center,
       children: [
-        ConfettiWidget(
-          confettiController: confettiController,
-          blastDirectionality: BlastDirectionality.explosive,
-          shouldLoop: false,
-          numberOfParticles: 10,
-          maxBlastForce: 5,
-          minBlastForce: 2,
-          emissionFrequency: 0.4,
-          gravity: 0.3,
-          particleDrag: 0.1,
-          colors: const [
-            Colors.red,
-            Colors.purple,
-            Color(0xFFECB200),
-            Colors.green
-          ],
-          createParticlePath: (size) {
-            final path = Path();
-            path.addOval(Rect.fromCircle(center: Offset.zero, radius: 2));
-            return path;
-          },
+        Positioned(
+          top: -10,
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: ConfettiWidget(
+              confettiController: confettiController,
+              blastDirectionality: BlastDirectionality.explosive,
+              shouldLoop: false,
+              numberOfParticles: 6,
+              maxBlastForce: 4,
+              minBlastForce: 2,
+              emissionFrequency: 0.4,
+              gravity: 0.4,
+              particleDrag: 0.1,
+              colors: const [
+                Colors.red,
+                Colors.purple,
+                Color(0xFFECB200),
+                Colors.green
+              ],
+              createParticlePath: (size) {
+                final path = Path();
+                path.addOval(Rect.fromCircle(center: Offset.zero, radius: 2));
+                return path;
+              },
+            ),
+          ),
         ),
         InkWell(
           splashColor: Colors.transparent,
