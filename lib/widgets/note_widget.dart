@@ -496,7 +496,7 @@ class _NoteWidgetState extends State<NoteWidget>
                             child: Padding(
                               padding: const EdgeInsets.only(top: 8),
                               child: CircleAvatar(
-                                radius: 22,
+                                radius: 18.5,
                                 backgroundImage: imgUrl.isNotEmpty
                                     ? CachedNetworkImageProvider(imgUrl)
                                     : null,
@@ -547,11 +547,11 @@ class _NoteWidgetState extends State<NoteWidget>
                                                           .substring(0, 25)
                                                       : user.name,
                                                   style: const TextStyle(
-                                                      fontSize: 16,
+                                                      fontSize: 14.5,
                                                       fontWeight:
                                                           FontWeight.w600,
                                                       color: Colors.white,
-                                                      height: 0.8),
+                                                      height: 0.1),
                                                   overflow:
                                                       TextOverflow.ellipsis,
                                                 ),
