@@ -7,6 +7,7 @@ import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:qiqstr/screens/note_statistics_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:confetti/confetti.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/send_reply.dart';
 import 'package:qiqstr/widgets/link_preview_widget.dart';
@@ -52,17 +53,35 @@ class _NoteWidgetState extends State<NoteWidget>
   bool _isRepostGlowing = false;
   bool _isZapGlowing = false;
 
-  double _reactionScale = 1.0;
-  double _replyScale = 1.0;
-  double _repostScale = 1.0;
-  double _zapScale = 1.0;
+  late final ConfettiController _reactionConfettiController;
+  late final ConfettiController _replyConfettiController;
+  late final ConfettiController _repostConfettiController;
+  late final ConfettiController _zapConfettiController;
 
   @override
   void initState() {
     super.initState();
+    _reactionConfettiController =
+        ConfettiController(duration: const Duration(milliseconds: 600));
+    _replyConfettiController =
+        ConfettiController(duration: const Duration(milliseconds: 600));
+    _repostConfettiController =
+        ConfettiController(duration: const Duration(milliseconds: 600));
+    _zapConfettiController =
+        ConfettiController(duration: const Duration(milliseconds: 600));
+
     _userProfileFuture =
         widget.dataService.getCachedUserProfile(widget.note.author);
     _formattedTimestamp = _formatTimestamp(widget.note.timestamp);
+  }
+
+  @override
+  void dispose() {
+    _reactionConfettiController.dispose();
+    _replyConfettiController.dispose();
+    _repostConfettiController.dispose();
+    _zapConfettiController.dispose();
+    super.dispose();
   }
 
   String _formatTimestamp(DateTime timestamp) {
@@ -76,29 +95,16 @@ class _NoteWidgetState extends State<NoteWidget>
     return '${(d.inDays / 365).floor()}y';
   }
 
-  void _navigateToMentionProfile(String id) {
-    widget.dataService.openUserProfile(context, id);
-  }
+  void _navigateToMentionProfile(String id) =>
+      widget.dataService.openUserProfile(context, id);
 
-  void _navigateToStatisticsPage() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => NoteStatisticsPage(
-            note: widget.note, dataService: widget.dataService),
-      ),
-    );
-  }
-
-  void _animateButton({
-    required void Function() onStart,
-    required void Function() onEnd,
-  }) {
-    setState(onStart);
-    Future.delayed(const Duration(milliseconds: 300), () {
-      if (mounted) setState(onEnd);
-    });
-  }
+  void _navigateToStatisticsPage() => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => NoteStatisticsPage(
+              note: widget.note, dataService: widget.dataService),
+        ),
+      );
 
   Widget _buildContentText(Map<String, dynamic> parsed) {
     final parts = parsed['textParts'] as List<Map<String, dynamic>>;
@@ -160,41 +166,56 @@ class _NoteWidgetState extends State<NoteWidget>
     );
   }
 
-  bool _hasZapped() {
-    final zaps = widget.dataService.zapsMap[widget.note.id] ?? [];
-    return zaps.any((z) => z.sender == widget.currentUserNpub);
+  bool _hasZapped() => (widget.dataService.zapsMap[widget.note.id] ?? [])
+      .any((z) => z.sender == widget.currentUserNpub);
+  bool _hasReacted() => (widget.dataService.reactionsMap[widget.note.id] ?? [])
+      .any((e) => e.author == widget.currentUserNpub);
+  bool _hasReplied() => (widget.dataService.repliesMap[widget.note.id] ?? [])
+      .any((e) => e.author == widget.currentUserNpub);
+  bool _hasReposted() => (widget.dataService.repostsMap[widget.note.id] ?? [])
+      .any((e) => e.repostedBy == widget.currentUserNpub);
+
+  void _handleReactionTap() async {
+    if (_hasReacted()) return;
+    _reactionConfettiController.play();
+    setState(() => _isReactionGlowing = true);
+    Future.delayed(const Duration(milliseconds: 400),
+        () => mounted ? setState(() => _isReactionGlowing = false) : null);
+    try {
+      await widget.dataService.sendReaction(widget.note.id, '💜');
+    } catch (_) {}
   }
 
-  bool _hasReacted() {
-    final r = widget.dataService.reactionsMap[widget.note.id] ?? [];
-    return r.any((e) => e.author == widget.currentUserNpub);
+  void _handleReplyTap() {
+    _replyConfettiController.play();
+    setState(() => _isReplyGlowing = true);
+    Future.delayed(const Duration(milliseconds: 400),
+        () => mounted ? setState(() => _isReplyGlowing = false) : null);
+    showDialog(
+      context: context,
+      builder: (_) => SendReplyDialog(
+          dataService: widget.dataService, noteId: widget.note.id),
+    );
   }
 
-  bool _hasReplied() {
-    final r = widget.dataService.repliesMap[widget.note.id] ?? [];
-    return r.any((e) => e.author == widget.currentUserNpub);
-  }
-
-  bool _hasReposted() {
-    final r = widget.dataService.repostsMap[widget.note.id] ?? [];
-    return r.any((e) => e.repostedBy == widget.currentUserNpub);
+  void _handleRepostTap() async {
+    _repostConfettiController.play();
+    setState(() => _isRepostGlowing = true);
+    Future.delayed(const Duration(milliseconds: 400),
+        () => mounted ? setState(() => _isRepostGlowing = false) : null);
+    try {
+      await widget.dataService.sendRepost(widget.note);
+    } catch (_) {}
   }
 
   void _handleZapTap() {
-    _animateButton(
-      onStart: () {
-        _zapScale = 1.2;
-        _isZapGlowing = true;
-      },
-      onEnd: () {
-        _zapScale = 1.0;
-        _isZapGlowing = false;
-      },
-    );
+    _zapConfettiController.play();
+    setState(() => _isZapGlowing = true);
+    Future.delayed(const Duration(milliseconds: 400),
+        () => mounted ? setState(() => _isZapGlowing = false) : null);
 
     final amountController = TextEditingController(text: '21');
     final noteController = TextEditingController();
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -203,11 +224,10 @@ class _NoteWidgetState extends State<NoteWidget>
           borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (context) => Padding(
         padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 40,
-          top: 8,
-        ),
+            left: 16,
+            right: 16,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 40,
+            top: 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -287,74 +307,20 @@ class _NoteWidgetState extends State<NoteWidget>
     );
   }
 
-  void _handleReactionTap() async {
-    if (_hasReacted()) return;
-    _animateButton(
-      onStart: () {
-        _reactionScale = 1.2;
-        _isReactionGlowing = true;
-      },
-      onEnd: () {
-        _reactionScale = 1.0;
-        _isReactionGlowing = false;
-      },
-    );
-    try {
-      await widget.dataService.sendReaction(widget.note.id, '💜');
-    } catch (_) {}
-  }
-
-  void _handleReplyTap() {
-    _animateButton(
-      onStart: () {
-        _replyScale = 1.2;
-        _isReplyGlowing = true;
-      },
-      onEnd: () {
-        _replyScale = 1.0;
-        _isReplyGlowing = false;
-      },
-    );
-    showDialog(
-      context: context,
-      builder: (_) => SendReplyDialog(
-          dataService: widget.dataService, noteId: widget.note.id),
-    );
-  }
-
-  void _handleRepostTap() async {
-    _animateButton(
-      onStart: () {
-        _repostScale = 1.2;
-        _isRepostGlowing = true;
-      },
-      onEnd: () {
-        _repostScale = 1.0;
-        _isRepostGlowing = false;
-      },
-    );
-    try {
-      await widget.dataService.sendRepost(widget.note);
-    } catch (_) {}
-  }
-
   Future<void> _onOpen(LinkableElement link) async {
     final url = Uri.parse(link.url);
     if (await canLaunchUrl(url)) await launchUrl(url);
   }
 
-  void _navigateToProfile(String npub) {
-    widget.dataService.openUserProfile(context, npub);
-  }
+  void _navigateToProfile(String npub) =>
+      widget.dataService.openUserProfile(context, npub);
 
   Widget _buildRepostInfo(String npub, DateTime? ts) {
     return FutureBuilder<Map<String, String>>(
       future: widget.dataService.getCachedUserProfile(npub),
       builder: (_, snap) {
         var name = 'Unknown';
-        if (snap.hasData) {
-          name = snap.data!['name'] ?? 'Unknown';
-        }
+        if (snap.hasData) name = snap.data!['name'] ?? 'Unknown';
         return GestureDetector(
           onTap: () => _navigateToProfile(npub),
           child: Row(
@@ -385,31 +351,53 @@ class _NoteWidgetState extends State<NoteWidget>
   }
 
   Widget _buildAction({
-    required double scale,
     required String svg,
     required Color color,
     required int count,
     required VoidCallback onTap,
+    required ConfettiController confettiController,
   }) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 1.0, end: scale),
-      duration: const Duration(milliseconds: 300),
-      builder: (_, s, child) => Transform.scale(scale: s, child: child),
-      child: InkWell(
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
-        onTap: onTap,
-        child: Row(
-          children: [
-            SvgPicture.asset(svg, width: 16, height: 16, color: color),
-            if (count > 0) ...[
-              const SizedBox(width: 4),
-              Text('$count',
-                  style: const TextStyle(fontSize: 13, color: Colors.white)),
-            ],
+    return Stack(
+      alignment: Alignment.center,
+      children: [
+        ConfettiWidget(
+          confettiController: confettiController,
+          blastDirectionality: BlastDirectionality.explosive,
+          shouldLoop: false,
+          numberOfParticles: 10,
+          maxBlastForce: 5,
+          minBlastForce: 2,
+          emissionFrequency: 0.4,
+          gravity: 0.3,
+          particleDrag: 0.1,
+          colors: const [
+            Colors.red,
+            Colors.purple,
+            Color(0xFFECB200),
+            Colors.green
           ],
+          createParticlePath: (size) {
+            final path = Path();
+            path.addOval(Rect.fromCircle(center: Offset.zero, radius: 2));
+            return path;
+          },
         ),
-      ),
+        InkWell(
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          onTap: onTap,
+          child: Row(
+            children: [
+              SvgPicture.asset(svg, width: 16, height: 16, color: color),
+              if (count > 0) ...[
+                const SizedBox(width: 4),
+                Text('$count',
+                    style: const TextStyle(fontSize: 13, color: Colors.white)),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -448,9 +436,7 @@ class _NoteWidgetState extends State<NoteWidget>
                         .getCachedUserProfile(updatedNote.author),
                     builder: (_, snap) {
                       String name = 'Unknown';
-                      if (snap.hasData) {
-                        name = snap.data!['name'] ?? 'Unknown';
-                      }
+                      if (snap.hasData) name = snap.data!['name'] ?? 'Unknown';
                       return Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         child: GestureDetector(
@@ -546,11 +532,11 @@ class _NoteWidgetState extends State<NoteWidget>
                                                           .substring(0, 25)
                                                       : user.name,
                                                   style: const TextStyle(
-                                                      fontSize: 14.5,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      color: Colors.white,
-                                                      height: 0.1),
+                                                    fontSize: 14.5,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: Colors.white,
+                                                    height: 0.1,
+                                                  ),
                                                   overflow:
                                                       TextOverflow.ellipsis,
                                                 ),
@@ -611,40 +597,41 @@ class _NoteWidgetState extends State<NoteWidget>
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 _buildAction(
-                                  scale: _reactionScale,
                                   svg: 'assets/reaction_button.svg',
                                   color: _isReactionGlowing || _hasReacted()
                                       ? Colors.red.shade400
                                       : Colors.white,
                                   count: updatedNote.reactionCount,
                                   onTap: _handleReactionTap,
+                                  confettiController:
+                                      _reactionConfettiController,
                                 ),
                                 _buildAction(
-                                  scale: _replyScale,
                                   svg: 'assets/reply_button.svg',
                                   color: _isReplyGlowing || _hasReplied()
                                       ? Colors.blue.shade200
                                       : Colors.white,
                                   count: updatedNote.replyCount,
                                   onTap: _handleReplyTap,
+                                  confettiController: _replyConfettiController,
                                 ),
                                 _buildAction(
-                                  scale: _repostScale,
                                   svg: 'assets/repost_button.svg',
                                   color: _isRepostGlowing || _hasReposted()
                                       ? Colors.green.shade400
                                       : Colors.white,
                                   count: updatedNote.repostCount,
                                   onTap: _handleRepostTap,
+                                  confettiController: _repostConfettiController,
                                 ),
                                 _buildAction(
-                                  scale: _zapScale,
                                   svg: 'assets/zap_button.svg',
                                   color: _isZapGlowing || _hasZapped()
                                       ? const Color(0xFFECB200)
                                       : Colors.white,
                                   count: updatedNote.zapAmount,
                                   onTap: _handleZapTap,
+                                  confettiController: _zapConfettiController,
                                 ),
                                 GestureDetector(
                                   onTap: _navigateToStatisticsPage,
