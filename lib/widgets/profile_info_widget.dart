@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -28,11 +29,21 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   int? _followingCount;
   bool _isLoadingFollowing = true;
 
+  UserModel? _liveUser;
+  Timer? _userRefreshTimer;
+
   @override
   void initState() {
     super.initState();
     _initFollowStatus();
     _loadFollowingCount();
+    _startUserRefreshTimer();
+  }
+
+  @override
+  void dispose() {
+    _userRefreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _initFollowStatus() async {
@@ -50,6 +61,19 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     _dataService =
         DataService(npub: _currentUserNpub!, dataType: DataType.Profile);
     await _dataService!.initialize();
+  }
+
+  void _startUserRefreshTimer() {
+    final npub = widget.user.npub;
+    _userRefreshTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      final usersBox = await Hive.openBox<UserModel>('users');
+      final latestUser = usersBox.get(npub);
+      if (latestUser != null && mounted) {
+        setState(() {
+          _liveUser = latestUser;
+        });
+      }
+    });
   }
 
   Future<void> _loadFollowingCount() async {
@@ -99,7 +123,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final user = widget.user;
+    final user = _liveUser ?? widget.user;
     final screenWidth = MediaQuery.of(context).size.width;
     final websiteUrl = user.website.isNotEmpty &&
             !(user.website.startsWith("http://") ||
@@ -147,7 +171,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) => EditOwnProfilePage(),
+                                      builder: (_) =>
+                                          const EditOwnProfilePage(),
                                     ),
                                   );
                                 },

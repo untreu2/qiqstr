@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:qiqstr/screens/profile_page.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:hive/hive.dart';
@@ -79,12 +78,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
       final updatedUser = usersBox.get(_dataService!.npub);
 
       if (mounted && updatedUser != null) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ProfilePage(user: updatedUser),
-          ),
-        );
+        Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
