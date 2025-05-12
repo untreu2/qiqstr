@@ -12,29 +12,17 @@ class LoginPage extends StatefulWidget {
   _LoginPageState createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage>
-    with SingleTickerProviderStateMixin {
+class _LoginPageState extends State<LoginPage> {
   final TextEditingController _nsecController = TextEditingController();
   String _message = '';
   bool _isLoading = false;
-  late AnimationController _progressController;
   DataService? _tempService;
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   @override
-  void initState() {
-    super.initState();
-    _progressController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 10),
-    );
-  }
-
-  @override
   void dispose() {
     _nsecController.dispose();
-    _progressController.dispose();
     _tempService?.closeConnections();
     super.dispose();
   }
@@ -58,19 +46,11 @@ class _LoginPageState extends State<LoginPage>
 
       _tempService = DataService(npub: npubHex, dataType: DataType.Feed);
       await _tempService!.initialize();
-
-      _progressController.forward();
-
-      await Future.delayed(const Duration(seconds: 10));
-
       await _tempService?.closeConnections();
       _tempService = null;
 
       if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-
+        setState(() => _isLoading = false);
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -168,26 +148,12 @@ class _LoginPageState extends State<LoginPage>
   Widget _buildLoadingScreen() {
     return Column(
       mainAxisSize: MainAxisSize.min,
-      children: [
-        const CircularProgressIndicator(color: Colors.white),
-        const SizedBox(height: 20),
-        const Text(
-          'Setting things up for you...',
+      children: const [
+        CircularProgressIndicator(color: Colors.white),
+        SizedBox(height: 20),
+        Text(
+          'Logging in...',
           style: TextStyle(color: Colors.white70, fontSize: 16),
-        ),
-        const SizedBox(height: 30),
-        SizedBox(
-          width: 200,
-          child: AnimatedBuilder(
-            animation: _progressController,
-            builder: (context, child) {
-              return LinearProgressIndicator(
-                value: _progressController.value,
-                backgroundColor: Colors.white10,
-                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-              );
-            },
-          ),
         ),
       ],
     );
@@ -201,9 +167,7 @@ class _LoginPageState extends State<LoginPage>
         child: Center(
           child: _isLoading
               ? _buildLoadingScreen()
-              : SingleChildScrollView(
-                  child: _buildLoginForm(),
-                ),
+              : SingleChildScrollView(child: _buildLoginForm()),
         ),
       ),
     );
