@@ -37,51 +37,52 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   @override
   Widget build(BuildContext context) {
     return Drawer(
-      backgroundColor: Colors.black,
+      backgroundColor: const Color(0xFF121212),
       child: widget.user == null || npub == null
           ? const Center(child: CircularProgressIndicator())
           : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SafeArea(bottom: false, child: SizedBox.shrink()),
+                const SafeArea(
+                  bottom: false,
+                  child: Text(""),
+                ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 28),
-                  decoration: const BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: Colors.white10, width: 0.5),
-                    ),
+                  margin: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E1E1E),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.3),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [
                       CircleAvatar(
-                        radius: 30,
+                        radius: 32,
                         backgroundImage: widget.user!.profileImage.isNotEmpty
                             ? CachedNetworkImageProvider(
                                 widget.user!.profileImage)
                             : const AssetImage('assets/default_profile.png')
                                 as ImageProvider,
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 16),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    widget.user!.name,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
+                            Text(
+                              widget.user!.name,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                             if (widget.user!.nip05.isNotEmpty)
                               Text(
@@ -89,57 +90,70 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                                 style: const TextStyle(
                                   color: Color(0xFFECB200),
                                   fontSize: 13,
-                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                           ],
                         ),
-                      )
+                      ),
                     ],
                   ),
                 ),
-                ListTile(
-                  leading: const Icon(Icons.person, color: Colors.white),
-                  title: const Text(
-                    'Profile',
-                    style: TextStyle(color: Colors.white, fontSize: 15),
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ProfilePage(user: widget.user!),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    children: [
+                      _buildSidebarItem(
+                        icon: Icons.person,
+                        label: 'Profile',
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                ProfilePage(user: widget.user!),
+                          ),
+                        ),
                       ),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.search, color: Colors.white),
-                  title: const Text(
-                    'Search',
-                    style: TextStyle(color: Colors.white, fontSize: 15),
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const UserSearchPage(),
+                      _buildSidebarItem(
+                        icon: Icons.search,
+                        label: 'Search',
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const UserSearchPage(),
+                          ),
+                        ),
                       ),
-                    );
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.logout, color: Colors.redAccent),
-                  title: const Text(
-                    'Logout',
-                    style: TextStyle(color: Colors.redAccent, fontSize: 15),
+                      _buildSidebarItem(
+                        icon: Icons.logout,
+                        label: 'Logout',
+                        iconColor: Colors.redAccent,
+                        textColor: Colors.redAccent,
+                        onTap: () => Logout.performLogout(context),
+                      ),
+                    ],
                   ),
-                  onTap: () {
-                    Logout.performLogout(context);
-                  },
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _buildSidebarItem({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    Color iconColor = Colors.white,
+    Color textColor = Colors.white,
+  }) {
+    return ListTile(
+      leading: Icon(icon, color: iconColor),
+      title: Text(
+        label,
+        style: TextStyle(color: textColor, fontSize: 16),
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      hoverColor: Colors.white12,
+      onTap: onTap,
     );
   }
 }
