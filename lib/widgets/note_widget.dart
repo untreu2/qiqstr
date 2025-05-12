@@ -86,6 +86,7 @@ class _NoteWidgetState extends State<NoteWidget>
 
   String _formatTimestamp(DateTime timestamp) {
     final d = DateTime.now().difference(timestamp);
+    if (d.inSeconds < 5) return 'now';
     if (d.inSeconds < 60) return '${d.inSeconds}s';
     if (d.inMinutes < 60) return '${d.inMinutes}m';
     if (d.inHours < 24) return '${d.inHours}h';
