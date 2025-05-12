@@ -123,14 +123,13 @@ class _NoteWidgetState extends State<NoteWidget>
               if (m.start > last) {
                 spans.add(TextSpan(
                   text: text.substring(last, m.start),
-                  style: const TextStyle(fontSize: 15.5, color: Colors.white),
+                  style: const TextStyle(fontSize: 15, color: Colors.white),
                 ));
               }
               final url = text.substring(m.start, m.end);
               spans.add(TextSpan(
                 text: url,
-                style:
-                    const TextStyle(color: Color(0xFFECB200), fontSize: 15.5),
+                style: const TextStyle(color: Color(0xFFECB200), fontSize: 15),
                 recognizer: TapGestureRecognizer()
                   ..onTap = () => _onOpen(LinkableElement(url, url)),
               ));
@@ -139,7 +138,7 @@ class _NoteWidgetState extends State<NoteWidget>
             if (last < text.length) {
               spans.add(TextSpan(
                 text: text.substring(last),
-                style: const TextStyle(fontSize: 15.5, color: Colors.white),
+                style: const TextStyle(fontSize: 15, color: Colors.white),
               ));
             }
           } else if (p['type'] == 'mention') {
@@ -149,7 +148,7 @@ class _NoteWidgetState extends State<NoteWidget>
               text: '@$username',
               style: const TextStyle(
                   color: Color(0xFFECB200),
-                  fontSize: 15.5,
+                  fontSize: 15,
                   fontWeight: FontWeight.w500),
               recognizer: TapGestureRecognizer()
                 ..onTap = () => _navigateToMentionProfile(p['id']),
@@ -402,7 +401,7 @@ class _NoteWidgetState extends State<NoteWidget>
         onTap: onTap,
         child: Row(
           children: [
-            SvgPicture.asset(svg, width: 18, height: 18, color: color),
+            SvgPicture.asset(svg, width: 16, height: 16, color: color),
             if (count > 0) ...[
               const SizedBox(width: 4),
               Text('$count',
