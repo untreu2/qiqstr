@@ -7,7 +7,6 @@ import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:qiqstr/screens/note_statistics_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:confetti/confetti.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/send_reply.dart';
 import 'package:qiqstr/widgets/link_preview_widget.dart';
@@ -53,22 +52,9 @@ class _NoteWidgetState extends State<NoteWidget>
   bool _isRepostGlowing = false;
   bool _isZapGlowing = false;
 
-  late final ConfettiController _reactionConfettiController;
-  late final ConfettiController _replyConfettiController;
-  late final ConfettiController _repostConfettiController;
-  late final ConfettiController _zapConfettiController;
-
   @override
   void initState() {
     super.initState();
-    _reactionConfettiController =
-        ConfettiController(duration: const Duration(milliseconds: 600));
-    _replyConfettiController =
-        ConfettiController(duration: const Duration(milliseconds: 600));
-    _repostConfettiController =
-        ConfettiController(duration: const Duration(milliseconds: 600));
-    _zapConfettiController =
-        ConfettiController(duration: const Duration(milliseconds: 600));
 
     _userProfileFuture =
         widget.dataService.getCachedUserProfile(widget.note.author);
@@ -77,10 +63,6 @@ class _NoteWidgetState extends State<NoteWidget>
 
   @override
   void dispose() {
-    _reactionConfettiController.dispose();
-    _replyConfettiController.dispose();
-    _repostConfettiController.dispose();
-    _zapConfettiController.dispose();
     super.dispose();
   }
 
@@ -178,7 +160,6 @@ class _NoteWidgetState extends State<NoteWidget>
 
   void _handleReactionTap() async {
     if (_hasReacted()) return;
-    _reactionConfettiController.play();
     setState(() => _isReactionGlowing = true);
     Future.delayed(const Duration(milliseconds: 400),
         () => mounted ? setState(() => _isReactionGlowing = false) : null);
@@ -188,7 +169,6 @@ class _NoteWidgetState extends State<NoteWidget>
   }
 
   void _handleReplyTap() {
-    _replyConfettiController.play();
     setState(() => _isReplyGlowing = true);
     Future.delayed(const Duration(milliseconds: 400),
         () => mounted ? setState(() => _isReplyGlowing = false) : null);
@@ -200,7 +180,6 @@ class _NoteWidgetState extends State<NoteWidget>
   }
 
   void _handleRepostTap() async {
-    _repostConfettiController.play();
     setState(() => _isRepostGlowing = true);
     Future.delayed(const Duration(milliseconds: 400),
         () => mounted ? setState(() => _isRepostGlowing = false) : null);
@@ -210,7 +189,6 @@ class _NoteWidgetState extends State<NoteWidget>
   }
 
   void _handleZapTap() {
-    _zapConfettiController.play();
     setState(() => _isZapGlowing = true);
     Future.delayed(const Duration(milliseconds: 400),
         () => mounted ? setState(() => _isZapGlowing = false) : null);
@@ -356,7 +334,6 @@ class _NoteWidgetState extends State<NoteWidget>
     required Color color,
     required int count,
     required VoidCallback onTap,
-    required ConfettiController confettiController,
   }) {
     return Stack(
       alignment: Alignment.center,
@@ -366,28 +343,6 @@ class _NoteWidgetState extends State<NoteWidget>
           child: SizedBox(
             width: 40,
             height: 40,
-            child: ConfettiWidget(
-              confettiController: confettiController,
-              blastDirectionality: BlastDirectionality.explosive,
-              shouldLoop: false,
-              numberOfParticles: 6,
-              maxBlastForce: 4,
-              minBlastForce: 2,
-              emissionFrequency: 0.4,
-              gravity: 0.4,
-              particleDrag: 0.1,
-              colors: const [
-                Colors.red,
-                Colors.purple,
-                Color(0xFFECB200),
-                Colors.green
-              ],
-              createParticlePath: (size) {
-                final path = Path();
-                path.addOval(Rect.fromCircle(center: Offset.zero, radius: 2));
-                return path;
-              },
-            ),
           ),
         ),
         InkWell(
@@ -611,8 +566,6 @@ class _NoteWidgetState extends State<NoteWidget>
                                       : Colors.white,
                                   count: updatedNote.reactionCount,
                                   onTap: _handleReactionTap,
-                                  confettiController:
-                                      _reactionConfettiController,
                                 ),
                                 _buildAction(
                                   svg: 'assets/reply_button.svg',
@@ -621,7 +574,6 @@ class _NoteWidgetState extends State<NoteWidget>
                                       : Colors.white,
                                   count: updatedNote.replyCount,
                                   onTap: _handleReplyTap,
-                                  confettiController: _replyConfettiController,
                                 ),
                                 _buildAction(
                                   svg: 'assets/repost_button.svg',
@@ -630,7 +582,6 @@ class _NoteWidgetState extends State<NoteWidget>
                                       : Colors.white,
                                   count: updatedNote.repostCount,
                                   onTap: _handleRepostTap,
-                                  confettiController: _repostConfettiController,
                                 ),
                                 _buildAction(
                                   svg: 'assets/zap_button.svg',
@@ -639,7 +590,6 @@ class _NoteWidgetState extends State<NoteWidget>
                                       : Colors.white,
                                   count: updatedNote.zapAmount,
                                   onTap: _handleZapTap,
-                                  confettiController: _zapConfettiController,
                                 ),
                                 GestureDetector(
                                   onTap: _navigateToStatisticsPage,
