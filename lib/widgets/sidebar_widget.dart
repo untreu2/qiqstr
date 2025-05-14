@@ -37,20 +37,17 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   @override
   Widget build(BuildContext context) {
     return Drawer(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: Colors.black,
       child: widget.user == null || npub == null
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                const SafeArea(
-                  bottom: false,
-                  child: Text(""),
-                ),
+                const SafeArea(bottom: false, child: Text("")),
                 Container(
                   margin: const EdgeInsets.all(16),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF1E1E1E),
+                    color: Colors.black,
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
@@ -152,7 +149,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         style: TextStyle(color: textColor, fontSize: 16),
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      hoverColor: Colors.white12,
+      hoverColor: Colors.black26,
       onTap: onTap,
     );
   }
