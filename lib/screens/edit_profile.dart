@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:hive/hive.dart';
+import 'package:file_picker/file_picker.dart';
 
 class EditOwnProfilePage extends StatefulWidget {
   const EditOwnProfilePage({super.key});
@@ -27,6 +28,8 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
 
   bool _isSaving = false;
   bool _isLoading = true;
+  bool _isUploadingPicture = false;
+  bool _isUploadingBanner = false;
 
   @override
   void initState() {
@@ -56,6 +59,56 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
       _websiteController = TextEditingController(text: user?.website ?? '');
       _isLoading = false;
     });
+  }
+
+  Future<void> _pickAndUploadMedia({
+    required TextEditingController controller,
+    required String label,
+    required bool isPicture,
+  }) async {
+    setState(() {
+      if (isPicture) {
+        _isUploadingPicture = true;
+        _pictureController.text = 'Uploading...';
+      } else {
+        _isUploadingBanner = true;
+        _bannerController.text = 'Uploading...';
+      }
+    });
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        withData: true,
+      );
+      if (result != null && result.files.single.path != null) {
+        final filePath = result.files.single.path!;
+        final url =
+            await _dataService!.sendMedia(filePath, 'https://nostr.build');
+        setState(() {
+          controller.text = url;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$label uploaded successfully.')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e')),
+        );
+      }
+    } finally {
+      setState(() {
+        if (isPicture) {
+          _isUploadingPicture = false;
+        } else {
+          _isUploadingBanner = false;
+        }
+      });
+    }
   }
 
   Future<void> _saveProfile() async {
@@ -91,6 +144,37 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
     }
   }
 
+  InputDecoration _inputDecoration(String label, {VoidCallback? onUpload}) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(
+        fontWeight: FontWeight.w600,
+        color: Colors.grey,
+      ),
+      filled: true,
+      fillColor: Colors.black,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.white12),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.white24),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFFECB200), width: 2),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      suffixIcon: onUpload != null
+          ? IconButton(
+              icon: const Icon(Icons.upload, color: Color(0xFFECB200)),
+              onPressed: onUpload,
+            )
+          : null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -101,59 +185,92 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         elevation: 0,
+        leading: const BackButton(color: Colors.white),
+        actions: [
+          TextButton.icon(
+            onPressed: _isSaving ? null : _saveProfile,
+            icon: _isSaving
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      color: Color(0xFFECB200),
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Icon(Icons.check, color: Color(0xFFECB200)),
+            label: const Text(
+              'Save',
+              style: TextStyle(
+                color: Color(0xFFECB200),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,
           child: ListView(
             children: [
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Name'),
+                decoration: _inputDecoration('Username'),
+                style: const TextStyle(color: Colors.white),
               ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _aboutController,
-                decoration: const InputDecoration(labelText: 'About'),
+                decoration: _inputDecoration('Bio'),
+                style: const TextStyle(color: Colors.white),
               ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _pictureController,
-                decoration:
-                    const InputDecoration(labelText: 'Profile Image URL'),
+                enabled: !_isUploadingPicture,
+                decoration: _inputDecoration(
+                  'Profile image',
+                  onUpload: _isUploadingPicture
+                      ? null
+                      : () => _pickAndUploadMedia(
+                            controller: _pictureController,
+                            label: 'Profile image',
+                            isPicture: true,
+                          ),
+                ),
+                style: const TextStyle(color: Colors.white),
               ),
-              TextFormField(
-                controller: _nip05Controller,
-                decoration: const InputDecoration(labelText: 'nip05'),
-              ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _bannerController,
-                decoration: const InputDecoration(labelText: 'Banner URL'),
+                enabled: !_isUploadingBanner,
+                decoration: _inputDecoration(
+                  'Banner',
+                  onUpload: _isUploadingBanner
+                      ? null
+                      : () => _pickAndUploadMedia(
+                            controller: _bannerController,
+                            label: 'Banner',
+                            isPicture: false,
+                          ),
+                ),
+                style: const TextStyle(color: Colors.white),
               ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _lud16Controller,
-                decoration: const InputDecoration(labelText: 'lud16'),
+                decoration: _inputDecoration('Lightning address'),
+                style: const TextStyle(color: Colors.white),
               ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _websiteController,
-                decoration: const InputDecoration(labelText: 'Website'),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  foregroundColor: Colors.white,
-                  side: const BorderSide(color: Color(0xFFECB200), width: 2),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                onPressed: _isSaving ? null : _saveProfile,
-                child: _isSaving
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('Save'),
+                decoration: _inputDecoration('Website'),
+                style: const TextStyle(color: Colors.white),
               ),
             ],
           ),
