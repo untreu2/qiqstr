@@ -223,6 +223,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
               }
 
               final note = filteredNotes[index - 1];
+
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -235,6 +236,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                     dataService: _dataService,
                     currentUserNpub: _currentUserNpub!,
                     notesNotifier: _dataService.notesNotifier,
+                    profiles: _dataService.profilesNotifier.value,
                   ),
                   if (index < filteredNotes.length)
                     Container(

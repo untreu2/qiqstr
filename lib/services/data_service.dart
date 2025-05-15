@@ -609,6 +609,11 @@ class DataService {
       print(
           '[DataService] Relay profile fetch fallback for ${remainingForRelay.length} npubs.');
     }
+
+    profilesNotifier.value = {
+      for (var entry in profileCache.entries)
+        entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
+    };
   }
 
   Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {
@@ -979,6 +984,11 @@ class DataService {
         _pendingProfileRequests[author]?.complete(profileCache[author]!.data);
         _pendingProfileRequests.remove(author);
       }
+
+      profilesNotifier.value = {
+        for (var entry in profileCache.entries)
+          entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
+      };
     } catch (e) {
       print('[DataService ERROR] Error handling profile event: $e');
     }
@@ -1217,6 +1227,8 @@ class DataService {
 
   final SplayTreeSet<NoteModel> _itemsTree = SplayTreeSet(_compareNotes);
   final ValueNotifier<List<NoteModel>> notesNotifier = ValueNotifier([]);
+  final ValueNotifier<Map<String, UserModel>> profilesNotifier =
+      ValueNotifier({});
 
   static int _compareNotes(NoteModel a, NoteModel b) {
     final aTime = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
@@ -1944,6 +1956,11 @@ class DataService {
     }
 
     await _fetchProfilesForAllData();
+
+    profilesNotifier.value = {
+      for (var entry in profileCache.entries)
+        entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
+    };
   }
 
   Future<void> loadZapsFromCache() async {

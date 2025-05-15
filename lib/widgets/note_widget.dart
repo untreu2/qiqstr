@@ -23,6 +23,7 @@ class NoteWidget extends StatefulWidget {
   final DataService dataService;
   final String currentUserNpub;
   final ValueNotifier<List<NoteModel>> notesNotifier;
+  final Map<String, UserModel> profiles;
 
   const NoteWidget({
     super.key,
@@ -33,6 +34,7 @@ class NoteWidget extends StatefulWidget {
     required this.dataService,
     required this.currentUserNpub,
     required this.notesNotifier,
+    required this.profiles,
   });
 
   @override
@@ -44,7 +46,6 @@ class _NoteWidgetState extends State<NoteWidget>
   @override
   bool get wantKeepAlive => true;
 
-  late Future<Map<String, String>> _userProfileFuture;
   late final String _formattedTimestamp;
 
   bool _isReactionGlowing = false;
@@ -55,15 +56,7 @@ class _NoteWidgetState extends State<NoteWidget>
   @override
   void initState() {
     super.initState();
-
-    _userProfileFuture =
-        widget.dataService.getCachedUserProfile(widget.note.author);
     _formattedTimestamp = _formatTimestamp(widget.note.timestamp);
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
   }
 
   String _formatTimestamp(DateTime timestamp) {
@@ -295,37 +288,30 @@ class _NoteWidgetState extends State<NoteWidget>
       widget.dataService.openUserProfile(context, npub);
 
   Widget _buildRepostInfo(String npub, DateTime? ts) {
-    return FutureBuilder<Map<String, String>>(
-      future: widget.dataService.getCachedUserProfile(npub),
-      builder: (_, snap) {
-        var name = 'Unknown';
-        if (snap.hasData) name = snap.data!['name'] ?? 'Unknown';
-        return GestureDetector(
-          onTap: () => _navigateToProfile(npub),
-          child: Row(
-            children: [
-              const Icon(Icons.repeat, size: 16, color: Colors.grey),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Row(
-                  children: [
-                    Text('Reposted by $name',
-                        style:
-                            const TextStyle(fontSize: 12, color: Colors.grey),
-                        overflow: TextOverflow.ellipsis),
-                    if (ts != null) ...[
-                      const SizedBox(width: 6),
-                      Text('• ${_formatTimestamp(ts)}',
-                          style: const TextStyle(
-                              fontSize: 12, color: Colors.grey)),
-                    ],
-                  ],
-                ),
-              ),
-            ],
+    final user = widget.profiles[npub];
+    final name = user?.name ?? 'Unknown';
+    return GestureDetector(
+      onTap: () => _navigateToProfile(npub),
+      child: Row(
+        children: [
+          const Icon(Icons.repeat, size: 16, color: Colors.grey),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Row(
+              children: [
+                Text('Reposted by $name',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    overflow: TextOverflow.ellipsis),
+                if (ts != null) ...[
+                  const SizedBox(width: 6),
+                  Text('• ${_formatTimestamp(ts)}',
+                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ],
+              ],
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -377,6 +363,8 @@ class _NoteWidgetState extends State<NoteWidget>
         widget.dataService.parseContentForNote(updatedNote);
         final parsed = updatedNote.parsedContent!;
 
+        final authorUser = widget.profiles[updatedNote.author];
+
         return GestureDetector(
           onDoubleTapDown: (_) => _handleReactionTap(),
           child: Container(
@@ -394,34 +382,25 @@ class _NoteWidgetState extends State<NoteWidget>
                   const SizedBox(height: 8),
                 ],
                 if (updatedNote.isReply) ...[
-                  FutureBuilder<Map<String, String>>(
-                    future: widget.dataService
-                        .getCachedUserProfile(updatedNote.author),
-                    builder: (_, snap) {
-                      String name = 'Unknown';
-                      if (snap.hasData) name = snap.data!['name'] ?? 'Unknown';
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: GestureDetector(
-                          onTap: () => _navigateToProfile(updatedNote.author),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.reply,
-                                  size: 16, color: Colors.grey),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Replied by $name',
-                                  style: const TextStyle(
-                                      fontSize: 12, color: Colors.grey),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: GestureDetector(
+                      onTap: () => _navigateToProfile(updatedNote.author),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.reply, size: 16, color: Colors.grey),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Replied by ${authorUser?.name ?? 'Unknown'}',
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.grey),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
-                      );
-                    },
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 6),
                 ],
@@ -430,97 +409,69 @@ class _NoteWidgetState extends State<NoteWidget>
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      FutureBuilder<Map<String, String>>(
-                        future: _userProfileFuture,
-                        builder: (_, snap) {
-                          var imgUrl = '';
-                          if (snap.hasData) {
-                            final user = UserModel.fromCachedProfile(
-                                updatedNote.author, snap.data!);
-                            imgUrl = user.profileImage;
-                          }
-                          return GestureDetector(
-                            onTap: () => _navigateToProfile(updatedNote.author),
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: 8),
-                              child: CircleAvatar(
-                                radius: 18.5,
-                                backgroundImage: imgUrl.isNotEmpty
-                                    ? CachedNetworkImageProvider(imgUrl)
+                      GestureDetector(
+                        onTap: () => _navigateToProfile(updatedNote.author),
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: CircleAvatar(
+                            radius: 18.5,
+                            backgroundImage:
+                                (authorUser?.profileImage ?? '').isNotEmpty
+                                    ? CachedNetworkImageProvider(
+                                        authorUser!.profileImage)
                                     : null,
-                                backgroundColor: imgUrl.isEmpty
+                            backgroundColor:
+                                (authorUser?.profileImage ?? '').isEmpty
                                     ? Colors.grey
                                     : Colors.transparent,
-                                child: imgUrl.isEmpty
-                                    ? const Icon(Icons.person,
-                                        size: 20, color: Colors.white)
-                                    : null,
-                              ),
-                            ),
-                          );
-                        },
+                            child: (authorUser?.profileImage ?? '').isEmpty
+                                ? const Icon(Icons.person,
+                                    size: 20, color: Colors.white)
+                                : null,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            FutureBuilder<Map<String, String>>(
-                              future: _userProfileFuture,
-                              builder: (_, snap) {
-                                if (!snap.hasData) {
-                                  return Container(
-                                      height: 20,
-                                      width: 100,
-                                      color: Colors.grey[700]);
-                                }
-                                final user = UserModel.fromCachedProfile(
-                                    updatedNote.author, snap.data!);
-                                return Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.center,
-                                            children: [
-                                              Flexible(
-                                                child: Text(
-                                                  user.name.length > 25
-                                                      ? user.name
-                                                          .substring(0, 25)
-                                                      : user.name,
-                                                  style: const TextStyle(
-                                                    fontSize: 14.5,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: Colors.white,
-                                                    height: 0.1,
-                                                  ),
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding: const EdgeInsets.only(
-                                                    left: 6),
-                                                child: Text(
-                                                    '• $_formattedTimestamp',
-                                                    style: const TextStyle(
-                                                        fontSize: 12,
-                                                        color: Colors.grey)),
-                                              ),
-                                            ],
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          (authorUser?.name ?? 'Unknown')
+                                                      .length >
+                                                  25
+                                              ? (authorUser?.name ?? 'Unknown')
+                                                  .substring(0, 25)
+                                              : (authorUser?.name ?? 'Unknown'),
+                                          style: const TextStyle(
+                                            fontSize: 14.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.white,
+                                            height: 0.1,
                                           ),
-                                        ],
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
-                                    ),
-                                  ],
-                                );
-                              },
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 6),
+                                        child: Text('• $_formattedTimestamp',
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey)),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                             if ((parsed['textParts'] as List).isNotEmpty)
                               Padding(
