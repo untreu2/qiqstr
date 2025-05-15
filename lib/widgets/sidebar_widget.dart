@@ -42,7 +42,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                const SafeArea(bottom: false, child: Text("")),
+                const SizedBox(height: 50),
                 Container(
                   margin: const EdgeInsets.all(16),
                   padding: const EdgeInsets.all(16),
