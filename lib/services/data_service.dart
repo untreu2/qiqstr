@@ -120,45 +120,43 @@ class DataService {
   int get connectedRelaysCount => _socketManager.activeSockets.length;
 
   Future<void> initialize() async {
-    await _initializeEventProcessorIsolate();
-    await _initializeFetchProcessorIsolate();
-    await _initializeIsolate();
-
-    notesBox =
-        await _openHiveBox<NoteModel>('notes_${dataType.toString()}_$npub');
-    print('[DataService] Hive notes box opened successfully.');
-
-    usersBox = await _openHiveBox<UserModel>('users');
-    print('[DataService] Hive users box opened successfully.');
-
-    await loadNotesFromCache((loadedNotes) {
-      print('[DataService] Cache loaded with ${loadedNotes.length} notes.');
-    });
-
     await Future.wait([
-      _openHiveBox<ReactionModel>('reactions_${dataType.toString()}_$npub')
-          .then((box) => reactionsBox = box),
-      _openHiveBox<ReplyModel>('replies_${dataType.toString()}_$npub')
-          .then((box) => repliesBox = box),
-      _openHiveBox<RepostModel>('reposts_${dataType.toString()}_$npub')
-          .then((box) => repostsBox = box),
-      _openHiveBox<ZapModel>('zaps_${dataType.toString()}_$npub')
-          .then((box) => zapsBox = box),
-      _openHiveBox<UserModel>('users').then((box) => usersBox = box),
-      _openHiveBox<FollowingModel>('followingBox')
-          .then((box) => followingBox = box),
+      _initializeEventProcessorIsolate(),
+      _initializeFetchProcessorIsolate(),
+      _initializeIsolate(),
     ]);
+
+    final boxes = await Future.wait([
+      _openHiveBox<NoteModel>('notes_${dataType}_$npub'),
+      _openHiveBox<UserModel>('users'),
+      _openHiveBox<ReactionModel>('reactions_${dataType}_$npub'),
+      _openHiveBox<ReplyModel>('replies_${dataType}_$npub'),
+      _openHiveBox<RepostModel>('reposts_${dataType}_$npub'),
+      _openHiveBox<ZapModel>('zaps_${dataType}_$npub'),
+      _openHiveBox<FollowingModel>('followingBox'),
+    ]);
+
+    notesBox = boxes[0] as Box<NoteModel>;
+    usersBox = boxes[1] as Box<UserModel>;
+    reactionsBox = boxes[2] as Box<ReactionModel>;
+    repliesBox = boxes[3] as Box<ReplyModel>;
+    repostsBox = boxes[4] as Box<RepostModel>;
+    zapsBox = boxes[5] as Box<ZapModel>;
+    followingBox = boxes[6] as Box<FollowingModel>;
+
+    print('[DataService] Hive boxes opened successfully.');
+
+    Future.microtask(() {
+      loadNotesFromCache((loadedNotes) {
+        debugPrint(
+            '[DataService] Cache loaded with ${loadedNotes.length} notes.');
+      });
+    });
 
     _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
 
-    await _fetchUserData();
-
-    if (dataType == DataType.Feed) {}
-
-    await reloadInteractionCounts();
-
-    _startCacheCleanup();
     _isInitialized = true;
+    _startCacheCleanup();
   }
 
   Future<void> reloadInteractionCounts() async {
@@ -440,9 +438,10 @@ class DataService {
     print('[DataService] Subscribed to following events (kind 3).');
   }
 
-  Future<void> _fetchUserData() async {
-    List<String> targetNpubs;
+  Future<void> initializeConnections() async {
+    if (!_isInitialized) return;
 
+    List<String> targetNpubs;
     if (dataType == DataType.Feed) {
       final following = await getFollowingList(npub);
       following.add(npub);
@@ -485,40 +484,6 @@ class DataService {
     }
 
     await getCachedUserProfile(npub);
-  }
-
-  Future<void> initializeConnections() async {
-    if (!_isInitialized) return;
-    List<String> targetNpubs;
-    if (dataType == DataType.Feed) {
-      final following = await getFollowingList(npub);
-      following.add(npub);
-      targetNpubs = following.toSet().toList();
-    } else {
-      targetNpubs = [npub];
-    }
-
-    if (_isClosed) return;
-
-    await _socketManager.connectRelays(targetNpubs,
-        onEvent: (event, relayUrl) => _handleEvent(event, targetNpubs),
-        onDisconnected: (relayUrl) =>
-            _socketManager.reconnectRelay(relayUrl, targetNpubs));
-
-    await fetchNotes(targetNpubs, initialLoad: true);
-
-    await Future.wait([
-      loadReactionsFromCache(),
-      loadRepliesFromCache(),
-      loadRepostsFromCache()
-    ]);
-
-    await _subscribeToAllReactions();
-    await _subscribeToAllReplies();
-    await _subscribeToAllReposts();
-    await _subscribeToAllZaps();
-
-    _startRealTimeSubscription(targetNpubs);
   }
 
   Future<void> _broadcastRequest(Request request) async =>
@@ -745,7 +710,8 @@ class DataService {
     }
 
     final timestamp = DateTime.fromMillisecondsSinceEpoch(
-        (eventData['created_at'] as int) * 1000);
+      (eventData['created_at'] as int) * 1000,
+    );
 
     final rootTag = tags.firstWhereOrNull(
       (tag) =>
@@ -785,6 +751,9 @@ class DataService {
 
       onNewNote?.call(newNote);
       addPendingNote(newNote);
+
+      final fetchKeys = isRepost ? [noteAuthor, author] : [noteAuthor];
+      await _fetchProfilesBatch(fetchKeys);
     }
 
     Future.microtask(() async {
@@ -1913,16 +1882,16 @@ class DataService {
       if (allNotes.isEmpty) return;
 
       allNotes.sort((a, b) {
-        DateTime aTime =
+        final aTime =
             a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
-        DateTime bTime =
+        final bTime =
             b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
         return bTime.compareTo(aTime);
       });
 
       final limitedNotes = allNotes.take(200).toList();
 
-      for (var note in limitedNotes) {
+      for (final note in limitedNotes) {
         if (!eventIds.contains(note.id)) {
           parseContentForNote(note);
           notes.add(note);
@@ -1940,8 +1909,7 @@ class DataService {
       notesNotifier.value = _itemsTree.toList();
       onLoad(limitedNotes);
 
-      List<String> cachedEventIds =
-          limitedNotes.map((note) => note.id).toList();
+      final cachedEventIds = limitedNotes.map((note) => note.id).toList();
 
       Future.microtask(() async {
         await Future.wait([
@@ -1951,16 +1919,17 @@ class DataService {
           fetchZapsForEvents(cachedEventIds),
         ]);
       });
+
+      Future.microtask(() async {
+        await _fetchProfilesForAllData();
+        profilesNotifier.value = {
+          for (var entry in profileCache.entries)
+            entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data),
+        };
+      });
     } catch (e) {
       print('[DataService ERROR] Error loading notes from cache: $e');
     }
-
-    await _fetchProfilesForAllData();
-
-    profilesNotifier.value = {
-      for (var entry in profileCache.entries)
-        entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
-    };
   }
 
   Future<void> loadZapsFromCache() async {

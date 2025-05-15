@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/widgets/note_widget.dart';
@@ -44,34 +43,15 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     _currentUserNpub = await _secureStorage.read(key: 'npub');
     if (!mounted || _currentUserNpub == null) return;
 
-    final prefs = await SharedPreferences.getInstance();
-    final preloadKey =
-        'note_preload_done_${widget.npub}_${widget.dataType.name}';
-    final preloadAlreadyDone = prefs.getBool(preloadKey) ?? false;
-
     _dataService = _createDataService();
 
     await _dataService.initialize();
-    await _dataService.initializeConnections();
+    _dataService.initializeConnections();
 
-    if (!preloadAlreadyDone) {
-      await Future.delayed(const Duration(seconds: 0));
-      await _dataService.closeConnections();
-
-      _dataService = _createDataService();
-      await _dataService.initialize();
-      await _dataService.initializeConnections();
-
-      _applyPendingNotes();
-      await prefs.setBool(preloadKey, true);
-    }
-
-    if (mounted) {
-      setState(() {
-        _isInitializing = false;
-        _preloadDone = true;
-      });
-    }
+    setState(() {
+      _isInitializing = false;
+      _preloadDone = true;
+    });
   }
 
   DataService _createDataService() {
@@ -177,8 +157,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
             child: Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
-                child: Text('No notes found.',
-                    style: TextStyle(color: Colors.white70)),
               ),
             ),
           );
