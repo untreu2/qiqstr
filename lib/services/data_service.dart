@@ -10,6 +10,7 @@ import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:qiqstr/constants/relays.dart';
 import 'package:qiqstr/models/zap_model.dart';
 import 'package:qiqstr/screens/profile_page.dart';
+import 'package:qiqstr/services/isolate_manager.dart';
 import 'package:qiqstr/services/media_service.dart';
 import 'package:qiqstr/services/relay_service.dart';
 import 'package:uuid/uuid.dart';
@@ -195,8 +196,11 @@ class DataService {
 
   Future<void> _initializeEventProcessorIsolate() async {
     final ReceivePort receivePort = ReceivePort();
-    _eventProcessorIsolate =
-        await Isolate.spawn(_eventProcessorEntryPoint, receivePort.sendPort);
+
+    _eventProcessorIsolate = await Isolate.spawn(
+      IsolateManager.eventProcessorEntryPoint,
+      receivePort.sendPort,
+    );
 
     receivePort.listen((dynamic message) {
       if (message is SendPort) {
@@ -204,7 +208,7 @@ class DataService {
         _eventProcessorReady.complete();
       } else if (message is Map<String, dynamic>) {
         if (message.containsKey('error')) {
-          print('[Isolate ERROR] ${message['error']}');
+          print('[Event Isolate ERROR] ${message['error']}');
         } else {
           _processParsedEvent(message);
         }
@@ -214,8 +218,11 @@ class DataService {
 
   Future<void> _initializeFetchProcessorIsolate() async {
     final ReceivePort receivePort = ReceivePort();
-    _fetchProcessorIsolate =
-        await Isolate.spawn(_fetchProcessorEntryPoint, receivePort.sendPort);
+
+    _fetchProcessorIsolate = await Isolate.spawn(
+      IsolateManager.fetchProcessorEntryPoint,
+      receivePort.sendPort,
+    );
 
     receivePort.listen((dynamic message) {
       if (message is SendPort) {
@@ -231,76 +238,6 @@ class DataService {
     });
   }
 
-  static void _eventProcessorEntryPoint(SendPort sendPort) {
-    final ReceivePort port = ReceivePort();
-    sendPort.send(port.sendPort);
-
-    port.listen((dynamic message) async {
-      if (message is List) {
-        for (final event in message) {
-          try {
-            final decodedEvent = jsonDecode(event['eventRaw']);
-
-            if (decodedEvent is List &&
-                decodedEvent.isNotEmpty &&
-                decodedEvent[0] == 'EOSE') {
-              continue;
-            }
-
-            final targetNpubs = List<String>.from(event['targetNpubs']);
-            final int priority = event['priority'] ?? 2;
-
-            if (decodedEvent is List && decodedEvent.length > 2) {
-              final kind = decodedEvent[2]['kind'] as int;
-              final eventId = decodedEvent[2]['id'] as String;
-              final author = decodedEvent[2]['pubkey'] as String;
-
-              sendPort.send({
-                'kind': kind,
-                'eventId': eventId,
-                'author': author,
-                'eventData': decodedEvent[2],
-                'targetNpubs': targetNpubs,
-                'priority': priority,
-              });
-            } else {
-              sendPort
-                  .send({'error': 'Unexpected event format: $decodedEvent'});
-            }
-          } catch (e) {
-            sendPort.send({'error': e.toString()});
-          }
-        }
-      } else {
-        print(
-            '[EventProcessor] Unexpected message type: ${message.runtimeType}');
-      }
-    });
-  }
-
-  static void _fetchProcessorEntryPoint(SendPort sendPort) {
-    final ReceivePort port = ReceivePort();
-    sendPort.send(port.sendPort);
-
-    port.listen((dynamic message) async {
-      if (message is Map<String, dynamic>) {
-        try {
-          final String type = message['type'];
-          final List<String> eventIds = List<String>.from(message['eventIds']);
-          final int priority = message['priority'] ?? 2;
-
-          sendPort.send({
-            'type': type,
-            'eventIds': eventIds,
-            'priority': priority,
-          });
-        } catch (e) {
-          sendPort.send({'error': e.toString()});
-        }
-      }
-    });
-  }
-
   Future<Box<T>> _openHiveBox<T>(String boxName) async {
     if (Hive.isBoxOpen(boxName)) {
       return Hive.box<T>(boxName);
@@ -311,8 +248,11 @@ class DataService {
 
   Future<void> _initializeIsolate() async {
     _receivePort = ReceivePort();
-    _isolate =
-        await Isolate.spawn(_dataProcessorEntryPoint, _receivePort.sendPort);
+
+    _isolate = await Isolate.spawn(
+      IsolateManager.dataProcessorEntryPoint,
+      _receivePort.sendPort,
+    );
 
     _receivePort.listen((message) {
       if (message is SendPort) {
@@ -336,32 +276,6 @@ class DataService {
             print('[DataService] Isolate received close message.');
             break;
         }
-      }
-    });
-  }
-
-  static void _dataProcessorEntryPoint(SendPort sendPort) {
-    final ReceivePort isolateReceivePort = ReceivePort();
-    sendPort.send(isolateReceivePort.sendPort);
-
-    isolateReceivePort.listen((message) {
-      if (message is IsolateMessage) {
-        switch (message.type) {
-          case MessageType.CacheLoad:
-            _processCacheLoad(message.data, sendPort);
-            break;
-          case MessageType.NewNotes:
-            _processNewNotes(message.data, sendPort);
-            break;
-          case MessageType.Close:
-            isolateReceivePort.close();
-            break;
-          case MessageType.Error:
-            sendPort.send(IsolateMessage(MessageType.Error, message.data));
-            break;
-        }
-      } else if (message is String && message == 'close') {
-        isolateReceivePort.close();
       }
     });
   }
@@ -485,28 +399,6 @@ class DataService {
 
     if (mediaUrls.isNotEmpty) {
       MediaService().cacheMediaUrls(mediaUrls);
-    }
-  }
-
-  static void _processCacheLoad(String data, SendPort sendPort) {
-    try {
-      final List<dynamic> jsonData = json.decode(data);
-      final List<NoteModel> parsedNotes =
-          jsonData.map((json) => NoteModel.fromJson(json)).toList();
-      sendPort.send(IsolateMessage(MessageType.CacheLoad, parsedNotes));
-    } catch (e) {
-      sendPort.send(IsolateMessage(MessageType.Error, e.toString()));
-    }
-  }
-
-  static void _processNewNotes(String data, SendPort sendPort) {
-    try {
-      final List<dynamic> jsonData = json.decode(data);
-      final List<NoteModel> parsedNotes =
-          jsonData.map((json) => NoteModel.fromJson(json)).toList();
-      sendPort.send(IsolateMessage(MessageType.NewNotes, parsedNotes));
-    } catch (e) {
-      sendPort.send(IsolateMessage(MessageType.Error, e.toString()));
     }
   }
 
