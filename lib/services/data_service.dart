@@ -146,10 +146,16 @@ class DataService {
 
     print('[DataService] Hive boxes opened successfully.');
 
+    await Future.wait([
+      loadReactionsFromCache(),
+      loadRepliesFromCache(),
+      loadRepostsFromCache(),
+      loadZapsFromCache(),
+    ]);
+
     Future.microtask(() {
       loadNotesFromCache((loadedNotes) {
-        debugPrint(
-            '[DataService] Cache loaded with ${loadedNotes.length} notes.');
+        print('[DataService] Cache loaded with ${loadedNotes.length} notes.');
       });
     });
 
