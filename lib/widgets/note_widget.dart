@@ -290,22 +290,44 @@ class _NoteWidgetState extends State<NoteWidget>
   Widget _buildRepostInfo(String npub, DateTime? ts) {
     final user = widget.profiles[npub];
     final name = user?.name ?? 'Unknown';
+    final profileImage = user?.profileImage;
+
     return GestureDetector(
       onTap: () => _navigateToProfile(npub),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const Icon(Icons.repeat, size: 16, color: Colors.grey),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
+          profileImage != null && profileImage.isNotEmpty
+              ? CircleAvatar(
+                  radius: 10,
+                  backgroundImage: CachedNetworkImageProvider(profileImage),
+                  backgroundColor: Colors.transparent,
+                )
+              : const CircleAvatar(
+                  radius: 10,
+                  backgroundColor: Colors.grey,
+                  child: Icon(Icons.person, size: 12, color: Colors.white),
+                ),
+          const SizedBox(width: 6),
           Expanded(
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text('Reposted by $name',
+                Flexible(
+                  child: Text(
+                    'Reposted by $name',
                     style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    overflow: TextOverflow.ellipsis),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
                 if (ts != null) ...[
                   const SizedBox(width: 6),
-                  Text('• ${_formatTimestamp(ts)}',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  Text(
+                    '• ${_formatTimestamp(ts)}',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                 ],
               ],
             ),
