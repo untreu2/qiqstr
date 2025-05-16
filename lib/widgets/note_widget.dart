@@ -287,76 +287,6 @@ class _NoteWidgetState extends State<NoteWidget>
   void _navigateToProfile(String npub) =>
       widget.dataService.openUserProfile(context, npub);
 
-  Widget _buildTopZapCard() {
-    final zaps = widget.dataService.zapsMap[widget.note.id] ?? [];
-
-    if (zaps.isEmpty) return const SizedBox.shrink();
-
-    final Map<String, int> zapTotals = {};
-    final Map<String, String> zapMessages = {};
-    for (var zap in zaps) {
-      zapTotals[zap.sender] = (zapTotals[zap.sender] ?? 0) + zap.amount;
-      if ((zap.comment ?? '').isNotEmpty) {
-        zapMessages[zap.sender] = zap.comment!;
-      }
-    }
-
-    final topSender = zapTotals.entries.fold<MapEntry<String, int>>(
-      zapTotals.entries.first,
-      (prev, curr) => curr.value > prev.value ? curr : prev,
-    );
-
-    final user = widget.profiles[topSender.key];
-    if (user == null) return const SizedBox.shrink();
-
-    final message = zapMessages[topSender.key] ?? '';
-    final amount = topSender.value;
-
-    return Positioned(
-      bottom: 0,
-      right: 12,
-      child: GestureDetector(
-        onTap: () => _navigateToProfile(user.npub),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade900,
-            borderRadius: BorderRadius.circular(20),
-          ),
-          constraints: const BoxConstraints(maxWidth: 240),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircleAvatar(
-                radius: 12,
-                backgroundImage: user.profileImage.isNotEmpty
-                    ? CachedNetworkImageProvider(user.profileImage)
-                    : null,
-                backgroundColor: user.profileImage.isEmpty
-                    ? Colors.grey
-                    : Colors.transparent,
-                child: user.profileImage.isEmpty
-                    ? const Icon(Icons.person, size: 14, color: Colors.white)
-                    : null,
-              ),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  '⚡ $amount ${message.isNotEmpty ? '— $message' : ''}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12.5,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildRepostInfo(String npub, DateTime? ts) {
     final user = widget.profiles[npub];
     final name = user?.name ?? 'Unknown';
@@ -598,9 +528,7 @@ class _NoteWidgetState extends State<NoteWidget>
                                         ))
                                     .toList(),
                               ),
-                            const SizedBox(height: 10),
-                            _buildTopZapCard(),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 20),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
