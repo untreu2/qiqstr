@@ -28,6 +28,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   int? _followingCount;
   bool _isLoadingFollowing = true;
+  bool _followsYou = false;
 
   UserModel? _liveUser;
   Timer? _userRefreshTimer;
@@ -83,9 +84,17 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       await dataService.initialize();
       final followingList =
           await dataService.getFollowingList(widget.user.npub);
+
+      final currentNpub = await _secureStorage.read(key: 'npub');
+      final followsYou = currentNpub != null &&
+          widget.user.npub != currentNpub &&
+          followingList.contains(currentNpub);
+
       setState(() {
         _followingCount = followingList.length;
         _isLoadingFollowing = false;
+        _followsYou = followsYou;
+        _currentUserNpub = currentNpub;
       });
     } catch (e) {
       setState(() {
@@ -254,9 +263,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                             onOpen: _onOpen,
                             text: websiteUrl,
                             style: const TextStyle(
-                              fontSize: 13,
-                              color: Color(0xFFECB200),
-                            ),
+                                fontSize: 13, color: Color(0xFFECB200)),
                             linkStyle: const TextStyle(
                               fontSize: 13,
                               color: Color(0xFFECB200),
@@ -355,6 +362,17 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                   style: const TextStyle(color: Colors.white, fontSize: 14),
                 ),
         ),
+        if (_followsYou) ...[
+          const SizedBox(width: 8),
+          const Text(
+            '• Follows you',
+            style: TextStyle(
+              color: Colors.greenAccent,
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ],
       ],
     );
   }
