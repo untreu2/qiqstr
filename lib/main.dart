@@ -9,7 +9,6 @@ import 'models/repost_model.dart';
 import 'models/user_model.dart';
 import 'models/following_model.dart';
 import 'models/link_preview_model.dart';
-import 'models/notification_model.dart';
 import 'models/zap_model.dart';
 import 'screens/login_page.dart';
 import 'screens/feed_page.dart';
@@ -26,7 +25,6 @@ Future<void> main() async {
     Hive.registerAdapter(UserModelAdapter());
     Hive.registerAdapter(FollowingModelAdapter());
     Hive.registerAdapter(LinkPreviewModelAdapter());
-    Hive.registerAdapter(NotificationModelAdapter());
     Hive.registerAdapter(ZapModelAdapter());
 
     await Hive.openBox<LinkPreviewModel>('link_preview_cache');
@@ -46,7 +44,6 @@ Future<void> main() async {
       await Hive.openBox<RepostModel>('reposts_Profile_$npub');
       await Hive.openBox<UserModel>('users');
       await Hive.openBox<FollowingModel>('followingBox');
-      await Hive.openBox<NotificationModel>('notifications_$npub');
       await Hive.openBox<ZapModel>('zaps_$npub');
 
       runApp(ProviderScope(child: QiqstrApp(home: FeedPage(npub: npub))));
