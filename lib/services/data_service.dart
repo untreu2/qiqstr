@@ -1521,7 +1521,7 @@ class DataService {
         content: jsonEncode(profileContent),
         privkey: privateKey,
       );
-
+      await initializeConnections();
       await _socketManager.broadcast(event.serialize());
 
       final updatedAt =
@@ -1543,11 +1543,19 @@ class DataService {
         profileContent.map((key, value) => MapEntry(key, value.toString())),
         updatedAt,
       );
-      await usersBox?.put(event.pubkey, userModel);
+
+      if (usersBox != null && usersBox!.isOpen) {
+        await usersBox!.put(event.pubkey, userModel);
+      }
+
+      profilesNotifier.value = {
+        ...profilesNotifier.value,
+        event.pubkey: userModel,
+      };
 
       print('[DataService] Profile updated and sent successfully.');
-    } catch (e) {
-      print('[DataService ERROR] Error sending profile edit: $e');
+    } catch (e, st) {
+      print('[DataService ERROR] Error sending profile edit: $e\n$st');
       throw e;
     }
   }

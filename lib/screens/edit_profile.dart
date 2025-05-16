@@ -16,13 +16,13 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
   final _formKey = GlobalKey<FormState>();
   final _secureStorage = const FlutterSecureStorage();
 
-  late TextEditingController _nameController;
-  late TextEditingController _aboutController;
-  late TextEditingController _pictureController;
-  late TextEditingController _nip05Controller;
-  late TextEditingController _bannerController;
-  late TextEditingController _lud16Controller;
-  late TextEditingController _websiteController;
+  final _nameController = TextEditingController();
+  final _aboutController = TextEditingController();
+  final _pictureController = TextEditingController();
+  final _nip05Controller = TextEditingController();
+  final _bannerController = TextEditingController();
+  final _lud16Controller = TextEditingController();
+  final _websiteController = TextEditingController();
 
   DataService? _dataService;
 
@@ -37,6 +37,19 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
     _loadUser();
   }
 
+  @override
+  void dispose() {
+    _dataService?.closeConnections();
+    _nameController.dispose();
+    _aboutController.dispose();
+    _pictureController.dispose();
+    _nip05Controller.dispose();
+    _bannerController.dispose();
+    _lud16Controller.dispose();
+    _websiteController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadUser() async {
     final npub = await _secureStorage.read(key: 'npub');
     if (npub == null) return;
@@ -49,14 +62,13 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
 
     setState(() {
       _dataService = dataService;
-      _nameController = TextEditingController(text: user?.name ?? '');
-      _aboutController = TextEditingController(text: user?.about ?? '');
-      _pictureController =
-          TextEditingController(text: user?.profileImage ?? '');
-      _nip05Controller = TextEditingController(text: user?.nip05 ?? '');
-      _bannerController = TextEditingController(text: user?.banner ?? '');
-      _lud16Controller = TextEditingController(text: user?.lud16 ?? '');
-      _websiteController = TextEditingController(text: user?.website ?? '');
+      _nameController.text = user?.name ?? '';
+      _aboutController.text = user?.about ?? '';
+      _pictureController.text = user?.profileImage ?? '';
+      _nip05Controller.text = user?.nip05 ?? '';
+      _bannerController.text = user?.banner ?? '';
+      _lud16Controller.text = user?.lud16 ?? '';
+      _websiteController.text = user?.website ?? '';
       _isLoading = false;
     });
   }
@@ -79,7 +91,6 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.image,
-        withData: true,
       );
       if (result != null && result.files.single.path != null) {
         final filePath = result.files.single.path!;
@@ -112,7 +123,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
   }
 
   Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate() || _isSaving) return;
 
     setState(() => _isSaving = true);
 
@@ -130,7 +141,14 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
       final usersBox = await Hive.openBox<UserModel>('users');
       final updatedUser = usersBox.get(_dataService!.npub);
 
-      if (mounted && updatedUser != null) {
+      if (updatedUser != null) {
+        _dataService!.profilesNotifier.value = {
+          ..._dataService!.profilesNotifier.value,
+          updatedUser.npub: updatedUser,
+        };
+      }
+
+      if (mounted) {
         Navigator.pop(context);
       }
     } catch (e) {
@@ -201,9 +219,9 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                     ),
                   )
                 : const Icon(Icons.check, color: Color(0xFFECB200)),
-            label: const Text(
-              'Save',
-              style: TextStyle(
+            label: Text(
+              _isSaving ? 'Updating...' : 'Save',
+              style: const TextStyle(
                 color: Color(0xFFECB200),
                 fontWeight: FontWeight.bold,
               ),
