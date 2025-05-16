@@ -304,12 +304,11 @@ class DataService {
         .toList();
 
     final RegExp quoteRegExp = RegExp(
-        r'nostr:(note1[0-9a-z]+|nevent1[0-9a-z]+)',
-        caseSensitive: false);
+      r'(?:nostr:)?(note1[0-9a-z]+|nevent1[0-9a-z]+)',
+      caseSensitive: false,
+    );
     final quoteMatches = quoteRegExp.allMatches(content);
-    final List<String> quoteIds = quoteMatches
-        .map((m) => m.group(0)!.replaceFirst('nostr:', ''))
-        .toList();
+    final List<String> quoteIds = quoteMatches.map((m) => m.group(1)!).toList();
 
     String cleanedText = content;
     for (final m in [...mediaMatches, ...quoteMatches]) {
@@ -318,8 +317,9 @@ class DataService {
     cleanedText = cleanedText.trim();
 
     final RegExp mentionRegExp = RegExp(
-        r'nostr:(npub1[0-9a-z]+|nprofile1[0-9a-z]+)',
-        caseSensitive: false);
+      r'nostr:(npub1[0-9a-z]+|nprofile1[0-9a-z]+)',
+      caseSensitive: false,
+    );
     final mentionMatches = mentionRegExp.allMatches(cleanedText);
 
     final List<Map<String, dynamic>> textParts = [];
@@ -332,7 +332,7 @@ class DataService {
         });
       }
 
-      final id = m.group(0)!.replaceFirst('nostr:', '');
+      final id = m.group(1)!;
       textParts.add({'type': 'mention', 'id': id});
       lastEnd = m.end;
     }
