@@ -21,9 +21,9 @@ import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
 import '../models/repost_model.dart';
 import '../models/following_model.dart';
-import 'dart:typed_data';
 import 'package:collection/collection.dart';
 import 'package:http/http.dart' as http;
+import 'package:crypto/crypto.dart';
 
 enum DataType { Feed, Profile, Note }
 
@@ -1314,7 +1314,7 @@ class DataService {
         privkey: privateKey,
       );
       final serializedEvent = event.serialize();
-
+      await initializeConnections();
       await _socketManager.broadcast(serializedEvent);
 
       final timestamp = DateTime.now();
@@ -1338,153 +1338,78 @@ class DataService {
     }
   }
 
-  Future<String> sendMedia(String filePath, String serverUrl) async {
+  Future<String> sendMedia(String filePath, String blossomUrl) async {
     final privateKey = await _secureStorage.read(key: 'privateKey');
     if (privateKey == null || privateKey.isEmpty) {
       throw Exception('Private key not found.');
     }
 
-    final configUrl = serverUrl.endsWith('/')
-        ? '$serverUrl.well-known/nostr/nip96.json'
-        : '$serverUrl/.well-known/nostr/nip96.json';
-    final httpClient = HttpClient();
-    final configRequest = await httpClient.getUrl(Uri.parse(configUrl));
-    final configResponse = await configRequest.close();
-    if (configResponse.statusCode != 200) {
-      throw Exception(
-          'Failed to fetch server configuration: ${configResponse.statusCode}');
-    }
-    final configBody = await configResponse.transform(utf8.decoder).join();
-    final configJson = json.decode(configBody);
-    final apiUrl = configJson['api_url'];
-    if (apiUrl == null || apiUrl.isEmpty) {
-      throw Exception('API URL not found in server configuration.');
-    }
-
-    final event = Event.from(
-      kind: 27235,
-      tags: [
-        ['u', apiUrl],
-        ['method', 'POST'],
-      ],
-      content: '',
-      privkey: privateKey,
-    );
-    final eventJsonStr = json.encode(event.toJson());
-    final token = base64.encode(utf8.encode(eventJsonStr));
-    final authHeader = 'Nostr $token';
-
     final file = File(filePath);
     if (!await file.exists()) {
       throw Exception('File not found: $filePath');
     }
-    final fileSize = await file.length();
-    final fileBytes = await file.readAsBytes();
 
-    String mimeType;
-    String? extension;
+    final fileBytes = await file.readAsBytes();
+    final sha256Hash = sha256.convert(fileBytes).toString();
+
+    String mimeType = 'application/octet-stream';
     final lowerPath = filePath.toLowerCase();
     if (lowerPath.endsWith('.jpg') || lowerPath.endsWith('.jpeg')) {
       mimeType = 'image/jpeg';
-      extension = 'jpg';
     } else if (lowerPath.endsWith('.png')) {
       mimeType = 'image/png';
-      extension = 'png';
+    } else if (lowerPath.endsWith('.gif')) {
+      mimeType = 'image/gif';
     } else if (lowerPath.endsWith('.mp4')) {
       mimeType = 'video/mp4';
-      extension = 'mp4';
-    } else {
-      mimeType = 'application/octet-stream';
     }
 
-    final randomName = Uuid().v4();
-    final fileName = extension != null ? '$randomName.$extension' : randomName;
+    final expiration =
+        DateTime.now().add(Duration(minutes: 10)).millisecondsSinceEpoch ~/
+            1000;
 
-    final boundary = '----dart_form_boundary_${Uuid().v4()}';
-    final contentTypeHeader = 'multipart/form-data; boundary=$boundary';
-    final bodyBuffer = BytesBuilder();
+    final authEvent = Event.from(
+      kind: 24242,
+      content: 'Upload ${file.uri.pathSegments.last}',
+      tags: [
+        ['t', 'upload'],
+        ['x', sha256Hash],
+        ['expiration', expiration.toString()],
+      ],
+      privkey: privateKey,
+    );
 
-    void addField(String name, String value) {
-      bodyBuffer.add(utf8.encode('--$boundary\r\n'));
-      bodyBuffer.add(
-          utf8.encode('Content-Disposition: form-data; name="$name"\r\n\r\n'));
-      bodyBuffer.add(utf8.encode(value));
-      bodyBuffer.add(utf8.encode('\r\n'));
+    final encodedAuth =
+        base64.encode(utf8.encode(jsonEncode(authEvent.toJson())));
+    final authHeader = 'Nostr $encodedAuth';
+
+    final cleanedUrl = blossomUrl.replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$cleanedUrl/upload');
+
+    final httpClient = HttpClient();
+    final request = await httpClient.putUrl(uri);
+
+    request.headers.set(HttpHeaders.authorizationHeader, authHeader);
+    request.headers.set(HttpHeaders.contentTypeHeader, mimeType);
+    request.headers.set(HttpHeaders.contentLengthHeader, fileBytes.length);
+
+    request.add(fileBytes);
+
+    final response = await request.close();
+    final responseBody = await response.transform(utf8.decoder).join();
+
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Upload failed with status ${response.statusCode}: $responseBody');
     }
 
-    addField('expiration', '');
-    addField('size', fileSize.toString());
-    addField('content_type', mimeType);
-
-    bodyBuffer.add(utf8.encode('--$boundary\r\n'));
-    bodyBuffer.add(utf8.encode(
-        'Content-Disposition: form-data; name="file"; filename="$fileName"\r\n'));
-    bodyBuffer.add(utf8.encode('Content-Type: $mimeType\r\n\r\n'));
-    bodyBuffer.add(fileBytes);
-    bodyBuffer.add(utf8.encode('\r\n'));
-    bodyBuffer.add(utf8.encode('--$boundary--\r\n'));
-
-    final multipartBody = bodyBuffer.takeBytes();
-
-    final apiUri = Uri.parse(
-        apiUrl.endsWith('/') ? apiUrl.substring(0, apiUrl.length - 1) : apiUrl);
-    final uploadRequest = await httpClient.postUrl(apiUri);
-    uploadRequest.headers.set(HttpHeaders.contentTypeHeader, contentTypeHeader);
-    uploadRequest.headers.set(HttpHeaders.authorizationHeader, authHeader);
-    uploadRequest.contentLength = multipartBody.length;
-    uploadRequest.add(multipartBody);
-
-    final uploadResponse = await uploadRequest.close();
-    final uploadResponseBody =
-        await uploadResponse.transform(utf8.decoder).join();
-    Map<String, dynamic> uploadResp = json.decode(uploadResponseBody);
-
-    if (uploadResp['status'] == 'processing' &&
-        uploadResp['processing_url'] != null) {
-      final processingUrl = uploadResp['processing_url'];
-      int retries = 5;
-      while (retries > 0) {
-        await Future.delayed(const Duration(seconds: 3));
-        final pollRequest = await httpClient.getUrl(Uri.parse(processingUrl));
-        final pollResponse = await pollRequest.close();
-        if (pollResponse.statusCode == 201) {
-          final pollBody = await pollResponse.transform(utf8.decoder).join();
-          uploadResp = json.decode(pollBody);
-          break;
-        } else {
-          final pollBody = await pollResponse.transform(utf8.decoder).join();
-          final delayedResponse = json.decode(pollBody);
-          if (delayedResponse['status'] == 'error') {
-            throw Exception('Processing error: ${delayedResponse['message']}');
-          }
-          retries--;
-        }
-      }
-      if (retries <= 0) {
-        throw Exception('Processing timeout (5 attempts reached)');
-      }
+    final decoded = jsonDecode(responseBody);
+    if (decoded is Map && decoded.containsKey('url')) {
+      return decoded['url'];
     }
 
-    if (uploadResp['status'] == 'error') {
-      throw Exception('Server returned error: ${uploadResp['message']}');
-    }
-
-    String? fileURL;
-    if (uploadResp['nip94_event'] != null &&
-        uploadResp['nip94_event']['tags'] != null) {
-      for (final tag in uploadResp['nip94_event']['tags']) {
-        if (tag is List && tag.length >= 2 && tag[0] == 'url') {
-          fileURL = tag[1];
-          break;
-        }
-      }
-    }
-
-    if (fileURL == null) {
-      throw Exception('File URL not found in server response.');
-    }
-
-    return fileURL;
+    throw Exception(
+        'Upload succeeded but response does not contain a valid URL.');
   }
 
   Future<void> sendProfileEdit({
@@ -1585,6 +1510,7 @@ class DataService {
         content: "",
         privkey: privateKey,
       );
+      await initializeConnections();
 
       await _socketManager.broadcast(event.serialize());
 
@@ -1627,6 +1553,7 @@ class DataService {
         content: "",
         privkey: privateKey,
       );
+      await initializeConnections();
 
       await _socketManager.broadcast(event.serialize());
 
@@ -1747,7 +1674,7 @@ class DataService {
         content: reactionContent,
         privkey: privateKey,
       );
-
+      await initializeConnections();
       await _socketManager.broadcast(event.serialize());
 
       final reaction = ReactionModel.fromEvent(event.toJson());
@@ -1794,7 +1721,7 @@ class DataService {
         content: replyContent,
         privkey: privateKey,
       );
-
+      await initializeConnections();
       await _socketManager.broadcast(event.serialize());
 
       final reply = ReplyModel.fromEvent(event.toJson());
@@ -1844,7 +1771,7 @@ class DataService {
         content: content,
         privkey: privateKey,
       );
-
+      await initializeConnections();
       await _socketManager.broadcast(event.serialize());
 
       final repost = RepostModel.fromEvent(event.toJson(), note.id);

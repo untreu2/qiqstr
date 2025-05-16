@@ -94,8 +94,8 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
       );
       if (result != null && result.files.single.path != null) {
         final filePath = result.files.single.path!;
-        final url =
-            await _dataService!.sendMedia(filePath, 'https://nostr.build');
+        final url = await _dataService!
+            .sendMedia(filePath, 'https://blossom.primal.net');
         setState(() {
           controller.text = url;
         });

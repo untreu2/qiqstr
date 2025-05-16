@@ -18,7 +18,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   bool _isPosting = false;
   bool _isMediaUploading = false;
   final List<String> _mediaUrls = [];
-  final String _serverUrl = "https://nostr.build";
+  final String _serverUrl = "https://blossom.primal.net";
 
   @override
   void initState() {
