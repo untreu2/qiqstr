@@ -1,7 +1,10 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../services/data_service.dart';
+import '../models/user_model.dart';
 
 class ShareNotePage extends StatefulWidget {
   final DataService dataService;
@@ -20,11 +23,27 @@ class _ShareNotePageState extends State<ShareNotePage> {
   final List<String> _mediaUrls = [];
   final String _serverUrl = "https://blossom.primal.net";
 
+  UserModel? _user;
+
   @override
   void initState() {
     super.initState();
+    _loadProfile();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
+    });
+  }
+
+  Future<void> _loadProfile() async {
+    final storage = FlutterSecureStorage();
+    final npub = await storage.read(key: 'npub');
+    if (npub == null) return;
+
+    final profileData = await widget.dataService.getCachedUserProfile(npub);
+
+    if (!mounted) return;
+    setState(() {
+      _user = UserModel.fromCachedProfile(npub, profileData);
     });
   }
 
@@ -145,9 +164,42 @@ class _ShareNotePageState extends State<ShareNotePage> {
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           child: Column(
             children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: Colors.white24,
+                    backgroundImage: _user?.profileImage != null
+                        ? CachedNetworkImageProvider(_user!.profileImage)
+                        : null,
+                    child: _user?.profileImage == null
+                        ? const Icon(Icons.person,
+                            color: Colors.white, size: 20)
+                        : null,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      focusNode: _focusNode,
+                      controller: _noteController,
+                      maxLines: null,
+                      textAlignVertical: TextAlignVertical.center,
+                      style: const TextStyle(color: Colors.white),
+                      cursorColor: Colors.white,
+                      decoration: const InputDecoration(
+                        hintText: "What's on your mind?",
+                        hintStyle: TextStyle(color: Colors.white54),
+                        border: InputBorder.none,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
               if (_mediaUrls.isNotEmpty)
                 SizedBox(
                   height: 170,
@@ -199,24 +251,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
                     ),
                   ),
                 ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: TextField(
-                  focusNode: _focusNode,
-                  controller: _noteController,
-                  maxLines: null,
-                  expands: true,
-                  textAlignVertical: TextAlignVertical.top,
-                  decoration: const InputDecoration(
-                    hintText: "Write your note here...",
-                    hintStyle: TextStyle(color: Colors.white54),
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.zero,
-                  ),
-                  style: const TextStyle(color: Colors.white),
-                  cursorColor: Colors.white,
-                ),
-              ),
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 300),
                 child: _isMediaUploading
