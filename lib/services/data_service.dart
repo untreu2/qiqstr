@@ -764,10 +764,7 @@ class DataService {
 
     Future.microtask(() async {
       await Future.wait([
-        fetchReactionsForEvents([newNote.id]),
-        fetchRepliesForEvents([newNote.id]),
-        fetchRepostsForEvents([newNote.id]),
-        fetchZapsForEvents([newNote.id]),
+        fetchInteractionsForEvents([newNote.id]),
       ]);
     });
   }
@@ -1919,10 +1916,7 @@ class DataService {
 
       Future.microtask(() async {
         await Future.wait([
-          fetchReactionsForEvents(cachedEventIds),
-          fetchRepliesForEvents(cachedEventIds),
-          fetchRepostsForEvents(cachedEventIds),
-          fetchZapsForEvents(cachedEventIds),
+          fetchInteractionsForEvents(cachedEventIds),
         ]);
       });
 
@@ -1983,24 +1977,53 @@ class DataService {
     }
   }
 
-  Future<void> fetchZapsForEvents(List<String> eventIdsToFetch) async {
+  Future<void> fetchInteractionsForEvents(List<String> eventIdsToFetch) async {
     if (_isClosed) return;
     await _fetchProcessorReady.future;
 
-    for (final targetEventId in eventIdsToFetch) {
-      final zaps = zapsMap[targetEventId] ?? [];
-      final note = notes.firstWhereOrNull((n) => n.id == targetEventId);
-      if (note != null) {
-        note.zapAmount = zaps.fold<int>(0, (sum, zap) => sum + zap.amount);
+    final kindsToFetch = [
+      {'type': 'reaction', 'kind': 7},
+      {'type': 'reply', 'kind': 1},
+      {'type': 'repost', 'kind': 6},
+      {'type': 'zap', 'kind': 9735},
+    ];
+
+    for (final interaction in kindsToFetch) {
+      final type = interaction['type'] as String;
+
+      _fetchProcessorSendPort.send({
+        'type': type,
+        'eventIds': eventIdsToFetch,
+        'priority': 2,
+      });
+
+      for (final eventId in eventIdsToFetch) {
+        if (type == 'reaction') {
+          final reactions = reactionsMap[eventId] ?? [];
+          onReactionsUpdated?.call(eventId, reactions);
+          final note = notes.firstWhereOrNull((n) => n.id == eventId);
+          if (note != null) note.reactionCount = reactions.length;
+        } else if (type == 'reply') {
+          final replies = repliesMap[eventId] ?? [];
+          onRepliesUpdated?.call(eventId, replies);
+          final note = notes.firstWhereOrNull((n) => n.id == eventId);
+          if (note != null) note.replyCount = replies.length;
+        } else if (type == 'repost') {
+          final reposts = repostsMap[eventId] ?? [];
+          onRepostsUpdated?.call(eventId, reposts);
+          final note = notes.firstWhereOrNull((n) => n.id == eventId);
+          if (note != null) note.repostCount = reposts.length;
+        } else if (type == 'zap') {
+          final zaps = zapsMap[eventId] ?? [];
+          final note = notes.firstWhereOrNull((n) => n.id == eventId);
+          if (note != null) {
+            note.zapAmount = zaps.fold<int>(0, (sum, z) => sum + z.amount);
+          }
+        }
       }
     }
-    notesNotifier.value = _itemsTree.toList();
 
-    _fetchProcessorSendPort.send({
-      'type': 'zap',
-      'eventIds': eventIdsToFetch,
-      'priority': 2,
-    });
+    notesNotifier.value = _itemsTree.toList();
   }
 
   Future<void> loadReactionsFromCache() async {
@@ -2044,10 +2067,7 @@ class DataService {
       if (replyIds.isNotEmpty) {
         Future.microtask(() async {
           await Future.wait([
-            fetchReactionsForEvents(replyIds),
-            fetchRepliesForEvents(replyIds),
-            fetchRepostsForEvents(replyIds),
-            fetchZapsForEvents(replyIds),
+            fetchInteractionsForEvents(replyIds),
           ]);
         });
       }
@@ -2094,75 +2114,6 @@ class DataService {
 
       data.map((note) => note.id).toList();
     }
-  }
-
-  Future<void> fetchReactionsForEvents(List<String> eventIdsToFetch) async {
-    if (_isClosed) return;
-    await _fetchProcessorReady.future;
-
-    for (final targetEventId in eventIdsToFetch) {
-      final reactions = reactionsMap[targetEventId] ?? [];
-      onReactionsUpdated?.call(targetEventId, reactions);
-
-      final note = notes.firstWhereOrNull((n) => n.id == targetEventId);
-      if (note != null) {
-        note.reactionCount = reactions.length;
-      }
-    }
-    notesNotifier.value = _itemsTree.toList();
-
-    notesNotifier.value = _itemsTree.toList();
-    _fetchProcessorSendPort.send({
-      'type': 'reaction',
-      'eventIds': eventIdsToFetch,
-      'priority': 2,
-    });
-  }
-
-  Future<void> fetchRepliesForEvents(List<String> parentEventIds) async {
-    if (_isClosed) return;
-    await _fetchProcessorReady.future;
-
-    for (final parentEventId in parentEventIds) {
-      final replies = repliesMap[parentEventId] ?? [];
-      onRepliesUpdated?.call(parentEventId, replies);
-
-      final note = notes.firstWhereOrNull((n) => n.id == parentEventId);
-      if (note != null) {
-        note.replyCount = replies.length;
-      }
-    }
-    notesNotifier.value = _itemsTree.toList();
-
-    notesNotifier.value = _itemsTree.toList();
-    _fetchProcessorSendPort.send({
-      'type': 'reply',
-      'eventIds': parentEventIds,
-      'priority': 2,
-    });
-  }
-
-  Future<void> fetchRepostsForEvents(List<String> eventIdsToFetch) async {
-    if (_isClosed) return;
-    await _fetchProcessorReady.future;
-
-    for (final originalNoteId in eventIdsToFetch) {
-      final reposts = repostsMap[originalNoteId] ?? [];
-      onRepostsUpdated?.call(originalNoteId, reposts);
-
-      final note = notes.firstWhereOrNull((n) => n.id == originalNoteId);
-      if (note != null) {
-        note.repostCount = reposts.length;
-      }
-    }
-    notesNotifier.value = _itemsTree.toList();
-
-    notesNotifier.value = _itemsTree.toList();
-    _fetchProcessorSendPort.send({
-      'type': 'repost',
-      'eventIds': eventIdsToFetch,
-      'priority': 2,
-    });
   }
 
   Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
