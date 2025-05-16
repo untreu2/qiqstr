@@ -53,16 +53,23 @@ class ZapModel extends HiveObject {
     final descriptionJson = getTagValue('description');
 
     String? comment;
+    String sender = '';
+
     try {
       final decoded = jsonDecode(descriptionJson);
       comment = decoded['content'];
-    } catch (_) {}
+      sender = decoded['pubkey'] ?? '';
+    } catch (_) {
+      sender = getTagValue('P').isNotEmpty
+          ? getTagValue('P')
+          : event['pubkey'] ?? '';
+    }
 
     final amount = parseAmountFromBolt11(bolt11);
 
     return ZapModel(
       id: event['id'],
-      sender: getTagValue('P').isNotEmpty ? getTagValue('P') : event['pubkey'],
+      sender: sender,
       recipient: p,
       targetEventId: e,
       timestamp:
