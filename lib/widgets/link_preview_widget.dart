@@ -114,18 +114,8 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
       );
     }
 
-    if (_title == null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4.0),
-        child: Text(
-          widget.url,
-          style: const TextStyle(
-            color: Colors.amberAccent,
-            fontSize: 14,
-            decoration: TextDecoration.underline,
-          ),
-        ),
-      );
+    if (_title == null || _imageUrl == null) {
+      return const SizedBox.shrink();
     }
 
     return Padding(
@@ -142,23 +132,21 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
                     const BorderRadius.vertical(top: Radius.circular(16)),
                 child: AspectRatio(
                   aspectRatio: 16 / 9,
-                  child: _imageUrl != null
-                      ? Image.network(
-                          _imageUrl!,
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                          errorBuilder: (_, __, ___) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (mounted) {
-                                setState(() {
-                                  _imageUrl = null;
-                                });
-                              }
-                            });
-                            return _placeholder();
-                          },
-                        )
-                      : _placeholder(),
+                  child: Image.network(
+                    _imageUrl!,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    errorBuilder: (_, __, ___) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) {
+                          setState(() {
+                            _imageUrl = null;
+                          });
+                        }
+                      });
+                      return _placeholder();
+                    },
+                  ),
                 ),
               ),
               Container(
