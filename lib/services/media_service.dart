@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter/material.dart';
 
 class MediaService {
@@ -52,12 +51,7 @@ class MediaService {
     try {
       final lower = url.toLowerCase();
 
-      if (lower.endsWith('.mp4') ||
-          lower.endsWith('.mov') ||
-          lower.endsWith('.mkv')) {
-        await DefaultCacheManager().getSingleFile(url);
-        print('[MediaService] Cached video: $url');
-      } else if (lower.endsWith('.jpg') ||
+      if (lower.endsWith('.jpg') ||
           lower.endsWith('.jpeg') ||
           lower.endsWith('.png') ||
           lower.endsWith('.webp') ||

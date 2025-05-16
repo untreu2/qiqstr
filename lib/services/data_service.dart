@@ -385,25 +385,21 @@ class DataService {
 
     final List<String> mediaUrls = List<String>.from(parsed['mediaUrls']);
 
-    final videoUrl = mediaUrls.firstWhere(
-      (url) =>
-          url.toLowerCase().endsWith('.mp4') ||
-          url.toLowerCase().endsWith('.mov') ||
-          url.toLowerCase().endsWith('.mkv'),
-      orElse: () => '',
-    );
+    final imageUrls = mediaUrls.where((url) {
+      final lower = url.toLowerCase();
+      return lower.endsWith('.jpg') ||
+          lower.endsWith('.jpeg') ||
+          lower.endsWith('.png') ||
+          lower.endsWith('.webp') ||
+          lower.endsWith('.gif');
+    }).toList();
 
-    if (videoUrl.isNotEmpty) {
-      note.isVideo = true;
-      note.videoUrl = videoUrl;
-    } else {
-      note.isVideo = false;
-      note.videoUrl = null;
+    if (imageUrls.isNotEmpty) {
+      MediaService().cacheMediaUrls(imageUrls);
     }
 
-    if (mediaUrls.isNotEmpty) {
-      MediaService().cacheMediaUrls(mediaUrls);
-    }
+    note.isVideo = false;
+    note.videoUrl = null;
   }
 
   Request _createRequest(Filter filter) => Request(generateUUID(), [filter]);
