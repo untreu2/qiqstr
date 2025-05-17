@@ -363,7 +363,7 @@ class _NoteWidgetState extends State<NoteWidget>
               if (count > 0) ...[
                 const SizedBox(width: 4),
                 Text('$count',
-                    style: const TextStyle(fontSize: 13, color: Colors.white)),
+                    style: const TextStyle(fontSize: 13, color: Colors.grey)),
               ],
             ],
           ),
@@ -536,7 +536,7 @@ class _NoteWidgetState extends State<NoteWidget>
                                   svg: 'assets/reaction_button.svg',
                                   color: _isReactionGlowing || _hasReacted()
                                       ? Colors.red.shade400
-                                      : Colors.white,
+                                      : Colors.grey,
                                   count: updatedNote.reactionCount,
                                   onTap: _handleReactionTap,
                                 ),
@@ -544,7 +544,7 @@ class _NoteWidgetState extends State<NoteWidget>
                                   svg: 'assets/reply_button.svg',
                                   color: _isReplyGlowing || _hasReplied()
                                       ? Colors.blue.shade200
-                                      : Colors.white,
+                                      : Colors.grey,
                                   count: updatedNote.replyCount,
                                   onTap: _handleReplyTap,
                                 ),
@@ -552,7 +552,7 @@ class _NoteWidgetState extends State<NoteWidget>
                                   svg: 'assets/repost_button.svg',
                                   color: _isRepostGlowing || _hasReposted()
                                       ? Colors.green.shade400
-                                      : Colors.white,
+                                      : Colors.grey,
                                   count: updatedNote.repostCount,
                                   onTap: _handleRepostTap,
                                 ),
@@ -560,7 +560,7 @@ class _NoteWidgetState extends State<NoteWidget>
                                   svg: 'assets/zap_button.svg',
                                   color: _isZapGlowing || _hasZapped()
                                       ? const Color(0xFFECB200)
-                                      : Colors.white,
+                                      : Colors.grey,
                                   count: updatedNote.zapAmount,
                                   onTap: _handleZapTap,
                                 ),
