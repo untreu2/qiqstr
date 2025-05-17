@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/edit_profile.dart';
+import 'package:qiqstr/screens/following_page.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:hive/hive.dart';
 import 'package:qiqstr/models/following_model.dart';
@@ -345,22 +346,43 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           'Following: ',
           style: TextStyle(color: Colors.white70, fontSize: 14),
         ),
-        AnimatedSwitcher(
-          duration: const Duration(milliseconds: 500),
-          transitionBuilder: (child, animation) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          child: _isLoadingFollowing
-              ? const Text(
-                  '...',
-                  key: ValueKey('loading'),
-                  style: TextStyle(color: Colors.white54, fontSize: 14),
-                )
-              : Text(
-                  '$_followingCount',
-                  key: const ValueKey('count'),
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+        GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => FollowingListPage(
+                  username: (_liveUser ?? widget.user).name.isNotEmpty
+                      ? (_liveUser ?? widget.user).name
+                      : (_liveUser ?? widget.user).nip05.split('@').first,
+                  npub: (_liveUser ?? widget.user).npub,
                 ),
+              ),
+            );
+          },
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 500),
+            transitionBuilder: (child, animation) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+            child: _isLoadingFollowing
+                ? const Text(
+                    '...',
+                    key: ValueKey('loading'),
+                    style: TextStyle(
+                        color: Colors.white54,
+                        fontSize: 14,
+                        decoration: TextDecoration.underline),
+                  )
+                : Text(
+                    '$_followingCount',
+                    key: const ValueKey('count'),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        decoration: TextDecoration.underline),
+                  ),
+          ),
         ),
         if (_followsYou) ...[
           const SizedBox(width: 8),
