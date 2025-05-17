@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/profile_page.dart';
 import 'package:qiqstr/services/data_service.dart';
+import 'package:auto_size_text/auto_size_text.dart';
 
 class FollowingListPage extends StatefulWidget {
   final String username;
@@ -98,13 +99,17 @@ class _FollowingListPageState extends State<FollowingListPage> {
                 onPressed: () => Navigator.pop(context),
               ),
               const SizedBox(width: 8),
-              Text(
-                "${widget.username}'s Following",
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  letterSpacing: -0.5,
+              Expanded(
+                child: AutoSizeText(
+                  "${widget.username}'s Following",
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    letterSpacing: -0.5,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
