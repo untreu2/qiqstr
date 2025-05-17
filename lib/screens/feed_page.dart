@@ -100,10 +100,14 @@ class _FeedPageState extends State<FeedPage> {
     );
   }
 
-  SliverPersistentHeader _buildAnimatedHeader() {
+  SliverPersistentHeader _buildAnimatedHeader(BuildContext context) {
+    final double topPadding = MediaQuery.of(context).padding.top;
+    final double calculatedHeight = topPadding + 40 + 8;
+
     return SliverPersistentHeader(
       floating: true,
       delegate: _PinnedHeaderDelegate(
+        height: calculatedHeight,
         child: AnimatedOpacity(
           opacity: _showAppBar ? 1.0 : 0.0,
           duration: const Duration(milliseconds: 300),
@@ -112,12 +116,7 @@ class _FeedPageState extends State<FeedPage> {
               filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
               child: Container(
                 color: Colors.black.withOpacity(0.5),
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  MediaQuery.of(context).padding.top + 4,
-                  16,
-                  8,
-                ),
+                padding: EdgeInsets.fromLTRB(16, topPadding + 4, 16, 8),
                 child: SizedBox(
                   height: 40,
                   child: Stack(
@@ -171,7 +170,7 @@ class _FeedPageState extends State<FeedPage> {
                           ),
                           onPressed: () {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
+                              const SnackBar(
                                 content: Text('Redesigning'),
                                 duration: Duration(seconds: 2),
                               ),
@@ -249,7 +248,7 @@ class _FeedPageState extends State<FeedPage> {
                   ),
                   cacheExtent: 1500,
                   slivers: [
-                    _buildAnimatedHeader(),
+                    _buildAnimatedHeader(context),
                     NoteListWidget(
                       npub: widget.npub,
                       dataType: DataType.Feed,
@@ -262,22 +261,26 @@ class _FeedPageState extends State<FeedPage> {
 
 class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
+  final double height;
 
-  _PinnedHeaderDelegate({required this.child});
+  _PinnedHeaderDelegate({
+    required this.child,
+    required this.height,
+  });
 
   @override
   Widget build(
       BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return child;
+    return SizedBox(height: height, child: child);
   }
 
   @override
-  double get maxExtent => 125;
+  double get maxExtent => height;
 
   @override
-  double get minExtent => 125;
+  double get minExtent => height;
 
   @override
-  bool shouldRebuild(covariant SliverPersistentHeaderDelegate oldDelegate) =>
-      false;
+  bool shouldRebuild(covariant _PinnedHeaderDelegate oldDelegate) =>
+      height != oldDelegate.height || child != oldDelegate.child;
 }
