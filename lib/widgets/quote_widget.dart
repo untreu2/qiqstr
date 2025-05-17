@@ -239,10 +239,18 @@ class QuoteWidget extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 10),
-              DefaultTextStyle(
-                style: const TextStyle(fontSize: 15, color: Colors.white),
-                child: _contentText(parsed),
-              ),
+              if ((parsed['textParts'] as List)
+                  .where((p) =>
+                      p['type'] == 'text' &&
+                      (p['text'] as String).trim().isNotEmpty)
+                  .isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: DefaultTextStyle(
+                    style: const TextStyle(fontSize: 15, color: Colors.white),
+                    child: _contentText(parsed),
+                  ),
+                ),
               if ((parsed['mediaUrls'] as List).isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 12),
