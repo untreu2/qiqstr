@@ -293,7 +293,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                 if (user.lud16.isNotEmpty)
                   Text(
                     user.lud16,
-                    style: TextStyle(fontSize: 13, color: Colors.amber[600]),
+                    style: TextStyle(fontSize: 13, color: Color(0xFFECB200)),
                   ),
                 if (user.about.isNotEmpty)
                   Padding(
@@ -309,19 +309,18 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                     padding: const EdgeInsets.only(top: 8.0, bottom: 1),
                     child: Row(
                       children: [
-                        const Icon(Icons.link,
-                            color: Color(0xFFECB200), size: 14),
+                        const Icon(Icons.link, color: Colors.white70, size: 14),
                         const SizedBox(width: 4),
                         Flexible(
                           child: Linkify(
                             onOpen: _onOpen,
                             text: websiteUrl,
                             style: const TextStyle(
-                                fontSize: 13, color: Color(0xFFECB200)),
+                                fontSize: 13, color: Colors.white70),
                             linkStyle: const TextStyle(
                               fontSize: 13,
-                              color: Color(0xFFECB200),
-                              decoration: TextDecoration.underline,
+                              color: Colors.white70,
+                              decoration: TextDecoration.none,
                             ),
                           ),
                         ),
