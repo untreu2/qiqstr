@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -10,6 +11,7 @@ import 'package:qiqstr/services/data_service.dart';
 import 'package:hive/hive.dart';
 import 'package:qiqstr/models/following_model.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:nostr_nip19/nostr_nip19.dart';
 
 class ProfileInfoWidget extends StatefulWidget {
   final UserModel user;
@@ -33,6 +35,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   UserModel? _liveUser;
   Timer? _userRefreshTimer;
+  bool _copiedToClipboard = false;
 
   @override
   void initState() {
@@ -134,6 +137,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   @override
   Widget build(BuildContext context) {
     final user = _liveUser ?? widget.user;
+    final npubBech32 = encodeBasicBech32(user.npub, "npub");
     final screenWidth = MediaQuery.of(context).size.width;
     final websiteUrl = user.website.isNotEmpty &&
             !(user.website.startsWith("http://") ||
@@ -236,6 +240,55 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                 ),
                 const SizedBox(height: 12),
                 _buildNameRow(user),
+                const SizedBox(height: 6),
+                const SizedBox(height: 6),
+                GestureDetector(
+                  onTap: () async {
+                    await Clipboard.setData(ClipboardData(text: npubBech32));
+                    setState(() => _copiedToClipboard = true);
+                    await Future.delayed(const Duration(seconds: 1));
+                    if (mounted) setState(() => _copiedToClipboard = false);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    height: 34,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.white10,
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: Colors.white30),
+                    ),
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      transitionBuilder: (child, animation) =>
+                          FadeTransition(opacity: animation, child: child),
+                      child: Row(
+                        key: ValueKey(_copiedToClipboard),
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.copy,
+                              size: 14, color: Colors.white54),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              _copiedToClipboard
+                                  ? 'Copied to clipboard'
+                                  : npubBech32,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 6),
                 if (user.lud16.isNotEmpty)
                   Text(
