@@ -320,7 +320,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                             linkStyle: const TextStyle(
                               fontSize: 13,
                               color: Colors.white70,
-                              decoration: TextDecoration.none,
+                              decoration: TextDecoration.underline,
                             ),
                           ),
                         ),
