@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/profile_page.dart';
@@ -5,6 +6,7 @@ import 'package:qiqstr/screens/users_search_page.dart';
 import 'package:qiqstr/utils/logout.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class SidebarWidget extends StatefulWidget {
   final UserModel? user;
@@ -28,51 +30,52 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     final storage = FlutterSecureStorage();
     final storedNpub = await storage.read(key: 'npub');
     if (mounted) {
-      setState(() {
-        npub = storedNpub;
-      });
+      setState(() => npub = storedNpub);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final bannerUrl = widget.user?.banner;
+    final bannerImage = bannerUrl != null && bannerUrl.isNotEmpty
+        ? CachedNetworkImageProvider(bannerUrl)
+        : const AssetImage('assets/default_banner.jpg') as ImageProvider;
+
     return Drawer(
-      backgroundColor: Colors.black,
-      child: widget.user == null || npub == null
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                const SizedBox(height: 50),
-                Container(
-                  margin: const EdgeInsets.all(16),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 32,
-                        backgroundImage: widget.user!.profileImage.isNotEmpty
-                            ? CachedNetworkImageProvider(
-                                widget.user!.profileImage)
-                            : const AssetImage('assets/default_profile.png')
-                                as ImageProvider,
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image(
+            image: bannerImage,
+            fit: BoxFit.cover,
+          ),
+          BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+            child: Container(
+              color: Colors.black.withOpacity(0.6),
+            ),
+          ),
+          widget.user == null || npub == null
+              ? const Center(child: CircularProgressIndicator())
+              : Column(
+                  children: [
+                    const SizedBox(height: 70),
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 32,
+                            backgroundImage: widget
+                                    .user!.profileImage.isNotEmpty
+                                ? CachedNetworkImageProvider(
+                                    widget.user!.profileImage)
+                                : const AssetImage('assets/default_profile.png')
+                                    as ImageProvider,
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Text(
                               widget.user!.name,
                               style: const TextStyle(
                                 color: Colors.white,
@@ -81,75 +84,72 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
-                            if (widget.user!.nip05.isNotEmpty)
-                              Text(
-                                '@${widget.user!.nip05.split('@').last}',
-                                style: const TextStyle(
-                                  color: Color(0xFFECB200),
-                                  fontSize: 13,
-                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        children: [
+                          _buildSidebarItem(
+                            svgAsset: 'assets/profile_button.svg',
+                            label: 'Profile',
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    ProfilePage(user: widget.user!),
                               ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    children: [
-                      _buildSidebarItem(
-                        icon: Icons.person,
-                        label: 'Profile',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                ProfilePage(user: widget.user!),
+                            ),
                           ),
-                        ),
-                      ),
-                      _buildSidebarItem(
-                        icon: Icons.search,
-                        label: 'Search',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const UserSearchPage(),
+                          _buildSidebarItem(
+                            svgAsset: 'assets/search_button.svg',
+                            label: 'Search',
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const UserSearchPage(),
+                              ),
+                            ),
                           ),
-                        ),
+                          _buildSidebarItem(
+                            svgAsset: 'assets/Logout_button.svg',
+                            label: 'Logout',
+                            iconColor: Colors.redAccent,
+                            textColor: Colors.redAccent,
+                            onTap: () => Logout.performLogout(context),
+                          ),
+                        ],
                       ),
-                      _buildSidebarItem(
-                        icon: Icons.logout,
-                        label: 'Logout',
-                        iconColor: Colors.redAccent,
-                        textColor: Colors.redAccent,
-                        onTap: () => Logout.performLogout(context),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+        ],
+      ),
     );
   }
 
   Widget _buildSidebarItem({
-    required IconData icon,
+    required String svgAsset,
     required String label,
     required VoidCallback onTap,
     Color iconColor = Colors.white,
     Color textColor = Colors.white,
   }) {
     return ListTile(
-      leading: Icon(icon, color: iconColor),
+      leading: SvgPicture.asset(
+        svgAsset,
+        width: 20,
+        height: 20,
+        color: iconColor,
+      ),
       title: Text(
         label,
-        style: TextStyle(color: textColor, fontSize: 16),
+        style: TextStyle(color: textColor, fontSize: 18),
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      hoverColor: Colors.black26,
+      hoverColor: Colors.white.withOpacity(0.05),
       onTap: onTap,
     );
   }
