@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
+import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:qiqstr/screens/note_statistics_page.dart';
+import 'package:qiqstr/screens/share_note.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qiqstr/models/user_model.dart';
@@ -172,13 +174,55 @@ class _NoteWidgetState extends State<NoteWidget>
     );
   }
 
-  void _handleRepostTap() async {
+  void _handleRepostTap() {
     setState(() => _isRepostGlowing = true);
-    Future.delayed(const Duration(milliseconds: 400),
-        () => mounted ? setState(() => _isRepostGlowing = false) : null);
-    try {
-      await widget.dataService.sendRepost(widget.note);
-    } catch (_) {}
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (mounted) setState(() => _isRepostGlowing = false);
+    });
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      backgroundColor: Colors.black,
+      builder: (context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.repeat, color: Colors.white),
+            title: const Text('Repost',
+                style: TextStyle(color: Colors.white, fontSize: 16)),
+            onTap: () async {
+              Navigator.pop(context);
+              try {
+                await widget.dataService.sendRepost(widget.note);
+              } catch (_) {}
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.format_quote, color: Colors.white),
+            title: const Text('Quote',
+                style: TextStyle(color: Colors.white, fontSize: 16)),
+            onTap: () {
+              Navigator.pop(context);
+              final bech32 = encodeBasicBech32(widget.note.id, 'note');
+              final quoteText = 'nostr:$bech32';
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ShareNotePage(
+                    dataService: widget.dataService,
+                    initialText: quoteText,
+                  ),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 45),
+        ],
+      ),
+    );
   }
 
   void _handleZapTap() {

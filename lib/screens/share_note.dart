@@ -5,29 +5,35 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../services/data_service.dart';
 import '../models/user_model.dart';
+import '../widgets/quote_widget.dart';
 
 class ShareNotePage extends StatefulWidget {
   final DataService dataService;
+  final String? initialText;
 
-  const ShareNotePage({super.key, required this.dataService});
+  const ShareNotePage({
+    super.key,
+    required this.dataService,
+    this.initialText,
+  });
 
   @override
   _ShareNotePageState createState() => _ShareNotePageState();
 }
 
 class _ShareNotePageState extends State<ShareNotePage> {
-  final TextEditingController _noteController = TextEditingController();
+  late TextEditingController _noteController;
   final FocusNode _focusNode = FocusNode();
   bool _isPosting = false;
   bool _isMediaUploading = false;
   final List<String> _mediaUrls = [];
   final String _serverUrl = "https://blossom.primal.net";
-
   UserModel? _user;
 
   @override
   void initState() {
     super.initState();
+    _noteController = TextEditingController();
     _loadProfile();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
@@ -88,7 +94,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   Future<void> _shareNote() async {
     if (_isPosting) return;
-    if (_noteController.text.trim().isEmpty) {
+    if (_noteController.text.trim().isEmpty && _mediaUrls.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a note')),
       );
@@ -99,9 +105,11 @@ class _ShareNotePageState extends State<ShareNotePage> {
     });
     try {
       final noteText = _noteController.text.trim();
-      final String finalNoteContent = _mediaUrls.isNotEmpty
-          ? "$noteText ${_mediaUrls.join(" ")}"
-          : noteText;
+      final mediaPart = _mediaUrls.isNotEmpty ? " ${_mediaUrls.join(" ")}" : "";
+      final quotePart =
+          widget.initialText != null ? "\n${widget.initialText}" : "";
+      final finalNoteContent = "$noteText$mediaPart$quotePart".trim();
+
       await widget.dataService.shareNote(finalNoteContent);
       Navigator.of(context).pop();
     } catch (error) {
@@ -257,7 +265,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
                       focusNode: _focusNode,
                       controller: _noteController,
                       maxLines: null,
-                      textAlignVertical: TextAlignVertical.center,
+                      textAlignVertical: TextAlignVertical.top,
                       style: const TextStyle(color: Colors.white),
                       cursorColor: Colors.white,
                       decoration: const InputDecoration(
@@ -319,6 +327,14 @@ class _ShareNotePageState extends State<ShareNotePage> {
                         );
                       }).toList(),
                     ),
+                  ),
+                ),
+              if (widget.initialText != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 16),
+                  child: QuoteWidget(
+                    bech32: widget.initialText!,
+                    dataService: widget.dataService,
                   ),
                 ),
             ],
