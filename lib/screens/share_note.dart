@@ -130,35 +130,105 @@ class _ShareNotePageState extends State<ShareNotePage> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 8.0),
+          child: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                color: Colors.white, size: 20),
+            onPressed: () => Navigator.pop(context),
+          ),
         ),
         actions: [
-          IconButton(
-            onPressed: _selectMedia,
-            icon: const Icon(Icons.attach_file, color: Color(0xFFECB200)),
-            tooltip: 'Add Media',
-          ),
-          TextButton(
-            onPressed: _isPosting ? null : _shareNote,
-            child: _isPosting
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : const Text(
-                    'Post!',
-                    style: TextStyle(
-                      color: Color(0xFFECB200),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
+          Row(
+            children: [
+              if (_isMediaUploading)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Row(
+                    children: const [
+                      SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      ),
+                      SizedBox(width: 6),
+                      Text(
+                        'Uploading...',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
+                ),
+              GestureDetector(
+                onTap: _selectMedia,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  height: 34,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.white10,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white30),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.attach_file, size: 16, color: Colors.white),
+                      SizedBox(width: 6),
+                      Text(
+                        'Add media',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: _isPosting ? null : _shareNote,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  height: 34,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.white10,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white30),
+                  ),
+                  child: _isPosting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Text(
+                          'Post!',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
           ),
         ],
       ),
@@ -251,44 +321,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
                     ),
                   ),
                 ),
-              AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                child: _isMediaUploading
-                    ? Container(
-                        key: const ValueKey('uploading'),
-                        margin: const EdgeInsets.symmetric(vertical: 12),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.7),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white10),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            const Text(
-                              "Uploading media...",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
             ],
           ),
         ),

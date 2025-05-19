@@ -203,27 +203,64 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        backgroundColor: Colors.black,
         elevation: 0,
-        leading: const BackButton(color: Colors.white),
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 8.0),
+          child: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                color: Colors.white, size: 20),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
         actions: [
-          TextButton.icon(
-            onPressed: _isSaving ? null : _saveProfile,
-            icon: _isSaving
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      color: Color(0xFFECB200),
-                      strokeWidth: 2,
-                    ),
-                  )
-                : const Icon(Icons.check, color: Color(0xFFECB200)),
-            label: Text(
-              _isSaving ? 'Updating...' : 'Save',
-              style: const TextStyle(
-                color: Color(0xFFECB200),
-                fontWeight: FontWeight.bold,
+          GestureDetector(
+            onTap: _isSaving ? null : _saveProfile,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              height: 34,
+              alignment: Alignment.center,
+              margin: const EdgeInsets.only(right: 12),
+              decoration: BoxDecoration(
+                color: Colors.white10,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white30),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: _isSaving
+                    ? const [
+                        SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          'Updating...',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ]
+                    : const [
+                        Text(
+                          'Save',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        SizedBox(width: 4),
+                        Icon(Icons.check, size: 16, color: Colors.white),
+                      ],
               ),
             ),
           ),
