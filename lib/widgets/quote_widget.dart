@@ -238,7 +238,6 @@ class QuoteWidget extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
               if ((parsed['textParts'] as List)
                   .where((p) =>
                       p['type'] == 'text' &&
