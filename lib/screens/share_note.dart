@@ -241,9 +241,11 @@ class _ShareNotePageState extends State<ShareNotePage> {
         ],
       ),
       body: SafeArea(
-        child: Padding(
+        bottom: false,
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
