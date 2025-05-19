@@ -150,21 +150,44 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CachedNetworkImage(
-            imageUrl: user.banner,
-            width: screenWidth,
-            height: 130,
-            fit: BoxFit.cover,
-            placeholder: (_, __) => Container(
-              height: 130,
-              width: screenWidth,
-              color: Colors.grey[700],
-            ),
-            errorWidget: (_, __, ___) => Container(
-              height: 130,
-              width: screenWidth,
-              color: Colors.black,
-            ),
+          Stack(
+            children: [
+              CachedNetworkImage(
+                imageUrl: user.banner,
+                width: screenWidth,
+                height: 130,
+                fit: BoxFit.cover,
+                placeholder: (_, __) => Container(
+                  height: 130,
+                  width: screenWidth,
+                  color: Colors.grey[700],
+                ),
+                errorWidget: (_, __, ___) => Container(
+                  height: 130,
+                  width: screenWidth,
+                  color: Colors.black,
+                ),
+              ),
+              Positioned(
+                top: MediaQuery.of(context).padding.top + -8,
+                left: 12,
+                child: GestureDetector(
+                  onTap: () => Navigator.of(context).maybePop(),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.3),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.arrow_back,
+                      size: 20,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
           Container(
             transform: Matrix4.translationValues(0, -30, 0),
