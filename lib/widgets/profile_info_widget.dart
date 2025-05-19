@@ -10,6 +10,7 @@ import 'package:qiqstr/services/data_service.dart';
 import 'package:hive/hive.dart';
 import 'package:qiqstr/models/following_model.dart';
 import 'package:qiqstr/widgets/mini_link_preview_widget.dart';
+import 'package:qiqstr/widgets/photo_viewer_widget.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 
 class ProfileInfoWidget extends StatefulWidget {
@@ -144,20 +145,33 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         children: [
           Stack(
             children: [
-              CachedNetworkImage(
-                imageUrl: user.banner,
-                width: screenWidth,
-                height: 130,
-                fit: BoxFit.cover,
-                placeholder: (_, __) => Container(
-                  height: 130,
+              GestureDetector(
+                onTap: () {
+                  if (user.banner.isNotEmpty) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            PhotoViewerWidget(imageUrls: [user.banner]),
+                      ),
+                    );
+                  }
+                },
+                child: CachedNetworkImage(
+                  imageUrl: user.banner,
                   width: screenWidth,
-                  color: Colors.grey[700],
-                ),
-                errorWidget: (_, __, ___) => Container(
                   height: 130,
-                  width: screenWidth,
-                  color: Colors.black,
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => Container(
+                    height: 130,
+                    width: screenWidth,
+                    color: Colors.grey[700],
+                  ),
+                  errorWidget: (_, __, ___) => Container(
+                    height: 130,
+                    width: screenWidth,
+                    color: Colors.black,
+                  ),
                 ),
               ),
               Positioned(
@@ -171,11 +185,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                       color: Colors.black.withOpacity(0.3),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.arrow_back,
-                      size: 20,
-                      color: Colors.white,
-                    ),
+                    child: const Icon(Icons.arrow_back,
+                        size: 20, color: Colors.white),
                   ),
                 ),
               ),
@@ -189,7 +200,20 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               children: [
                 Row(
                   children: [
-                    _buildAvatar(user),
+                    GestureDetector(
+                      onTap: () {
+                        if (user.profileImage.isNotEmpty) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => PhotoViewerWidget(
+                                  imageUrls: [user.profileImage]),
+                            ),
+                          );
+                        }
+                      },
+                      child: _buildAvatar(user),
+                    ),
                     const Spacer(),
                     if (_currentUserNpub != null)
                       Padding(
@@ -306,25 +330,20 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                 ),
                 const SizedBox(height: 6),
                 if (user.lud16.isNotEmpty)
-                  Text(
-                    user.lud16,
-                    style: TextStyle(fontSize: 13, color: Color(0xFFECB200)),
-                  ),
+                  Text(user.lud16,
+                      style: const TextStyle(
+                          fontSize: 13, color: Color(0xFFECB200))),
                 if (user.about.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8.0),
-                    child: Text(
-                      user.about,
-                      style:
-                          const TextStyle(fontSize: 14, color: Colors.white70),
-                    ),
+                    child: Text(user.about,
+                        style: const TextStyle(
+                            fontSize: 14, color: Colors.white70)),
                   ),
                 if (user.website.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 12.0),
-                    child: MiniLinkPreviewWidget(
-                      url: websiteUrl,
-                    ),
+                    child: MiniLinkPreviewWidget(url: websiteUrl),
                   ),
                 const SizedBox(height: 16),
                 _buildFollowingCount(),
@@ -393,10 +412,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   Widget _buildFollowingCount() {
     return Row(
       children: [
-        const Text(
-          'Following: ',
-          style: TextStyle(color: Colors.white70, fontSize: 14),
-        ),
+        const Text('Following: ',
+            style: TextStyle(color: Colors.white70, fontSize: 14)),
         GestureDetector(
           onTap: () {
             Navigator.push(
@@ -413,9 +430,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           },
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 500),
-            transitionBuilder: (child, animation) {
-              return FadeTransition(opacity: animation, child: child);
-            },
+            transitionBuilder: (child, animation) =>
+                FadeTransition(opacity: animation, child: child),
             child: _isLoadingFollowing
                 ? const Text(
                     '...',
