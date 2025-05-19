@@ -1,5 +1,3 @@
-import 'dart:async';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/photo_viewer_widget.dart';
@@ -26,6 +24,7 @@ class MediaPreviewWidget extends StatelessWidget {
 
     if (videoUrls.isNotEmpty) {
       final videoUrl = videoUrls.first;
+
       return VP(url: videoUrl);
     }
 
@@ -48,39 +47,13 @@ class MediaPreviewWidget extends StatelessWidget {
 
   Widget _buildMediaGrid(BuildContext context, List<String> imageUrls) {
     if (imageUrls.length == 1) {
-      return FutureBuilder<ui.Image>(
-        future: _getImageSize(imageUrls[0]),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done ||
-              !snapshot.hasData) {
-            return AspectRatio(
-              aspectRatio: 1,
-              child: const Center(child: CircularProgressIndicator()),
-            );
-          }
-
-          final image = snapshot.data!;
-          final isLowRes = image.width < 300 || image.height < 300;
-
-          return isLowRes
-              ? AspectRatio(
-                  aspectRatio: 1,
-                  child: _buildImage(
-                    context,
-                    imageUrls[0],
-                    0,
-                    imageUrls,
-                    fit: BoxFit.cover,
-                  ),
-                )
-              : _buildImage(
-                  context,
-                  imageUrls[0],
-                  0,
-                  imageUrls,
-                  fit: BoxFit.contain,
-                );
-        },
+      return _buildImage(
+        context,
+        imageUrls[0],
+        0,
+        imageUrls,
+        useAspectRatio: false,
+        fit: BoxFit.contain,
       );
     } else if (imageUrls.length == 2) {
       return Row(
@@ -185,21 +158,6 @@ class MediaPreviewWidget extends StatelessWidget {
         },
       );
     }
-  }
-
-  Future<ui.Image> _getImageSize(String imageUrl) async {
-    final completer = Completer<ui.Image>();
-    final image = NetworkImage(imageUrl);
-
-    image.resolve(const ImageConfiguration()).addListener(
-          ImageStreamListener((ImageInfo info, bool _) {
-            completer.complete(info.image);
-          }, onError: (dynamic error, StackTrace? stackTrace) {
-            completer.completeError(error, stackTrace);
-          }),
-        );
-
-    return completer.future;
   }
 
   Widget _buildImage(
