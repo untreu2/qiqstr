@@ -359,7 +359,7 @@ class _NoteWidgetState extends State<NoteWidget>
           onTap: onTap,
           child: Row(
             children: [
-              SvgPicture.asset(svg, width: 16, height: 16, color: color),
+              SvgPicture.asset(svg, width: 15, height: 15, color: color),
               const SizedBox(width: 4),
               Opacity(
                 opacity: count > 0 ? 1.0 : 0.0,
