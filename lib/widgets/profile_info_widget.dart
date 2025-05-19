@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/models/user_model.dart';
@@ -10,7 +9,7 @@ import 'package:qiqstr/screens/following_page.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:hive/hive.dart';
 import 'package:qiqstr/models/following_model.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:qiqstr/widgets/mini_link_preview_widget.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 
 class ProfileInfoWidget extends StatefulWidget {
@@ -124,13 +123,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       setState(() {
         _isFollowing = !_isFollowing!;
       });
-    }
-  }
-
-  Future<void> _onOpen(LinkableElement link) async {
-    final uri = Uri.parse(link.url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
     }
   }
 
@@ -329,25 +321,9 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                   ),
                 if (user.website.isNotEmpty)
                   Padding(
-                    padding: const EdgeInsets.only(top: 8.0, bottom: 1),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.link, color: Colors.white70, size: 14),
-                        const SizedBox(width: 4),
-                        Flexible(
-                          child: Linkify(
-                            onOpen: _onOpen,
-                            text: websiteUrl,
-                            style: const TextStyle(
-                                fontSize: 13, color: Colors.white70),
-                            linkStyle: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.white70,
-                              decoration: TextDecoration.underline,
-                            ),
-                          ),
-                        ),
-                      ],
+                    padding: const EdgeInsets.only(top: 12.0),
+                    child: MiniLinkPreviewWidget(
+                      url: websiteUrl,
                     ),
                   ),
                 const SizedBox(height: 16),
