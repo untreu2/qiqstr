@@ -360,11 +360,14 @@ class _NoteWidgetState extends State<NoteWidget>
           child: Row(
             children: [
               SvgPicture.asset(svg, width: 16, height: 16, color: color),
-              if (count > 0) ...[
-                const SizedBox(width: 4),
-                Text('$count',
-                    style: const TextStyle(fontSize: 13, color: Colors.grey)),
-              ],
+              const SizedBox(width: 4),
+              Opacity(
+                opacity: count > 0 ? 1.0 : 0.0,
+                child: Text(
+                  '$count',
+                  style: const TextStyle(fontSize: 13, color: Colors.grey),
+                ),
+              ),
             ],
           ),
         ),
@@ -528,7 +531,7 @@ class _NoteWidgetState extends State<NoteWidget>
                                         ))
                                     .toList(),
                               ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 10),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
