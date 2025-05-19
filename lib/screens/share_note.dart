@@ -333,7 +333,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
                 Padding(
                   padding: const EdgeInsets.only(top: 16),
                   child: QuoteWidget(
-                    bech32: widget.initialText!,
+                    bech32: widget.initialText!.replaceFirst('nostr:', ''),
                     dataService: widget.dataService,
                   ),
                 ),
