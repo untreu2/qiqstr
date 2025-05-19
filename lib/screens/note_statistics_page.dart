@@ -148,7 +148,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                     ),
                     const SizedBox(width: 16),
                     const Text(
-                      'Stats',
+                      'Note interactions',
                       style: TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.w700,
