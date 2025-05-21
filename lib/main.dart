@@ -10,8 +10,11 @@ import 'models/user_model.dart';
 import 'models/following_model.dart';
 import 'models/link_preview_model.dart';
 import 'models/zap_model.dart';
+import 'wallet/wallet_provider.dart';
 import 'screens/login_page.dart';
 import 'screens/feed_page.dart';
+
+final walletProvider = ChangeNotifierProvider((ref) => WalletProvider());
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,6 +36,8 @@ Future<void> main() async {
     String? privateKey = await secureStorage.read(key: 'privateKey');
     String? npub = await secureStorage.read(key: 'npub');
 
+    Widget home;
+
     if (privateKey != null && npub != null) {
       await Hive.openBox<NoteModel>('notes_Feed_$npub');
       await Hive.openBox<ReactionModel>('reactions_Feed_$npub');
@@ -46,10 +51,16 @@ Future<void> main() async {
       await Hive.openBox<FollowingModel>('followingBox');
       await Hive.openBox<ZapModel>('zaps_$npub');
 
-      runApp(ProviderScope(child: QiqstrApp(home: FeedPage(npub: npub))));
+      home = FeedPage(npub: npub);
     } else {
-      runApp(const ProviderScope(child: QiqstrApp(home: LoginPage())));
+      home = const LoginPage();
     }
+
+    runApp(
+      ProviderScope(
+        child: QiqstrApp(home: home),
+      ),
+    );
   } catch (e) {
     print('Error initializing Hive: $e');
     runApp(const HiveErrorApp());
