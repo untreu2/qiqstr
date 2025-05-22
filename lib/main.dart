@@ -51,8 +51,16 @@ Future<void> main() async {
       runApp(const ProviderScope(child: QiqstrApp(home: LoginPage())));
     }
   } catch (e) {
-    print('Error initializing Hive: $e');
-    runApp(const HiveErrorApp());
+    print('Hive initialization error: $e');
+
+    try {
+      await Hive.deleteFromDisk();
+      print('Hive data deleted. Restarting app...');
+      main();
+    } catch (deleteError) {
+      print('Failed to delete Hive data: $deleteError');
+      runApp(const HiveErrorApp());
+    }
   }
 }
 
