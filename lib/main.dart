@@ -11,7 +11,7 @@ import 'models/following_model.dart';
 import 'models/link_preview_model.dart';
 import 'models/zap_model.dart';
 import 'screens/login_page.dart';
-import 'screens/feed_page.dart';
+import 'screens/home_navigator.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -46,7 +46,7 @@ Future<void> main() async {
       await Hive.openBox<FollowingModel>('followingBox');
       await Hive.openBox<ZapModel>('zaps_$npub');
 
-      runApp(ProviderScope(child: QiqstrApp(home: FeedPage(npub: npub))));
+      runApp(ProviderScope(child: QiqstrApp(home: HomeNavigator(npub: npub))));
     } else {
       runApp(const ProviderScope(child: QiqstrApp(home: LoginPage())));
     }

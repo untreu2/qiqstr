@@ -27,7 +27,7 @@ class _FeedPageState extends State<FeedPage> {
 
   late ScrollController _scrollController;
   bool _showAppBar = true;
-  bool _showFAB = true;
+  double _fabOpacity = 1.0;
 
   @override
   void initState() {
@@ -43,16 +43,15 @@ class _FeedPageState extends State<FeedPage> {
 
   void _scrollListener() {
     final direction = _scrollController.position.userScrollDirection;
-    if (direction == ScrollDirection.reverse && (_showAppBar || _showFAB)) {
+    if (direction == ScrollDirection.reverse && _fabOpacity != 0.3) {
       setState(() {
+        _fabOpacity = 0.6;
         _showAppBar = false;
-        _showFAB = false;
       });
-    } else if (direction == ScrollDirection.forward &&
-        (!_showAppBar || !_showFAB)) {
+    } else if (direction == ScrollDirection.forward && _fabOpacity != 1.0) {
       setState(() {
+        _fabOpacity = 1.0;
         _showAppBar = true;
-        _showFAB = true;
       });
     }
   }
@@ -159,26 +158,6 @@ class _FeedPageState extends State<FeedPage> {
                           ),
                         ),
                       ),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: IconButton(
-                          icon: SvgPicture.asset(
-                            'assets/notification_button.svg',
-                            width: 19,
-                            height: 19,
-                            color: Colors.white,
-                          ),
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Redesigning'),
-                                duration: Duration(seconds: 2),
-                              ),
-                            );
-                          },
-                          tooltip: 'Notifications',
-                        ),
-                      )
                     ],
                   ),
                 ),
@@ -196,16 +175,13 @@ class _FeedPageState extends State<FeedPage> {
       backgroundColor: Colors.black,
       drawer: SidebarWidget(user: user),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      floatingActionButton: AnimatedSlide(
-        offset: _showFAB ? Offset.zero : const Offset(0, 2),
-        duration: const Duration(milliseconds: 650),
-        curve: Curves.easeInOutCubic,
-        child: AnimatedOpacity(
-          opacity: _showFAB ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 650),
-          curve: Curves.easeInOutCubic,
-          child: Padding(
-            padding: const EdgeInsets.only(right: 12, bottom: 12),
+      floatingActionButton: AnimatedOpacity(
+        opacity: _fabOpacity,
+        duration: const Duration(milliseconds: 300),
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 90.0, right: 5.0),
+          child: GestureDetector(
+            onTap: _navigateToShareNotePage,
             child: ClipOval(
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
@@ -213,18 +189,23 @@ class _FeedPageState extends State<FeedPage> {
                   width: 56,
                   height: 56,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFECB200).withOpacity(0.8),
+                    color: const Color(0xFFECB200).withOpacity(0.9),
                     shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.3),
+                        blurRadius: 6,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
                   ),
-                  child: IconButton(
-                    onPressed: _navigateToShareNotePage,
-                    icon: SvgPicture.asset(
+                  child: Center(
+                    child: SvgPicture.asset(
                       'assets/new_post_button.svg',
-                      color: Colors.white,
                       width: 24,
                       height: 24,
+                      color: Colors.white,
                     ),
-                    tooltip: 'New Note',
                   ),
                 ),
               ),
