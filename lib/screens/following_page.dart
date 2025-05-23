@@ -34,7 +34,7 @@ class _FollowingListPageState extends State<FollowingListPage> {
 
   Future<void> _loadFollowings() async {
     final dataService =
-        DataService(npub: widget.npub, dataType: DataType.Profile);
+        DataService(npub: widget.npub, dataType: DataType.profile);
     await dataService.initialize();
     final followingNpubs = await dataService.getFollowingList(widget.npub);
 

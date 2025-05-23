@@ -57,7 +57,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
     final usersBox = await Hive.openBox<UserModel>('users');
     final user = usersBox.get(npub);
 
-    final dataService = DataService(npub: npub, dataType: DataType.Profile);
+    final dataService = DataService(npub: npub, dataType: DataType.profile);
     await dataService.initialize();
 
     setState(() {

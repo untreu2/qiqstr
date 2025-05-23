@@ -25,9 +25,9 @@ import 'package:collection/collection.dart';
 import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
 
-enum DataType { Feed, Profile, Note }
+enum DataType { feed, profile, note }
 
-enum MessageType { NewNotes, CacheLoad, Error, Close }
+enum MessageType { newnotes, cacheload, error, close }
 
 class IsolateMessage {
   final MessageType type;
@@ -267,16 +267,16 @@ class DataService {
         }
       } else if (message is IsolateMessage) {
         switch (message.type) {
-          case MessageType.NewNotes:
+          case MessageType.newnotes:
             _handleNewNotes(message.data);
             break;
-          case MessageType.CacheLoad:
+          case MessageType.cacheload:
             _handleCacheLoad(message.data);
             break;
-          case MessageType.Error:
+          case MessageType.error:
             print('[DataService ERROR] Isolate error: ${message.data}');
             break;
-          case MessageType.Close:
+          case MessageType.close:
             print('[DataService] Isolate received close message.');
             break;
         }
@@ -444,7 +444,7 @@ class DataService {
     if (!_isInitialized) return;
 
     List<String> targetNpubs;
-    if (dataType == DataType.Feed) {
+    if (dataType == DataType.feed) {
       final following = await getFollowingList(npub);
       following.add(npub);
       targetNpubs = following.toSet().toList();
@@ -480,7 +480,7 @@ class DataService {
     await _subscribeToAllReposts();
     await _subscribeToAllZaps();
 
-    if (dataType == DataType.Feed) {
+    if (dataType == DataType.feed) {
       _startRealTimeSubscription(targetNpubs);
       await _subscribeToFollowing();
     }
@@ -696,14 +696,14 @@ class DataService {
 
     if (eventIds.contains(eventId) || noteContent.trim().isEmpty) return;
 
-    if (dataType == DataType.Feed) {
+    if (dataType == DataType.feed) {
       if (isRepost) {
         if (!targetNpubs.contains(author) && !targetNpubs.contains(noteAuthor))
           return;
       } else {
         if (!targetNpubs.contains(noteAuthor)) return;
       }
-    } else if (dataType == DataType.Profile) {
+    } else if (dataType == DataType.profile) {
       if (isRepost) {
         if (author != npub && noteAuthor != npub) return;
       } else {
@@ -2339,7 +2339,7 @@ class DataService {
 
     try {
       if (_sendPortReadyCompleter.isCompleted) {
-        _sendPort.send(IsolateMessage(MessageType.Close, 'close'));
+        _sendPort.send(IsolateMessage(MessageType.close, 'close'));
       }
     } catch (e) {}
 

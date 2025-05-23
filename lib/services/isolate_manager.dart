@@ -78,17 +78,17 @@ class IsolateManager {
     isolateReceivePort.listen((message) {
       if (message is IsolateMessage) {
         switch (message.type) {
-          case MessageType.CacheLoad:
+          case MessageType.cacheload:
             _processCacheLoad(message.data, sendPort);
             break;
-          case MessageType.NewNotes:
+          case MessageType.newnotes:
             _processNewNotes(message.data, sendPort);
             break;
-          case MessageType.Close:
+          case MessageType.close:
             isolateReceivePort.close();
             break;
-          case MessageType.Error:
-            sendPort.send(IsolateMessage(MessageType.Error, message.data));
+          case MessageType.error:
+            sendPort.send(IsolateMessage(MessageType.error, message.data));
             break;
         }
       } else if (message is String && message == 'close') {
@@ -102,9 +102,9 @@ class IsolateManager {
       final List<dynamic> jsonData = json.decode(data);
       final List<NoteModel> parsedNotes =
           jsonData.map((json) => NoteModel.fromJson(json)).toList();
-      sendPort.send(IsolateMessage(MessageType.CacheLoad, parsedNotes));
+      sendPort.send(IsolateMessage(MessageType.cacheload, parsedNotes));
     } catch (e) {
-      sendPort.send(IsolateMessage(MessageType.Error, e.toString()));
+      sendPort.send(IsolateMessage(MessageType.error, e.toString()));
     }
   }
 
@@ -113,9 +113,9 @@ class IsolateManager {
       final List<dynamic> jsonData = json.decode(data);
       final List<NoteModel> parsedNotes =
           jsonData.map((json) => NoteModel.fromJson(json)).toList();
-      sendPort.send(IsolateMessage(MessageType.NewNotes, parsedNotes));
+      sendPort.send(IsolateMessage(MessageType.newnotes, parsedNotes));
     } catch (e) {
-      sendPort.send(IsolateMessage(MessageType.Error, e.toString()));
+      sendPort.send(IsolateMessage(MessageType.error, e.toString()));
     }
   }
 }

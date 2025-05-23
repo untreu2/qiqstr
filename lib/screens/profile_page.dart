@@ -24,7 +24,7 @@ class ProfilePage extends StatelessWidget {
           ),
           NoteListWidget(
             npub: user.npub,
-            dataType: DataType.Profile,
+            dataType: DataType.profile,
           ),
         ],
       ),

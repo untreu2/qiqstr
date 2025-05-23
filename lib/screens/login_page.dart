@@ -44,7 +44,7 @@ class _LoginPageState extends State<LoginPage> {
       await _secureStorage.write(key: 'privateKey', value: nsecHex);
       await _secureStorage.write(key: 'npub', value: npubHex);
 
-      _tempService = DataService(npub: npubHex, dataType: DataType.Feed);
+      _tempService = DataService(npub: npubHex, dataType: DataType.feed);
       await _tempService!.initialize();
       await _tempService?.closeConnections();
       _tempService = null;

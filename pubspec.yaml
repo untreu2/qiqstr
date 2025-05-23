@@ -63,6 +63,9 @@ dependencies:
     better_player_plus: ^1.0.8
     native_video_player: ^3.0.0
     auto_size_text: ^3.0.0
+    collection: ^1.19.1
+    http: ^1.4.0
+    crypto: ^3.0.6
 dev_dependencies:
     hive_generator: ^2.0.1
     flutter_test:

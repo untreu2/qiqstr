@@ -64,7 +64,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     });
 
     _dataService =
-        DataService(npub: _currentUserNpub!, dataType: DataType.Profile);
+        DataService(npub: _currentUserNpub!, dataType: DataType.profile);
     await _dataService!.initialize();
   }
 
@@ -84,7 +84,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   Future<void> _loadFollowingCount() async {
     try {
       final dataService =
-          DataService(npub: widget.user.npub, dataType: DataType.Profile);
+          DataService(npub: widget.user.npub, dataType: DataType.profile);
       await dataService.initialize();
       final followingList =
           await dataService.getFollowingList(widget.user.npub);

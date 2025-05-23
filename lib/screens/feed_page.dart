@@ -32,7 +32,7 @@ class _FeedPageState extends State<FeedPage> {
   @override
   void initState() {
     super.initState();
-    dataService = DataService(npub: widget.npub, dataType: DataType.Feed);
+    dataService = DataService(npub: widget.npub, dataType: DataType.feed);
     _scrollController = ScrollController()..addListener(_scrollListener);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -232,7 +232,7 @@ class _FeedPageState extends State<FeedPage> {
                     _buildAnimatedHeader(context),
                     NoteListWidget(
                       npub: widget.npub,
-                      dataType: DataType.Feed,
+                      dataType: DataType.feed,
                     ),
                   ],
                 ),
