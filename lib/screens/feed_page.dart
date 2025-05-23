@@ -179,7 +179,7 @@ class _FeedPageState extends State<FeedPage> {
         opacity: _fabOpacity,
         duration: const Duration(milliseconds: 300),
         child: Padding(
-          padding: const EdgeInsets.only(bottom: 90.0, right: 5.0),
+          padding: const EdgeInsets.only(bottom: 0.0, right: 5.0),
           child: GestureDetector(
             onTap: _navigateToShareNotePage,
             child: ClipOval(

@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qiqstr/screens/feed_page.dart';
@@ -31,6 +30,52 @@ class _HomeNavigatorState extends State<HomeNavigator> {
     );
   }
 
+  Widget _buildCustomBottomBar() {
+    List<Map<String, dynamic>> items = [
+      {'icon': 'assets/home_gap.svg', 'index': 0},
+      {'icon': 'assets/search_button.svg', 'index': 1},
+      {'icon': 'assets/dm_button.svg', 'index': 2},
+      {'icon': 'assets/notification_button.svg', 'index': 3},
+    ];
+
+    return Container(
+      height: 72,
+      width: double.infinity,
+      color: Colors.black,
+      child: Row(
+        children: items.map((item) {
+          final bool isSelected = _currentIndex == item['index'];
+          return Expanded(
+            child: GestureDetector(
+              onTap: () {
+                if (item['index'] == 2) {
+                  _handleAction("Designing: DMs");
+                } else if (item['index'] == 3) {
+                  _handleAction("Designing: Notifications");
+                } else {
+                  setState(() => _currentIndex = item['index']);
+                }
+              },
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Spacer(flex: 2),
+                  SvgPicture.asset(
+                    item['icon'],
+                    width: 20,
+                    height: 20,
+                    color: isSelected ? Colors.amber : Colors.white70,
+                  ),
+                  const Spacer(flex: 5),
+                ],
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -38,68 +83,8 @@ class _HomeNavigatorState extends State<HomeNavigator> {
         index: _currentIndex >= 2 ? 0 : _currentIndex,
         children: _pages,
       ),
-      extendBody: true,
-      bottomNavigationBar: ClipRRect(
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: BottomNavigationBar(
-            backgroundColor: Colors.black.withOpacity(0.5),
-            type: BottomNavigationBarType.fixed,
-            currentIndex: _currentIndex,
-            showSelectedLabels: false,
-            showUnselectedLabels: false,
-            selectedItemColor: Colors.amber,
-            unselectedItemColor: Colors.white70,
-            onTap: (index) {
-              if (index == 2) {
-                _handleAction("Designing: DMs");
-              } else if (index == 3) {
-                _handleAction("Designing: Notifications");
-              } else {
-                setState(() => _currentIndex = index);
-              }
-            },
-            items: [
-              BottomNavigationBarItem(
-                icon: SvgPicture.asset(
-                  'assets/home_gap.svg',
-                  width: 18,
-                  height: 18,
-                  color: _currentIndex == 0 ? Colors.amber : Colors.white70,
-                ),
-                label: '',
-              ),
-              BottomNavigationBarItem(
-                icon: SvgPicture.asset(
-                  'assets/search_button.svg',
-                  width: 18,
-                  height: 18,
-                  color: _currentIndex == 1 ? Colors.amber : Colors.white70,
-                ),
-                label: '',
-              ),
-              BottomNavigationBarItem(
-                icon: SvgPicture.asset(
-                  'assets/dm_button.svg',
-                  width: 18,
-                  height: 18,
-                  color: Colors.white70,
-                ),
-                label: '',
-              ),
-              BottomNavigationBarItem(
-                icon: SvgPicture.asset(
-                  'assets/notification_button.svg',
-                  width: 18,
-                  height: 18,
-                  color: Colors.white70,
-                ),
-                label: '',
-              ),
-            ],
-          ),
-        ),
-      ),
+      extendBody: false,
+      bottomNavigationBar: _buildCustomBottomBar(),
     );
   }
 }
