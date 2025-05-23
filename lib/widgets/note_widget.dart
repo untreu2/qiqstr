@@ -100,9 +100,10 @@ class _NoteWidgetState extends State<NoteWidget>
         for (var p in parts) {
           if (p['type'] == 'text') {
             final text = p['text'] as String;
-            final regex = RegExp(r'(https?:\/\/[^\s]+)');
+            final regex = RegExp(r'(https?:\/\/[^\s]+)|(#\w+)');
             final matches = regex.allMatches(text);
             var last = 0;
+
             for (final m in matches) {
               if (m.start > last) {
                 spans.add(TextSpan(
@@ -110,15 +111,32 @@ class _NoteWidgetState extends State<NoteWidget>
                   style: const TextStyle(fontSize: 15, color: Colors.white),
                 ));
               }
-              final url = text.substring(m.start, m.end);
-              spans.add(TextSpan(
-                text: url,
-                style: const TextStyle(color: Color(0xFFECB200), fontSize: 15),
-                recognizer: TapGestureRecognizer()
-                  ..onTap = () => _onOpen(LinkableElement(url, url)),
-              ));
+
+              final urlMatch = m.group(1);
+              final hashtagMatch = m.group(2);
+
+              if (urlMatch != null) {
+                spans.add(TextSpan(
+                  text: urlMatch,
+                  style: const TextStyle(color: Color(0xFFECB200), fontSize: 15),
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = () => _onOpen(LinkableElement(urlMatch, urlMatch)),
+                ));
+              } else if (hashtagMatch != null) {
+                spans.add(TextSpan(
+                  text: hashtagMatch,
+                  style: const TextStyle(color: Color(0xFFECB200), fontSize: 15),
+                  recognizer: TapGestureRecognizer()
+                    ..onTap = () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Designing: Hashtags')),
+                      );
+                    },
+                ));
+              }
               last = m.end;
             }
+
             if (last < text.length) {
               spans.add(TextSpan(
                 text: text.substring(last),
