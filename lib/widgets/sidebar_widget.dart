@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/profile_page.dart';
-import 'package:qiqstr/screens/users_search_page.dart';
 import 'package:qiqstr/utils/logout.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -82,16 +81,6 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                             MaterialPageRoute(
                               builder: (context) =>
                                   ProfilePage(user: widget.user!),
-                            ),
-                          ),
-                        ),
-                        _buildSidebarItem(
-                          svgAsset: 'assets/search_button.svg',
-                          label: 'Search',
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const UserSearchPage(),
                             ),
                           ),
                         ),
