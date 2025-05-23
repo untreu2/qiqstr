@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qiqstr/screens/feed_page.dart';
@@ -38,40 +39,49 @@ class _HomeNavigatorState extends State<HomeNavigator> {
       {'icon': 'assets/notification_button.svg', 'index': 3},
     ];
 
-    return Container(
-      height: 86,
-      width: double.infinity,
-      color: Colors.black,
-      child: Row(
-        children: items.map((item) {
-          final bool isSelected = _currentIndex == item['index'];
-          return Expanded(
-            child: GestureDetector(
-              onTap: () {
-                if (item['index'] == 2) {
-                  _handleAction("Designing: DMs");
-                } else if (item['index'] == 3) {
-                  _handleAction("Designing: Notifications");
-                } else {
-                  setState(() => _currentIndex = item['index']);
-                }
-              },
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Spacer(flex: 2),
-                  SvgPicture.asset(
-                    item['icon'],
-                    width: 20,
-                    height: 20,
-                    color: isSelected ? Colors.amber : Colors.white70,
+    return ClipRRect(
+      borderRadius: BorderRadius.zero,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          height: 86,
+          width: double.infinity,
+          padding: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.5),
+          ),
+          child: Row(
+            children: items.map((item) {
+              final bool isSelected = _currentIndex == item['index'];
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    if (item['index'] == 2) {
+                      _handleAction("Designing: DMs");
+                    } else if (item['index'] == 3) {
+                      _handleAction("Designing: Notifications");
+                    } else {
+                      setState(() => _currentIndex = item['index']);
+                    }
+                  },
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Spacer(flex: 2),
+                      SvgPicture.asset(
+                        item['icon'],
+                        width: 20,
+                        height: 20,
+                        color: isSelected ? Colors.amber : Colors.white70,
+                      ),
+                      const Spacer(flex: 5),
+                    ],
                   ),
-                  const Spacer(flex: 5),
-                ],
-              ),
-            ),
-          );
-        }).toList(),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
       ),
     );
   }
@@ -79,11 +89,11 @@ class _HomeNavigatorState extends State<HomeNavigator> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBody: true,
       body: IndexedStack(
         index: _currentIndex >= 2 ? 0 : _currentIndex,
         children: _pages,
       ),
-      extendBody: false,
       bottomNavigationBar: _buildCustomBottomBar(),
     );
   }
