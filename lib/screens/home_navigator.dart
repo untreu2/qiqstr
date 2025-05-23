@@ -39,7 +39,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
     ];
 
     return Container(
-      height: 72,
+      height: 86,
       width: double.infinity,
       color: Colors.black,
       child: Row(
