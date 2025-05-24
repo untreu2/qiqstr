@@ -1,15 +1,15 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/services.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:qiqstr/screens/note_statistics_page.dart';
 import 'package:qiqstr/screens/thread_page.dart';
-import 'package:qiqstr/screens/share_note.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/send_reply.dart';
 import 'package:qiqstr/widgets/interaction_bar_widget.dart';
 import 'package:qiqstr/widgets/note_content_widget.dart';
+import 'package:qiqstr/widgets/dialogs/repost_dialog.dart';
+import 'package:qiqstr/widgets/dialogs/zap_dialog.dart';
+
 
 import '../models/note_model.dart';
 import '../services/data_service.dart';
@@ -117,48 +117,10 @@ class _NoteWidgetState extends State<NoteWidget>
       if (mounted) setState(() => _isRepostGlowing = false);
     });
 
-    showModalBottomSheet(
+    showRepostDialog(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      backgroundColor: Colors.black,
-      builder: (context) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ListTile(
-            leading: const Icon(Icons.repeat, color: Colors.white),
-            title: const Text('Repost',
-                style: TextStyle(color: Colors.white, fontSize: 16)),
-            onTap: () async {
-              Navigator.pop(context);
-              try {
-                await widget.dataService.sendRepost(widget.note);
-              } catch (_) {}
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.format_quote, color: Colors.white),
-            title: const Text('Quote',
-                style: TextStyle(color: Colors.white, fontSize: 16)),
-            onTap: () {
-              Navigator.pop(context);
-              final bech32 = encodeBasicBech32(widget.note.id, 'note');
-              final quoteText = 'nostr:$bech32';
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ShareNotePage(
-                    dataService: widget.dataService,
-                    initialText: quoteText,
-                  ),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 45),
-        ],
-      ),
+      dataService: widget.dataService,
+      note: widget.note,
     );
   }
 
@@ -166,97 +128,11 @@ class _NoteWidgetState extends State<NoteWidget>
     setState(() => _isZapGlowing = true);
     Future.delayed(const Duration(milliseconds: 400),
         () => mounted ? setState(() => _isZapGlowing = false) : null);
-
-    final amountController = TextEditingController(text: '21');
-    final noteController = TextEditingController();
-    showModalBottomSheet(
+    
+    showZapDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.black,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 40,
-            top: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: amountController,
-              keyboardType: TextInputType.number,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'Amount (sats)',
-                labelStyle: TextStyle(color: Colors.grey),
-                enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey)),
-                focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white)),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: noteController,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'Comment... (Optional)',
-                labelStyle: TextStyle(color: Colors.grey),
-                enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey)),
-                focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.white)),
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
-              onPressed: () async {
-                final sats = int.tryParse(amountController.text.trim());
-                if (sats == null || sats <= 0) {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Enter a valid amount'),
-                      duration: Duration(seconds: 2)));
-                  return;
-                }
-                Navigator.pop(context);
-                try {
-                  final profile = await widget.dataService
-                      .getCachedUserProfile(widget.note.author);
-                  final user =
-                      UserModel.fromCachedProfile(widget.note.author, profile);
-                  final invoice = await widget.dataService.sendZap(
-                    recipientPubkey: user.npub,
-                    lud16: user.lud16,
-                    noteId: widget.note.id,
-                    amountSats: sats,
-                    content: noteController.text.trim(),
-                  );
-                  await Clipboard.setData(ClipboardData(text: invoice));
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text('⚡ Copied!'),
-                        duration: Duration(seconds: 2)));
-                  }
-                } catch (e) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text('Zap failed: $e'),
-                        duration: const Duration(seconds: 2)));
-                  }
-                }
-              },
-              child: const Text('Copy to send'),
-            ),
-          ],
-        ),
-      ),
+      dataService: widget.dataService,
+      note: widget.note,
     );
   }
 

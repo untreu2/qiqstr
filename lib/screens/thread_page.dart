@@ -5,6 +5,10 @@ import 'package:collection/collection.dart';
 import 'package:qiqstr/widgets/root_note_widget.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/widgets/note_widget.dart';
+import 'package:qiqstr/screens/note_statistics_page.dart';
+import 'package:qiqstr/screens/send_reply.dart';
+import 'package:qiqstr/widgets/dialogs/repost_dialog.dart';
+import 'package:qiqstr/widgets/dialogs/zap_dialog.dart';
 
 class NoteWithDepth {
   final NoteModel note;
@@ -33,6 +37,11 @@ class _ThreadPageState extends State<ThreadPage> {
   String? _currentUserNpub;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   bool _isLoading = true;
+
+  bool _isRootNoteReactionGlowing = false;
+  bool _isRootNoteReplyGlowing = false;
+  bool _isRootNoteRepostGlowing = false;
+  bool _isRootNoteZapGlowing = false;
 
   @override
   void initState() {
@@ -109,8 +118,87 @@ class _ThreadPageState extends State<ThreadPage> {
     }
   }
 
+  
+  bool _hasReacted(NoteModel note) {
+    if (_currentUserNpub == null) return false;
+    return (widget.dataService.reactionsMap[note.id] ?? []).any((e) => e.author == _currentUserNpub);
+  }
+
+  bool _hasReplied(NoteModel note) {
+    if (_currentUserNpub == null) return false;
+    return (widget.dataService.repliesMap[note.id] ?? []).any((e) => e.author == _currentUserNpub);
+  }
+
+  bool _hasReposted(NoteModel note) {
+    if (_currentUserNpub == null) return false;
+    return (widget.dataService.repostsMap[note.id] ?? []).any((e) => e.repostedBy == _currentUserNpub);
+  }
+
+  bool _hasZapped(NoteModel note) {
+    if (_currentUserNpub == null) return false;
+    return (widget.dataService.zapsMap[note.id] ?? []).any((z) => z.sender == _currentUserNpub);
+  }
+
   void _navigateToProfile(String npub) {
     widget.dataService.openUserProfile(context, npub);
+  }
+
+  
+  void _handleRootNoteReactionTap() async {
+    if (_rootNote == null || _hasReacted(_rootNote!)) return;
+    if (!mounted) return;
+    setState(() => _isRootNoteReactionGlowing = true);
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (mounted) setState(() => _isRootNoteReactionGlowing = false);
+    });
+    try {
+      await widget.dataService.sendReaction(_rootNote!.id, '+');
+    } catch (_) {}
+  }
+
+  void _handleRootNoteReplyTap() {
+    if (_rootNote == null) return;
+    if (!mounted) return;
+    setState(() => _isRootNoteReplyGlowing = true);
+    Future.delayed(
+        const Duration(milliseconds: 400), () => mounted ? setState(() => _isRootNoteReplyGlowing = false) : null);
+    showDialog(
+      context: context,
+      builder: (_) => SendReplyDialog(dataService: widget.dataService, noteId: _rootNote!.id),
+    );
+  }
+
+  void _handleRootNoteRepostTap() {
+    if (_rootNote == null) return;
+    if (!mounted) return;
+    setState(() => _isRootNoteRepostGlowing = true);
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (mounted) setState(() => _isRootNoteRepostGlowing = false);
+    });
+
+    showRepostDialog(
+      context: context,
+      dataService: widget.dataService,
+      note: _rootNote!,
+    );
+  }
+
+  void _handleRootNoteZapTap() {
+    if (_rootNote == null) return;
+    if (!mounted) return;
+    setState(() => _isRootNoteZapGlowing = true);
+    Future.delayed(
+        const Duration(milliseconds: 400), () => mounted ? setState(() => _isRootNoteZapGlowing = false) : null);
+
+    showZapDialog(context: context, dataService: widget.dataService, note: _rootNote!);
+  }
+
+  void _handleRootNoteStatisticsTap() {
+    if (_rootNote == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => NoteStatisticsPage(note: _rootNote!, dataService: widget.dataService)),
+    );
   }
 
   Widget _buildHeader(BuildContext context) {
@@ -174,19 +262,19 @@ class _ThreadPageState extends State<ThreadPage> {
                               note: item.note,
                               dataService: widget.dataService,
                               onNavigateToMentionProfile: _navigateToProfile,
-                              isReactionGlowing: false,
-                              isReplyGlowing: false,
-                              isRepostGlowing: false,
-                              isZapGlowing: false,
-                              hasReacted: false,
-                              hasReplied: false,
-                              hasReposted: false,
-                              hasZapped: false,
-                              onReactionTap: () {},
-                              onReplyTap: () {},
-                              onRepostTap: () {},
-                              onZapTap: () {},
-                              onStatisticsTap: () {},
+                              isReactionGlowing: _isRootNoteReactionGlowing,
+                              isReplyGlowing: _isRootNoteReplyGlowing,
+                              isRepostGlowing: _isRootNoteRepostGlowing,
+                              isZapGlowing: _isRootNoteZapGlowing,
+                              hasReacted: _hasReacted(item.note),
+                              hasReplied: _hasReplied(item.note),
+                              hasReposted: _hasReposted(item.note),
+                              hasZapped: _hasZapped(item.note),
+                              onReactionTap: _handleRootNoteReactionTap,
+                              onReplyTap: _handleRootNoteReplyTap,
+                              onRepostTap: _handleRootNoteRepostTap,
+                              onZapTap: _handleRootNoteZapTap,
+                              onStatisticsTap: _handleRootNoteStatisticsTap,
                             );
                           } else {
                             return Padding(
