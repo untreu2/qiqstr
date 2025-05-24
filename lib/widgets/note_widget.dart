@@ -1,21 +1,18 @@
 import 'dart:async';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:qiqstr/screens/note_statistics_page.dart';
+import 'package:qiqstr/screens/thread_page.dart';
 import 'package:qiqstr/screens/share_note.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/send_reply.dart';
-import 'package:qiqstr/widgets/link_preview_widget.dart';
-import 'package:qiqstr/widgets/media_preview_widget.dart';
+import 'package:qiqstr/widgets/interaction_bar_widget.dart';
+import 'package:qiqstr/widgets/note_content_widget.dart';
+
 import '../models/note_model.dart';
 import '../services/data_service.dart';
-import 'quote_widget.dart';
 
 class NoteWidget extends StatefulWidget {
   final NoteModel note;
@@ -82,85 +79,7 @@ class _NoteWidgetState extends State<NoteWidget>
           builder: (_) => NoteStatisticsPage(
               note: widget.note, dataService: widget.dataService),
         ),
-      );
-
-  Widget _buildContentText(Map<String, dynamic> parsed) {
-    final parts = parsed['textParts'] as List<Map<String, dynamic>>;
-    final mentionIds = parts
-        .where((p) => p['type'] == 'mention')
-        .map((p) => p['id'] as String)
-        .toList();
-
-    return FutureBuilder<Map<String, String>>(
-      future: widget.dataService.resolveMentions(mentionIds),
-      builder: (context, snapshot) {
-        final mentions = snapshot.data ?? {};
-        final spans = <InlineSpan>[];
-
-        for (var p in parts) {
-          if (p['type'] == 'text') {
-            final text = p['text'] as String;
-            final regex = RegExp(r'(https?:\/\/[^\s]+)|(#\w+)');
-            final matches = regex.allMatches(text);
-            var last = 0;
-
-            for (final m in matches) {
-              if (m.start > last) {
-                spans.add(TextSpan(
-                  text: text.substring(last, m.start),
-                  style: const TextStyle(fontSize: 15, color: Colors.white),
-                ));
-              }
-
-              final urlMatch = m.group(1);
-              final hashtagMatch = m.group(2);
-
-              if (urlMatch != null) {
-                spans.add(TextSpan(
-                  text: urlMatch,
-                  style: const TextStyle(color: Color(0xFFECB200), fontSize: 15),
-                  recognizer: TapGestureRecognizer()
-                    ..onTap = () => _onOpen(LinkableElement(urlMatch, urlMatch)),
-                ));
-              } else if (hashtagMatch != null) {
-                spans.add(TextSpan(
-                  text: hashtagMatch,
-                  style: const TextStyle(color: Color(0xFFECB200), fontSize: 15),
-                  recognizer: TapGestureRecognizer()
-                    ..onTap = () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Designing: Hashtags')),
-                      );
-                    },
-                ));
-              }
-              last = m.end;
-            }
-
-            if (last < text.length) {
-              spans.add(TextSpan(
-                text: text.substring(last),
-                style: const TextStyle(fontSize: 15, color: Colors.white),
-              ));
-            }
-          } else if (p['type'] == 'mention') {
-            final username =
-                mentions[p['id']] ?? '${p['id'].substring(0, 8)}...';
-            spans.add(TextSpan(
-              text: '@$username',
-              style: const TextStyle(
-                  color: Color(0xFFECB200),
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500),
-              recognizer: TapGestureRecognizer()
-                ..onTap = () => _navigateToMentionProfile(p['id']),
-            ));
-          }
-        }
-        return RichText(text: TextSpan(children: spans));
-      },
-    );
-  }
+      );    
 
   bool _hasZapped() => (widget.dataService.zapsMap[widget.note.id] ?? [])
       .any((z) => z.sender == widget.currentUserNpub);
@@ -341,13 +260,20 @@ class _NoteWidgetState extends State<NoteWidget>
     );
   }
 
-  Future<void> _onOpen(LinkableElement link) async {
-    final url = Uri.parse(link.url);
-    if (await canLaunchUrl(url)) await launchUrl(url);
-  }
-
   void _navigateToProfile(String npub) =>
       widget.dataService.openUserProfile(context, npub);
+  
+  void _navigateToThreadPage(NoteModel note) {
+    final String rootIdToShow =
+        (note.isReply && note.rootId != null && note.rootId!.isNotEmpty) ? note.rootId! : note.id;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ThreadPage(rootNoteId: rootIdToShow, dataService: widget.dataService),
+      ),
+    );
+  }
 
   Widget _buildRepostInfo(String npub, DateTime? ts) {
     final user = widget.profiles[npub];
@@ -399,44 +325,6 @@ class _NoteWidgetState extends State<NoteWidget>
     );
   }
 
-  Widget _buildAction({
-    required String svg,
-    required Color color,
-    required int count,
-    required VoidCallback onTap,
-  }) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        Positioned(
-          top: -10,
-          child: SizedBox(
-            width: 40,
-            height: 40,
-          ),
-        ),
-        InkWell(
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-          onTap: onTap,
-          child: Row(
-            children: [
-              SvgPicture.asset(svg, width: 15, height: 15, color: color),
-              const SizedBox(width: 4),
-              Opacity(
-                opacity: count > 0 ? 1.0 : 0.0,
-                child: Text(
-                  '$count',
-                  style: const TextStyle(fontSize: 13, color: Colors.grey),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -454,6 +342,7 @@ class _NoteWidgetState extends State<NoteWidget>
 
         return GestureDetector(
           onDoubleTapDown: (_) => _handleReactionTap(),
+          onTap: () => _navigateToThreadPage(updatedNote),
           child: Container(
             color: Colors.black,
             padding: const EdgeInsets.only(bottom: 2),
@@ -560,81 +449,33 @@ class _NoteWidgetState extends State<NoteWidget>
                                 ),
                               ],
                             ),
-                            if ((parsed['textParts'] as List).isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.all(0),
-                                child: _buildContentText(parsed),
-                              ),
-                            if ((parsed['mediaUrls'] as List).isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: MediaPreviewWidget(
-                                    mediaUrls:
-                                        parsed['mediaUrls'] as List<String>),
-                              ),
-                            if ((parsed['linkUrls'] as List).isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: Column(
-                                  children: (parsed['linkUrls'] as List<String>)
-                                      .map((u) => LinkPreviewWidget(url: u))
-                                      .toList(),
-                                ),
-                              ),
-                            if ((parsed['quoteIds'] as List).isNotEmpty)
-                              Column(
-                                children: (parsed['quoteIds'] as List<String>)
-                                    .map((q) => Padding(
-                                          padding: const EdgeInsets.symmetric(
-                                              vertical: 8),
-                                          child: QuoteWidget(
-                                              bech32: q,
-                                              dataService: widget.dataService),
-                                        ))
-                                    .toList(),
-                              ),
+                            NoteContentWidget(
+                              parsedContent: parsed,
+                              dataService: widget.dataService,
+                              onNavigateToMentionProfile: _navigateToMentionProfile,
+                            ),
                             const SizedBox(height: 10),
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                _buildAction(
-                                  svg: 'assets/reaction_button.svg',
-                                  color: _isReactionGlowing || _hasReacted()
-                                      ? Colors.red.shade400
-                                      : Colors.grey,
-                                  count: updatedNote.reactionCount,
-                                  onTap: _handleReactionTap,
-                                ),
-                                _buildAction(
-                                  svg: 'assets/reply_button.svg',
-                                  color: _isReplyGlowing || _hasReplied()
-                                      ? Colors.blue.shade200
-                                      : Colors.grey,
-                                  count: updatedNote.replyCount,
-                                  onTap: _handleReplyTap,
-                                ),
-                                _buildAction(
-                                  svg: 'assets/repost_button.svg',
-                                  color: _isRepostGlowing || _hasReposted()
-                                      ? Colors.green.shade400
-                                      : Colors.grey,
-                                  count: updatedNote.repostCount,
-                                  onTap: _handleRepostTap,
-                                ),
-                                _buildAction(
-                                  svg: 'assets/zap_button.svg',
-                                  color: _isZapGlowing || _hasZapped()
-                                      ? const Color(0xFFECB200)
-                                      : Colors.grey,
-                                  count: updatedNote.zapAmount,
-                                  onTap: _handleZapTap,
-                                ),
-                                GestureDetector(
-                                  onTap: _navigateToStatisticsPage,
-                                  child: const Padding(
-                                    padding: EdgeInsets.only(left: 6),
-                                    child: Icon(Icons.bar_chart,
-                                        size: 18, color: Colors.grey),
+                                Expanded(
+                                  child: InteractionBar(
+                                    reactionCount: updatedNote.reactionCount,
+                                    replyCount: updatedNote.replyCount,
+                                    repostCount: updatedNote.repostCount,
+                                    zapAmount: updatedNote.zapAmount,
+                                    isReactionGlowing: _isReactionGlowing,
+                                    isReplyGlowing: _isReplyGlowing,
+                                    isRepostGlowing: _isRepostGlowing,
+                                    isZapGlowing: _isZapGlowing,
+                                    hasReacted: _hasReacted(),
+                                    hasReplied: _hasReplied(),
+                                    hasReposted: _hasReposted(),
+                                    hasZapped: _hasZapped(),
+                                    onReactionTap: _handleReactionTap,
+                                    onReplyTap: _handleReplyTap,
+                                    onRepostTap: _handleRepostTap,
+                                    onZapTap: _handleZapTap,
+                                    onStatisticsTap: _navigateToStatisticsPage,
                                   ),
                                 ),
                               ],
