@@ -1198,6 +1198,7 @@ class DataService {
   final ValueNotifier<List<NoteModel>> notesNotifier = ValueNotifier([]);
   final ValueNotifier<Map<String, UserModel>> profilesNotifier =
       ValueNotifier({});
+  final ValueNotifier<List<NotificationModel>> notificationsNotifier = ValueNotifier([]);
 
   static int _compareNotes(NoteModel a, NoteModel b) {
     final aTime = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
@@ -2032,7 +2033,10 @@ class DataService {
   Future<void> _loadNotificationsFromCache() async {
     if (notificationsBox == null || !notificationsBox!.isOpen) return;
     try {
-      final count = notificationsBox!.length;
+      final allNotifications = notificationsBox!.values.toList();
+      allNotifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      notificationsNotifier.value = allNotifications;
+      final count = allNotifications.length;
       print('[DataService] Notifications cache contains $count notifications.');
     } catch (e) {
       print('[DataService ERROR] Error loading notifications from cache: $e');
@@ -2135,6 +2139,9 @@ class DataService {
             if (!notificationsBox!.containsKey(notification.id)) {
               await notificationsBox!.put(notification.id, notification);
               print("[DataService] New notification stored: ${notification.type} - ${notification.id}");
+              final currentNotifications = List<NotificationModel>.from(notificationsNotifier.value);
+              currentNotifications.insert(0, notification);
+              notificationsNotifier.value = currentNotifications;
             }
           }
         }

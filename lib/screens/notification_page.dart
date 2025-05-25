@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:hive/hive.dart';
 import 'package:qiqstr/models/notification_model.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/data_service.dart';
@@ -18,48 +17,44 @@ class NotificationPage extends StatefulWidget {
 }
 
 class _NotificationPageState extends State<NotificationPage> {
-  late Box<NotificationModel> notificationsBox;
   Map<String, UserModel?> userProfiles = {};
   List<_NotificationGroup> groupedNotifications = [];
   bool isLoading = true;
-  Timer? _pollingTimer;
 
   @override
   void initState() {
     super.initState();
-    _initializeBoxAndStartTimer();
+    _processNotifications(widget.dataService.notificationsNotifier.value);
+    widget.dataService.notificationsNotifier.addListener(_handleNotificationsUpdate);
   }
 
   @override
   void dispose() {
-    _pollingTimer?.cancel();
+    widget.dataService.notificationsNotifier.removeListener(_handleNotificationsUpdate);
     super.dispose();
   }
 
-  Future<void> _initializeBoxAndStartTimer() async {
-    final box = widget.dataService.notificationsBox;
-    if (box == null || !box.isOpen) return;
-
-    notificationsBox = box;
-    await _loadAndMarkRead();
-
-    _pollingTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
-      await _loadAndMarkRead();
-    });
+  void _handleNotificationsUpdate() {
+    if (mounted) {
+      _processNotifications(widget.dataService.notificationsNotifier.value);
+    }
   }
 
-  Future<void> _loadAndMarkRead() async {
-    final all = notificationsBox.values
+  Future<void> _processNotifications(List<NotificationModel> notificationsFromNotifier) async {
+    if (!mounted) return;
+
+    final all = notificationsFromNotifier
         .where((n) => ['mention', 'reaction', 'repost'].contains(n.type))
         .toList()
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
     final limited = all.take(50).toList();
 
+    List<Future<void>> saveFutures = [];
     for (final n in limited) {
       if (!n.isRead) {
         n.isRead = true;
-        await n.save();
+        saveFutures.add(n.save());
       }
     }
 
@@ -109,11 +104,17 @@ class _NotificationPageState extends State<NotificationPage> {
     final combinedGroups = [...flatMentions, ...grouped.values];
     combinedGroups.sort((a, b) => b.latest.compareTo(a.latest));
 
-    setState(() {
-      groupedNotifications = combinedGroups;
-      userProfiles = {...userProfiles, ...loadedProfiles};
-      isLoading = false;
-    });
+    if (saveFutures.isNotEmpty) {
+      await Future.wait(saveFutures);
+    }
+
+    if (mounted) {
+      setState(() {
+        groupedNotifications = combinedGroups;
+        userProfiles = {...userProfiles, ...loadedProfiles};
+        isLoading = false;
+      });
+    }
   }
 
   String _buildTitle(_NotificationGroup group) {
