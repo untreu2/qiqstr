@@ -75,12 +75,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
-              ),
-              const SizedBox(width: 8),
+            children: const [
               const Text(
                 'Search users',
                 style: TextStyle(
