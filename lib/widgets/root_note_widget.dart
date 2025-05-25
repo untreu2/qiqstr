@@ -57,7 +57,7 @@ class RootNoteWidget extends StatelessWidget {
     
     return Card(
         margin: EdgeInsets.zero,
-        color: Colors.grey[900]?.withOpacity(0.8),
+      color: Colors.black,
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
@@ -72,15 +72,15 @@ class RootNoteWidget extends StatelessWidget {
 
                   if (authorProfile?.profileImage.isNotEmpty ?? false) ...[
                     CircleAvatar(
-                      radius: 16,
+                    radius: 18,
                       backgroundImage: NetworkImage(authorProfile!.profileImage), 
                       backgroundColor: Colors.grey.shade700,
                     ),
                   ] else ...[
                     CircleAvatar(
-                      radius: 16,
+                    radius: 18,
                       backgroundColor: Colors.grey.shade700,
-                      child: const Icon(Icons.person, size: 18, color: Colors.white70),
+                    child: const Icon(Icons.person, size: 22, color: Colors.white70),
                     ),
                   ],
                   const SizedBox(width: 8),
@@ -88,7 +88,7 @@ class RootNoteWidget extends StatelessWidget {
                     child: Text(
                       authorName,
                       style: const TextStyle(
-                        fontSize: 16,
+                      fontSize: 16,
                         color: Colors.white,
                         fontWeight: FontWeight.w500,
                       ),
