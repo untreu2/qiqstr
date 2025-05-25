@@ -715,44 +715,16 @@ class DataService {
       (eventData['created_at'] as int) * 1000,
     );
 
-    
-    String? determinedParentId;
-    String? determinedRootId;
-    List<List<dynamic>> eTags = tags.whereType<List<dynamic>>().where((t) => t.length >= 2 && t[0] == 'e').toList();
+    final rootTag = tags.firstWhereOrNull(
+      (tag) => tag is List && tag.length >= 4 && tag[0] == 'e' && tag[3] == 'root',
+    );
+    final replyTag = tags.firstWhereOrNull(
+      (tag) => tag is List && tag.length >= 4 && tag[0] == 'e' && tag[3] == 'reply',
+    );
 
-    if (eTags.isNotEmpty) {
-      determinedRootId = eTags.first[1] as String?;
-
-      determinedParentId = eTags.last[1] as String?;
-
-      final nip10ReplyMarkerTag = eTags.firstWhereOrNull((t) => t.length >= 4 && t[3] == 'reply');
-      final nip10RootMarkerTag = eTags.firstWhereOrNull((t) => t.length >= 4 && t[3] == 'root');
-
-      if (nip10RootMarkerTag != null) {
-        determinedRootId = nip10RootMarkerTag[1] as String?;
-      }
-      if (nip10ReplyMarkerTag != null) {
-        determinedParentId = nip10ReplyMarkerTag[1] as String?;
-      }
-
-      if (eTags.length == 1) {
-        final singleETagId = eTags.first[1] as String;
-        if (nip10RootMarkerTag != null) {
-          determinedRootId = nip10RootMarkerTag[1] as String;
-          determinedParentId = nip10RootMarkerTag[1] as String;
-        } else if (nip10ReplyMarkerTag != null) {
-          determinedParentId = nip10ReplyMarkerTag[1] as String;
-          determinedRootId = nip10ReplyMarkerTag[1] as String;
-        } else {
-          determinedRootId = singleETagId;
-          determinedParentId = singleETagId;
-        }
-      }
-    }
-
-    final bool isReply = determinedParentId != null;
-    final String? finalRootId = isReply ? (determinedRootId ?? determinedParentId) : null;
-    final String? finalParentId = determinedParentId;
+    final isReply = rootTag != null;
+    final rootId = rootTag != null ? rootTag[1] : null;
+    final parentId = replyTag != null ? replyTag[1] : rootId;
 
     final newNote = NoteModel(
       id: eventId,
@@ -764,8 +736,8 @@ class DataService {
       repostTimestamp: repostTimestamp,
       rawWs: isRepost ? repostRawWs : rawWs,
       isReply: isReply,
-      rootId: finalRootId,
-      parentId: finalParentId,
+      rootId: rootId,
+      parentId: parentId,
     );
 
     parseContentForNote(newNote);
@@ -859,6 +831,56 @@ class DataService {
     }
   }
 
+  Future<void> _handleReplyEvent(Map<String, dynamic> eventData, String parentEventId) async {
+    if (_isClosed) return;
+    try {
+      final reply = ReplyModel.fromEvent(eventData);
+      repliesMap.putIfAbsent(parentEventId, () => []);
+
+      if (!repliesMap[parentEventId]!.any((r) => r.id == reply.id)) {
+        repliesMap[parentEventId]!.add(reply);
+        await repliesBox?.put(reply.id, reply);
+
+        onRepliesUpdated?.call(parentEventId, repliesMap[parentEventId]!);
+
+        final parentNote = notes.firstWhereOrNull((n) => n.id == parentEventId);
+        if (parentNote != null) {
+          parentNote.replyCount = repliesMap[parentEventId]!.length;
+        }
+
+        final isRepost = eventData['kind'] == 6;
+        final repostTimestamp =
+            isRepost ? DateTime.fromMillisecondsSinceEpoch((eventData['created_at'] as int) * 1000) : null;
+
+        final noteModel = NoteModel(
+          id: reply.id,
+          content: reply.content,
+          author: reply.author,
+          timestamp: reply.timestamp,
+          isReply: true,
+          isRepost: isRepost,
+          repostedBy: isRepost ? reply.author : null,
+          repostTimestamp: repostTimestamp,
+          parentId: parentEventId,
+          rootId: reply.rootEventId,
+        );
+
+        parseContentForNote(noteModel);
+
+        if (!eventIds.contains(noteModel.id)) {
+          notes.add(noteModel);
+          eventIds.add(noteModel.id);
+          await notesBox?.put(noteModel.id, noteModel);
+          addPendingNote(noteModel);
+        }
+
+        notesNotifier.value = _itemsTree.toList();
+        await _fetchProfilesBatch([reply.author]);
+      }
+    } catch (e) {
+      print('[DataService ERROR] Error handling reply event: $e');
+    }
+  }
 
   Future<void> _handleProfileEvent(Map<String, dynamic> eventData) async {
     if (_isClosed) return;
@@ -2035,9 +2057,18 @@ class DataService {
       } else if (kind == 9735) {
         await _handleZapEvent(eventData);
       } else if (kind == 1) {
-        
-        
-        await _processNoteEvent(eventData, targetNpubs, rawWs: jsonEncode(eventData));
+        final tags = eventData['tags'] as List<dynamic>;
+        final rootTag = tags.firstWhere(
+          (tag) => tag is List && tag.isNotEmpty && tag[0] == 'e' && tag.contains('root'),
+          orElse: () => null,
+        );
+
+        if (rootTag != null && rootTag is List && rootTag.length >= 2) {
+          final rootId = rootTag[1] as String;
+          await _handleReplyEvent(eventData, rootId);
+        } else {
+          await _processNoteEvent(eventData, targetNpubs, rawWs: jsonEncode(eventData));
+        }
       } else if (kind == 6) {
         await _handleRepostEvent(eventData);
         await _processNoteEvent(eventData, targetNpubs);
