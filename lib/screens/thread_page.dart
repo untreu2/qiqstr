@@ -163,7 +163,7 @@ class _ThreadPageState extends State<ThreadPage> {
           ),
           const SizedBox(width: 8),
           const Text(
-            'Threads',
+            'Thread',
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w700,

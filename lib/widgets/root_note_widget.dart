@@ -97,7 +97,7 @@ class RootNoteWidget extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 4), 
+            const SizedBox(height: 12), 
               NoteContentWidget(
                 parsedContent: parsedContent,
                 dataService: dataService,
