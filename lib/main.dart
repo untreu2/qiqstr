@@ -10,14 +10,17 @@ import 'models/user_model.dart';
 import 'models/following_model.dart';
 import 'models/link_preview_model.dart';
 import 'models/zap_model.dart';
+import 'models/notification_model.dart';
 import 'screens/login_page.dart';
 import 'screens/home_navigator.dart';
+import 'services/data_service.dart'; 
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
     await Hive.initFlutter();
+
     Hive.registerAdapter(NoteModelAdapter());
     Hive.registerAdapter(ReactionModelAdapter());
     Hive.registerAdapter(ReplyModelAdapter());
@@ -26,10 +29,11 @@ Future<void> main() async {
     Hive.registerAdapter(FollowingModelAdapter());
     Hive.registerAdapter(LinkPreviewModelAdapter());
     Hive.registerAdapter(ZapModelAdapter());
+    Hive.registerAdapter(NotificationModelAdapter());
 
     await Hive.openBox<LinkPreviewModel>('link_preview_cache');
 
-    final FlutterSecureStorage secureStorage = const FlutterSecureStorage();
+    final secureStorage = const FlutterSecureStorage();
     String? privateKey = await secureStorage.read(key: 'privateKey');
     String? npub = await secureStorage.read(key: 'npub');
 
@@ -45,14 +49,25 @@ Future<void> main() async {
       await Hive.openBox<UserModel>('users');
       await Hive.openBox<FollowingModel>('followingBox');
       await Hive.openBox<ZapModel>('zaps_$npub');
+      await Hive.openBox<NotificationModel>('notifications_$npub');
 
-      runApp(ProviderScope(child: QiqstrApp(home: HomeNavigator(npub: npub))));
+      final dataService = DataService(npub: npub, dataType: DataType.feed);
+      await dataService.initialize();
+      await dataService.initializeConnections();
+
+      runApp(ProviderScope(
+        child: QiqstrApp(
+          home: HomeNavigator(
+            npub: npub,
+            dataService: dataService,
+          ),
+        ),
+      ));
     } else {
       runApp(const ProviderScope(child: QiqstrApp(home: LoginPage())));
     }
   } catch (e) {
     print('Hive initialization error: $e');
-
     try {
       await Hive.deleteFromDisk();
       print('Hive data deleted. Restarting app...');

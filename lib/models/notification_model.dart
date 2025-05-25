@@ -14,7 +14,7 @@ class NotificationModel extends HiveObject {
   final String author;
 
   @HiveField(3)
-  final String type;
+  final String type; 
 
   @HiveField(4)
   final String content;
@@ -25,6 +25,9 @@ class NotificationModel extends HiveObject {
   @HiveField(6)
   final DateTime fetchedAt;
 
+  @HiveField(7)
+  bool isRead; 
+
   NotificationModel({
     required this.id,
     required this.targetEventId,
@@ -33,28 +36,35 @@ class NotificationModel extends HiveObject {
     required this.content,
     required this.timestamp,
     required this.fetchedAt,
+    this.isRead = false,
   });
 
   factory NotificationModel.fromEvent(Map<String, dynamic> eventData, String type) {
     String? targetEventId;
+    final String eventItselfId = eventData['id'] as String;
+
     for (var tag in eventData['tags']) {
-      if (tag.length >= 2 && tag[0] == 'e') {
+      if (tag is List && tag.length >= 2 && tag[0] == 'e') {
         targetEventId = tag[1] as String;
         break;
       }
     }
-    if (targetEventId == null) {
-      throw Exception('targetEventId not found for $type.');
+
+    if (type == "mention" && targetEventId == null) {
+      targetEventId = eventItselfId;
     }
 
+    targetEventId ??= eventItselfId;
+
     return NotificationModel(
-      id: eventData['id'] as String,
+      id: eventItselfId,
       targetEventId: targetEventId,
       author: eventData['pubkey'] as String,
       type: type,
       content: eventData['content'] as String,
       timestamp: DateTime.fromMillisecondsSinceEpoch((eventData['created_at'] as int) * 1000),
       fetchedAt: DateTime.now(),
+      isRead: false,
     );
   }
 
@@ -67,6 +77,7 @@ class NotificationModel extends HiveObject {
       content: json['content'],
       timestamp: DateTime.parse(json['timestamp']),
       fetchedAt: DateTime.parse(json['fetchedAt']),
+      isRead: json['isRead'] ?? false,
     );
   }
 
@@ -79,6 +90,7 @@ class NotificationModel extends HiveObject {
       'content': content,
       'timestamp': timestamp.toIso8601String(),
       'fetchedAt': fetchedAt.toIso8601String(),
+      'isRead': isRead,
     };
   }
 }

@@ -10,6 +10,7 @@ import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:qiqstr/constants/relays.dart';
 import 'package:qiqstr/models/zap_model.dart';
 import 'package:qiqstr/screens/profile_page.dart';
+import 'package:qiqstr/models/notification_model.dart';
 import 'package:qiqstr/services/isolate_manager.dart';
 import 'package:qiqstr/services/media_service.dart';
 import 'package:qiqstr/services/relay_service.dart';
@@ -77,6 +78,7 @@ class DataService {
   Box<RepostModel>? repostsBox;
   Box<FollowingModel>? followingBox;
   Box<ZapModel>? zapsBox;
+  Box<NotificationModel>? notificationsBox;
 
   final List<Map<String, dynamic>> _pendingEvents = [];
   Timer? _batchTimer;
@@ -134,6 +136,7 @@ class DataService {
       _openHiveBox<RepostModel>('reposts_${dataType}_$npub'),
       _openHiveBox<ZapModel>('zaps_${dataType}_$npub'),
       _openHiveBox<FollowingModel>('followingBox'),
+      _openHiveBox<NotificationModel>('notifications_$npub'),
     ]);
 
     notesBox = boxes[0] as Box<NoteModel>;
@@ -143,6 +146,7 @@ class DataService {
     repostsBox = boxes[4] as Box<RepostModel>;
     zapsBox = boxes[5] as Box<ZapModel>;
     followingBox = boxes[6] as Box<FollowingModel>;
+    notificationsBox = boxes[7] as Box<NotificationModel>;
 
     print('[DataService] Hive boxes opened successfully.');
 
@@ -151,6 +155,7 @@ class DataService {
       loadRepliesFromCache(),
       loadRepostsFromCache(),
       loadZapsFromCache(),
+      _loadNotificationsFromCache(),
     ]);
 
     Future.microtask(() {
@@ -479,6 +484,7 @@ class DataService {
     await _subscribeToAllReplies();
     await _subscribeToAllReposts();
     await _subscribeToAllZaps();
+    await _subscribeToNotifications();
 
     if (dataType == DataType.feed) {
       _startRealTimeSubscription(targetNpubs);
@@ -2023,6 +2029,48 @@ class DataService {
     }
   }
 
+  Future<void> _loadNotificationsFromCache() async {
+    if (notificationsBox == null || !notificationsBox!.isOpen) return;
+    try {
+      final count = notificationsBox!.length;
+      print('[DataService] Notifications cache contains $count notifications.');
+    } catch (e) {
+      print('[DataService ERROR] Error loading notifications from cache: $e');
+    }
+  }
+
+  Future<void> _subscribeToNotifications() async {
+    if (_isClosed || npub.isEmpty || notificationsBox == null || !notificationsBox!.isOpen) return;
+
+    int? sinceTimestamp;
+    try {
+      if (notificationsBox!.isNotEmpty) {
+        final List<NotificationModel> sortedNotifications = notificationsBox!.values.toList()
+          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        sinceTimestamp = (sortedNotifications.first.timestamp.millisecondsSinceEpoch ~/ 1000) + 1;
+      }
+    } catch (e) {
+      print('[DataService ERROR] Error getting latest notification timestamp from cache: $e');
+    }
+    sinceTimestamp ??= DateTime.now().subtract(const Duration(days: 1)).millisecondsSinceEpoch ~/ 1000;
+
+    final filter = Filter(
+      p: [npub],
+      kinds: [1, 6, 7],
+      since: sinceTimestamp,
+      limit: 50,
+    );
+    final request = _createRequest(filter);
+    try {
+      await _broadcastRequest(request);
+      print(
+          '[DataService] Subscribed to notifications for $npub since $sinceTimestamp with filter: ${filter.toJson()}');
+    } catch (e) {
+      print('[DataService ERROR] Failed to subscribe to notifications: $e');
+    }
+  }
+
+
   Future<void> _handleNewNotes(dynamic data) async {
     if (data is List<NoteModel> && data.isNotEmpty) {
       for (var note in data) {
@@ -2047,6 +2095,50 @@ class DataService {
       final int kind = parsedData['kind'];
       final Map<String, dynamic> eventData = parsedData['eventData'];
       final List<String> targetNpubs = parsedData['targetNpubs'];
+      final String incomingEventId = eventData['id'] as String;
+      final String eventAuthor = eventData['pubkey'] as String;
+
+      if (eventAuthor != npub) {
+        final List<dynamic> eventTags = List<dynamic>.from(eventData['tags'] ?? []);
+        bool isUserPMentioned = eventTags.any((tag) {
+          return tag is List && tag.length >= 2 && tag[0] == 'p' && tag[1] == npub;
+        });
+
+        if (isUserPMentioned && (kind == 1 || kind == 6 || kind == 7)) {
+          String notificationType;
+
+          String? firstETagValue;
+          for (var tag in eventTags) {
+            if (tag is List && tag.length >= 2 && tag[0] == 'e') {
+              firstETagValue = tag[1] as String;
+              break;
+            }
+          }
+
+          if (kind == 1) {
+            notificationType = "mention";
+          } else if (kind == 6) {
+            notificationType = "repost";
+            if (firstETagValue == null)
+              print("Warning: Repost event ${incomingEventId} for notification missing e-tag.");
+          } else if (kind == 7) {
+            notificationType = "reaction";
+            if (firstETagValue == null)
+              print("Warning: Reaction event ${incomingEventId} for notification missing e-tag.");
+          } else {
+            return;
+          }
+
+          final notification = NotificationModel.fromEvent(eventData, notificationType);
+
+          if (notificationsBox != null && notificationsBox!.isOpen) {
+            if (!notificationsBox!.containsKey(notification.id)) {
+              await notificationsBox!.put(notification.id, notification);
+              print("[DataService] New notification stored: ${notification.type} - ${notification.id}");
+            }
+          }
+        }
+      }
 
       if (kind == 0) {
         await _handleProfileEvent(eventData);

@@ -3,10 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qiqstr/screens/feed_page.dart';
 import 'package:qiqstr/screens/users_search_page.dart';
+import 'package:qiqstr/screens/notification_page.dart';
+import 'package:qiqstr/services/data_service.dart';
 
 class HomeNavigator extends StatefulWidget {
   final String npub;
-  const HomeNavigator({Key? key, required this.npub}) : super(key: key);
+  final DataService dataService;
+
+  const HomeNavigator({
+    Key? key,
+    required this.npub,
+    required this.dataService,
+  }) : super(key: key);
 
   @override
   State<HomeNavigator> createState() => _HomeNavigatorState();
@@ -19,15 +27,12 @@ class _HomeNavigatorState extends State<HomeNavigator> {
     FeedPage(npub: widget.npub),
     const UserSearchPage(),
     const SizedBox(),
-    const SizedBox(),
+    NotificationPage(dataService: widget.dataService),
   ];
 
   void _handleAction(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 2),
-      ),
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
     );
   }
 
@@ -47,21 +52,21 @@ class _HomeNavigatorState extends State<HomeNavigator> {
           height: 86,
           width: double.infinity,
           padding: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.5),
-          ),
+          decoration: BoxDecoration(color: Colors.black.withOpacity(0.5)),
           child: Row(
             children: items.map((item) {
               final bool isSelected = _currentIndex == item['index'];
+              final index = item['index'];
+
               return Expanded(
                 child: GestureDetector(
                   onTap: () {
-                    if (item['index'] == 2) {
+                    if (index == 2) {
                       _handleAction("Designing: DMs");
-                    } else if (item['index'] == 3) {
-                      _handleAction("Designing: Notifications");
                     } else {
-                      setState(() => _currentIndex = item['index']);
+                      setState(() {
+                        _currentIndex = index;
+                      });
                     }
                   },
                   child: Column(
@@ -91,7 +96,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
     return Scaffold(
       extendBody: true,
       body: IndexedStack(
-        index: _currentIndex >= 2 ? 0 : _currentIndex,
+        index: _currentIndex,
         children: _pages,
       ),
       bottomNavigationBar: _buildCustomBottomBar(),
