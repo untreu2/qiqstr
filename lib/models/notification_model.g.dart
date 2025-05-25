@@ -25,13 +25,14 @@ class NotificationModelAdapter extends TypeAdapter<NotificationModel> {
       timestamp: fields[5] as DateTime,
       fetchedAt: fields[6] as DateTime,
       isRead: fields[7] as bool,
+      amount: fields[8] as int,
     );
   }
 
   @override
   void write(BinaryWriter writer, NotificationModel obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -47,7 +48,9 @@ class NotificationModelAdapter extends TypeAdapter<NotificationModel> {
       ..writeByte(6)
       ..write(obj.fetchedAt)
       ..writeByte(7)
-      ..write(obj.isRead);
+      ..write(obj.isRead)
+      ..writeByte(8)
+      ..write(obj.amount);
   }
 
   @override

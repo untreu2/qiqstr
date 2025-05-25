@@ -2043,7 +2043,7 @@ class DataService {
     }
   }
 
-  Future<void> _subscribeToNotifications() async {
+Future<void> _subscribeToNotifications() async {
     if (_isClosed || npub.isEmpty || notificationsBox == null || !notificationsBox!.isOpen) return;
 
     int? sinceTimestamp;
@@ -2056,15 +2056,18 @@ class DataService {
     } catch (e) {
       print('[DataService ERROR] Error getting latest notification timestamp from cache: $e');
     }
+
     sinceTimestamp ??= DateTime.now().subtract(const Duration(days: 1)).millisecondsSinceEpoch ~/ 1000;
 
     final filter = Filter(
       p: [npub],
-      kinds: [1, 6, 7],
+      kinds: [1, 6, 7, 9735],
       since: sinceTimestamp,
       limit: 50,
     );
+
     final request = _createRequest(filter);
+
     try {
       await _broadcastRequest(request);
       print(
@@ -2073,6 +2076,7 @@ class DataService {
       print('[DataService ERROR] Failed to subscribe to notifications: $e');
     }
   }
+
 
 
   Future<void> _handleNewNotes(dynamic data) async {
@@ -2094,12 +2098,11 @@ class DataService {
     }
   }
 
-  Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
+Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
     try {
       final int kind = parsedData['kind'];
       final Map<String, dynamic> eventData = parsedData['eventData'];
       final List<String> targetNpubs = parsedData['targetNpubs'];
-      final String incomingEventId = eventData['id'] as String;
       final String eventAuthor = eventData['pubkey'] as String;
 
       if (eventAuthor != npub) {
@@ -2108,10 +2111,10 @@ class DataService {
           return tag is List && tag.length >= 2 && tag[0] == 'p' && tag[1] == npub;
         });
 
-        if (isUserPMentioned && (kind == 1 || kind == 6 || kind == 7)) {
+        if (isUserPMentioned && [1, 6, 7, 9735].contains(kind)) {
           String notificationType;
-
           String? firstETagValue;
+
           for (var tag in eventTags) {
             if (tag is List && tag.length >= 2 && tag[0] == 'e') {
               firstETagValue = tag[1] as String;
@@ -2121,14 +2124,13 @@ class DataService {
 
           if (kind == 1) {
             notificationType = "mention";
+            firstETagValue ??= eventData['id'];
           } else if (kind == 6) {
             notificationType = "repost";
-            if (firstETagValue == null)
-              print("Warning: Repost event ${incomingEventId} for notification missing e-tag.");
           } else if (kind == 7) {
             notificationType = "reaction";
-            if (firstETagValue == null)
-              print("Warning: Reaction event ${incomingEventId} for notification missing e-tag.");
+          } else if (kind == 9735) {
+            notificationType = "zap";
           } else {
             return;
           }
@@ -2138,7 +2140,7 @@ class DataService {
           if (notificationsBox != null && notificationsBox!.isOpen) {
             if (!notificationsBox!.containsKey(notification.id)) {
               await notificationsBox!.put(notification.id, notification);
-              print("[DataService] New notification stored: ${notification.type} - ${notification.id}");
+              print("[DataService] New $notificationType notification stored: ${notification.id}");
               final currentNotifications = List<NotificationModel>.from(notificationsNotifier.value);
               currentNotifications.insert(0, notification);
               notificationsNotifier.value = currentNotifications;
@@ -2176,6 +2178,7 @@ class DataService {
       print('[DataService ERROR] Error processing parsed event: $e');
     }
   }
+
 
   Future<void> _handleFetchedData(Map<String, dynamic> fetchData) async {
     try {

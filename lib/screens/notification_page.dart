@@ -18,7 +18,7 @@ class NotificationPage extends StatefulWidget {
 
 class _NotificationPageState extends State<NotificationPage> {
   Map<String, UserModel?> userProfiles = {};
-  List<_NotificationGroup> groupedNotifications = [];
+  List<dynamic> displayNotifications = [];
   bool isLoading = true;
 
   @override
@@ -44,11 +44,11 @@ class _NotificationPageState extends State<NotificationPage> {
     if (!mounted) return;
 
     final all = notificationsFromNotifier
-        .where((n) => ['mention', 'reaction', 'repost'].contains(n.type))
+        .where((n) => ['mention', 'reaction', 'repost', 'zap'].contains(n.type))
         .toList()
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-    final limited = all.take(50).toList();
+    final limited = all.take(100).toList();
 
     List<Future<void>> saveFutures = [];
     for (final n in limited) {
@@ -76,9 +76,12 @@ class _NotificationPageState extends State<NotificationPage> {
 
     final grouped = <String, _NotificationGroup>{};
     final flatMentions = <_NotificationGroup>[];
+    final individualZaps = <NotificationModel>[];
 
     for (final n in limited) {
-      if (n.type == 'mention') {
+      if (n.type == 'zap') {
+        individualZaps.add(n);
+      } else if (n.type == 'mention') {
         flatMentions.add(_NotificationGroup(
           type: n.type,
           targetEventId: n.targetEventId,
@@ -101,8 +104,15 @@ class _NotificationPageState extends State<NotificationPage> {
       }
     }
 
-    final combinedGroups = [...flatMentions, ...grouped.values];
-    combinedGroups.sort((a, b) => b.latest.compareTo(a.latest));
+    final groupedItems = [...flatMentions, ...grouped.values];
+    groupedItems.sort((a, b) => b.latest.compareTo(a.latest));
+    individualZaps.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+    final combined = <dynamic>[...groupedItems, ...individualZaps]..sort((a, b) {
+        final at = a is _NotificationGroup ? a.latest : a.timestamp;
+        final bt = b is _NotificationGroup ? b.latest : b.timestamp;
+        return bt.compareTo(at);
+      });
 
     if (saveFutures.isNotEmpty) {
       await Future.wait(saveFutures);
@@ -110,14 +120,14 @@ class _NotificationPageState extends State<NotificationPage> {
 
     if (mounted) {
       setState(() {
-        groupedNotifications = combinedGroups;
+        displayNotifications = combined;
         userProfiles = {...userProfiles, ...loadedProfiles};
         isLoading = false;
       });
     }
   }
 
-  String _buildTitle(_NotificationGroup group) {
+  String _buildGroupTitle(_NotificationGroup group) {
     final first = group.notifications.first;
     final names = group.notifications.map((n) {
       final profile = userProfiles[n.author];
@@ -144,55 +154,100 @@ class _NotificationPageState extends State<NotificationPage> {
     }
   }
 
-  Widget _buildNotificationTile(_NotificationGroup group) {
-    final first = group.notifications.first;
-    final profile = userProfiles[first.author];
-    final image = profile?.profileImage ?? '';
+  Widget _buildNotificationTile(dynamic item) {
+    if (item is _NotificationGroup) {
+      final first = item.notifications.first;
+      final profile = userProfiles[first.author];
+      final image = profile?.profileImage ?? '';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-            leading: CircleAvatar(
-              radius: 18,
-              backgroundColor: Colors.grey[800],
-              backgroundImage: image.isNotEmpty
-                  ? CachedNetworkImageProvider(image)
-                  : null,
-              child: image.isEmpty
-                  ? const Icon(Icons.person, size: 18, color: Colors.white)
-                  : null,
-            ),
-            title: Text(
-              _buildTitle(group),
-              style: const TextStyle(
-                fontWeight: FontWeight.w500,
-                fontSize: 15,
-                color: Colors.white,
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+              leading: CircleAvatar(
+                radius: 18,
+                backgroundColor: Colors.grey[800],
+                backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
+                child: image.isEmpty ? const Icon(Icons.person, size: 18, color: Colors.white) : null,
+              ),
+              title: Text(
+                _buildGroupTitle(item),
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 15,
+                  color: Colors.white,
+                ),
               ),
             ),
-          ),
-          if (first.type == 'mention' && first.content.trim().isNotEmpty)
+            if (first.type == 'mention' && first.content.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  first.content,
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                first.content,
-                style: const TextStyle(color: Colors.white70),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: QuoteWidget(
+                bech32: encodeBasicBech32(first.targetEventId, 'note'),
+                dataService: widget.dataService,
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: QuoteWidget(
-              bech32: encodeBasicBech32(first.targetEventId, 'note'),
-              dataService: widget.dataService,
+          ],
+        ),
+      );
+    } else if (item is NotificationModel && item.type == 'zap') {
+      final profile = userProfiles[item.author];
+      final image = profile?.profileImage ?? '';
+      final displayName = profile?.name.isNotEmpty == true ? profile!.name : 'Anonymous';
+
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+              leading: CircleAvatar(
+                radius: 18,
+                backgroundColor: Colors.grey[800],
+                backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
+                child: image.isEmpty ? const Icon(Icons.flash_on, size: 18, color: Colors.white) : null,
+              ),
+              title: Text(
+                '$displayName zapped your post ⚡${item.amount} sats',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 15,
+                  color: Colors.white,
+                ),
+              ),
             ),
-          ),
-        ],
-      ),
-    );
+            if (item.content.trim().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  item.content,
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: QuoteWidget(
+                bech32: encodeBasicBech32(item.targetEventId, 'note'),
+                dataService: widget.dataService,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 
   @override
@@ -219,7 +274,7 @@ class _NotificationPageState extends State<NotificationPage> {
                     ),
                   ),
                 ),
-                if (groupedNotifications.isEmpty)
+                if (displayNotifications.isEmpty)
                   const SliverFillRemaining(
                     hasScrollBody: false,
                     child: Center(
@@ -232,8 +287,8 @@ class _NotificationPageState extends State<NotificationPage> {
                 else
                   SliverList(
                     delegate: SliverChildBuilderDelegate(
-                      (context, index) => _buildNotificationTile(groupedNotifications[index]),
-                      childCount: groupedNotifications.length,
+                      (context, index) => _buildNotificationTile(displayNotifications[index]),
+                      childCount: displayNotifications.length,
                     ),
                   ),
               ],
