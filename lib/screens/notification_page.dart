@@ -24,7 +24,9 @@ class _NotificationPageState extends State<NotificationPage> {
   @override
   void initState() {
     super.initState();
-    _processNotifications(widget.dataService.notificationsNotifier.value);
+    
+    
+    _updateDisplayData(widget.dataService.notificationsNotifier.value, isInitialLoad: true);
     widget.dataService.notificationsNotifier.addListener(_handleNotificationsUpdate);
   }
 
@@ -34,35 +36,31 @@ class _NotificationPageState extends State<NotificationPage> {
     super.dispose();
   }
 
+  
   void _handleNotificationsUpdate() {
     if (mounted) {
-      _processNotifications(widget.dataService.notificationsNotifier.value);
+      
+      _updateDisplayData(widget.dataService.notificationsNotifier.value);
     }
   }
 
-  Future<void> _processNotifications(List<NotificationModel> notificationsFromNotifier) async {
+  
+  Future<void> _updateDisplayData(List<NotificationModel> notificationsFromNotifier,
+      {bool isInitialLoad = false}) async {
     if (!mounted) return;
 
     final all = notificationsFromNotifier
         .where((n) => ['mention', 'reaction', 'repost', 'zap'].contains(n.type))
         .toList()
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
     final limited = all.take(100).toList();
 
-    List<Future<void>> saveFutures = [];
-    for (final n in limited) {
-      if (!n.isRead) {
-        n.isRead = true;
-        saveFutures.add(n.save());
-      }
-    }
-
+    
     final npubs = limited.map((n) => n.author).toSet();
     final loadedProfiles = <String, UserModel?>{};
-
     await Future.wait(npubs.map((npub) async {
-      if (!userProfiles.containsKey(npub)) {
+      
+      if (!userProfiles.containsKey(npub) || isInitialLoad) {
         try {
           final profile = await widget.dataService.getCachedUserProfile(npub);
           loadedProfiles[npub] = UserModel.fromCachedProfile(npub, profile);
@@ -74,6 +72,7 @@ class _NotificationPageState extends State<NotificationPage> {
       }
     }));
 
+    
     final grouped = <String, _NotificationGroup>{};
     final flatMentions = <_NotificationGroup>[];
     final individualZaps = <NotificationModel>[];
@@ -114,15 +113,11 @@ class _NotificationPageState extends State<NotificationPage> {
         return bt.compareTo(at);
       });
 
-    if (saveFutures.isNotEmpty) {
-      await Future.wait(saveFutures);
-    }
-
     if (mounted) {
       setState(() {
         displayNotifications = combined;
         userProfiles = {...userProfiles, ...loadedProfiles};
-        isLoading = false;
+        if (isInitialLoad) isLoading = false;
       });
     }
   }
@@ -276,9 +271,9 @@ class _NotificationPageState extends State<NotificationPage> {
                     ),
                   ),
                 ),
-                if (displayNotifications.isEmpty)
+                if (displayNotifications.isEmpty && !isLoading) 
                   const SliverFillRemaining(
-                    hasScrollBody: false,
+                    hasScrollBody: false, 
                     child: Center(
                       child: Text(
                         'No notifications yet.',

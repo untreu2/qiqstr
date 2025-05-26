@@ -62,9 +62,15 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                 child: GestureDetector(
                   onTap: () {
                     if (index == 2) {
+                      
                       _handleAction("Designing: DMs");
+                    } else if (index == 3) {
+                      widget.dataService.markAllUserNotificationsAsRead().then((_) {
+                        if (mounted) setState(() => _currentIndex = index);
+                      });
                     } else {
-                      setState(() {
+                      if (mounted)
+                        setState(() {
                         _currentIndex = index;
                       });
                     }
@@ -72,14 +78,58 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Spacer(flex: 2),
-                      SvgPicture.asset(
-                        item['icon'],
-                        width: 20,
-                        height: 20,
-                        color: isSelected ? Colors.amber : Colors.white70,
-                      ),
-                      const Spacer(flex: 5),
+                      const Spacer(flex: 3),
+                      if (index == 3)
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            SvgPicture.asset(
+                              item['icon'],
+                              width: 20,
+                              height: 20,
+                              color: isSelected ? Colors.amber : Colors.white70,
+                            ),
+                            ValueListenableBuilder<int>(
+                              valueListenable: widget.dataService.unreadNotificationsCountNotifier,
+                              builder: (context, count, child) {
+                                if (count == 0) {
+                                  return const SizedBox.shrink();
+                                }
+                                return Positioned(
+                                  top: -4,
+                                  right: -5,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(1),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: Colors.black, width: 0.5),
+                                    ),
+                                    constraints: const BoxConstraints(
+                                      minWidth: 14,
+                                      minHeight: 14,
+                                    ),
+                                    child: Text('$count',
+                                        style: const TextStyle(
+                                          color: Colors.black,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        textAlign: TextAlign.center),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        )
+                      else
+                        SvgPicture.asset(
+                          item['icon'],
+                          width: 20,
+                          height: 20,
+                          color: isSelected ? Colors.amber : Colors.white70,
+                        ),
+                      const Spacer(flex: 4),
                     ],
                   ),
                 ),

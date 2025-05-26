@@ -1199,6 +1199,7 @@ class DataService {
   final ValueNotifier<Map<String, UserModel>> profilesNotifier =
       ValueNotifier({});
   final ValueNotifier<List<NotificationModel>> notificationsNotifier = ValueNotifier([]);
+  final ValueNotifier<int> unreadNotificationsCountNotifier = ValueNotifier(0);
 
   static int _compareNotes(NoteModel a, NoteModel b) {
     final aTime = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
@@ -2036,10 +2037,53 @@ class DataService {
       final allNotifications = notificationsBox!.values.toList();
       allNotifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       notificationsNotifier.value = allNotifications;
+      _updateUnreadNotificationCount();
       final count = allNotifications.length;
       print('[DataService] Notifications cache contains $count notifications.');
     } catch (e) {
       print('[DataService ERROR] Error loading notifications from cache: $e');
+    }
+  }
+
+  void _updateUnreadNotificationCount() {
+    if (notificationsBox != null && notificationsBox!.isOpen) {
+      final unreadCount = notificationsBox!.values.where((n) => !n.isRead).length;
+      unreadNotificationsCountNotifier.value = unreadCount;
+    }
+  }
+
+  Future<void> refreshUnreadNotificationCount() async {
+    _updateUnreadNotificationCount();
+  }
+
+  Future<void> markAllUserNotificationsAsRead() async {
+    if (notificationsBox == null || !notificationsBox!.isOpen) return;
+
+    List<Future<void>> saveFutures = [];
+    bool madeChanges = false;
+
+    final relevantNotifications =
+        notificationsBox!.values.where((n) => ['mention', 'reaction', 'repost', 'zap'].contains(n.type)).toList();
+
+    for (final notification in relevantNotifications) {
+      if (!notification.isRead) {
+        notification.isRead = true;
+        saveFutures.add(notification.save());
+        madeChanges = true;
+      }
+    }
+
+    if (saveFutures.isNotEmpty) {
+      await Future.wait(saveFutures);
+      print('[DataService] Marked ${saveFutures.length} notifications as read.');
+    }
+
+    _updateUnreadNotificationCount();
+
+    if (madeChanges) {
+      final allNotifications = notificationsBox!.values.toList();
+      allNotifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      notificationsNotifier.value = allNotifications;
     }
   }
 
@@ -2144,6 +2188,9 @@ Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
               final currentNotifications = List<NotificationModel>.from(notificationsNotifier.value);
               currentNotifications.insert(0, notification);
               notificationsNotifier.value = currentNotifications;
+              if (!notification.isRead) {
+                unreadNotificationsCountNotifier.value++;
+              }
             }
           }
         }
