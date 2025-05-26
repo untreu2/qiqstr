@@ -167,6 +167,7 @@ class _NotificationPageState extends State<NotificationPage> {
           children: [
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+              horizontalTitleGap: 8,
               leading: CircleAvatar(
                 radius: 18,
                 backgroundColor: Colors.grey[800],
@@ -212,6 +213,7 @@ class _NotificationPageState extends State<NotificationPage> {
           children: [
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+              horizontalTitleGap: 8,
               leading: CircleAvatar(
                 radius: 18,
                 backgroundColor: Colors.grey[800],
