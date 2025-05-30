@@ -1,7 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qiqstr/screens/feed_page.dart';
+import 'package:carbon_icons/carbon_icons.dart';
 import 'package:qiqstr/screens/users_search_page.dart';
 import 'package:qiqstr/screens/notification_page.dart';
 import 'package:qiqstr/services/data_service.dart';
@@ -38,10 +38,10 @@ class _HomeNavigatorState extends State<HomeNavigator> {
 
   Widget _buildCustomBottomBar() {
     List<Map<String, dynamic>> items = [
-      {'icon': 'assets/home_gap.svg', 'index': 0},
-      {'icon': 'assets/search_button.svg', 'index': 1},
-      {'icon': 'assets/dm_button.svg', 'index': 2},
-      {'icon': 'assets/notification_button.svg', 'index': 3},
+      {'icon': CarbonIcons.home, 'index': 0},
+      {'icon': CarbonIcons.search, 'index': 1},
+      {'icon': CarbonIcons.mail_all, 'index': 2},
+      {'icon': CarbonIcons.notification, 'index': 3},
     ];
 
     return ClipRRect(
@@ -83,10 +83,9 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                         Stack(
                           clipBehavior: Clip.none,
                           children: [
-                            SvgPicture.asset(
-                              item['icon'],
-                              width: 20,
-                              height: 20,
+                            Icon(
+                              item['icon'] as IconData,
+                              size: 24,
                               color: isSelected ? Colors.amber : Colors.white70,
                             ),
                             ValueListenableBuilder<int>(
@@ -123,10 +122,9 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                           ],
                         )
                       else
-                        SvgPicture.asset(
-                          item['icon'],
-                          width: 20,
-                          height: 20,
+                        Icon(
+                          item['icon'] as IconData,
+                          size: 24,
                           color: isSelected ? Colors.amber : Colors.white70,
                         ),
                       const Spacer(flex: 4),

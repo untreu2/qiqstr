@@ -47,7 +47,7 @@ class _NoteWidgetState extends State<NoteWidget>
 
   late final String _formattedTimestamp;
 
-  bool _isReactionGlowing = false;
+  
   bool _isReplyGlowing = false;
   bool _isRepostGlowing = false;
   bool _isZapGlowing = false;
@@ -90,14 +90,20 @@ class _NoteWidgetState extends State<NoteWidget>
   bool _hasReposted() => (widget.dataService.repostsMap[widget.note.id] ?? [])
       .any((e) => e.repostedBy == widget.currentUserNpub);
 
-  void _handleReactionTap() async {
-    if (_hasReacted()) return;
-    setState(() => _isReactionGlowing = true);
-    Future.delayed(const Duration(milliseconds: 400),
-        () => mounted ? setState(() => _isReactionGlowing = false) : null);
-    try {
-      await widget.dataService.sendReaction(widget.note.id, '+');
-    } catch (_) {}
+  Future<bool> _handleReactionTap(bool isCurrentlyLikedByButton) async {
+    if (isCurrentlyLikedByButton) {
+      return true;
+    } else {
+      if (_hasReacted()) {
+        return true;
+      }
+      try {
+        await widget.dataService.sendReaction(widget.note.id, '+');
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
   }
 
   void _handleReplyTap() {
@@ -217,7 +223,7 @@ class _NoteWidgetState extends State<NoteWidget>
         final authorUser = widget.profiles[updatedNote.author];
 
         return GestureDetector(
-          onDoubleTapDown: (_) => _handleReactionTap(),
+          onDoubleTapDown: (_) => _handleReactionTap(false),
           onTap: () => _navigateToThreadPage(updatedNote),
           child: Container(
             color: Colors.black,
@@ -339,7 +345,7 @@ class _NoteWidgetState extends State<NoteWidget>
                                     replyCount: updatedNote.replyCount,
                                     repostCount: updatedNote.repostCount,
                                     zapAmount: updatedNote.zapAmount,
-                                    isReactionGlowing: _isReactionGlowing,
+                                    
                                     isReplyGlowing: _isReplyGlowing,
                                     isRepostGlowing: _isRepostGlowing,
                                     isZapGlowing: _isZapGlowing,

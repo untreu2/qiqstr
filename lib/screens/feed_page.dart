@@ -8,6 +8,7 @@ import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/share_note.dart';
+import 'package:carbon_icons/carbon_icons.dart';
 import 'package:qiqstr/services/data_service.dart';
 
 class FeedPage extends StatefulWidget {
@@ -141,7 +142,8 @@ class _FeedPageState extends State<FeedPage> {
                           ),
                         ),
                       ),
-                      Center(
+                      Align(
+                        alignment: Alignment.center,
                         child: GestureDetector(
                           onTap: () {
                             _scrollController.animateTo(
@@ -154,7 +156,7 @@ class _FeedPageState extends State<FeedPage> {
                             'assets/main_icon_white.svg',
                             width: 30,
                             height: 30,
-                            color: Colors.white,
+                            colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn), 
                           ),
                         ),
                       ),
@@ -200,12 +202,8 @@ class _FeedPageState extends State<FeedPage> {
                     ],
                   ),
                   child: Center(
-                    child: SvgPicture.asset(
-                      'assets/new_post_button.svg',
-                      width: 24,
-                      height: 24,
-                      color: Colors.white,
-                    ),
+                    
+                    child: Icon(CarbonIcons.add, size: 28, color: Colors.white), 
                   ),
                 ),
               ),

@@ -15,7 +15,7 @@ class RootNoteWidget extends StatelessWidget {
     required this.dataService,
     required this.onNavigateToMentionProfile,
     
-    required this.isReactionGlowing,
+    
     required this.isReplyGlowing,
     required this.isRepostGlowing,
     required this.isZapGlowing,
@@ -23,7 +23,7 @@ class RootNoteWidget extends StatelessWidget {
     required this.hasReplied,
     required this.hasReposted,
     required this.hasZapped,
-    required this.onReactionTap,
+    required this.onReactionTap, 
     required this.onReplyTap,
     required this.onRepostTap,
     required this.onZapTap,
@@ -32,7 +32,7 @@ class RootNoteWidget extends StatelessWidget {
   }) : super(key: key);
 
   
-  final bool isReactionGlowing;
+  
   final bool isReplyGlowing;
   final bool isRepostGlowing;
   final bool isZapGlowing;
@@ -40,7 +40,7 @@ class RootNoteWidget extends StatelessWidget {
   final bool hasReplied;
   final bool hasReposted;
   final bool hasZapped;
-  final VoidCallback onReactionTap;
+  final Future<bool> Function(bool) onReactionTap; 
   final VoidCallback onReplyTap;
   final VoidCallback onRepostTap;
   final VoidCallback onZapTap;
@@ -109,7 +109,7 @@ class RootNoteWidget extends StatelessWidget {
                 replyCount: note.replyCount,
                 repostCount: note.repostCount,
                 zapAmount: note.zapAmount, 
-                isReactionGlowing: isReactionGlowing,
+              
                 isReplyGlowing: isReplyGlowing,
                 isRepostGlowing: isRepostGlowing,
                 isZapGlowing: isZapGlowing,

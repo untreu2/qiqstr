@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
+import 'package:carbon_icons/carbon_icons.dart';
+import 'package:like_button/like_button.dart';
 
 class InteractionBar extends StatelessWidget {
   final int reactionCount;
@@ -7,7 +8,6 @@ class InteractionBar extends StatelessWidget {
   final int repostCount;
   final int zapAmount;
 
-  final bool isReactionGlowing;
   final bool isReplyGlowing;
   final bool isRepostGlowing;
   final bool isZapGlowing;
@@ -17,7 +17,7 @@ class InteractionBar extends StatelessWidget {
   final bool hasReposted;
   final bool hasZapped;
 
-  final VoidCallback onReactionTap;
+  final Future<bool> Function(bool) onReactionTap;
   final VoidCallback onReplyTap;
   final VoidCallback onRepostTap;
   final VoidCallback onZapTap;
@@ -29,7 +29,6 @@ class InteractionBar extends StatelessWidget {
     required this.replyCount,
     required this.repostCount,
     required this.zapAmount,
-    required this.isReactionGlowing,
     required this.isReplyGlowing,
     required this.isRepostGlowing,
     required this.isZapGlowing,
@@ -45,40 +44,28 @@ class InteractionBar extends StatelessWidget {
   });
 
   Widget _buildAction({
-    required String svg,
     required Color color,
+    required IconData iconData,
     required int count,
     required VoidCallback onTap,
   }) {
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        const Positioned(
-          top: -10,
-          child: SizedBox(
-            width: 40,
-            height: 40,
+    return InkWell(
+      splashColor: Colors.transparent,
+      highlightColor: Colors.transparent,
+      onTap: onTap,
+      child: Row(
+        children: [
+          Icon(iconData, size: 18, color: color),
+          const SizedBox(width: 4),
+          Opacity(
+            opacity: count > 0 ? 1.0 : 0.0,
+            child: Text(
+              '$count',
+              style: const TextStyle(fontSize: 13, color: Colors.grey),
+            ),
           ),
-        ),
-        InkWell(
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
-          onTap: onTap,
-          child: Row(
-            children: [
-              SvgPicture.asset(svg, width: 15, height: 15, colorFilter: ColorFilter.mode(color, BlendMode.srcIn)),
-              const SizedBox(width: 4),
-              Opacity(
-                opacity: count > 0 ? 1.0 : 0.0,
-                child: Text(
-                  '$count',
-                  style: const TextStyle(fontSize: 13, color: Colors.grey),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -87,35 +74,51 @@ class InteractionBar extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _buildAction(
-          svg: 'assets/reaction_button.svg',
-          color: isReactionGlowing || hasReacted
-              ? Colors.red.shade400
-              : Colors.grey,
-          count: reactionCount,
+        LikeButton(
+          isLiked: hasReacted,
+          likeCount: reactionCount,
           onTap: onReactionTap,
+          size: 22,
+          circleColor: const CircleColor(
+            start: Color(0xFFFF5722),
+            end: Color(0xFFFFC107),
+          ),
+          bubblesColor: const BubblesColor(
+            dotPrimaryColor: Color(0xFFFFC107),
+            dotSecondaryColor: Color(0xFFFF5722),
+          ),
+          likeBuilder: (bool isLiked) {
+            return Icon(
+              isLiked ? CarbonIcons.favorite_filled : CarbonIcons.favorite,
+              color: isLiked ? Colors.red.shade400 : Colors.grey,
+              size: 18,
+            );
+          },
+          countBuilder: (int? count, bool isLiked, String text) {
+            return Opacity(
+              opacity: count != null && count > 0 ? 1.0 : 0.0,
+              child: Text(
+                text,
+                style: const TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+            );
+          },
         ),
         _buildAction(
-          svg: 'assets/reply_button.svg',
-          color: isReplyGlowing || hasReplied
-              ? Colors.blue.shade200
-              : Colors.grey,
+          iconData: CarbonIcons.chat,
+          color: isReplyGlowing || hasReplied ? Colors.blue.shade200 : Colors.grey,
           count: replyCount,
           onTap: onReplyTap,
         ),
         _buildAction(
-          svg: 'assets/repost_button.svg',
-          color: isRepostGlowing || hasReposted
-              ? Colors.green.shade400
-              : Colors.grey,
+          iconData: CarbonIcons.renew,
+          color: isRepostGlowing || hasReposted ? Colors.green.shade400 : Colors.grey,
           count: repostCount,
           onTap: onRepostTap,
         ),
         _buildAction(
-          svg: 'assets/zap_button.svg',
-          color: isZapGlowing || hasZapped
-              ? const Color(0xFFECB200)
-              : Colors.grey,
+          iconData: hasZapped ? CarbonIcons.flash_filled : CarbonIcons.flash,
+          color: isZapGlowing || hasZapped ? const Color(0xFFECB200) : Colors.grey,
           count: zapAmount,
           onTap: onZapTap,
         ),
@@ -123,7 +126,7 @@ class InteractionBar extends StatelessWidget {
           onTap: onStatisticsTap,
           child: const Padding(
             padding: EdgeInsets.only(left: 6),
-            child: Icon(Icons.bar_chart, size: 18, color: Colors.grey),
+            child: Icon(Icons.bar_chart, size: 20, color: Colors.grey),
           ),
         ),
       ],
