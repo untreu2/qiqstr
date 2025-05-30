@@ -66,13 +66,13 @@ class InteractionBar extends StatelessWidget {
           onTap: onTap,
           child: Row(
             children: [
-              SvgPicture.asset(svg, width: 15, height: 15, colorFilter: ColorFilter.mode(color, BlendMode.srcIn)),
-              const SizedBox(width: 4),
+              SvgPicture.asset(svg, width: 16, height: 16, colorFilter: ColorFilter.mode(color, BlendMode.srcIn)),
+              const SizedBox(width: 5),
               Opacity(
                 opacity: count > 0 ? 1.0 : 0.0,
                 child: Text(
                   '$count',
-                  style: const TextStyle(fontSize: 13, color: Colors.grey),
+                  style: const TextStyle(fontSize: 14, color: Colors.grey),
                 ),
               ),
             ],
@@ -123,7 +123,7 @@ class InteractionBar extends StatelessWidget {
           onTap: onStatisticsTap,
           child: const Padding(
             padding: EdgeInsets.only(left: 6),
-            child: Icon(Icons.bar_chart, size: 18, color: Colors.grey),
+            child: Icon(Icons.bar_chart, size: 21, color: Colors.grey),
           ),
         ),
       ],
