@@ -4,7 +4,7 @@ import 'package:qiqstr/screens/profile_page.dart';
 import 'package:qiqstr/utils/logout.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:carbon_icons/carbon_icons.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class SidebarWidget extends StatefulWidget {
   final UserModel? user;
@@ -74,7 +74,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       children: [
                         _buildSidebarItem(
-                          iconData: CarbonIcons.user_avatar,
+                          svgAsset: 'assets/profile_button.svg',
                           label: 'Profile',
                           onTap: () => Navigator.push(
                             context,
@@ -85,7 +85,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                           ),
                         ),
                         _buildSidebarItem(
-                          iconData: CarbonIcons.logout,
+                          svgAsset: 'assets/Logout_button.svg',
                           label: 'Logout',
                           iconColor: Colors.redAccent,
                           textColor: Colors.redAccent,
@@ -101,16 +101,17 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   }
 
   Widget _buildSidebarItem({
-    required IconData iconData,
+    required String svgAsset,
     required String label,
     required VoidCallback onTap,
     Color iconColor = Colors.white,
     Color textColor = Colors.white,
   }) {
     return ListTile(
-      leading: Icon(
-        iconData,
-        size: 22,
+      leading: SvgPicture.asset(
+        svgAsset,
+        width: 20,
+        height: 20,
         color: iconColor,
       ),
       title: Text(

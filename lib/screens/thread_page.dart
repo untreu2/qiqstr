@@ -28,7 +28,7 @@ class _ThreadPageState extends State<ThreadPage> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   bool _isLoading = true;
 
-  
+  bool _isRootNoteReactionGlowing = false;
   bool _isRootNoteReplyGlowing = false;
   bool _isRootNoteRepostGlowing = false;
   bool _isRootNoteZapGlowing = false;
@@ -89,24 +89,16 @@ class _ThreadPageState extends State<ThreadPage> {
     widget.dataService.openUserProfile(context, npub);
   }
 
-  Future<bool> _handleRootNoteReactionTap(bool isCurrentlyLikedByButton) async {
-    if (_rootNote == null) return isCurrentlyLikedByButton;
-
-    if (isCurrentlyLikedByButton) {
-      return true;
-    } else {
-      if (_hasReacted(_rootNote!)) {
-        return true;
-      }
-      try {
-        await widget.dataService.sendReaction(_rootNote!.id, '+');
-        return true;
-      } catch (_) {
-        return false;
-      }
-    }
+  void _handleRootNoteReactionTap() async {
+    if (_rootNote == null || _hasReacted(_rootNote!)) return;
+    setState(() => _isRootNoteReactionGlowing = true);
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (mounted) setState(() => _isRootNoteReactionGlowing = false);
+    });
+    try {
+      await widget.dataService.sendReaction(_rootNote!.id, '+');
+    } catch (_) {}
   }
-
 
   void _handleRootNoteReplyTap() {
     if (_rootNote == null) return;
@@ -191,7 +183,7 @@ class _ThreadPageState extends State<ThreadPage> {
                             note: _rootNote!,
                             dataService: widget.dataService,
                             onNavigateToMentionProfile: _navigateToProfile,
-                            
+                            isReactionGlowing: _isRootNoteReactionGlowing,
                             isReplyGlowing: _isRootNoteReplyGlowing,
                             isRepostGlowing: _isRootNoteRepostGlowing,
                             isZapGlowing: _isRootNoteZapGlowing,
