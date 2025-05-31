@@ -40,6 +40,7 @@ class NoteContentWidget extends StatelessWidget {
 
   Widget _buildRichTextContent(BuildContext context, Map<String, String> mentions) {
     final parts = (parsedContent['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+    final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     final spans = <InlineSpan>[];
 
     for (var p in parts) {
@@ -53,7 +54,7 @@ class NoteContentWidget extends StatelessWidget {
           if (m.start > last) {
             spans.add(TextSpan(
               text: text.substring(last, m.start),
-              style: const TextStyle(fontSize: 15, color: Colors.white),
+              style: TextStyle(fontSize: 15 * textScaleFactor, color: Colors.white),
             ));
           }
 
@@ -63,14 +64,14 @@ class NoteContentWidget extends StatelessWidget {
           if (urlMatch != null) {
             spans.add(TextSpan(
               text: urlMatch,
-              style: const TextStyle(color: Color(0xFFECB200), fontSize: 15),
+              style: TextStyle(color: const Color(0xFFECB200), fontSize: 15 * textScaleFactor),
               recognizer: TapGestureRecognizer()
                 ..onTap = () => _onOpenLink(context, LinkableElement(urlMatch, urlMatch)),
             ));
           } else if (hashtagMatch != null) {
             spans.add(TextSpan(
               text: hashtagMatch,
-              style: const TextStyle(color: Color(0xFFECB200), fontSize: 15),
+              style: TextStyle(color: const Color(0xFFECB200), fontSize: 15 * textScaleFactor),
               recognizer: TapGestureRecognizer()
                 ..onTap = () => _onHashtagTap(context, hashtagMatch),
             ));
@@ -81,16 +82,14 @@ class NoteContentWidget extends StatelessWidget {
         if (last < text.length) {
           spans.add(TextSpan(
             text: text.substring(last),
-            style: const TextStyle(fontSize: 15, color: Colors.white),
+            style: TextStyle(fontSize: 15 * textScaleFactor, color: Colors.white),
           ));
         }
       } else if (p['type'] == 'mention') {
         final username = mentions[p['id']] ?? '${(p['id'] as String).substring(0, 8)}...';
         spans.add(TextSpan(
           text: '@$username',
-          style: const TextStyle(
-              color: Color(0xFFECB200),
-              fontSize: 15,
+          style: TextStyle(color: const Color(0xFFECB200), fontSize: 15 * textScaleFactor,
               fontWeight: FontWeight.w500),
           recognizer: TapGestureRecognizer()
             ..onTap = () => onNavigateToMentionProfile(p['id'] as String),

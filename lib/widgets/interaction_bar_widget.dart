@@ -45,11 +45,13 @@ class InteractionBar extends StatelessWidget {
   });
 
   Widget _buildAction({
+    required BuildContext context,
     required String svg,
     required Color color,
     required int count,
     required VoidCallback onTap,
   }) {
+    final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     return Stack(
       alignment: Alignment.center,
       children: [
@@ -66,7 +68,12 @@ class InteractionBar extends StatelessWidget {
           onTap: onTap,
           child: Row(
             children: [
-              SvgPicture.asset(svg, width: 16, height: 16, colorFilter: ColorFilter.mode(color, BlendMode.srcIn)),
+              SvgPicture.asset(
+                svg,
+                width: 14 * textScaleFactor,
+                height: 14 * textScaleFactor,
+                colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+              ),
               const SizedBox(width: 5),
               Opacity(
                 opacity: count > 0 ? 1.0 : 0.0,
@@ -88,6 +95,7 @@ class InteractionBar extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         _buildAction(
+          context: context,
           svg: 'assets/reaction_button.svg',
           color: isReactionGlowing || hasReacted
               ? Colors.red.shade400
@@ -96,6 +104,7 @@ class InteractionBar extends StatelessWidget {
           onTap: onReactionTap,
         ),
         _buildAction(
+          context: context,
           svg: 'assets/reply_button.svg',
           color: isReplyGlowing || hasReplied
               ? Colors.blue.shade200
@@ -104,6 +113,7 @@ class InteractionBar extends StatelessWidget {
           onTap: onReplyTap,
         ),
         _buildAction(
+          context: context,
           svg: 'assets/repost_button.svg',
           color: isRepostGlowing || hasReposted
               ? Colors.green.shade400
@@ -112,6 +122,7 @@ class InteractionBar extends StatelessWidget {
           onTap: onRepostTap,
         ),
         _buildAction(
+          context: context,
           svg: 'assets/zap_button.svg',
           color: isZapGlowing || hasZapped
               ? const Color(0xFFECB200)
@@ -123,7 +134,8 @@ class InteractionBar extends StatelessWidget {
           onTap: onStatisticsTap,
           child: const Padding(
             padding: EdgeInsets.only(left: 6),
-            child: Icon(Icons.bar_chart, size: 21, color: Colors.grey),
+            
+            child: Icon(Icons.bar_chart, size: 19, color: Colors.grey), 
           ),
         ),
       ],
