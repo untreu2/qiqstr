@@ -4,19 +4,28 @@ import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/widgets/note_widget.dart';
 
+enum NoteListFilterType {
+  latest,
+  popular,
+  media,
+}
+
 class NoteListWidget extends StatefulWidget {
   final String npub;
   final DataType dataType;
+  final NoteListFilterType filterType;
 
   const NoteListWidget({
     super.key,
     required this.npub,
     required this.dataType,
+    this.filterType = NoteListFilterType.latest,
   });
 
   @override
   State<NoteListWidget> createState() => _NoteListWidgetState();
 }
+
 
 class _NoteListWidgetState extends State<NoteListWidget> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
@@ -28,8 +37,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   late DataService _dataService;
   final List<NoteModel> _pendingNotes = [];
-
-  int _selectedTabIndex = 1;
 
   @override
   void initState() {
@@ -95,40 +102,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     super.dispose();
   }
 
-  Widget buildButton(int index, String label) {
-    final isSelected = _selectedTabIndex == index;
-
-    return Expanded(
-      child: TextButton(
-        onPressed: () {
-          setState(() {
-            _selectedTabIndex = index;
-          });
-        },
-        style: TextButton.styleFrom(
-          backgroundColor:
-              isSelected ? Colors.white.withOpacity(0.12) : Colors.transparent,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(
-              color: isSelected ? const Color(0xFFECB200) : Colors.white10,
-              width: 1.4,
-            ),
-          ),
-          foregroundColor: isSelected ? Colors.white : Colors.white70,
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          textStyle: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-          minimumSize: Size.zero,
-          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        ),
-        child: Text(label, textAlign: TextAlign.center),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_isInitializing || _currentUserNpub == null) {
@@ -152,55 +125,65 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     return ValueListenableBuilder<List<NoteModel>>(
       valueListenable: _dataService.notesNotifier,
       builder: (context, notes, child) {
-        if (notes.isEmpty) {
+        if (notes.isEmpty && _preloadDone) {
           return const SliverToBoxAdapter(
             child: Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
+                child: Text(
+                  'No notes available yet.',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ),
             ),
           );
         }
 
-        List<NoteModel> filteredNotes = switch (_selectedTabIndex) {
-          0 => notes
-              .where((n) =>
-                  n.timestamp.isAfter(
-                      DateTime.now().subtract(const Duration(hours: 24))) &&
-                  (!n.isReply || n.isRepost))
-              .toList()
-            ..sort((a, b) =>
-                (b.reactionCount + b.replyCount + b.repostCount + b.zapAmount)
-                    .compareTo(a.reactionCount +
-                        a.replyCount +
-                        a.repostCount +
-                        a.zapAmount)),
-          2 => notes
-              .where((n) => n.hasMedia && (!n.isReply || n.isRepost))
-              .toList(),
-          _ => notes.where((n) => !n.isReply || n.isRepost).toList(),
-        };
+        List<NoteModel> filteredNotes;
+        switch (widget.filterType) {
+          case NoteListFilterType.popular:
+            filteredNotes = notes
+                .where((n) =>
+                    n.timestamp.isAfter(DateTime.now().subtract(const Duration(hours: 24))) &&
+                    (!n.isReply || n.isRepost))
+                .toList()
+              ..sort((a, b) => (b.reactionCount + b.replyCount + b.repostCount + b.zapAmount)
+                  .compareTo(a.reactionCount + a.replyCount + a.repostCount + a.zapAmount));
+            break;
+          case NoteListFilterType.media:
+            filteredNotes = notes.where((n) => n.hasMedia && (!n.isReply || n.isRepost)).toList();
+            break;
+          case NoteListFilterType.latest:
+            filteredNotes = notes.where((n) => !n.isReply || n.isRepost).toList();
+            break;
+        }
+
+        if (filteredNotes.isEmpty && _preloadDone) {
+          return const SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'No notes match the current filter.',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
 
         return SliverList(
           delegate: SliverChildBuilderDelegate(
             (context, index) {
-              if (index == 0) {
-                return Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                  child: Row(
-                    children: [
-                      buildButton(1, "Latest"),
-                      const SizedBox(width: 6),
-                      buildButton(0, "Popular (24h)"),
-                      const SizedBox(width: 6),
-                      buildButton(2, "Media"),
-                    ],
-                  ),
-                );
-              }
-
-              final note = filteredNotes[index - 1];
+              final note = filteredNotes[index];
 
               return Column(
                 mainAxisSize: MainAxisSize.min,
@@ -216,7 +199,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                     notesNotifier: _dataService.notesNotifier,
                     profiles: _dataService.profilesNotifier.value,
                   ),
-                  if (index < filteredNotes.length)
+                  if (index < filteredNotes.length - 1)
                     Container(
                       margin: const EdgeInsets.symmetric(vertical: 10),
                       height: 1,
@@ -226,7 +209,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                 ],
               );
             },
-            childCount: filteredNotes.length + 1,
+            childCount: filteredNotes.length,
           ),
         );
       },
