@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/models/notification_model.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/data_service.dart';
+import 'package:qiqstr/widgets/note_content_widget.dart';
 import 'package:qiqstr/widgets/quote_widget.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 
@@ -149,6 +150,10 @@ class _NotificationPageState extends State<NotificationPage> {
     }
   }
 
+  void _navigateToProfileFromContent(String npub) {
+    widget.dataService.openUserProfile(context, npub);
+  }
+
   Widget _buildNotificationTile(dynamic item) {
     if (item is _NotificationGroup) {
       final first = item.notifications.first;
@@ -181,11 +186,14 @@ class _NotificationPageState extends State<NotificationPage> {
             if (first.type == 'mention' && first.content.trim().isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  first.content,
-                  style: const TextStyle(color: Colors.white70),
+                child: NoteContentWidget(
+                  parsedContent: widget.dataService.parseContent(first.content),
+                  dataService: widget.dataService,
+                  onNavigateToMentionProfile: _navigateToProfileFromContent,
+                  size: NoteContentSize.small,
                 ),
               ),
+            if (first.type == 'mention' && first.content.trim().isNotEmpty) const SizedBox(height: 8),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: QuoteWidget(
