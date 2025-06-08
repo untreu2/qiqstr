@@ -24,6 +24,7 @@ class NoteWidget extends StatefulWidget {
   final ValueNotifier<List<NoteModel>> notesNotifier;
   final Map<String, UserModel> profiles;
 
+  final bool isSmallView;
   const NoteWidget({
     super.key,
     required this.note,
@@ -34,6 +35,7 @@ class NoteWidget extends StatefulWidget {
     required this.currentUserNpub,
     required this.notesNotifier,
     required this.profiles,
+    this.isSmallView = true,
   });
 
   @override
@@ -329,6 +331,7 @@ class _NoteWidgetState extends State<NoteWidget>
                               parsedContent: parsed,
                               dataService: widget.dataService,
                               onNavigateToMentionProfile: _navigateToMentionProfile,
+                              size: widget.isSmallView ? NoteContentSize.small : NoteContentSize.big,
                             ),
                             const SizedBox(height: 10),
                             Row(

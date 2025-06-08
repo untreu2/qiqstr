@@ -7,16 +7,23 @@ import 'package:qiqstr/widgets/media_preview_widget.dart';
 import 'package:qiqstr/widgets/quote_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+enum NoteContentSize { small, big }
+
 class NoteContentWidget extends StatelessWidget {
   final Map<String, dynamic> parsedContent;
   final DataService dataService;
   final void Function(String mentionId) onNavigateToMentionProfile;
+  final NoteContentSize size;
+
+  static const double _smallFontSize = 15.0;
+  static const double _bigFontSize = 17.0;
 
   const NoteContentWidget({
     Key? key,
     required this.parsedContent,
     required this.dataService,
     required this.onNavigateToMentionProfile,
+    this.size = NoteContentSize.small,
   }) : super(key: key);
 
   Future<void> _onOpenLink(BuildContext context, LinkableElement link) async {
@@ -41,7 +48,9 @@ class NoteContentWidget extends StatelessWidget {
   Widget _buildRichTextContent(BuildContext context, Map<String, String> mentions) {
     final parts = (parsedContent['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
+    final baseFontSize = (size == NoteContentSize.big) ? _bigFontSize : _smallFontSize;
     final spans = <InlineSpan>[];
+    final currentFontSize = baseFontSize * textScaleFactor;
 
     for (var p in parts) {
       if (p['type'] == 'text') {
@@ -54,7 +63,7 @@ class NoteContentWidget extends StatelessWidget {
           if (m.start > last) {
             spans.add(TextSpan(
               text: text.substring(last, m.start),
-              style: TextStyle(fontSize: 15 * textScaleFactor, color: Colors.white),
+              style: TextStyle(fontSize: currentFontSize, color: Colors.white),
             ));
           }
 
@@ -64,14 +73,14 @@ class NoteContentWidget extends StatelessWidget {
           if (urlMatch != null) {
             spans.add(TextSpan(
               text: urlMatch,
-              style: TextStyle(color: const Color(0xFFECB200), fontSize: 15 * textScaleFactor),
+              style: TextStyle(color: const Color(0xFFECB200), fontSize: currentFontSize),
               recognizer: TapGestureRecognizer()
                 ..onTap = () => _onOpenLink(context, LinkableElement(urlMatch, urlMatch)),
             ));
           } else if (hashtagMatch != null) {
             spans.add(TextSpan(
               text: hashtagMatch,
-              style: TextStyle(color: const Color(0xFFECB200), fontSize: 15 * textScaleFactor),
+              style: TextStyle(color: const Color(0xFFECB200), fontSize: currentFontSize),
               recognizer: TapGestureRecognizer()
                 ..onTap = () => _onHashtagTap(context, hashtagMatch),
             ));
@@ -82,14 +91,14 @@ class NoteContentWidget extends StatelessWidget {
         if (last < text.length) {
           spans.add(TextSpan(
             text: text.substring(last),
-            style: TextStyle(fontSize: 15 * textScaleFactor, color: Colors.white),
+            style: TextStyle(fontSize: currentFontSize, color: Colors.white),
           ));
         }
       } else if (p['type'] == 'mention') {
         final username = mentions[p['id']] ?? '${(p['id'] as String).substring(0, 8)}...';
         spans.add(TextSpan(
           text: '@$username',
-          style: TextStyle(color: const Color(0xFFECB200), fontSize: 15 * textScaleFactor,
+          style: TextStyle(color: const Color(0xFFECB200), fontSize: currentFontSize,
               fontWeight: FontWeight.w500),
           recognizer: TapGestureRecognizer()
             ..onTap = () => onNavigateToMentionProfile(p['id'] as String),
