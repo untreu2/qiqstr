@@ -45,10 +45,14 @@ class NoteContentWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildRichTextContent(BuildContext context, Map<String, String> mentions) {
+  Widget _buildRichTextContent(
+    BuildContext context,
+    Map<String, String> mentions,
+    NoteContentSize effectiveSize,
+  ) {
     final parts = (parsedContent['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
-    final baseFontSize = (size == NoteContentSize.big) ? _bigFontSize : _smallFontSize;
+    final baseFontSize = (effectiveSize == NoteContentSize.big) ? _bigFontSize : _smallFontSize;
     final spans = <InlineSpan>[];
     final currentFontSize = baseFontSize * textScaleFactor;
 
@@ -120,6 +124,11 @@ class NoteContentWidget extends StatelessWidget {
         .map((p) => p['id'] as String)
         .toList();
 
+    final visibleText = textParts.where((p) => p['type'] == 'text').map((p) => (p['text'] as String).trim()).join(' ');
+
+    final isShortVisibleText = visibleText.length < 30;
+    final effectiveSize = isShortVisibleText ? NoteContentSize.big : size;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -128,7 +137,7 @@ class NoteContentWidget extends StatelessWidget {
             future: dataService.resolveMentions(mentionIds),
             builder: (context, snapshot) {
               final mentionsMap = snapshot.data ?? {};
-              return _buildRichTextContent(context, mentionsMap);
+              return _buildRichTextContent(context, mentionsMap, effectiveSize);
             },
           ),
         if (mediaUrls.isNotEmpty)
