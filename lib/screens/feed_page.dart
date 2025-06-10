@@ -187,7 +187,7 @@ class _FeedPageState extends State<FeedPage> {
         }
       },
       style: TextButton.styleFrom(
-        backgroundColor: isSelected ? Colors.white.withOpacity(0.2) : Colors.transparent,
+        backgroundColor: Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
