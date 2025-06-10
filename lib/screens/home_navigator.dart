@@ -45,7 +45,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
     ];
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 20.0),
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 30.0),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(25.0),
         child: BackdropFilter(
