@@ -1235,29 +1235,48 @@ class DataService {
 
   Future<void> _subscribeToAllReactions() async {
     if (_isClosed) return;
-    String subscriptionId = generateUUID();
+    generateUUID();
     List<String> allEventIds = notes.map((note) => note.id).toList();
     if (allEventIds.isEmpty) return;
-
-    final filter = Filter(kinds: [7], e: allEventIds, limit: 1000);
-    final request = Request(subscriptionId, [filter]);
-    await _broadcastRequest(request);
+    
+    const batchSize = 100;
+    for (int i = 0; i < allEventIds.length; i += batchSize) {
+      final batch = allEventIds.sublist(i, i + batchSize > allEventIds.length ? allEventIds.length : i + batchSize);
+      if (batch.isNotEmpty) {
+        final filter = Filter(kinds: [7], e: batch, limit: 1000);
+        final request = Request(generateUUID(), [filter]);
+        await _broadcastRequest(request);
+      }
+    }
   }
 
   Future<void> _subscribeToAllReplies() async {
     if (_isClosed) return;
     List<String> allEventIds = notes.map((n) => n.id).toList();
     if (allEventIds.isEmpty) return;
-    final filter = Filter(kinds: [1], e: allEventIds, limit: 1000);
-    await _broadcastRequest(_createRequest(filter));
+
+    const batchSize = 100;
+    for (int i = 0; i < allEventIds.length; i += batchSize) {
+      final batch = allEventIds.sublist(i, i + batchSize > allEventIds.length ? allEventIds.length : i + batchSize);
+      if (batch.isNotEmpty) {
+        final filter = Filter(kinds: [1], e: batch, limit: 1000);
+        await _broadcastRequest(_createRequest(filter));
+      }
+    }
   }
 
   Future<void> _subscribeToAllReposts() async {
     if (_isClosed) return;
     List<String> allEventIds = notes.map((n) => n.id).toList();
     if (allEventIds.isEmpty) return;
-    final filter = Filter(kinds: [6], e: allEventIds, limit: 1000);
-    await _broadcastRequest(_createRequest(filter));
+    const batchSize = 100;
+    for (int i = 0; i < allEventIds.length; i += batchSize) {
+      final batch = allEventIds.sublist(i, i + batchSize > allEventIds.length ? allEventIds.length : i + batchSize);
+      if (batch.isNotEmpty) {
+        final filter = Filter(kinds: [6], e: batch, limit: 1000);
+        await _broadcastRequest(_createRequest(filter));
+      }
+    }
   }
 
   void _startCacheCleanup() {
