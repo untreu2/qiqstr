@@ -154,6 +154,12 @@ class _NotificationPageState extends State<NotificationPage> {
     widget.dataService.openUserProfile(context, npub);
   }
 
+  void _navigateToAuthorProfile(String npub) {
+    if (npub.isNotEmpty) {
+      widget.dataService.openUserProfile(context, npub);
+    }
+  }
+
   Widget _buildNotificationTile(dynamic item) {
     if (item is _NotificationGroup) {
       final first = item.notifications.first;
@@ -168,20 +174,33 @@ class _NotificationPageState extends State<NotificationPage> {
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 16),
               horizontalTitleGap: 8,
-              leading: CircleAvatar(
-                radius: 18,
-                backgroundColor: Colors.grey[800],
-                backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
-                child: image.isEmpty ? const Icon(Icons.person, size: 18, color: Colors.white) : null,
-              ),
-              title: Text(
-                _buildGroupTitle(item),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 15,
-                  color: Colors.white,
+                leading: GestureDetector(
+                  onTap: () => _navigateToAuthorProfile(first.author),
+                  child: CircleAvatar(
+                    radius: 18,
+                    backgroundColor: Colors.grey[800],
+                    backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
+                    child: image.isEmpty ? const Icon(Icons.person, size: 18, color: Colors.white) : null,
+                  ),
                 ),
-              ),
+                title: Builder(
+                  builder: (context) {
+                    final titleText = _buildGroupTitle(item);
+                    final titleStyle = const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 15,
+                      color: Colors.white,
+                    );
+                    if (item.notifications.length == 1) {
+                      return GestureDetector(
+                        onTap: () => _navigateToAuthorProfile(first.author),
+                        child: Text(titleText, style: titleStyle),
+                      );
+                    } else {
+                      return Text(titleText, style: titleStyle);
+                    }
+                  },
+                )
             ),
             if (first.type == 'mention' && first.content.trim().isNotEmpty)
               Padding(
@@ -217,20 +236,26 @@ class _NotificationPageState extends State<NotificationPage> {
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 16),
               horizontalTitleGap: 8,
-              leading: CircleAvatar(
-                radius: 18,
-                backgroundColor: Colors.grey[800],
-                backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
-                child: image.isEmpty ? const Icon(Icons.flash_on, size: 18, color: Colors.white) : null,
-              ),
-              title: Text(
-                '$displayName zapped your post ⚡${item.amount} sats',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 15,
-                  color: Colors.white,
+                leading: GestureDetector(
+                  onTap: () => _navigateToAuthorProfile(item.author),
+                  child: CircleAvatar(
+                    radius: 18,
+                    backgroundColor: Colors.grey[800],
+                    backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
+                    child: image.isEmpty ? const Icon(Icons.flash_on, size: 18, color: Colors.white) : null,
+                  ),
                 ),
-              ),
+                title: GestureDetector(
+                  onTap: () => _navigateToAuthorProfile(item.author),
+                  child: Text(
+                    '$displayName zapped your post ⚡${item.amount} sats',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 15,
+                      color: Colors.white,
+                    ),
+                  ),
+                )
             ),
             if (item.content.trim().isNotEmpty)
               Padding(

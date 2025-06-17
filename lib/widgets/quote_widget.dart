@@ -57,14 +57,14 @@ class QuoteWidget extends StatelessWidget {
     return results;
   }
 
-  Widget _contentText(Map<String, dynamic> parsed) {
+  Widget _contentText(BuildContext context, Map<String, dynamic> parsed) {
     final parts = parsed['textParts'] as List<Map<String, dynamic>>;
 
     return FutureBuilder<Map<String, String>>(
       future: _fetchAllMentions(
           parts.where((p) => p['type'] == 'mention').toList()),
       builder: (context, snapshot) {
-        final mentions = snapshot.data ?? {};
+        final resolvedMentions = snapshot.data ?? {};
         List<InlineSpan> spans = [];
 
         for (var p in parts) {
@@ -104,7 +104,8 @@ class QuoteWidget extends StatelessWidget {
               ));
             }
           } else if (p['type'] == 'mention') {
-            final username = mentions[p['id']] ?? '${p['id'].substring(0, 8)}…';
+            final mentionId = p['id'] as String;
+            final username = resolvedMentions[mentionId] ?? '${mentionId.substring(0, 8)}…';
             spans.add(
               TextSpan(
                 text: '@$username',
@@ -113,6 +114,7 @@ class QuoteWidget extends StatelessWidget {
                   fontSize: 14,
                   fontStyle: FontStyle.normal,
                 ),
+                recognizer: TapGestureRecognizer()..onTap = () => dataService.openUserProfile(context, mentionId),
               ),
             );
           }
@@ -134,7 +136,7 @@ class QuoteWidget extends StatelessWidget {
     return await dataService.getCachedNote(hex);
   }
 
-  Widget _authorInfo(String npub) {
+  Widget _authorInfo(BuildContext context, String npub) {
     return FutureBuilder<Map<String, String>>(
       future: dataService.getCachedUserProfile(npub),
       builder: (_, snap) {
@@ -144,27 +146,27 @@ class QuoteWidget extends StatelessWidget {
           name = u.name;
           img = u.profileImage;
         }
-        return Row(
-          children: [
-            CircleAvatar(
-              radius: 14,
-              backgroundImage:
-                  img.isNotEmpty ? CachedNetworkImageProvider(img) : null,
-              backgroundColor: img.isEmpty ? Colors.grey : Colors.transparent,
-              child: img.isEmpty
-                  ? const Icon(Icons.person, size: 14, color: Colors.white)
-                  : null,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              name,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
+        return GestureDetector(
+          onTap: () => dataService.openUserProfile(context, npub),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 14,
+                backgroundImage: img.isNotEmpty ? CachedNetworkImageProvider(img) : null,
+                backgroundColor: img.isEmpty ? Colors.grey : Colors.transparent,
+                child: img.isEmpty ? const Icon(Icons.person, size: 14, color: Colors.white) : null,
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              Text(
+                name,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -226,7 +228,7 @@ class QuoteWidget extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  _authorInfo(n.author),
+                  _authorInfo(context, n.author),
                   const Spacer(),
                   Text(
                     _formatTimestamp(n.timestamp),
@@ -247,7 +249,7 @@ class QuoteWidget extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 10),
                   child: DefaultTextStyle(
                     style: const TextStyle(fontSize: 15, color: Colors.white),
-                    child: _contentText(parsed),
+                    child: _contentText(context, parsed),
                   ),
                 ),
               if ((parsed['mediaUrls'] as List).isNotEmpty)
