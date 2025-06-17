@@ -89,7 +89,7 @@ class DataService {
   bool _isClosed = false;
 
   Timer? _cacheCleanupTimer;
-  final int currentLimit = 75;
+  final int currentLimit = 50;
 
   final Map<String, Completer<Map<String, String>>> _pendingProfileRequests =
       {};
@@ -101,10 +101,10 @@ class DataService {
 
   Function(List<NoteModel>)? _onCacheLoad;
 
-  final Uuid _uuid = Uuid();
+  static final Uuid _uuid = Uuid();
 
-  final Duration profileCacheTTL = const Duration(hours: 1);
-  final Duration cacheCleanupInterval = const Duration(hours: 12);
+  final Duration profileCacheTTL = const Duration(minutes: 30);
+  final Duration cacheCleanupInterval = const Duration(hours: 6);
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
@@ -123,13 +123,13 @@ class DataService {
   int get connectedRelaysCount => _socketManager.activeSockets.length;
 
   Future<void> initialize() async {
-    await Future.wait([
+    final isolateInitFutures = [
       _initializeEventProcessorIsolate(),
       _initializeFetchProcessorIsolate(),
       _initializeIsolate(),
-    ]);
+    ];
 
-    final boxes = await Future.wait([
+    final boxInitFutures = [
       _openHiveBox<NoteModel>('notes_${dataType}_$npub'),
       _openHiveBox<UserModel>('users'),
       _openHiveBox<ReactionModel>('reactions_${dataType}_$npub'),
@@ -138,8 +138,14 @@ class DataService {
       _openHiveBox<ZapModel>('zaps_${dataType}_$npub'),
       _openHiveBox<FollowingModel>('followingBox'),
       _openHiveBox<NotificationModel>('notifications_$npub'),
+    ];
+
+    final results = await Future.wait([
+      Future.wait(isolateInitFutures),
+      Future.wait(boxInitFutures),
     ]);
 
+    final boxes = results[1] as List<Box>;
     notesBox = boxes[0] as Box<NoteModel>;
     usersBox = boxes[1] as Box<UserModel>;
     reactionsBox = boxes[2] as Box<ReactionModel>;
@@ -149,8 +155,6 @@ class DataService {
     followingBox = boxes[6] as Box<FollowingModel>;
     notificationsBox = boxes[7] as Box<NotificationModel>;
 
-    print('[DataService] Hive boxes opened successfully.');
-
     await Future.wait([
       loadReactionsFromCache(),
       loadRepliesFromCache(),
@@ -159,25 +163,32 @@ class DataService {
       _loadNotificationsFromCache(),
     ]);
 
-    Future.microtask(() {
-      loadNotesFromCache((loadedNotes) {
-        print('[DataService] Cache loaded with ${loadedNotes.length} notes.');
-      });
-    });
+    loadNotesFromCache((loadedNotes) {});
 
     _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
-
     _isInitialized = true;
     _startCacheCleanup();
   }
 
   Future<void> reloadInteractionCounts() async {
+    var hasChanges = false;
     for (var note in notes) {
-      note.reactionCount = reactionsMap[note.id]?.length ?? 0;
-      note.replyCount = repliesMap[note.id]?.length ?? 0;
-      note.repostCount = repostsMap[note.id]?.length ?? 0;
+      final newReactionCount = reactionsMap[note.id]?.length ?? 0;
+      final newReplyCount = repliesMap[note.id]?.length ?? 0;
+      final newRepostCount = repostsMap[note.id]?.length ?? 0;
+      
+      if (note.reactionCount != newReactionCount ||
+          note.replyCount != newReplyCount ||
+          note.repostCount != newRepostCount) {
+        note.reactionCount = newReactionCount;
+        note.replyCount = newReplyCount;
+        note.repostCount = newRepostCount;
+        hasChanges = true;
+      }
     }
-    notesNotifier.value = _itemsTree.toList();
+    if (hasChanges) {
+      notesNotifier.value = _itemsTree.toList();
+    }
   }
 
   Future<Map<String, String>> resolveMentions(List<String> ids) async {
@@ -601,17 +612,22 @@ class DataService {
         'priority': 1,
       });
 
-      _batchTimer ??= Timer(const Duration(milliseconds: 200), () {
-        if (_pendingEvents.isNotEmpty) {
-          final batch = List<Map<String, dynamic>>.from(_pendingEvents);
-          _pendingEvents.clear();
-          _eventProcessorSendPort.send(batch);
-        }
-        _batchTimer = null;
-      });
-    } catch (e) {
-      print('[DataService ERROR] Error batching events: $e');
+      if (_pendingEvents.length >= 10) {
+        _flushPendingEvents();
+      } else {
+        _batchTimer ??= Timer(const Duration(milliseconds: 100), _flushPendingEvents);
+      }
+    } catch (e) {}
+  }
+
+  void _flushPendingEvents() {
+    if (_pendingEvents.isNotEmpty) {
+      final batch = List<Map<String, dynamic>>.from(_pendingEvents);
+      _pendingEvents.clear();
+      _eventProcessorSendPort.send(batch);
     }
+    _batchTimer?.cancel();
+    _batchTimer = null;
   }
 
   Future<void> _handleFollowingEvent(Map<String, dynamic> eventData) async {
@@ -938,41 +954,63 @@ class DataService {
     final limitedRelays = _socketManager.relayUrls.take(3).toList();
 
     await Future.wait(limitedRelays.map((relayUrl) async {
+      WebSocket? ws;
+      StreamSubscription? sub;
       try {
-        final ws = await WebSocket.connect(relayUrl)
+        ws = await WebSocket.connect(relayUrl)
             .timeout(const Duration(seconds: 3));
         if (_isClosed) {
-          await ws.close();
+          try {
+            await ws.close();
+          } catch (_) {}
           return;
         }
         final request = _createRequest(
             Filter(authors: [targetNpub], kinds: [3], limit: 1000));
         final completer = Completer<void>();
 
-        ws.listen((event) {
-          final decoded = jsonDecode(event);
-          if (decoded[0] == 'EVENT') {
-            for (var tag in decoded[2]['tags']) {
-              if (tag is List && tag.isNotEmpty && tag[0] == 'p') {
-                following.add(tag[1] as String);
+        sub = ws.listen((event) {
+          try {
+            if (completer.isCompleted) return;
+            final decoded = jsonDecode(event);
+            if (decoded[0] == 'EVENT') {
+              for (var tag in decoded[2]['tags']) {
+                if (tag is List && tag.isNotEmpty && tag[0] == 'p') {
+                  following.add(tag[1] as String);
+                }
               }
+              completer.complete();
             }
-            completer.complete();
+          } catch (e) {
+            if (!completer.isCompleted) completer.complete();
           }
         }, onDone: () {
           if (!completer.isCompleted) completer.complete();
         }, onError: (error) {
           if (!completer.isCompleted) completer.complete();
-        });
+        }, cancelOnError: true);
 
-        ws.add(request.serialize());
+        if (ws.readyState == WebSocket.open) {
+          ws.add(request.serialize());
+        }
+        
         await completer.future.timeout(const Duration(seconds: 3),
-            onTimeout: () async {
+            onTimeout: () {});
+            
+        try {
+          await sub.cancel();
+        } catch (_) {}
+        
+        try {
           await ws.close();
-        });
-        await ws.close();
+        } catch (_) {}
       } catch (e) {
-        print('[DataService] Error fetching following from $relayUrl: $e');
+        try {
+          await sub?.cancel();
+        } catch (_) {}
+        try {
+          await ws?.close();
+        } catch (_) {}
       }
     }));
 
@@ -997,12 +1035,16 @@ class DataService {
     final allRelays = _socketManager.relayUrls;
 
     await Future.wait(allRelays.map((relayUrl) async {
+      WebSocket? ws;
+      StreamSubscription? sub;
       try {
-        final ws = await WebSocket.connect(relayUrl)
+        ws = await WebSocket.connect(relayUrl)
             .timeout(const Duration(seconds: 2));
 
         if (_isClosed) {
-          await ws.close();
+          try {
+            await ws.close();
+          } catch (_) {}
           return;
         }
 
@@ -1015,32 +1057,47 @@ class DataService {
         final request = Request(generateUUID(), [filter]);
         final completer = Completer<void>();
 
-        ws.listen((event) {
-          final decoded = jsonDecode(event);
-          if (decoded[0] == 'EVENT') {
-            final author = decoded[2]['pubkey'];
-            followers.add(author);
-          }
-          if (decoded[0] == 'EOSE') {
+        sub = ws.listen((event) {
+          try {
+            if (completer.isCompleted) return;
+            final decoded = jsonDecode(event);
+            if (decoded[0] == 'EVENT') {
+              final author = decoded[2]['pubkey'];
+              followers.add(author);
+            }
+            if (decoded[0] == 'EOSE') {
+              completer.complete();
+            }
+          } catch (e) {
             if (!completer.isCompleted) completer.complete();
           }
         }, onDone: () {
           if (!completer.isCompleted) completer.complete();
         }, onError: (error) {
           if (!completer.isCompleted) completer.complete();
-        });
+        }, cancelOnError: true);
 
-        ws.add(request.serialize());
+        if (ws.readyState == WebSocket.open) {
+          ws.add(request.serialize());
+        }
 
         await completer.future.timeout(const Duration(seconds: 3),
-            onTimeout: () async {
-          await ws.close();
-        });
+            onTimeout: () {});
 
-        await ws.close();
+        try {
+          await sub.cancel();
+        } catch (_) {}
+        
+        try {
+          await ws.close();
+        } catch (_) {}
       } catch (e) {
-        print(
-            '[DataService] Error fetching global followers from $relayUrl: $e');
+        try {
+          await sub?.cancel();
+        } catch (_) {}
+        try {
+          await ws?.close();
+        } catch (_) {}
       }
     }));
 
@@ -1117,48 +1174,87 @@ class DataService {
   }
 
   Future<void> _subscribeToAllReactions() async {
-    if (_isClosed) return;
-    generateUUID();
-    List<String> allEventIds = notes.map((note) => note.id).toList();
-    if (allEventIds.isEmpty) return;
+    if (_isClosed || notes.isEmpty) return;
     
-    const batchSize = 100;
+    final allEventIds = notes.map((note) => note.id).toList();
+    const batchSize = 50;
+    
+    final futures = <Future>[];
     for (int i = 0; i < allEventIds.length; i += batchSize) {
-      final batch = allEventIds.sublist(i, i + batchSize > allEventIds.length ? allEventIds.length : i + batchSize);
+      final endIndex = (i + batchSize > allEventIds.length) ? allEventIds.length : i + batchSize;
+      final batch = allEventIds.sublist(i, endIndex);
+      
       if (batch.isNotEmpty) {
-        final filter = Filter(kinds: [7], e: batch, limit: 1000);
+        final filter = Filter(kinds: [7], e: batch, limit: 500);
         final request = Request(generateUUID(), [filter]);
-        await _broadcastRequest(request);
+        futures.add(_broadcastRequest(request));
       }
+      
+      if (futures.length >= 3) {
+        await Future.wait(futures);
+        futures.clear();
+        await Future.delayed(const Duration(milliseconds: 50));
+      }
+    }
+    
+    if (futures.isNotEmpty) {
+      await Future.wait(futures);
     }
   }
 
   Future<void> _subscribeToAllReplies() async {
-    if (_isClosed) return;
-    List<String> allEventIds = notes.map((n) => n.id).toList();
-    if (allEventIds.isEmpty) return;
-
-    const batchSize = 100;
+    if (_isClosed || notes.isEmpty) return;
+    
+    final allEventIds = notes.map((n) => n.id).toList();
+    const batchSize = 50;
+    
+    final futures = <Future>[];
     for (int i = 0; i < allEventIds.length; i += batchSize) {
-      final batch = allEventIds.sublist(i, i + batchSize > allEventIds.length ? allEventIds.length : i + batchSize);
+      final endIndex = (i + batchSize > allEventIds.length) ? allEventIds.length : i + batchSize;
+      final batch = allEventIds.sublist(i, endIndex);
+      
       if (batch.isNotEmpty) {
-        final filter = Filter(kinds: [1], e: batch, limit: 1000);
-        await _broadcastRequest(_createRequest(filter));
+        final filter = Filter(kinds: [1], e: batch, limit: 500);
+        futures.add(_broadcastRequest(_createRequest(filter)));
       }
+      
+      if (futures.length >= 3) {
+        await Future.wait(futures);
+        futures.clear();
+        await Future.delayed(const Duration(milliseconds: 50));
+      }
+    }
+    
+    if (futures.isNotEmpty) {
+      await Future.wait(futures);
     }
   }
 
   Future<void> _subscribeToAllReposts() async {
-    if (_isClosed) return;
-    List<String> allEventIds = notes.map((n) => n.id).toList();
-    if (allEventIds.isEmpty) return;
-    const batchSize = 100;
+    if (_isClosed || notes.isEmpty) return;
+    
+    final allEventIds = notes.map((n) => n.id).toList();
+    const batchSize = 50;
+    
+    final futures = <Future>[];
     for (int i = 0; i < allEventIds.length; i += batchSize) {
-      final batch = allEventIds.sublist(i, i + batchSize > allEventIds.length ? allEventIds.length : i + batchSize);
+      final endIndex = (i + batchSize > allEventIds.length) ? allEventIds.length : i + batchSize;
+      final batch = allEventIds.sublist(i, endIndex);
+      
       if (batch.isNotEmpty) {
-        final filter = Filter(kinds: [6], e: batch, limit: 1000);
-        await _broadcastRequest(_createRequest(filter));
+        final filter = Filter(kinds: [6], e: batch, limit: 500);
+        futures.add(_broadcastRequest(_createRequest(filter)));
       }
+      
+      if (futures.length >= 3) {
+        await Future.wait(futures);
+        futures.clear();
+        await Future.delayed(const Duration(milliseconds: 50));
+      }
+    }
+    
+    if (futures.isNotEmpty) {
+      await Future.wait(futures);
     }
   }
 
@@ -1171,37 +1267,53 @@ class DataService {
       }
 
       final now = DateTime.now();
-      profileCache.removeWhere(
-          (key, cached) => now.difference(cached.fetchedAt) > profileCacheTTL);
+      final cutoffTime = now.subtract(profileCacheTTL);
+      
+      profileCache.removeWhere((key, cached) => cached.fetchedAt.isBefore(cutoffTime));
 
-      reactionsMap.forEach((eventId, reactions) {
-        reactions.removeWhere(
-            (reaction) => now.difference(reaction.fetchedAt) > profileCacheTTL);
+      final expiredReactionKeys = <String>[];
+      final expiredReplyKeys = <String>[];
+
+      if (reactionsBox?.isOpen == true) {
+        for (final key in reactionsBox!.keys) {
+          final reaction = reactionsBox!.get(key);
+          if (reaction?.fetchedAt.isBefore(cutoffTime) == true) {
+            expiredReactionKeys.add(key);
+          }
+        }
+      }
+
+      if (repliesBox?.isOpen == true) {
+        for (final key in repliesBox!.keys) {
+          final reply = repliesBox!.get(key);
+          if (reply?.fetchedAt.isBefore(cutoffTime) == true) {
+            expiredReplyKeys.add(key);
+          }
+        }
+      }
+
+      final cleanupFutures = <Future>[];
+      if (expiredReactionKeys.isNotEmpty) {
+        cleanupFutures.add(reactionsBox!.deleteAll(expiredReactionKeys));
+      }
+      if (expiredReplyKeys.isNotEmpty) {
+        cleanupFutures.add(repliesBox!.deleteAll(expiredReplyKeys));
+      }
+
+      if (cleanupFutures.isNotEmpty) {
+        await Future.wait(cleanupFutures);
+      }
+
+      reactionsMap.removeWhere((eventId, reactions) {
+        reactions.removeWhere((reaction) => reaction.fetchedAt.isBefore(cutoffTime));
+        return reactions.isEmpty;
       });
 
-      repliesMap.forEach((eventId, replies) {
-        replies.removeWhere(
-            (reply) => now.difference(reply.fetchedAt) > profileCacheTTL);
+      repliesMap.removeWhere((eventId, replies) {
+        replies.removeWhere((reply) => reply.fetchedAt.isBefore(cutoffTime));
+        return replies.isEmpty;
       });
-
-      await Future.wait([
-        if (reactionsBox != null && reactionsBox!.isOpen)
-          reactionsBox!.deleteAll(reactionsBox!.keys.where((key) {
-            final reaction = reactionsBox!.get(key);
-            return reaction != null &&
-                now.difference(reaction.fetchedAt) > profileCacheTTL;
-          })),
-        if (repliesBox != null && repliesBox!.isOpen)
-          repliesBox!.deleteAll(repliesBox!.keys.where((key) {
-            final reply = repliesBox!.get(key);
-            return reply != null &&
-                now.difference(reply.fetchedAt) > profileCacheTTL;
-          })),
-      ]);
-
-      print('[DataService] Performed cache cleanup.');
     });
-    print('[DataService] Started cache cleanup timer.');
   }
 
   Future<void> shareNote(String noteContent) async {
@@ -1751,37 +1863,36 @@ class DataService {
   }
 
   Future<void> saveNotesToCache() async {
-    if (notesBox != null && notesBox!.isOpen) {
-      try {
-        final Map<String, NoteModel> notesMap = {
-          for (var note in notes.take(200)) note.id: note
-        };
-        await notesBox!.clear();
-        await notesBox!.putAll(notesMap);
-        print(
-            '[DataService] Notes saved to cache successfully. (${notesMap.length} notes)');
-      } catch (e) {
-        print('[DataService ERROR] Error saving notes to cache: $e');
+    if (notesBox?.isOpen != true || notes.isEmpty) return;
+    
+    try {
+      final notesToSave = notes.take(150).toList();
+      final notesMap = <String, NoteModel>{};
+      
+      for (final note in notesToSave) {
+        notesMap[note.id] = note;
       }
-    }
+      
+      await notesBox!.clear();
+      await notesBox!.putAll(notesMap);
+    } catch (e) {}
   }
 
   Future<void> loadNotesFromCache(Function(List<NoteModel>) onLoad) async {
-    if (notesBox == null || !notesBox!.isOpen) return;
+    if (notesBox?.isOpen != true) return;
 
     try {
       final allNotes = notesBox!.values.cast<NoteModel>().toList();
       if (allNotes.isEmpty) return;
 
       allNotes.sort((a, b) {
-        final aTime =
-            a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
-        final bTime =
-            b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
+        final aTime = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
+        final bTime = b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
         return bTime.compareTo(aTime);
       });
 
-      final limitedNotes = allNotes.take(200).toList();
+      final limitedNotes = allNotes.take(150).toList();
+      final newNotes = <NoteModel>[];
 
       for (final note in limitedNotes) {
         if (!eventIds.contains(note.id)) {
@@ -1789,36 +1900,31 @@ class DataService {
           notes.add(note);
           eventIds.add(note.id);
           _addNote(note);
+          newNotes.add(note);
         }
 
         note.reactionCount = reactionsMap[note.id]?.length ?? 0;
         note.replyCount = repliesMap[note.id]?.length ?? 0;
         note.repostCount = repostsMap[note.id]?.length ?? 0;
-        note.zapAmount =
-            zapsMap[note.id]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
+        note.zapAmount = zapsMap[note.id]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
       }
 
-      notesNotifier.value = _itemsTree.toList();
-      onLoad(limitedNotes);
+      if (newNotes.isNotEmpty) {
+        notesNotifier.value = _itemsTree.toList();
+        onLoad(newNotes);
 
-      final cachedEventIds = limitedNotes.map((note) => note.id).toList();
-
-      Future.microtask(() async {
-        await Future.wait([
-          fetchInteractionsForEvents(cachedEventIds),
-        ]);
-      });
-
-      Future.microtask(() async {
-        await _fetchProfilesForAllData();
-        profilesNotifier.value = {
-          for (var entry in profileCache.entries)
-            entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data),
-        };
-      });
-    } catch (e) {
-      print('[DataService ERROR] Error loading notes from cache: $e');
-    }
+        final cachedEventIds = newNotes.map((note) => note.id).toList();
+        
+        Future.microtask(() => fetchInteractionsForEvents(cachedEventIds));
+        Future.microtask(() async {
+          await _fetchProfilesForAllData();
+          profilesNotifier.value = {
+            for (var entry in profileCache.entries)
+              entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data),
+          };
+        });
+      }
+    } catch (e) {}
   }
 
   Future<void> loadZapsFromCache() async {
@@ -2256,16 +2362,30 @@ Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
 
   Future<void> _fetchProfilesForAllData() async {
     if (_isClosed) return;
-    Set<String> allAuthors = notes.map((note) => note.author).toSet();
+    
+    final allAuthors = <String>{};
+    allAuthors.addAll(notes.map((note) => note.author));
 
     for (var replies in repliesMap.values) {
-      allAuthors.addAll(replies.map((reply) => reply.author));
+      for (var reply in replies) {
+        allAuthors.add(reply.author);
+      }
     }
+    
     for (var reactions in reactionsMap.values) {
-      allAuthors.addAll(reactions.map((reaction) => reaction.author));
+      for (var reaction in reactions) {
+        allAuthors.add(reaction.author);
+      }
     }
 
-    await fetchProfilesBatch(allAuthors.toList());
+    final uncachedAuthors = allAuthors.where((author) =>
+      !profileCache.containsKey(author) ||
+      DateTime.now().difference(profileCache[author]!.fetchedAt) > profileCacheTTL
+    ).toList();
+
+    if (uncachedAuthors.isNotEmpty) {
+      await fetchProfilesBatch(uncachedAuthors);
+    }
   }
 
   Future<NoteModel?> fetchNoteByIdIndependently(String eventId) async {
@@ -2332,26 +2452,39 @@ Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
 
       late StreamSubscription sub;
       sub = ws.listen((event) {
-        final decoded = jsonDecode(event);
-        if (decoded is List && decoded.length >= 2) {
-          if (decoded[0] == 'EVENT' && decoded[1] == subscriptionId) {
-            completer.complete(decoded[2]);
-          } else if (decoded[0] == 'EOSE' && decoded[1] == subscriptionId) {
-            if (!completer.isCompleted) completer.complete(null);
+        try {
+          if (completer.isCompleted) return;
+          final decoded = jsonDecode(event);
+          if (decoded is List && decoded.length >= 2) {
+            if (decoded[0] == 'EVENT' && decoded[1] == subscriptionId) {
+              completer.complete(decoded[2]);
+            } else if (decoded[0] == 'EOSE' && decoded[1] == subscriptionId) {
+              completer.complete(null);
+            }
           }
+        } catch (e) {
+          if (!completer.isCompleted) completer.complete(null);
         }
       }, onError: (error) {
         if (!completer.isCompleted) completer.complete(null);
       }, onDone: () {
         if (!completer.isCompleted) completer.complete(null);
-      });
+      }, cancelOnError: true);
 
-      ws.add(request);
+      if (ws.readyState == WebSocket.open) {
+        ws.add(request);
+      }
+      
       final eventData = await completer.future
           .timeout(const Duration(seconds: 5), onTimeout: () => null);
 
-      await sub.cancel();
-      await ws.close();
+      try {
+        await sub.cancel();
+      } catch (_) {}
+      
+      try {
+        await ws.close();
+      } catch (_) {}
 
       if (eventData != null) {
         final contentRaw = eventData['content'];
@@ -2403,32 +2536,40 @@ Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
 
       late StreamSubscription sub;
       sub = ws.listen((event) {
-        final decoded = jsonDecode(event);
+        try {
+          if (completer.isCompleted) return;
+          final decoded = jsonDecode(event);
 
-        if (decoded is List && decoded.length >= 2) {
-          if (decoded[0] == 'EVENT' && decoded[1] == subscriptionId) {
-            completer.complete(decoded[2]);
-          } else if (decoded[0] == 'EOSE' && decoded[1] == subscriptionId) {
-            if (!completer.isCompleted) {
+          if (decoded is List && decoded.length >= 2) {
+            if (decoded[0] == 'EVENT' && decoded[1] == subscriptionId) {
+              completer.complete(decoded[2]);
+            } else if (decoded[0] == 'EOSE' && decoded[1] == subscriptionId) {
               completer.complete(null);
             }
           }
+        } catch (e) {
+          if (!completer.isCompleted) completer.complete(null);
         }
       }, onError: (error) {
         if (!completer.isCompleted) completer.complete(null);
       }, onDone: () {
         if (!completer.isCompleted) completer.complete(null);
-      });
+      }, cancelOnError: true);
 
-      ws.add(request);
+      if (ws.readyState == WebSocket.open) {
+        ws.add(request);
+      }
 
       final eventData = await completer.future
-          .timeout(const Duration(seconds: 5), onTimeout: () {
-        return null;
-      });
+          .timeout(const Duration(seconds: 5), onTimeout: () => null);
 
-      await sub.cancel();
-      await ws.close();
+      try {
+        await sub.cancel();
+      } catch (_) {}
+      
+      try {
+        await ws.close();
+      } catch (_) {}
 
       if (eventData != null) {
         return NoteModel(

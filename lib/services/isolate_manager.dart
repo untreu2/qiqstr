@@ -8,42 +8,45 @@ class IsolateManager {
     final ReceivePort port = ReceivePort();
     sendPort.send(port.sendPort);
 
-    port.listen((dynamic message) async {
-      if (message is List) {
+    port.listen((dynamic message) {
+      if (message is List && message.isNotEmpty) {
+        final results = <Map<String, dynamic>>[];
+        
         for (final event in message) {
           try {
-            final decodedEvent = jsonDecode(event['eventRaw']);
-            if (decodedEvent is List &&
-                decodedEvent.isNotEmpty &&
+            final eventRaw = event['eventRaw'];
+            if (eventRaw == null) continue;
+            
+            final decodedEvent = jsonDecode(eventRaw);
+            if (decodedEvent is! List ||
+                decodedEvent.length <= 2 ||
                 decodedEvent[0] == 'EOSE') continue;
 
-            final targetNpubs = List<String>.from(event['targetNpubs']);
-            final int priority = event['priority'] ?? 2;
+            final eventData = decodedEvent[2];
+            if (eventData is! Map<String, dynamic>) continue;
 
-            if (decodedEvent is List && decodedEvent.length > 2) {
-              final kind = decodedEvent[2]['kind'] as int;
-              final eventId = decodedEvent[2]['id'] as String;
-              final author = decodedEvent[2]['pubkey'] as String;
+            final kind = eventData['kind'];
+            final eventId = eventData['id'];
+            final author = eventData['pubkey'];
+            
+            if (kind == null || eventId == null || author == null) continue;
 
-              sendPort.send({
-                'kind': kind,
-                'eventId': eventId,
-                'author': author,
-                'eventData': decodedEvent[2],
-                'targetNpubs': targetNpubs,
-                'priority': priority,
-              });
-            } else {
-              sendPort
-                  .send({'error': 'Unexpected event format: $decodedEvent'});
-            }
+            results.add({
+              'kind': kind,
+              'eventId': eventId,
+              'author': author,
+              'eventData': eventData,
+              'targetNpubs': event['targetNpubs'] ?? [],
+              'priority': event['priority'] ?? 2,
+            });
           } catch (e) {
-            sendPort.send({'error': e.toString()});
+            results.add({'error': e.toString()});
           }
         }
-      } else {
-        print(
-            '[EventProcessor] Unexpected message type: ${message.runtimeType}');
+        
+        for (final result in results) {
+          sendPort.send(result);
+        }
       }
     });
   }
@@ -52,18 +55,20 @@ class IsolateManager {
     final ReceivePort port = ReceivePort();
     sendPort.send(port.sendPort);
 
-    port.listen((dynamic message) async {
+    port.listen((dynamic message) {
       if (message is Map<String, dynamic>) {
         try {
-          final String type = message['type'];
-          final List<String> eventIds = List<String>.from(message['eventIds']);
-          final int priority = message['priority'] ?? 2;
+          final type = message['type'];
+          final eventIds = message['eventIds'];
+          final priority = message['priority'] ?? 2;
 
-          sendPort.send({
-            'type': type,
-            'eventIds': eventIds,
-            'priority': priority,
-          });
+          if (type != null && eventIds is List) {
+            sendPort.send({
+              'type': type,
+              'eventIds': List<String>.from(eventIds),
+              'priority': priority,
+            });
+          }
         } catch (e) {
           sendPort.send({'error': e.toString()});
         }
@@ -86,12 +91,12 @@ class IsolateManager {
             break;
           case MessageType.close:
             isolateReceivePort.close();
-            break;
+            return;
           case MessageType.error:
             sendPort.send(IsolateMessage(MessageType.error, message.data));
             break;
         }
-      } else if (message is String && message == 'close') {
+      } else if (message == 'close') {
         isolateReceivePort.close();
       }
     });
@@ -99,9 +104,10 @@ class IsolateManager {
 
   static void _processCacheLoad(String data, SendPort sendPort) {
     try {
-      final List<dynamic> jsonData = json.decode(data);
-      final List<NoteModel> parsedNotes =
-          jsonData.map((json) => NoteModel.fromJson(json)).toList();
+      final jsonData = jsonDecode(data) as List<dynamic>;
+      final parsedNotes = jsonData
+          .map((json) => NoteModel.fromJson(json as Map<String, dynamic>))
+          .toList();
       sendPort.send(IsolateMessage(MessageType.cacheload, parsedNotes));
     } catch (e) {
       sendPort.send(IsolateMessage(MessageType.error, e.toString()));
@@ -110,9 +116,10 @@ class IsolateManager {
 
   static void _processNewNotes(String data, SendPort sendPort) {
     try {
-      final List<dynamic> jsonData = json.decode(data);
-      final List<NoteModel> parsedNotes =
-          jsonData.map((json) => NoteModel.fromJson(json)).toList();
+      final jsonData = jsonDecode(data) as List<dynamic>;
+      final parsedNotes = jsonData
+          .map((json) => NoteModel.fromJson(json as Map<String, dynamic>))
+          .toList();
       sendPort.send(IsolateMessage(MessageType.newnotes, parsedNotes));
     } catch (e) {
       sendPort.send(IsolateMessage(MessageType.error, e.toString()));
