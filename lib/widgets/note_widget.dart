@@ -235,29 +235,6 @@ class _NoteWidgetState extends State<NoteWidget>
                   ),
                   const SizedBox(height: 8),
                 ],
-                if (updatedNote.isReply) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: GestureDetector(
-                      onTap: () => _navigateToProfile(updatedNote.author),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.reply, size: 16, color: Colors.grey),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Replied by ${authorUser?.name ?? 'Unknown'}',
-                              style: const TextStyle(
-                                  fontSize: 12, color: Colors.grey),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                ],
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   child: Row(
@@ -267,21 +244,43 @@ class _NoteWidgetState extends State<NoteWidget>
                         onTap: () => _navigateToProfile(updatedNote.author),
                         child: Padding(
                           padding: const EdgeInsets.only(top: 8),
-                          child: CircleAvatar(
-                            radius: 18.5,
-                            backgroundImage:
-                                (authorUser?.profileImage ?? '').isNotEmpty
-                                    ? CachedNetworkImageProvider(
-                                        authorUser!.profileImage)
+                          child: Stack(
+                            children: [
+                              CircleAvatar(
+                                radius: 18.5,
+                                backgroundImage:
+                                    (authorUser?.profileImage ?? '').isNotEmpty
+                                        ? CachedNetworkImageProvider(
+                                            authorUser!.profileImage)
+                                        : null,
+                                backgroundColor:
+                                    (authorUser?.profileImage ?? '').isEmpty
+                                        ? Colors.grey
+                                        : Colors.transparent,
+                                child: (authorUser?.profileImage ?? '').isEmpty
+                                    ? const Icon(Icons.person,
+                                        size: 20, color: Colors.white)
                                     : null,
-                            backgroundColor:
-                                (authorUser?.profileImage ?? '').isEmpty
-                                    ? Colors.grey
-                                    : Colors.transparent,
-                            child: (authorUser?.profileImage ?? '').isEmpty
-                                ? const Icon(Icons.person,
-                                    size: 20, color: Colors.white)
-                                : null,
+                              ),
+                              if (updatedNote.isReply)
+                                Positioned(
+                                  top: 0,
+                                  left: 0,
+                                  child: Container(
+                                    width: 14,
+                                    height: 14,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.grey,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.reply,
+                                      size: 10,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
                       ),

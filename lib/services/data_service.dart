@@ -719,6 +719,16 @@ class DataService {
         final parentNote = notes.firstWhereOrNull((n) => n.id == parentEventId);
         if (parentNote != null) {
           parentNote.replyCount = repliesMap[parentEventId]!.length;
+          if (!parentNote.replyIds.contains(reply.id)) {
+            parentNote.replyIds.add(reply.id);
+          }
+        }
+
+        if (reply.rootEventId != null && reply.rootEventId != parentEventId) {
+          final rootNote = notes.firstWhereOrNull((n) => n.id == reply.rootEventId);
+          if (rootNote != null && !rootNote.replyIds.contains(reply.id)) {
+            rootNote.replyIds.add(reply.id);
+          }
         }
 
         final isRepost = eventData['kind'] == 6;
@@ -736,6 +746,7 @@ class DataService {
           repostTimestamp: repostTimestamp,
           parentId: parentEventId,
           rootId: reply.rootEventId,
+          rawWs: jsonEncode(eventData),
         );
 
         parseContentForNote(noteModel);
@@ -744,7 +755,12 @@ class DataService {
           notes.add(noteModel);
           eventIds.add(noteModel.id);
           await notesBox?.put(noteModel.id, noteModel);
-          addPendingNote(noteModel);
+          _addNote(noteModel);
+
+          if (reply.author == npub) {
+            onNewNote?.call(noteModel);
+            print('[DataService] Own reply processed and added: ${reply.id}');
+          }
         }
 
         notesNotifier.value = _itemsTree.toList();
@@ -1598,11 +1614,29 @@ class DataService {
         throw Exception('Parent note not found.');
       }
 
-      final tags = [
-        ['e', parentNote.id, '', 'root'],
-        ['e', parentEventId, '', 'reply'],
-        ['p', parentNote.author],
-      ];
+      String rootId;
+      String replyId = parentEventId;
+
+      if (parentNote.isReply && parentNote.rootId != null) {
+        rootId = parentNote.rootId!;
+      } else {
+        rootId = parentEventId;
+      }
+
+      List<List<String>> tags = [];
+
+      if (rootId != replyId) {
+        tags.add(['e', rootId, '', 'root']);
+        tags.add(['e', replyId, '', 'reply']);
+      } else {
+        tags.add(['e', rootId, '', 'root']);
+      }
+
+      tags.add(['p', parentNote.author, '', 'mention']);
+
+      for (final relayUrl in relaySetMainSockets) {
+        tags.add(['r', relayUrl]);
+      }
 
       final event = Event.from(
         kind: 1,
@@ -1618,13 +1652,48 @@ class DataService {
       repliesMap[parentEventId]!.add(reply);
       await repliesBox?.put(reply.id, reply);
 
+      
+      final replyNoteModel = NoteModel(
+        id: reply.id,
+        content: reply.content,
+        author: reply.author,
+        timestamp: reply.timestamp,
+        isReply: true,
+        parentId: parentEventId,
+        rootId: rootId,
+        rawWs: jsonEncode(event.toJson()),
+      );
+
+      parseContentForNote(replyNoteModel);
+
+      if (!eventIds.contains(replyNoteModel.id)) {
+        notes.add(replyNoteModel);
+        eventIds.add(replyNoteModel.id);
+        await notesBox?.put(replyNoteModel.id, replyNoteModel);
+        _addNote(replyNoteModel);
+      }
+
       final note = notes.firstWhereOrNull((n) => n.id == parentEventId);
       if (note != null) {
         note.replyCount = repliesMap[parentEventId]!.length;
+        
+        if (!note.replyIds.contains(reply.id)) {
+          note.replyIds.add(reply.id);
+        }
+      }
+
+      if (rootId != parentEventId) {
+        final rootNote = notes.firstWhereOrNull((n) => n.id == rootId);
+        if (rootNote != null && !rootNote.replyIds.contains(reply.id)) {
+          rootNote.replyIds.add(reply.id);
+        }
       }
 
       onRepliesUpdated?.call(parentEventId, repliesMap[parentEventId]!);
+      onNewNote?.call(replyNoteModel); 
       notesNotifier.value = _itemsTree.toList();
+      
+      print('[DataService] Reply sent and added to local notes: ${reply.id}');
     } catch (e) {
       print('[DataService ERROR] Error sending reply: $e');
       throw e;
@@ -2092,16 +2161,47 @@ Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
         await _handleZapEvent(eventData);
       } else if (kind == 1) {
         final tags = eventData['tags'] as List<dynamic>;
-        final rootTag = tags.firstWhere(
-          (tag) => tag is List && tag.isNotEmpty && tag[0] == 'e' && tag.contains('root'),
-          orElse: () => null,
-        );
+        final eventAuthor = eventData['pubkey'] as String;
 
-        if (rootTag != null && rootTag is List && rootTag.length >= 2) {
-          final rootId = rootTag[1] as String;
-          await _handleReplyEvent(eventData, rootId);
+        String? rootId;
+        String? replyId;
+
+        for (var tag in tags) {
+          if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
+            if (tag.length > 3 && tag[3] == 'root') {
+              rootId = tag[1] as String;
+            } else if (tag.length > 3 && tag[3] == 'reply') {
+              replyId = tag[1] as String;
+            }
+          }
+        }
+
+        if (rootId != null || replyId != null) {
+          String parentId = replyId ?? rootId!;
+          await _handleReplyEvent(eventData, parentId);
+
+          if (eventAuthor == npub) {
+            print('[DataService] Processing own reply: ${eventData['id']}');
+          }
         } else {
-          await NoteProcessor.processNoteEvent(this, eventData, targetNpubs, rawWs: jsonEncode(eventData));
+          final eTags = tags.where((tag) => tag is List && tag.isNotEmpty && tag[0] == 'e').toList();
+
+          if (eTags.isNotEmpty) {
+            final lastETag = eTags.last;
+            if (lastETag is List && lastETag.length >= 2) {
+              final parentId = lastETag[1] as String;
+              await _handleReplyEvent(eventData, parentId);
+              
+              
+              if (eventAuthor == npub) {
+                print('[DataService] Processing own legacy reply: ${eventData['id']}');
+              }
+            } else {
+              await NoteProcessor.processNoteEvent(this, eventData, targetNpubs, rawWs: jsonEncode(eventData));
+            }
+          } else {
+            await NoteProcessor.processNoteEvent(this, eventData, targetNpubs, rawWs: jsonEncode(eventData));
+          }
         }
       } else if (kind == 6) {
         await _handleRepostEvent(eventData);
@@ -2355,6 +2455,52 @@ Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
   }
 
   String generateUUID() => _uuid.v4().replaceAll('-', '');
+
+  
+  List<NoteModel> getThreadReplies(String rootNoteId) {
+    final List<NoteModel> threadReplies = [];
+
+    for (final note in notes) {
+      if (note.isReply && (note.rootId == rootNoteId || note.parentId == rootNoteId)) {
+        threadReplies.add(note);
+      }
+    }
+
+    threadReplies.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    return threadReplies;
+  }
+
+  List<NoteModel> getDirectReplies(String noteId) {
+    final List<NoteModel> directReplies = [];
+
+    for (final note in notes) {
+      if (note.isReply && note.parentId == noteId) {
+        directReplies.add(note);
+      }
+    }
+
+    directReplies.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+    return directReplies;
+  }
+
+  Map<String, List<NoteModel>> buildThreadHierarchy(String rootNoteId) {
+    final Map<String, List<NoteModel>> hierarchy = {};
+    final threadReplies = getThreadReplies(rootNoteId);
+
+    for (final reply in threadReplies) {
+      final parentId = reply.parentId ?? rootNoteId;
+      hierarchy.putIfAbsent(parentId, () => []);
+      hierarchy[parentId]!.add(reply);
+    }
+
+    hierarchy.forEach((key, replies) {
+      replies.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    });
+
+    return hierarchy;
+  }
 
   Future<void> closeConnections() async {
     if (_isClosed) return;

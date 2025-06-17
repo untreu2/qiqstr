@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/widgets/root_note_widget.dart';
+import 'package:qiqstr/widgets/note_widget.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/screens/note_statistics_page.dart';
 import 'package:qiqstr/widgets/dialogs/repost_dialog.dart';
@@ -152,6 +153,80 @@ class _ThreadPageState extends State<ThreadPage> {
     );
   }
 
+  Widget _buildThreadReplies() {
+    if (_rootNote == null || _currentUserNpub == null) return const SizedBox.shrink();
+
+    final threadHierarchy = widget.dataService.buildThreadHierarchy(_rootNote!.id);
+    final directReplies = threadHierarchy[_rootNote!.id] ?? [];
+
+    if (directReplies.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: Text(
+            'No replies yet',
+            style: TextStyle(color: Colors.white70, fontSize: 16),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        const SizedBox(height: 8.0),
+        ...directReplies.map((reply) => _buildThreadReplyWithDepth(reply, threadHierarchy, 0)).toList(),
+      ],
+    );
+  }
+
+  Widget _buildThreadReplyWithDepth(NoteModel reply, Map<String, List<NoteModel>> hierarchy, int depth) {
+    const double indentWidth = 20.0;
+    const int maxDepth = 5;
+
+    final actualDepth = depth > maxDepth ? maxDepth : depth;
+    final leftPadding = actualDepth * indentWidth;
+
+    return Column(
+      children: [
+        if (depth > 0)
+          Container(
+            margin: EdgeInsets.only(left: leftPadding - 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 2,
+                  height: 20,
+                  color: Colors.grey[700],
+                ),
+                Container(
+                  width: 8,
+                  height: 2,
+                  color: Colors.grey[700],
+                ),
+              ],
+            ),
+          ),
+        Container(
+          margin: EdgeInsets.only(left: leftPadding),
+          child: NoteWidget(
+            note: reply,
+            reactionCount: reply.reactionCount,
+            replyCount: reply.replyCount,
+            repostCount: reply.repostCount,
+            dataService: widget.dataService,
+            currentUserNpub: _currentUserNpub!,
+            notesNotifier: widget.dataService.notesNotifier,
+            profiles: widget.dataService.profilesNotifier.value,
+            isSmallView: depth > 0,
+          ),
+        ),
+        ...((hierarchy[reply.id] ?? [])
+            .map((nestedReply) => _buildThreadReplyWithDepth(nestedReply, hierarchy, depth + 1))),
+        if (depth == 0) const SizedBox(height: 8),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -166,52 +241,36 @@ class _ThreadPageState extends State<ThreadPage> {
         backgroundColor: Colors.black,
         elevation: 0,
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: _isLoading
-                ? const Center(
-                    child: CircularProgressIndicator(color: Colors.white))
-                : _rootNote == null
-                    ? const Center(
-                        child: Text('Root note not found.',
-                            style: TextStyle(color: Colors.white70)))
-                    : Column(
-                        children: [
-                          RootNoteWidget(
-                            note: _rootNote!,
-                            dataService: widget.dataService,
-                            onNavigateToMentionProfile: _navigateToProfile,
-                            isReactionGlowing: _isRootNoteReactionGlowing,
-                            isReplyGlowing: _isRootNoteReplyGlowing,
-                            isRepostGlowing: _isRootNoteRepostGlowing,
-                            isZapGlowing: _isRootNoteZapGlowing,
-                            hasReacted: _hasReacted(_rootNote!),
-                            hasReplied: _hasReplied(_rootNote!),
-                            hasReposted: _hasReposted(_rootNote!),
-                            hasZapped: _hasZapped(_rootNote!),
-                            onReactionTap: _handleRootNoteReactionTap,
-                            onReplyTap: _handleRootNoteReplyTap,
-                            onRepostTap: _handleRootNoteRepostTap,
-                            onZapTap: _handleRootNoteZapTap,
-                            onStatisticsTap: _handleRootNoteStatisticsTap,
-                          ),
-                          const Padding(
-                            padding: EdgeInsets.only(top: 48.0),
-                            child: Center(
-                              child: Text(
-                                'Designing: Threads',
-                                style: TextStyle(
-                                    color: Colors.white70, fontSize: 16),
-                              ),
-                            ),
-                          ),
-                        ],
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          : _rootNote == null
+              ? const Center(child: Text('Root note not found.', style: TextStyle(color: Colors.white70)))
+              : SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      RootNoteWidget(
+                        note: _rootNote!,
+                        dataService: widget.dataService,
+                        onNavigateToMentionProfile: _navigateToProfile,
+                        isReactionGlowing: _isRootNoteReactionGlowing,
+                        isReplyGlowing: _isRootNoteReplyGlowing,
+                        isRepostGlowing: _isRootNoteRepostGlowing,
+                        isZapGlowing: _isRootNoteZapGlowing,
+                        hasReacted: _hasReacted(_rootNote!),
+                        hasReplied: _hasReplied(_rootNote!),
+                        hasReposted: _hasReposted(_rootNote!),
+                        hasZapped: _hasZapped(_rootNote!),
+                        onReactionTap: _handleRootNoteReactionTap,
+                        onReplyTap: _handleRootNoteReplyTap,
+                        onRepostTap: _handleRootNoteRepostTap,
+                        onZapTap: _handleRootNoteZapTap,
+                        onStatisticsTap: _handleRootNoteStatisticsTap,
                       ),
-          ),
-        ],
-      ),
+                      _buildThreadReplies(),
+                    ],
+                  ),
+                ),
     );
   }
 }

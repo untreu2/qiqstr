@@ -64,6 +64,9 @@ class NoteModel extends HiveObject {
   @HiveField(19)
   final String? rootId;
 
+  @HiveField(20)
+  List<String> replyIds;
+
   NoteModel({
     required this.id,
     required this.content,
@@ -85,7 +88,8 @@ class NoteModel extends HiveObject {
     this.isReply = false,
     this.parentId,
     this.rootId,
-  });
+    List<String>? replyIds,
+  }) : replyIds = replyIds ?? [];
 
   factory NoteModel.fromJson(Map<String, dynamic> json) {
     return NoteModel(
@@ -117,6 +121,9 @@ class NoteModel extends HiveObject {
       isReply: json['isReply'] as bool? ?? false,
       parentId: json['parentId'] as String?,
       rootId: json['rootId'] as String?,
+      replyIds: json['replyIds'] != null
+          ? List<String>.from(json['replyIds'])
+          : null,
     );
   }
 
@@ -142,6 +149,7 @@ class NoteModel extends HiveObject {
       'isReply': isReply,
       'parentId': parentId,
       'rootId': rootId,
+      'replyIds': replyIds,
     };
   }
 }
