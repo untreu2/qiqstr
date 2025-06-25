@@ -420,7 +420,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               context,
               MaterialPageRoute(
                 builder: (_) => FollowingListPage(
-                  username: (_liveUser ?? widget.user).name.isNotEmpty
+                  display_name: (_liveUser ?? widget.user).name.isNotEmpty
                       ? (_liveUser ?? widget.user).name
                       : (_liveUser ?? widget.user).nip05.split('@').first,
                   npub: (_liveUser ?? widget.user).npub,

@@ -105,10 +105,10 @@ class QuoteWidget extends StatelessWidget {
             }
           } else if (p['type'] == 'mention') {
             final mentionId = p['id'] as String;
-            final username = resolvedMentions[mentionId] ?? '${mentionId.substring(0, 8)}…';
+            final display_name = resolvedMentions[mentionId] ?? '${mentionId.substring(0, 8)}…';
             spans.add(
               TextSpan(
-                text: '@$username',
+                text: '@$display_name',
                 style: const TextStyle(
                   color: Colors.amberAccent,
                   fontSize: 14,

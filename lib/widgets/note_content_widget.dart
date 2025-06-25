@@ -99,9 +99,9 @@ class NoteContentWidget extends StatelessWidget {
           ));
         }
       } else if (p['type'] == 'mention') {
-        final username = mentions[p['id']] ?? '${(p['id'] as String).substring(0, 8)}...';
+        final display_name = mentions[p['id']] ?? '${(p['id'] as String).substring(0, 8)}...';
         spans.add(TextSpan(
-          text: '@$username',
+          text: '@$display_name',
           style: TextStyle(color: const Color(0xFFECB200), fontSize: currentFontSize,
               fontWeight: FontWeight.w500),
           recognizer: TapGestureRecognizer()

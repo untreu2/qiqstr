@@ -7,12 +7,12 @@ import 'package:qiqstr/services/data_service.dart';
 import 'package:auto_size_text/auto_size_text.dart';
 
 class FollowingListPage extends StatefulWidget {
-  final String username;
+  final String display_name;
   final String npub;
 
   const FollowingListPage({
     super.key,
-    required this.username,
+    required this.display_name,
     required this.npub,
   });
 
@@ -101,7 +101,7 @@ class _FollowingListPageState extends State<FollowingListPage> {
               const SizedBox(width: 8),
               Expanded(
                 child: AutoSizeText(
-                  "${widget.username}'s Following",
+                  "${widget.display_name}'s Following",
                   style: const TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w700,

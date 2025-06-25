@@ -180,11 +180,11 @@ class NetworkService {
       throw Exception('Invalid lud16 format.');
     }
 
-    final username = parts[0];
+    final display_name = parts[0];
     final domain = parts[1];
 
     // Fetch LNURL data
-    final uri = Uri.parse('https://$domain/.well-known/lnurlp/$username');
+    final uri = Uri.parse('https://$domain/.well-known/lnurlp/$display_name');
     final response = await http.get(uri);
     if (response.statusCode != 200) {
       throw Exception('LNURL fetch failed with status: ${response.statusCode}');
