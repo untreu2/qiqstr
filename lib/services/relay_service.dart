@@ -163,7 +163,7 @@ class WebSocketManager {
     const baseDelay = 1;
     const maxDelay = 16;
     final delay = (baseDelay * pow(2, attempt - 1)).toInt().clamp(1, maxDelay);
-    final jitter = Random().nextInt(delay ~/ 2);
+    final jitter = Random().nextInt((delay ~/ 2).clamp(1, 5));
     return delay + jitter;
   }
 

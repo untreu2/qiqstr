@@ -230,6 +230,14 @@ class DataService {
       } else if (message is Map<String, dynamic>) {
         if (message.containsKey('error')) {
           print('[Event Isolate ERROR] ${message['error']}');
+        } else if (message.containsKey('type') && message['type'] == 'batch_results') {
+          // Handle batch results from optimized isolate
+          final results = message['results'] as List<dynamic>? ?? [];
+          for (final result in results) {
+            if (result is Map<String, dynamic> && !result.containsKey('error')) {
+              _processParsedEvent(result);
+            }
+          }
         } else {
           _processParsedEvent(message);
         }
@@ -748,8 +756,10 @@ class DataService {
         }
 
         final isRepost = eventData['kind'] == 6;
-        final repostTimestamp =
-            isRepost ? DateTime.fromMillisecondsSinceEpoch((eventData['created_at'] as int) * 1000) : null;
+        final createdAtRaw = eventData['created_at'];
+        final repostTimestamp = isRepost && createdAtRaw is int
+            ? DateTime.fromMillisecondsSinceEpoch(createdAtRaw * 1000)
+            : null;
 
         final noteModel = NoteModel(
           id: reply.id,
@@ -791,8 +801,12 @@ class DataService {
     if (_isClosed) return;
     try {
       final author = eventData['pubkey'] as String;
-      final createdAt =
-          DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000);
+      final createdAtRaw = eventData['created_at'];
+      if (createdAtRaw is! int) {
+        print('[DataService] Skipping profile event with invalid created_at: $createdAtRaw');
+        return;
+      }
+      final createdAt = DateTime.fromMillisecondsSinceEpoch(createdAtRaw * 1000);
       final contentRaw = eventData['content'];
 
       Map<String, dynamic> profileContent;
@@ -2205,10 +2219,27 @@ Future<void> _subscribeToNotifications() async {
 
 Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
     try {
-      final int kind = parsedData['kind'];
-      final Map<String, dynamic> eventData = parsedData['eventData'];
-      final List<String> targetNpubs = parsedData['targetNpubs'];
-      final String eventAuthor = eventData['pubkey'] as String;
+      final int? kindNullable = parsedData['kind'] as int?;
+      if (kindNullable == null) {
+        print('[DataService] Skipping event with null kind');
+        return;
+      }
+      final int kind = kindNullable;
+      
+      final Map<String, dynamic>? eventDataNullable = parsedData['eventData'] as Map<String, dynamic>?;
+      if (eventDataNullable == null) {
+        print('[DataService] Skipping event with null eventData');
+        return;
+      }
+      final Map<String, dynamic> eventData = eventDataNullable;
+      
+      final List<String> targetNpubs = List<String>.from(parsedData['targetNpubs'] ?? []);
+      final String? eventAuthorNullable = eventData['pubkey'] as String?;
+      if (eventAuthorNullable == null) {
+        print('[DataService] Skipping event with null pubkey');
+        return;
+      }
+      final String eventAuthor = eventAuthorNullable;
 
       if (eventAuthor != npub) {
         final List<dynamic> eventTags = List<dynamic>.from(eventData['tags'] ?? []);

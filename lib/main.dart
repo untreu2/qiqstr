@@ -21,15 +21,23 @@ Future<void> main() async {
   try {
     await Hive.initFlutter();
 
-    Hive.registerAdapter(NoteModelAdapter());
-    Hive.registerAdapter(ReactionModelAdapter());
-    Hive.registerAdapter(ReplyModelAdapter());
-    Hive.registerAdapter(RepostModelAdapter());
-    Hive.registerAdapter(UserModelAdapter());
-    Hive.registerAdapter(FollowingModelAdapter());
-    Hive.registerAdapter(LinkPreviewModelAdapter());
-    Hive.registerAdapter(ZapModelAdapter());
-    Hive.registerAdapter(NotificationModelAdapter());
+    // Clear any existing adapters to prevent duplicate registration
+    if (Hive.isAdapterRegistered(0)) {
+      // If any adapter is registered, it means we need to reset
+      await Hive.close();
+      await Hive.initFlutter();
+    }
+
+    // Register adapters only if not already registered
+    if (!Hive.isAdapterRegistered(0)) Hive.registerAdapter(NoteModelAdapter());
+    if (!Hive.isAdapterRegistered(1)) Hive.registerAdapter(ReactionModelAdapter());
+    if (!Hive.isAdapterRegistered(2)) Hive.registerAdapter(ReplyModelAdapter());
+    if (!Hive.isAdapterRegistered(3)) Hive.registerAdapter(RepostModelAdapter());
+    if (!Hive.isAdapterRegistered(4)) Hive.registerAdapter(UserModelAdapter());
+    if (!Hive.isAdapterRegistered(5)) Hive.registerAdapter(ZapModelAdapter());
+    if (!Hive.isAdapterRegistered(6)) Hive.registerAdapter(FollowingModelAdapter());
+    if (!Hive.isAdapterRegistered(7)) Hive.registerAdapter(LinkPreviewModelAdapter());
+    if (!Hive.isAdapterRegistered(12)) Hive.registerAdapter(NotificationModelAdapter());
 
     await Hive.openBox<LinkPreviewModel>('link_preview_cache');
 

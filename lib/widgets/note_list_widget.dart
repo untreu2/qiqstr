@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/services/data_service.dart';
-import 'package:qiqstr/widgets/note_widget.dart';
+import 'package:qiqstr/services/note_preloader_service.dart';
+import 'package:qiqstr/widgets/lazy_note_widget.dart';
 
 enum NoteListFilterType {
   latest,
@@ -36,6 +37,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   bool _preloadDone = false;
 
   late DataService _dataService;
+  late NotePreloaderService _preloaderService;
   final List<NoteModel> _pendingNotes = [];
 
   @override
@@ -51,6 +53,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     if (!mounted || _currentUserNpub == null) return;
 
     _dataService = _createDataService();
+    _preloaderService = NotePreloaderService(_dataService);
 
     await _dataService.initialize();
     _dataService.initializeConnections();
@@ -98,6 +101,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   @override
   void dispose() {
     _scrollController.dispose();
+    _preloaderService.dispose();
     _dataService.closeConnections();
     super.dispose();
   }
@@ -180,25 +184,31 @@ class _NoteListWidgetState extends State<NoteListWidget> {
           );
         }
 
+        if (filteredNotes.isNotEmpty) {
+          _preloaderService.preloadNotes(filteredNotes);
+        }
+
         return SliverList(
           delegate: SliverChildBuilderDelegate(
             (context, index) {
               final note = filteredNotes[index];
+              final isReady = _preloaderService.isNoteReady(note.id);
 
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  NoteWidget(
-                    key: ValueKey(note.id),
-                    note: note,
-                    reactionCount: note.reactionCount,
-                    replyCount: note.replyCount,
-                    repostCount: note.repostCount,
-                    dataService: _dataService,
-                    currentUserNpub: _currentUserNpub!,
-                    notesNotifier: _dataService.notesNotifier,
-                    profiles: _dataService.profilesNotifier.value,
-                  ),
+                  if (isReady)
+                    LazyNoteWidget(
+                      key: ValueKey(note.id),
+                      note: note,
+                      dataService: _dataService,
+                      currentUserNpub: _currentUserNpub!,
+                      notesNotifier: _dataService.notesNotifier,
+                      profiles: _dataService.profilesNotifier.value,
+                      isSmallView: true,
+                    )
+                  else
+                    _buildLoadingPlaceholder(note),
                   if (index < filteredNotes.length - 1)
                     Container(
                       margin: const EdgeInsets.symmetric(vertical: 10),
@@ -213,6 +223,102 @@ class _NoteListWidgetState extends State<NoteListWidget> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildLoadingPlaceholder(NoteModel note) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[900]?.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.white12,
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.grey[700],
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Center(
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white38),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      height: 14,
+                      width: 120,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[700],
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      height: 12,
+                      width: 80,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[800],
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          
+          Container(
+            height: 16,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.grey[700],
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            height: 16,
+            width: MediaQuery.of(context).size.width * 0.7,
+            decoration: BoxDecoration(
+              color: Colors.grey[700],
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            height: 16,
+            width: MediaQuery.of(context).size.width * 0.5,
+            decoration: BoxDecoration(
+              color: Colors.grey[700],
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          
+        ],
+      ),
     );
   }
 }
