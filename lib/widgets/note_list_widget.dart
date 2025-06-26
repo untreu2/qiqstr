@@ -27,7 +27,6 @@ class NoteListWidget extends StatefulWidget {
   State<NoteListWidget> createState() => _NoteListWidgetState();
 }
 
-
 class _NoteListWidgetState extends State<NoteListWidget> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final ScrollController _scrollController = ScrollController();
@@ -40,11 +39,43 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   late NotePreloaderService _preloaderService;
   final List<NoteModel> _pendingNotes = [];
 
+  List<NoteModel> _cachedFilteredNotes = [];
+  NoteListFilterType? _lastFilterType;
+  int _lastNotesHash = 0;
+
+  static const int _itemsPerPage = 20;
+  int _currentPage = 0;
+  bool _isLoadingMore = false;
+
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _setupInitialService();
+    });
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      _loadMoreItems();
+    }
+  }
+
+  void _loadMoreItems() {
+    if (_isLoadingMore || _cachedFilteredNotes.isEmpty) return;
+
+    setState(() {
+      _isLoadingMore = true;
+      _currentPage++;
+    });
+
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) {
+        setState(() {
+          _isLoadingMore = false;
+        });
+      }
     });
   }
 
@@ -91,15 +122,63 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     }
     _dataService.applyPendingNotes();
     _pendingNotes.clear();
+    _invalidateCache();
     _updateSafely();
+  }
+
+  void _invalidateCache() {
+    _cachedFilteredNotes.clear();
+    _lastFilterType = null;
+    _lastNotesHash = 0;
+    _currentPage = 0;
   }
 
   void _updateSafely() {
     if (mounted) setState(() {});
   }
 
+  List<NoteModel> _getFilteredNotes(List<NoteModel> notes) {
+    final currentHash = notes.length.hashCode ^ widget.filterType.hashCode;
+    if (_lastFilterType == widget.filterType && _lastNotesHash == currentHash && _cachedFilteredNotes.isNotEmpty) {
+      return _cachedFilteredNotes;
+    }
+
+    List<NoteModel> filtered;
+    switch (widget.filterType) {
+      case NoteListFilterType.popular:
+        final cutoffTime = DateTime.now().subtract(const Duration(hours: 24));
+        filtered = notes.where((n) => n.timestamp.isAfter(cutoffTime) && (!n.isReply || n.isRepost)).toList();
+
+        filtered.sort((a, b) {
+          final aScore = _calculateEngagementScore(a);
+          final bScore = _calculateEngagementScore(b);
+          return bScore.compareTo(aScore);
+        });
+        break;
+
+      case NoteListFilterType.media:
+        filtered = notes.where((n) => n.hasMedia && (!n.isReply || n.isRepost)).toList();
+        break;
+
+      case NoteListFilterType.latest:
+        filtered = notes.where((n) => !n.isReply || n.isRepost).toList();
+        break;
+    }
+
+    _cachedFilteredNotes = filtered;
+    _lastFilterType = widget.filterType;
+    _lastNotesHash = currentHash;
+
+    return filtered;
+  }
+
+  int _calculateEngagementScore(NoteModel note) {
+    return note.reactionCount + note.replyCount + note.repostCount + (note.zapAmount ~/ 1000);
+  }
+
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _preloaderService.dispose();
     _dataService.closeConnections();
@@ -147,24 +226,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
           );
         }
 
-        List<NoteModel> filteredNotes;
-        switch (widget.filterType) {
-          case NoteListFilterType.popular:
-            filteredNotes = notes
-                .where((n) =>
-                    n.timestamp.isAfter(DateTime.now().subtract(const Duration(hours: 24))) &&
-                    (!n.isReply || n.isRepost))
-                .toList()
-              ..sort((a, b) => (b.reactionCount + b.replyCount + b.repostCount + b.zapAmount)
-                  .compareTo(a.reactionCount + a.replyCount + a.repostCount + a.zapAmount));
-            break;
-          case NoteListFilterType.media:
-            filteredNotes = notes.where((n) => n.hasMedia && (!n.isReply || n.isRepost)).toList();
-            break;
-          case NoteListFilterType.latest:
-            filteredNotes = notes.where((n) => !n.isReply || n.isRepost).toList();
-            break;
-        }
+        final filteredNotes = _getFilteredNotes(notes);
 
         if (filteredNotes.isEmpty && _preloadDone) {
           return const SliverToBoxAdapter(
@@ -184,14 +246,43 @@ class _NoteListWidgetState extends State<NoteListWidget> {
           );
         }
 
+    
         if (filteredNotes.isNotEmpty) {
-          _preloaderService.preloadNotes(filteredNotes);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _preloaderService.preloadNotes(filteredNotes.take(30).toList());
+          });
         }
+
+    
+        final totalItems = filteredNotes.length;
+        final visibleItems = (_currentPage + 1) * _itemsPerPage;
+        final itemsToShow = visibleItems > totalItems ? totalItems : visibleItems;
+        final displayNotes = filteredNotes.take(itemsToShow).toList();
 
         return SliverList(
           delegate: SliverChildBuilderDelegate(
             (context, index) {
-              final note = filteredNotes[index];
+          
+              if (index == displayNotes.length) {
+                if (_isLoadingMore && itemsToShow < totalItems) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white38),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                return null;
+              }
+
+              final note = displayNotes[index];
               final isReady = _preloaderService.isNoteReady(note.id);
 
               return Column(
@@ -209,7 +300,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                     )
                   else
                     _buildLoadingPlaceholder(note),
-                  if (index < filteredNotes.length - 1)
+                  if (index < displayNotes.length - 1)
                     Container(
                       margin: const EdgeInsets.symmetric(vertical: 10),
                       height: 1,
@@ -219,7 +310,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                 ],
               );
             },
-            childCount: filteredNotes.length,
+            childCount: displayNotes.length + (_isLoadingMore && itemsToShow < totalItems ? 1 : 0),
           ),
         );
       },
