@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:collection/collection.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';

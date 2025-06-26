@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:hive/hive.dart';
 import '../models/user_model.dart';
 import 'relay_service.dart';
