@@ -8,6 +8,7 @@ import 'package:qiqstr/screens/note_statistics_page.dart';
 import 'package:qiqstr/widgets/dialogs/repost_dialog.dart';
 import 'package:qiqstr/widgets/dialogs/zap_dialog.dart';
 import 'package:qiqstr/screens/send_reply.dart';
+import 'package:collection/collection.dart';
 
 class ThreadPage extends StatefulWidget {
   final String rootNoteId;
@@ -27,6 +28,7 @@ class ThreadPage extends StatefulWidget {
 
 class _ThreadPageState extends State<ThreadPage> {
   NoteModel? _rootNote;
+  NoteModel? _focusedNote;
   String? _currentUserNpub;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final ScrollController _scrollController = ScrollController();
@@ -35,10 +37,10 @@ class _ThreadPageState extends State<ThreadPage> {
 
   bool _isLoading = true;
 
-  bool _isRootNoteReactionGlowing = false;
-  bool _isRootNoteReplyGlowing = false;
-  bool _isRootNoteRepostGlowing = false;
-  bool _isRootNoteZapGlowing = false;
+  bool _isReactionGlowing = false;
+  bool _isReplyGlowing = false;
+  bool _isRepostGlowing = false;
+  bool _isZapGlowing = false;
 
   @override
   void initState() {
@@ -63,17 +65,17 @@ class _ThreadPageState extends State<ThreadPage> {
     _currentUserNpub = await _secureStorage.read(key: 'npub');
     final allNotes = widget.dataService.notesNotifier.value;
 
-    try {
-      _rootNote = allNotes.firstWhere(
-        (n) => n.id == widget.rootNoteId,
-      );
-    } catch (e) {
-      _rootNote = null;
+    _rootNote = allNotes.firstWhereOrNull((n) => n.id == widget.rootNoteId);
+
+    if (widget.focusedNoteId != null && widget.focusedNoteId != widget.rootNoteId) {
+      _focusedNote = allNotes.firstWhereOrNull((n) => n.id == widget.focusedNoteId);
+    } else {
+      _focusedNote = null;
     }
 
     if (mounted) {
       setState(() => _isLoading = false);
-      if (_rootNote != null && widget.focusedNoteId != null) {
+      if (widget.focusedNoteId != null && (_focusedNote != null || _rootNote?.id == widget.focusedNoteId)) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _scrollToFocusedNote();
         });
@@ -88,7 +90,7 @@ class _ThreadPageState extends State<ThreadPage> {
       _highlightedNoteId = widget.focusedNoteId;
     });
 
-    if (widget.focusedNoteId != _rootNote?.id) {
+    if (_focusedNote != null) {
       final context = _focusedNoteKey.currentContext;
       if (context != null) {
         Scrollable.ensureVisible(context,
@@ -127,74 +129,68 @@ class _ThreadPageState extends State<ThreadPage> {
     widget.dataService.openUserProfile(context, npub);
   }
 
-  void _handleRootNoteReactionTap() async {
-    if (_rootNote == null || _hasReacted(_rootNote!)) return;
-    setState(() => _isRootNoteReactionGlowing = true);
+  void _handleReactionTap(NoteModel note) async {
+    if (_hasReacted(note)) return;
+    setState(() => _isReactionGlowing = true);
     Future.delayed(const Duration(milliseconds: 400), () {
-      if (mounted) setState(() => _isRootNoteReactionGlowing = false);
+      if (mounted) setState(() => _isReactionGlowing = false);
     });
     try {
-      await widget.dataService.sendReaction(_rootNote!.id, '+');
+      await widget.dataService.sendReaction(note.id, '+');
     } catch (_) {}
   }
 
-  void _handleRootNoteReplyTap() {
-    if (_rootNote == null) return;
-    setState(() => _isRootNoteReplyGlowing = true);
+  void _handleReplyTap(NoteModel note) {
+    setState(() => _isReplyGlowing = true);
     Future.delayed(const Duration(milliseconds: 400), () {
-      if (mounted) setState(() => _isRootNoteReplyGlowing = false);
+      if (mounted) setState(() => _isReplyGlowing = false);
     });
 
     showDialog(
       context: context,
       builder: (_) => SendReplyDialog(
         dataService: widget.dataService,
-        noteId: _rootNote!.id,
+        noteId: note.id,
       ),
     );
   }
 
-  void _handleRootNoteRepostTap() {
-    if (_rootNote == null) return;
-    setState(() => _isRootNoteRepostGlowing = true);
+  void _handleRepostTap(NoteModel note) {
+    setState(() => _isRepostGlowing = true);
     Future.delayed(const Duration(milliseconds: 400), () {
-      if (mounted) setState(() => _isRootNoteRepostGlowing = false);
+      if (mounted) setState(() => _isRepostGlowing = false);
     });
 
     showRepostDialog(
       context: context,
       dataService: widget.dataService,
-      note: _rootNote!,
+      note: note,
     );
   }
 
-  void _handleRootNoteZapTap() {
-    if (_rootNote == null) return;
-    setState(() => _isRootNoteZapGlowing = true);
+  void _handleZapTap(NoteModel note) {
+    setState(() => _isZapGlowing = true);
     Future.delayed(const Duration(milliseconds: 400), () {
-      if (mounted) setState(() => _isRootNoteZapGlowing = false);
+      if (mounted) setState(() => _isZapGlowing = false);
     });
 
-    showZapDialog(
-        context: context, dataService: widget.dataService, note: _rootNote!);
+    showZapDialog(context: context, dataService: widget.dataService, note: note);
   }
 
-  void _handleRootNoteStatisticsTap() {
-    if (_rootNote == null) return;
+  void _handleStatisticsTap(NoteModel note) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => NoteStatisticsPage(
-            note: _rootNote!, dataService: widget.dataService),
+        builder: (_) => NoteStatisticsPage(note: note, dataService: widget.dataService),
       ),
     );
   }
 
-  Widget _buildThreadReplies() {
-    if (_rootNote == null || _currentUserNpub == null) return const SizedBox.shrink();
+  Widget _buildThreadReplies(NoteModel noteForReplies) {
+    if (_currentUserNpub == null || _rootNote == null) return const SizedBox.shrink();
 
     final threadHierarchy = widget.dataService.buildThreadHierarchy(_rootNote!.id);
-    final directReplies = threadHierarchy[_rootNote!.id] ?? [];
+    final directReplies = threadHierarchy[noteForReplies.id] ?? [];
 
     if (directReplies.isEmpty) {
       return const Center(
@@ -208,74 +204,108 @@ class _ThreadPageState extends State<ThreadPage> {
       );
     }
 
+    List<Widget> threadWidgets = [];
+    for (int i = 0; i < directReplies.length; i++) {
+      threadWidgets.add(
+        _buildThreadReplyWithDepth(
+          directReplies[i],
+          threadHierarchy,
+          0,
+          i == directReplies.length - 1,
+          const [],
+        ),
+      );
+    }
+
     return Column(
       children: [
         const SizedBox(height: 8.0),
-        ...directReplies.map((reply) => _buildThreadReplyWithDepth(reply, threadHierarchy, 0)).toList(),
+        ...threadWidgets,
       ],
     );
   }
 
-  Widget _buildThreadReplyWithDepth(NoteModel reply, Map<String, List<NoteModel>> hierarchy, int depth) {
+  Widget _buildThreadReplyWithDepth(
+    NoteModel reply,
+    Map<String, List<NoteModel>> hierarchy,
+    int depth,
+    bool isLast,
+    List<bool> parentIsLast,
+  ) {
     const double indentWidth = 20.0;
-    const int maxDepth = 5;
 
-    final actualDepth = depth > maxDepth ? maxDepth : depth;
-    final leftPadding = actualDepth * indentWidth;
     final isFocused = reply.id == widget.focusedNoteId;
     final isHighlighted = reply.id == _highlightedNoteId;
+    final nestedReplies = hierarchy[reply.id] ?? [];
 
-    return Column(
-      key: isFocused ? _focusedNoteKey : null,
-      children: [
-        if (depth > 0)
-          Container(
-            margin: EdgeInsets.only(left: leftPadding - 10),
-            child: Row(
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (depth > 0)
+            SizedBox(
+              width: depth * indentWidth,
+              child: CustomPaint(
+                painter: _ThreadLinePainter(
+                  depth: depth,
+                  isLast: isLast,
+                  parentIsLast: parentIsLast,
+                  indentWidth: indentWidth,
+                  lineColor: Colors.grey[700]!,
+                ),
+              ),
+            ),
+          Expanded(
+            child: Column(
+              key: isFocused ? _focusedNoteKey : null,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 2,
-                  height: 20,
-                  color: Colors.grey[700],
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 500),
+                  curve: Curves.easeInOut,
+                  margin: EdgeInsets.only(left: depth > 0 ? 8 : 0),
+                  decoration: BoxDecoration(
+                      color: isHighlighted ? Theme.of(context).primaryColor.withOpacity(0.1) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8)),
+                  child: NoteWidget(
+                    note: reply,
+                    reactionCount: reply.reactionCount,
+                    replyCount: reply.replyCount,
+                    repostCount: reply.repostCount,
+                    dataService: widget.dataService,
+                    currentUserNpub: _currentUserNpub!,
+                    notesNotifier: widget.dataService.notesNotifier,
+                    profiles: widget.dataService.profilesNotifier.value,
+                    isSmallView: depth > 0,
+                    containerColor: Colors.transparent,
+                  ),
                 ),
-                Container(
-                  width: 8,
-                  height: 2,
-                  color: Colors.grey[700],
-                ),
+                ...((hierarchy[reply.id] ?? []).asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final nestedReply = entry.value;
+                  return _buildThreadReplyWithDepth(
+                    nestedReply,
+                    hierarchy,
+                    depth + 1,
+                    index == nestedReplies.length - 1,
+                    [...parentIsLast, isLast],
+                  );
+                })),
+                if (depth == 0) const SizedBox(height: 8),
               ],
             ),
           ),
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 500),
-          curve: Curves.easeInOut,
-          margin: EdgeInsets.only(left: leftPadding),
-          decoration: BoxDecoration(
-              color: isHighlighted ? Theme.of(context).primaryColor.withOpacity(0.1) : Colors.transparent,
-              borderRadius: BorderRadius.circular(8)),
-          child: NoteWidget(
-            note: reply,
-            reactionCount: reply.reactionCount,
-            replyCount: reply.replyCount,
-            repostCount: reply.repostCount,
-            dataService: widget.dataService,
-            currentUserNpub: _currentUserNpub!,
-            notesNotifier: widget.dataService.notesNotifier,
-            profiles: widget.dataService.profilesNotifier.value,
-            isSmallView: depth > 0,
-            containerColor: Colors.transparent,
-          ),
-        ),
-        ...((hierarchy[reply.id] ?? [])
-            .map((nestedReply) => _buildThreadReplyWithDepth(nestedReply, hierarchy, depth + 1))),
-        if (depth == 0) const SizedBox(height: 8),
-      ],
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isRootHighlighted = _rootNote?.id == _highlightedNoteId;
+    final NoteModel? displayRoot = _focusedNote ?? _rootNote;
+    final NoteModel? contextNote = _focusedNote != null ? _rootNote : null;
+    final isDisplayRootHighlighted = displayRoot?.id == _highlightedNoteId;
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -290,42 +320,103 @@ class _ThreadPageState extends State<ThreadPage> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
-          : _rootNote == null
-              ? const Center(child: Text('Root note not found.', style: TextStyle(color: Colors.white70)))
+          : displayRoot == null
+              ? const Center(child: Text('Note not found.', style: TextStyle(color: Colors.white70)))
               : SingleChildScrollView(
                   controller: _scrollController,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (contextNote != null)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                          child: NoteWidget(
+                            note: contextNote,
+                            reactionCount: contextNote.reactionCount,
+                            replyCount: contextNote.replyCount,
+                            repostCount: contextNote.repostCount,
+                            dataService: widget.dataService,
+                            currentUserNpub: _currentUserNpub!,
+                            notesNotifier: widget.dataService.notesNotifier,
+                            profiles: widget.dataService.profilesNotifier.value,
+                            isSmallView: true,
+                            containerColor: Colors.transparent,
+                          ),
+                        ),
                       AnimatedContainer(
                         duration: const Duration(milliseconds: 500),
                         curve: Curves.easeInOut,
-                        color: isRootHighlighted ?? false
+                        color: isDisplayRootHighlighted
                             ? Theme.of(context).primaryColor.withOpacity(0.1)
                             : Colors.transparent,
                         child: RootNoteWidget(
-                          note: _rootNote!,
+                          key: _focusedNote != null ? _focusedNoteKey : null,
+                          note: displayRoot,
                           dataService: widget.dataService,
                           onNavigateToMentionProfile: _navigateToProfile,
-                          isReactionGlowing: _isRootNoteReactionGlowing,
-                          isReplyGlowing: _isRootNoteReplyGlowing,
-                          isRepostGlowing: _isRootNoteRepostGlowing,
-                          isZapGlowing: _isRootNoteZapGlowing,
-                          hasReacted: _hasReacted(_rootNote!),
-                          hasReplied: _hasReplied(_rootNote!),
-                          hasReposted: _hasReposted(_rootNote!),
-                          hasZapped: _hasZapped(_rootNote!),
-                          onReactionTap: _handleRootNoteReactionTap,
-                          onReplyTap: _handleRootNoteReplyTap,
-                          onRepostTap: _handleRootNoteRepostTap,
-                          onZapTap: _handleRootNoteZapTap,
-                          onStatisticsTap: _handleRootNoteStatisticsTap,
+                          isReactionGlowing: _isReactionGlowing,
+                          isReplyGlowing: _isReplyGlowing,
+                          isRepostGlowing: _isRepostGlowing,
+                          isZapGlowing: _isZapGlowing,
+                          hasReacted: _hasReacted(displayRoot),
+                          hasReplied: _hasReplied(displayRoot),
+                          hasReposted: _hasReposted(displayRoot),
+                          hasZapped: _hasZapped(displayRoot),
+                          onReactionTap: () => _handleReactionTap(displayRoot),
+                          onReplyTap: () => _handleReplyTap(displayRoot),
+                          onRepostTap: () => _handleRepostTap(displayRoot),
+                          onZapTap: () => _handleZapTap(displayRoot),
+                          onStatisticsTap: () => _handleStatisticsTap(displayRoot),
                         ),
                       ),
-                      _buildThreadReplies(),
+                      _buildThreadReplies(displayRoot),
+                      const SizedBox(height: 24.0),
                     ],
                   ),
                 ),
     );
+  }
+}
+
+class _ThreadLinePainter extends CustomPainter {
+  final int depth;
+  final bool isLast;
+  final List<bool> parentIsLast;
+  final double indentWidth;
+  final Color lineColor;
+
+  _ThreadLinePainter({
+    required this.depth,
+    required this.isLast,
+    required this.parentIsLast,
+    required this.indentWidth,
+    required this.lineColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = lineColor
+      ..strokeWidth = 2.0;
+
+    for (int i = 0; i < depth - 1; i++) {
+      if (!parentIsLast[i]) {
+        final dx = (i * indentWidth) + (indentWidth / 2);
+        canvas.drawLine(Offset(dx, 0), Offset(dx, size.height), paint);
+      }
+    }
+    final dx = ((depth - 1) * indentWidth) + (indentWidth / 2);
+    const endY = 20.0;
+    canvas.drawLine(Offset(dx, 0), Offset(dx, isLast ? endY : size.height), paint);
+    canvas.drawLine(Offset(dx, endY), Offset(dx + indentWidth / 2, endY), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _ThreadLinePainter oldDelegate) {
+    return oldDelegate.depth != depth ||
+        oldDelegate.isLast != isLast ||
+        oldDelegate.parentIsLast != parentIsLast ||
+        oldDelegate.indentWidth != indentWidth ||
+        oldDelegate.lineColor != lineColor;
   }
 }
