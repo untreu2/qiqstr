@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:collection';
-import 'dart:isolate';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
@@ -126,7 +125,7 @@ class MediaService {
         return;
       }
 
-      final lower = url.toLowerCase();
+      url.toLowerCase();
       if (!_isValidMediaUrl(url)) {
         return;
       }

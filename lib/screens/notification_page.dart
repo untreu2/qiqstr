@@ -209,7 +209,6 @@ class _NotificationPageState extends State<NotificationPage> {
                   parsedContent: widget.dataService.parseContent(first.content),
                   dataService: widget.dataService,
                   onNavigateToMentionProfile: _navigateToProfileFromContent,
-                  size: NoteContentSize.small,
                 ),
               ),
             if (first.type == 'mention' && first.content.trim().isNotEmpty) const SizedBox(height: 8),

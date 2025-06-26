@@ -7,23 +7,18 @@ import 'package:qiqstr/widgets/media_preview_widget.dart';
 import 'package:qiqstr/widgets/quote_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-enum NoteContentSize { small, big }
-
 class NoteContentWidget extends StatelessWidget {
   final Map<String, dynamic> parsedContent;
   final DataService dataService;
   final void Function(String mentionId) onNavigateToMentionProfile;
-  final NoteContentSize size;
 
-  static const double _smallFontSize = 15.0;
-  static const double _bigFontSize = 17.0;
+  static const double _fontSize = 15.0;
 
   const NoteContentWidget({
     Key? key,
     required this.parsedContent,
     required this.dataService,
     required this.onNavigateToMentionProfile,
-    this.size = NoteContentSize.small,
   }) : super(key: key);
 
   Future<void> _onOpenLink(BuildContext context, LinkableElement link) async {
@@ -48,13 +43,11 @@ class NoteContentWidget extends StatelessWidget {
   Widget _buildRichTextContent(
     BuildContext context,
     Map<String, String> mentions,
-    NoteContentSize effectiveSize,
   ) {
     final parts = (parsedContent['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
-    final baseFontSize = (effectiveSize == NoteContentSize.big) ? _bigFontSize : _smallFontSize;
     final spans = <InlineSpan>[];
-    final currentFontSize = baseFontSize * textScaleFactor;
+    final currentFontSize = _fontSize * textScaleFactor;
 
     for (var p in parts) {
       if (p['type'] == 'text') {
@@ -124,11 +117,6 @@ class NoteContentWidget extends StatelessWidget {
         .map((p) => p['id'] as String)
         .toList();
 
-    final visibleText = textParts.where((p) => p['type'] == 'text').map((p) => (p['text'] as String).trim()).join(' ');
-
-    final isShortVisibleText = visibleText.length < 30;
-    final effectiveSize = isShortVisibleText ? NoteContentSize.big : size;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -137,7 +125,7 @@ class NoteContentWidget extends StatelessWidget {
             future: dataService.resolveMentions(mentionIds),
             builder: (context, snapshot) {
               final mentionsMap = snapshot.data ?? {};
-              return _buildRichTextContent(context, mentionsMap, effectiveSize);
+              return _buildRichTextContent(context, mentionsMap);
             },
           ),
         if (mediaUrls.isNotEmpty)

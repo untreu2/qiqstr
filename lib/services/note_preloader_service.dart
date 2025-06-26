@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
 import 'package:qiqstr/models/note_model.dart';
-import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/services/media_service.dart';
 

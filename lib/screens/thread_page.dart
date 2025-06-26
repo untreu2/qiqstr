@@ -11,11 +11,13 @@ import 'package:qiqstr/screens/send_reply.dart';
 
 class ThreadPage extends StatefulWidget {
   final String rootNoteId;
+  final String? focusedNoteId;
   final DataService dataService;
 
   const ThreadPage({
     Key? key,
     required this.rootNoteId,
+    this.focusedNoteId,
     required this.dataService,
   }) : super(key: key);
 
@@ -27,6 +29,10 @@ class _ThreadPageState extends State<ThreadPage> {
   NoteModel? _rootNote;
   String? _currentUserNpub;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _focusedNoteKey = GlobalKey();
+  String? _highlightedNoteId;
+
   bool _isLoading = true;
 
   bool _isRootNoteReactionGlowing = false;
@@ -44,22 +50,53 @@ class _ThreadPageState extends State<ThreadPage> {
   @override
   void dispose() {
     widget.dataService.notesNotifier.removeListener(_onNotesChanged);
+    _scrollController.dispose();
     super.dispose();
   }
 
   void _onNotesChanged() => _loadRootNote();
 
   Future<void> _loadRootNote() async {
+    if (!mounted) return;
     setState(() => _isLoading = true);
 
     _currentUserNpub = await _secureStorage.read(key: 'npub');
     final allNotes = widget.dataService.notesNotifier.value;
 
-    _rootNote = allNotes.firstWhere(
-      (n) => n.id == widget.rootNoteId,
-    );
+    try {
+      _rootNote = allNotes.firstWhere(
+        (n) => n.id == widget.rootNoteId,
+      );
+    } catch (e) {
+      _rootNote = null;
+    }
 
-    if (mounted) setState(() => _isLoading = false);
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (_rootNote != null && widget.focusedNoteId != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _scrollToFocusedNote();
+        });
+      }
+    }
+  }
+
+  void _scrollToFocusedNote() {
+    if (!mounted || widget.focusedNoteId == null) return;
+
+    setState(() {
+      _highlightedNoteId = widget.focusedNoteId;
+    });
+
+    if (widget.focusedNoteId != _rootNote?.id) {
+      final context = _focusedNoteKey.currentContext;
+      if (context != null) {
+        Scrollable.ensureVisible(context,
+            duration: const Duration(milliseconds: 500), curve: Curves.easeInOut, alignment: 0.1);
+      }
+    }
+
+    Future.delayed(const Duration(seconds: 2), () => {if (mounted) setState(() => _highlightedNoteId = null)});
   }
 
   bool _hasReacted(NoteModel note) {
@@ -185,8 +222,11 @@ class _ThreadPageState extends State<ThreadPage> {
 
     final actualDepth = depth > maxDepth ? maxDepth : depth;
     final leftPadding = actualDepth * indentWidth;
+    final isFocused = reply.id == widget.focusedNoteId;
+    final isHighlighted = reply.id == _highlightedNoteId;
 
     return Column(
+      key: isFocused ? _focusedNoteKey : null,
       children: [
         if (depth > 0)
           Container(
@@ -206,8 +246,13 @@ class _ThreadPageState extends State<ThreadPage> {
               ],
             ),
           ),
-        Container(
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
           margin: EdgeInsets.only(left: leftPadding),
+          decoration: BoxDecoration(
+              color: isHighlighted ? Theme.of(context).primaryColor.withOpacity(0.1) : Colors.transparent,
+              borderRadius: BorderRadius.circular(8)),
           child: NoteWidget(
             note: reply,
             reactionCount: reply.reactionCount,
@@ -218,6 +263,7 @@ class _ThreadPageState extends State<ThreadPage> {
             notesNotifier: widget.dataService.notesNotifier,
             profiles: widget.dataService.profilesNotifier.value,
             isSmallView: depth > 0,
+            containerColor: Colors.transparent,
           ),
         ),
         ...((hierarchy[reply.id] ?? [])
@@ -229,6 +275,7 @@ class _ThreadPageState extends State<ThreadPage> {
 
   @override
   Widget build(BuildContext context) {
+    final isRootHighlighted = _rootNote?.id == _highlightedNoteId;
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -246,26 +293,34 @@ class _ThreadPageState extends State<ThreadPage> {
           : _rootNote == null
               ? const Center(child: Text('Root note not found.', style: TextStyle(color: Colors.white70)))
               : SingleChildScrollView(
+                  controller: _scrollController,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      RootNoteWidget(
-                        note: _rootNote!,
-                        dataService: widget.dataService,
-                        onNavigateToMentionProfile: _navigateToProfile,
-                        isReactionGlowing: _isRootNoteReactionGlowing,
-                        isReplyGlowing: _isRootNoteReplyGlowing,
-                        isRepostGlowing: _isRootNoteRepostGlowing,
-                        isZapGlowing: _isRootNoteZapGlowing,
-                        hasReacted: _hasReacted(_rootNote!),
-                        hasReplied: _hasReplied(_rootNote!),
-                        hasReposted: _hasReposted(_rootNote!),
-                        hasZapped: _hasZapped(_rootNote!),
-                        onReactionTap: _handleRootNoteReactionTap,
-                        onReplyTap: _handleRootNoteReplyTap,
-                        onRepostTap: _handleRootNoteRepostTap,
-                        onZapTap: _handleRootNoteZapTap,
-                        onStatisticsTap: _handleRootNoteStatisticsTap,
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 500),
+                        curve: Curves.easeInOut,
+                        color: isRootHighlighted ?? false
+                            ? Theme.of(context).primaryColor.withOpacity(0.1)
+                            : Colors.transparent,
+                        child: RootNoteWidget(
+                          note: _rootNote!,
+                          dataService: widget.dataService,
+                          onNavigateToMentionProfile: _navigateToProfile,
+                          isReactionGlowing: _isRootNoteReactionGlowing,
+                          isReplyGlowing: _isRootNoteReplyGlowing,
+                          isRepostGlowing: _isRootNoteRepostGlowing,
+                          isZapGlowing: _isRootNoteZapGlowing,
+                          hasReacted: _hasReacted(_rootNote!),
+                          hasReplied: _hasReplied(_rootNote!),
+                          hasReposted: _hasReposted(_rootNote!),
+                          hasZapped: _hasZapped(_rootNote!),
+                          onReactionTap: _handleRootNoteReactionTap,
+                          onReplyTap: _handleRootNoteReplyTap,
+                          onRepostTap: _handleRootNoteRepostTap,
+                          onZapTap: _handleRootNoteZapTap,
+                          onStatisticsTap: _handleRootNoteStatisticsTap,
+                        ),
                       ),
                       _buildThreadReplies(),
                     ],

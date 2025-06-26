@@ -24,6 +24,7 @@ class NoteWidget extends StatefulWidget {
   final ValueNotifier<List<NoteModel>> notesNotifier;
   final Map<String, UserModel> profiles;
 
+  final Color? containerColor;
   final bool isSmallView;
   const NoteWidget({
     super.key,
@@ -35,6 +36,7 @@ class NoteWidget extends StatefulWidget {
     required this.currentUserNpub,
     required this.notesNotifier,
     required this.profiles,
+    this.containerColor,
     this.isSmallView = true,
   });
 
@@ -148,7 +150,7 @@ class _NoteWidgetState extends State<NoteWidget>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ThreadPage(rootNoteId: rootIdToShow, dataService: widget.dataService),
+        builder: (_) => ThreadPage(rootNoteId: rootIdToShow, dataService: widget.dataService, focusedNoteId: note.id),
       ),
     );
   }
@@ -222,7 +224,7 @@ class _NoteWidgetState extends State<NoteWidget>
           onDoubleTapDown: (_) => _handleReactionTap(),
           onTap: () => _navigateToThreadPage(updatedNote),
           child: Container(
-            color: Colors.black,
+            color: widget.containerColor ?? Colors.black,
             padding: const EdgeInsets.only(bottom: 2),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -330,7 +332,6 @@ class _NoteWidgetState extends State<NoteWidget>
                               parsedContent: parsed,
                               dataService: widget.dataService,
                               onNavigateToMentionProfile: _navigateToMentionProfile,
-                              size: widget.isSmallView ? NoteContentSize.small : NoteContentSize.big,
                             ),
                             const SizedBox(height: 10),
                             Row(
