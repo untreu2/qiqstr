@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qiqstr/screens/feed_page.dart';
+import 'package:bounce/bounce.dart';
 import 'package:qiqstr/screens/users_search_page.dart';
 import 'package:qiqstr/screens/notification_page.dart';
 import 'package:qiqstr/services/data_service.dart';
@@ -67,9 +68,11 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                 final index = item['index'];
 
                 return Expanded(
-                  child: GestureDetector(
-                    
+                  child: Bounce(
+                    scaleFactor: 0.85,
+                   
                     onTap: () {
+                     
                       if (index == 2) {
                         _handleAction("Designing: DMs");
                       } else if (index == 3) {
@@ -86,8 +89,9 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                     },
                     behavior: HitTestBehavior.opaque,
                     child: SizedBox.expand(
-                      
-                    child: Column(
+                     
+                      child: Column(
+                       
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         
@@ -143,7 +147,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                             color: isSelected ? Colors.amber : Colors.white70,
                           ),
                       ],
-                      ), 
+                      ),
                     ),
                   ),
                 );
