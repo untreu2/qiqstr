@@ -68,6 +68,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
 
                 return Expanded(
                   child: GestureDetector(
+                    
                     onTap: () {
                       if (index == 2) {
                         _handleAction("Designing: DMs");
@@ -83,6 +84,9 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                         }
                       }
                     },
+                    behavior: HitTestBehavior.opaque,
+                    child: SizedBox.expand(
+                      
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -139,6 +143,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                             color: isSelected ? Colors.amber : Colors.white70,
                           ),
                       ],
+                      ), 
                     ),
                   ),
                 );
