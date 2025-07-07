@@ -141,13 +141,13 @@ class NoteProcessor {
     dataService.parseContentForNote(newNote);
 
     if (!dataService.eventIds.contains(newNote.id)) {
+      dataService.notes.add(newNote);
       dataService.eventIds.add(newNote.id);
       if (dataService.notesBox != null && dataService.notesBox!.isOpen) {
         await dataService.notesBox!.put(newNote.id, newNote);
       }
 
       dataService.onNewNote?.call(newNote);
-      dataService.addPendingNote(newNote);
 
       final List<String> authorsToFetch = [noteAuthor];
       if (isOuterEventRepost) {

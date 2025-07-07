@@ -7,7 +7,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/screens/share_note.dart';
 import 'package:qiqstr/services/data_service.dart';
 
 class FeedPage extends StatefulWidget {
@@ -28,7 +27,6 @@ class _FeedPageState extends State<FeedPage> {
 
   late ScrollController _scrollController;
   bool _showAppBar = true;
-  double _fabOpacity = 1.0;
 
   @override
   void initState() {
@@ -43,14 +41,12 @@ class _FeedPageState extends State<FeedPage> {
 
   void _scrollListener() {
     final direction = _scrollController.position.userScrollDirection;
-    if (direction == ScrollDirection.reverse && _fabOpacity != 0.3) {
+    if (direction == ScrollDirection.reverse) {
       setState(() {
-        _fabOpacity = 0.6;
         _showAppBar = false;
       });
-    } else if (direction == ScrollDirection.forward && _fabOpacity != 1.0) {
+    } else if (direction == ScrollDirection.forward) {
       setState(() {
-        _fabOpacity = 1.0;
         _showAppBar = true;
       });
     }
@@ -90,13 +86,6 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
-  void _navigateToShareNotePage() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ShareNotePage(dataService: dataService),
-      ),
-    );
-  }
 
   Widget _buildHeaderWithFilters(BuildContext context, double topPadding) {
     return ClipRRect(
@@ -214,45 +203,6 @@ class _FeedPageState extends State<FeedPage> {
     return Scaffold(
       backgroundColor: Colors.black,
       drawer: SidebarWidget(user: user),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      floatingActionButton: AnimatedOpacity(
-        opacity: _fabOpacity,
-        duration: const Duration(milliseconds: 300),
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 90.0, right: 5.0),
-          child: GestureDetector(
-            onTap: _navigateToShareNotePage,
-            child: ClipOval(
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFECB200).withOpacity(0.9),
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
-                        blurRadius: 6,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: SvgPicture.asset(
-                      'assets/new_post_button.svg',
-                      width: 24,
-                      height: 24,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
       body: isLoading
           ? const ColoredBox(color: Colors.black)
           : errorMessage != null

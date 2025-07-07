@@ -5,6 +5,7 @@ import 'package:qiqstr/screens/feed_page.dart';
 import 'package:bounce/bounce.dart';
 import 'package:qiqstr/screens/users_search_page.dart';
 import 'package:qiqstr/screens/notification_page.dart';
+import 'package:qiqstr/screens/share_note.dart';
 import 'package:qiqstr/services/data_service.dart';
 
 class HomeNavigator extends StatefulWidget {
@@ -37,6 +38,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
     );
   }
 
+
   Widget _buildCustomBottomBar() {
     List<Map<String, dynamic>> items = [
       {'icon': 'assets/home_gap.svg', 'index': 0},
@@ -47,114 +49,156 @@ class _HomeNavigatorState extends State<HomeNavigator> {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 30.0),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(25.0),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            height: 70,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.5),
-              border: Border.all(
-                color: Colors.white.withOpacity(0.2),
-                width: 1.5,
-              ),
+      child: Row(
+        children: [
+          Expanded(
+            child: ClipRRect(
               borderRadius: BorderRadius.circular(25.0),
-            ),
-            child: Row(
-              children: items.map((item) {
-                final bool isSelected = _currentIndex == item['index'];
-                final index = item['index'];
-
-                return Expanded(
-                  child: Bounce(
-                    scaleFactor: 0.85,
-                   
-                    onTap: () {
-                     
-                      if (index == 2) {
-                        _handleAction("Designing: DMs");
-                      } else if (index == 3) {
-                        widget.dataService.markAllUserNotificationsAsRead().then((_) {
-                          if (mounted) setState(() => _currentIndex = index);
-                        });
-                      } else {
-                        if (mounted) {
-                          setState(() {
-                            _currentIndex = index;
-                          });
-                        }
-                      }
-                    },
-                    behavior: HitTestBehavior.opaque,
-                    child: SizedBox.expand(
-                     
-                      child: Column(
-                       
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        
-                        
-                        if (index == 3)
-                          Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              SvgPicture.asset(
-                                item['icon'],
-                                width: 20,
-                                height: 20,
-                                color: isSelected ? Colors.amber : Colors.white70,
-                              ),
-                              ValueListenableBuilder<int>(
-                                valueListenable: widget.dataService.unreadNotificationsCountNotifier,
-                                builder: (context, count, child) {
-                                  if (count == 0) {
-                                    return const SizedBox.shrink();
-                                  }
-                                  return Positioned(
-                                    top: -4,
-                                    right: -5,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(1),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.black, width: 0.5),
-                                      ),
-                                      constraints: const BoxConstraints(
-                                        minWidth: 14,
-                                        minHeight: 14,
-                                      ),
-                                      child: Text('$count',
-                                          style: const TextStyle(
-                                            color: Colors.black,
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                          textAlign: TextAlign.center),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          )
-                        else
-                          SvgPicture.asset(
-                            item['icon'],
-                            width: 20,
-                            height: 20,
-                            color: isSelected ? Colors.amber : Colors.white70,
-                          ),
-                      ],
-                      ),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: Container(
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.5),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.2),
+                      width: 1.5,
                     ),
+                    borderRadius: BorderRadius.circular(25.0),
                   ),
-                );
-              }).toList(),
+                  child: Row(
+                    children: items.map((item) {
+                      final bool isSelected = _currentIndex == item['index'];
+                      final index = item['index'];
+
+                      return Expanded(
+                        child: Bounce(
+                          scaleFactor: 0.85,
+                          onTap: () {
+                            if (index == 2) {
+                              _handleAction("Designing: DMs");
+                            } else if (index == 3) {
+                              widget.dataService.markAllUserNotificationsAsRead().then((_) {
+                                if (mounted) setState(() => _currentIndex = index);
+                              });
+                            } else {
+                              if (mounted) {
+                                setState(() {
+                                  _currentIndex = index;
+                                });
+                              }
+                            }
+                          },
+                          behavior: HitTestBehavior.opaque,
+                          child: SizedBox.expand(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (index == 3)
+                                  Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      SvgPicture.asset(
+                                        item['icon'],
+                                        width: 20,
+                                        height: 20,
+                                        color: isSelected ? Colors.amber : Colors.white70,
+                                      ),
+                                      ValueListenableBuilder<int>(
+                                        valueListenable: widget.dataService.unreadNotificationsCountNotifier,
+                                        builder: (context, count, child) {
+                                          if (count == 0) {
+                                            return const SizedBox.shrink();
+                                          }
+                                          return Positioned(
+                                            top: -4,
+                                            right: -5,
+                                            child: Container(
+                                              padding: const EdgeInsets.all(1),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white,
+                                                shape: BoxShape.circle,
+                                                border: Border.all(color: Colors.black, width: 0.5),
+                                              ),
+                                              constraints: const BoxConstraints(
+                                                minWidth: 14,
+                                                minHeight: 14,
+                                              ),
+                                              child: Text('$count',
+                                                  style: const TextStyle(
+                                                    color: Colors.black,
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                  textAlign: TextAlign.center),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  )
+                                else
+                                  SvgPicture.asset(
+                                    item['icon'],
+                                    width: 20,
+                                    height: 20,
+                                    color: isSelected ? Colors.amber : Colors.white70,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
+          const SizedBox(width: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(25.0),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.5),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.2),
+                    width: 1.5,
+                  ),
+                  borderRadius: BorderRadius.circular(25.0),
+                ),
+                child: Bounce(
+                  scaleFactor: 0.85,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => ShareNotePage(dataService: widget.dataService),
+                      ),
+                    );
+                  },
+                  behavior: HitTestBehavior.opaque,
+                  child: SizedBox.expand(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SvgPicture.asset(
+                          'assets/new_post_button.svg',
+                          width: 24,
+                          height: 24,
+                          color: Colors.white70,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

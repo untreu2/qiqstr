@@ -231,7 +231,6 @@ class DataService {
         if (message.containsKey('error')) {
           print('[Event Isolate ERROR] ${message['error']}');
         } else if (message.containsKey('type') && message['type'] == 'batch_results') {
-          // Handle batch results from optimized isolate
           final results = message['results'] as List<dynamic>? ?? [];
           for (final result in results) {
             if (result is Map<String, dynamic> && !result.containsKey('error')) {
@@ -1162,21 +1161,9 @@ class DataService {
     return result == 0 ? a.id.compareTo(b.id) : result;
   }
 
-  final List<NoteModel> pendingNotes = [];
-  void addPendingNote(NoteModel note) {
-    pendingNotes.add(note);
-  }
-
-  void applyPendingNotes() {
-    for (var note in pendingNotes) {
-      _addNote(note);
-    }
-    pendingNotes.clear();
-    notesNotifier.value = _itemsTree.toList();
-  }
-
   void _addNote(NoteModel note) {
     _itemsTree.add(note);
+    notesNotifier.value = _itemsTree.toList();
   }
 
   Future<void> _subscribeToAllZaps() async {
@@ -2207,7 +2194,7 @@ Future<void> _subscribeToNotifications() async {
           eventIds.add(note.id);
 
           await notesBox?.put(note.id, note);
-          addPendingNote(note);
+          _addNote(note);
         }
       }
 

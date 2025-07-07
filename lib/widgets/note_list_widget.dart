@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/services/data_service.dart';
-import 'package:qiqstr/services/note_preloader_service.dart';
 import 'package:qiqstr/widgets/lazy_note_widget.dart';
 
 enum NoteListFilterType {
@@ -33,11 +32,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   String? _currentUserNpub;
   bool _isInitializing = true;
-  bool _preloadDone = false;
 
   late DataService _dataService;
-  late NotePreloaderService _preloaderService;
-  final List<NoteModel> _pendingNotes = [];
 
   List<NoteModel> _cachedFilteredNotes = [];
   NoteListFilterType? _lastFilterType;
@@ -84,14 +80,12 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     if (!mounted || _currentUserNpub == null) return;
 
     _dataService = _createDataService();
-    _preloaderService = NotePreloaderService(_dataService);
 
     await _dataService.initialize();
     _dataService.initializeConnections();
 
     setState(() {
       _isInitializing = false;
-      _preloadDone = true;
     });
   }
 
@@ -110,18 +104,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   }
 
   void _handleNewNote(NoteModel note) {
-    _pendingNotes.add(note);
-    if (_preloadDone) {
-      _applyPendingNotes();
-    }
-  }
-
-  void _applyPendingNotes() {
-    for (final note in _pendingNotes) {
-      _dataService.addPendingNote(note);
-    }
-    _dataService.applyPendingNotes();
-    _pendingNotes.clear();
     _invalidateCache();
     _updateSafely();
   }
@@ -180,7 +162,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   void dispose() {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
-    _preloaderService.dispose();
     _dataService.closeConnections();
     super.dispose();
   }
@@ -208,7 +189,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     return ValueListenableBuilder<List<NoteModel>>(
       valueListenable: _dataService.notesNotifier,
       builder: (context, notes, child) {
-        if (notes.isEmpty && _preloadDone) {
+        if (notes.isEmpty) {
           return const SliverToBoxAdapter(
             child: Center(
               child: Padding(
@@ -228,7 +209,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
         final filteredNotes = _getFilteredNotes(notes);
 
-        if (filteredNotes.isEmpty && _preloadDone) {
+        if (filteredNotes.isEmpty) {
           return const SliverToBoxAdapter(
             child: Center(
               child: Padding(
@@ -246,14 +227,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
           );
         }
 
-    
-        if (filteredNotes.isNotEmpty) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _preloaderService.preloadNotes(filteredNotes.take(30).toList());
-          });
-        }
-
-    
         final totalItems = filteredNotes.length;
         final visibleItems = (_currentPage + 1) * _itemsPerPage;
         final itemsToShow = visibleItems > totalItems ? totalItems : visibleItems;
@@ -262,7 +235,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         return SliverList(
           delegate: SliverChildBuilderDelegate(
             (context, index) {
-          
               if (index == displayNotes.length) {
                 if (_isLoadingMore && itemsToShow < totalItems) {
                   return const Padding(
@@ -283,23 +255,19 @@ class _NoteListWidgetState extends State<NoteListWidget> {
               }
 
               final note = displayNotes[index];
-              final isReady = _preloaderService.isNoteReady(note.id);
 
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (isReady)
-                    LazyNoteWidget(
-                      key: ValueKey(note.id),
-                      note: note,
-                      dataService: _dataService,
-                      currentUserNpub: _currentUserNpub!,
-                      notesNotifier: _dataService.notesNotifier,
-                      profiles: _dataService.profilesNotifier.value,
-                      isSmallView: true,
-                    )
-                  else
-                    _buildLoadingPlaceholder(note),
+                  LazyNoteWidget(
+                    key: ValueKey(note.id),
+                    note: note,
+                    dataService: _dataService,
+                    currentUserNpub: _currentUserNpub!,
+                    notesNotifier: _dataService.notesNotifier,
+                    profiles: _dataService.profilesNotifier.value,
+                    isSmallView: true,
+                  ),
                   if (index < displayNotes.length - 1)
                     Container(
                       margin: const EdgeInsets.symmetric(vertical: 10),
@@ -317,99 +285,4 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     );
   }
 
-  Widget _buildLoadingPlaceholder(NoteModel note) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[900]?.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white12,
-          width: 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Colors.grey[700],
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Center(
-                  child: SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white38),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      height: 14,
-                      width: 120,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[700],
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      height: 12,
-                      width: 80,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[800],
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          
-          Container(
-            height: 16,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.grey[700],
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            height: 16,
-            width: MediaQuery.of(context).size.width * 0.7,
-            decoration: BoxDecoration(
-              color: Colors.grey[700],
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            height: 16,
-            width: MediaQuery.of(context).size.width * 0.5,
-            decoration: BoxDecoration(
-              color: Colors.grey[700],
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-          
-        ],
-      ),
-    );
-  }
 }
