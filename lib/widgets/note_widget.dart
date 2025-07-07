@@ -4,7 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/screens/note_statistics_page.dart';
 import 'package:qiqstr/screens/thread_page.dart';
 import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/screens/send_reply.dart';
+import 'package:qiqstr/screens/share_note.dart';
 import 'package:qiqstr/widgets/interaction_bar_widget.dart';
 import 'package:qiqstr/widgets/note_content_widget.dart';
 import 'package:qiqstr/widgets/dialogs/repost_dialog.dart';
@@ -108,10 +108,14 @@ class _NoteWidgetState extends State<NoteWidget>
     setState(() => _isReplyGlowing = true);
     Future.delayed(const Duration(milliseconds: 400),
         () => mounted ? setState(() => _isReplyGlowing = false) : null);
-    showDialog(
-      context: context,
-      builder: (_) => SendReplyDialog(
-          dataService: widget.dataService, noteId: widget.note.id),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ShareNotePage(
+          dataService: widget.dataService,
+          replyToNoteId: widget.note.id,
+        ),
+      ),
     );
   }
 

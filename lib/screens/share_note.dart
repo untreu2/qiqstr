@@ -6,15 +6,18 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../services/data_service.dart';
 import '../models/user_model.dart';
 import '../widgets/quote_widget.dart';
+import '../widgets/reply_preview_widget.dart';
 
 class ShareNotePage extends StatefulWidget {
   final DataService dataService;
   final String? initialText;
+  final String? replyToNoteId;
 
   const ShareNotePage({
     super.key,
     required this.dataService,
     this.initialText,
+    this.replyToNoteId,
   });
 
   @override
@@ -33,7 +36,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   @override
   void initState() {
     super.initState();
-    _noteController = TextEditingController();
+    _noteController = TextEditingController(text: widget.initialText ?? '');
     _loadProfile();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
@@ -41,7 +44,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Future<void> _loadProfile() async {
-    final storage = FlutterSecureStorage();
+    const storage = FlutterSecureStorage();
     final npub = await storage.read(key: 'npub');
     if (npub == null) return;
 
@@ -75,9 +78,11 @@ class _ShareNotePageState extends State<ShareNotePage> {
           if (file.path != null) {
             final url =
                 await widget.dataService.sendMedia(file.path!, _serverUrl);
-            setState(() {
-              _mediaUrls.add(url);
-            });
+            if (mounted) {
+              setState(() {
+                _mediaUrls.add(url);
+              });
+            }
           }
         }
       } catch (e) {
@@ -105,12 +110,14 @@ class _ShareNotePageState extends State<ShareNotePage> {
     });
     try {
       final noteText = _noteController.text.trim();
-      final mediaPart = _mediaUrls.isNotEmpty ? " ${_mediaUrls.join(" ")}" : "";
-      final quotePart =
-          widget.initialText != null ? "\n${widget.initialText}" : "";
-      final finalNoteContent = "$noteText$mediaPart$quotePart".trim();
+      final mediaPart = _mediaUrls.isNotEmpty ? "\n${_mediaUrls.join("\n")}" : "";
+      final finalNoteContent = "$noteText$mediaPart".trim();
 
-      await widget.dataService.shareNote(finalNoteContent);
+      if (widget.replyToNoteId != null) {
+        await widget.dataService.sendReply(widget.replyToNoteId!, finalNoteContent);
+      } else {
+        await widget.dataService.shareNote(finalNoteContent);
+      }
       Navigator.of(context).pop();
     } catch (error) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -130,6 +137,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
       _mediaUrls.remove(url);
     });
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -152,8 +160,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
               if (_isMediaUploading)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
-                  child: Row(
-                    children: const [
+                  child: const Row(
+                    children: [
                       SizedBox(
                         width: 16,
                         height: 16,
@@ -247,6 +255,12 @@ class _ShareNotePageState extends State<ShareNotePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (widget.replyToNoteId != null)
+                ReplyPreviewWidget(
+                  noteId: widget.replyToNoteId!,
+                  dataService: widget.dataService,
+                ),
+              
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -331,7 +345,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
                     ),
                   ),
                 ),
-              if (widget.initialText != null)
+              if (widget.initialText != null && widget.initialText!.startsWith('nostr:'))
                 Padding(
                   padding: const EdgeInsets.only(top: 16),
                   child: QuoteWidget(
