@@ -138,224 +138,259 @@ class _ShareNotePageState extends State<ShareNotePage> {
     });
   }
 
+  void _reorderMedia(int oldIndex, int newIndex) {
+    setState(() {
+      if (newIndex > oldIndex) {
+        newIndex -= 1;
+      }
+      final String item = _mediaUrls.removeAt(oldIndex);
+      _mediaUrls.insert(newIndex, item);
+    });
+  }
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        elevation: 0,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 8.0),
-          child: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                color: Colors.white, size: 20),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
-        actions: [
-          Row(
-            children: [
-              if (_isMediaUploading)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: const Row(
-                    children: [
+      body: Stack(
+        children: [
+          if (_mediaUrls.isNotEmpty)
+            Positioned.fill(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 500),
+                child: Container(
+                  key: ValueKey(_mediaUrls.first),
+                  decoration: BoxDecoration(
+                    image: DecorationImage(
+                      image: CachedNetworkImageProvider(_mediaUrls.first),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: Container(
+                      color: Colors.black.withOpacity(0.7),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          Scaffold(
+            backgroundColor: Colors.transparent,
+            appBar: AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              leading: Padding(
+                padding: const EdgeInsets.only(left: 8.0),
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+              actions: [
+                Row(
+                  children: [
+                    if (_isMediaUploading)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: const Row(
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            ),
+                            SizedBox(width: 6),
+                            Text(
+                              'Uploading...',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    GestureDetector(
+                      onTap: _selectMedia,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        height: 34,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.white10,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: Colors.white30),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.attach_file, size: 16, color: Colors.white),
+                            SizedBox(width: 6),
+                            Text(
+                              'Add media',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: _isPosting ? null : _shareNote,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        height: 34,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.white10,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: Colors.white30),
+                        ),
+                        child: _isPosting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
+                            : const Text(
+                                'Post!',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                ),
+              ],
+            ),
+            body: SafeArea(
+              bottom: false,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (widget.replyToNoteId != null)
+                      ReplyPreviewWidget(
+                        noteId: widget.replyToNoteId!,
+                        dataService: widget.dataService,
+                      ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        CircleAvatar(
+                          radius: 20,
+                          backgroundColor: Colors.white24,
+                          backgroundImage:
+                              _user?.profileImage != null ? CachedNetworkImageProvider(_user!.profileImage) : null,
+                          child: _user?.profileImage == null
+                              ? const Icon(Icons.person, color: Colors.white, size: 20)
+                              : null,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            focusNode: _focusNode,
+                            controller: _noteController,
+                            maxLines: null,
+                            textAlignVertical: TextAlignVertical.top,
+                            style: const TextStyle(color: Colors.white),
+                            cursorColor: Colors.white,
+                            decoration: const InputDecoration(
+                              hintText: "What's on your mind?",
+                              hintStyle: TextStyle(color: Colors.white54),
+                              border: InputBorder.none,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    if (_mediaUrls.isNotEmpty)
                       SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        height: 170,
+                        child: ReorderableListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _mediaUrls.length,
+                          onReorder: _reorderMedia,
+                          itemBuilder: (context, index) {
+                            final url = _mediaUrls[index];
+                            return Padding(
+                              key: ValueKey(url),
+                              padding: const EdgeInsets.only(right: 8.0),
+                              child: Stack(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.network(
+                                      url,
+                                      width: 160,
+                                      height: 160,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Container(
+                                        width: 160,
+                                        height: 160,
+                                        color: Colors.grey[300],
+                                        child: const Icon(Icons.broken_image),
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    top: 8,
+                                    right: 8,
+                                    child: GestureDetector(
+                                      onTap: () => _removeMedia(url),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(2),
+                                        decoration: const BoxDecoration(
+                                          color: Colors.black54,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const Icon(
+                                          Icons.close,
+                                          color: Colors.white,
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
                         ),
                       ),
-                      SizedBox(width: 6),
-                      Text(
-                        'Uploading...',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                    if (widget.initialText != null && widget.initialText!.startsWith('nostr:'))
+                      Padding(
+                        padding: const EdgeInsets.only(top: 16),
+                        child: QuoteWidget(
+                          bech32: widget.initialText!.replaceFirst('nostr:', ''),
+                          dataService: widget.dataService,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              GestureDetector(
-                onTap: _selectMedia,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  height: 34,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: Colors.white10,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.white30),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.attach_file, size: 16, color: Colors.white),
-                      SizedBox(width: 6),
-                      Text(
-                        'Add media',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              GestureDetector(
-                onTap: _isPosting ? null : _shareNote,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  height: 34,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: Colors.white10,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.white30),
-                  ),
-                  child: _isPosting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Text(
-                          'Post!',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 8),
-            ],
+            ),
           ),
         ],
-      ),
-      body: SafeArea(
-        bottom: false,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (widget.replyToNoteId != null)
-                ReplyPreviewWidget(
-                  noteId: widget.replyToNoteId!,
-                  dataService: widget.dataService,
-                ),
-              
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: Colors.white24,
-                    backgroundImage: _user?.profileImage != null
-                        ? CachedNetworkImageProvider(_user!.profileImage)
-                        : null,
-                    child: _user?.profileImage == null
-                        ? const Icon(Icons.person,
-                            color: Colors.white, size: 20)
-                        : null,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      focusNode: _focusNode,
-                      controller: _noteController,
-                      maxLines: null,
-                      textAlignVertical: TextAlignVertical.top,
-                      style: const TextStyle(color: Colors.white),
-                      cursorColor: Colors.white,
-                      decoration: const InputDecoration(
-                        hintText: "What's on your mind?",
-                        hintStyle: TextStyle(color: Colors.white54),
-                        border: InputBorder.none,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              if (_mediaUrls.isNotEmpty)
-                SizedBox(
-                  height: 170,
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: _mediaUrls.map((url) {
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8.0),
-                          child: Stack(
-                            children: [
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: Image.network(
-                                  url,
-                                  width: 160,
-                                  height: 160,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => Container(
-                                    width: 160,
-                                    height: 160,
-                                    color: Colors.grey[300],
-                                    child: const Icon(Icons.broken_image),
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                top: 0,
-                                right: 0,
-                                child: GestureDetector(
-                                  onTap: () => _removeMedia(url),
-                                  child: Container(
-                                    decoration: const BoxDecoration(
-                                      color: Colors.black54,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.close,
-                                      color: Colors.white,
-                                      size: 20,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ),
-              if (widget.initialText != null && widget.initialText!.startsWith('nostr:'))
-                Padding(
-                  padding: const EdgeInsets.only(top: 16),
-                  child: QuoteWidget(
-                    bech32: widget.initialText!.replaceFirst('nostr:', ''),
-                    dataService: widget.dataService,
-                  ),
-                ),
-            ],
-          ),
-        ),
       ),
     );
   }
