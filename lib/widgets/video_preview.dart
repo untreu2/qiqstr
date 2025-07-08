@@ -1,4 +1,6 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
@@ -190,18 +192,36 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                   child: CircularProgressIndicator(color: Colors.white)),
             if (_isInitialized)
               Positioned(
-                bottom: 64,
+                bottom: 80,
                 left: 0,
                 right: 0,
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 16),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(25.0),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                      child: LiquidGlass(
+                        shape: LiquidRoundedSuperellipse(
+                          borderRadius: Radius.circular(25.0),
+                        ),
+                        settings: LiquidGlassSettings(
+                          thickness: 15,
+                          glassColor: Color(0xFF000000),
+                          lightIntensity: 0.8,
+                          ambientStrength: 0.3,
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.3),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.2),
+                              width: 1.5,
+                            ),
+                            borderRadius: BorderRadius.circular(25.0),
+                          ),
+                          child: Row(
                     children: [
                       IconButton(
                         icon: Icon(
@@ -225,14 +245,25 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                         style: const TextStyle(color: Colors.white),
                       ),
                       Expanded(
-                        child: VideoProgressIndicator(
-                          _controller,
-                          allowScrubbing: true,
+                        child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
-                          colors: const VideoProgressColors(
-                            playedColor: Colors.amber,
-                            bufferedColor: Colors.white38,
-                            backgroundColor: Colors.white24,
+                          child: SliderTheme(
+                            data: SliderTheme.of(context).copyWith(
+                              activeTrackColor: Colors.amber,
+                              inactiveTrackColor: Colors.white24,
+                              thumbColor: Colors.white,
+                              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                              trackHeight: 3,
+                            ),
+                            child: Slider(
+                              value: _controller.value.position.inMilliseconds.toDouble(),
+                              max: _controller.value.duration.inMilliseconds.toDouble(),
+                              onChanged: (value) {
+                                final position = Duration(milliseconds: value.toInt());
+                                _controller.seekTo(position);
+                              },
+                            ),
                           ),
                         ),
                       ),
@@ -244,7 +275,11 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                         icon: const Icon(Icons.close, color: Colors.white),
                         onPressed: () => Navigator.pop(context),
                       ),
-                    ],
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
