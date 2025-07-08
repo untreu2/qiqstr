@@ -68,6 +68,7 @@ dependencies:
     crypto: ^3.0.6
     kmbal_ionicons: ^1.0.0
     bounce: ^1.0.2
+    liquid_glass_renderer: ^0.1.1-dev.9
 dev_dependencies:
     hive_generator: ^2.0.1
     flutter_test:

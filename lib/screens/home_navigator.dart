@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qiqstr/screens/feed_page.dart';
@@ -56,18 +57,28 @@ class _HomeNavigatorState extends State<HomeNavigator> {
               borderRadius: BorderRadius.circular(25.0),
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                child: Container(
-                  height: 70,
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.2),
-                      width: 1.5,
-                    ),
-                    borderRadius: BorderRadius.circular(25.0),
+                child: LiquidGlass(
+                  shape: LiquidRoundedSuperellipse(
+                    borderRadius: Radius.circular(25.0),
                   ),
-                  child: Row(
-                    children: items.map((item) {
+                  settings: LiquidGlassSettings(
+                    thickness: 15,
+                    glassColor: Color(0xFF000000),
+                    lightIntensity: 0.8,
+                    ambientStrength: 0.3,
+                  ),
+                  child: Container(
+                    height: 70,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.3),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.2),
+                        width: 1.5,
+                      ),
+                      borderRadius: BorderRadius.circular(25.0),
+                    ),
+                    child: Row(
+                      children: items.map((item) {
                       final bool isSelected = _currentIndex == item['index'];
                       final index = item['index'];
 
@@ -149,7 +160,8 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                           ),
                         ),
                       );
-                    }).toList(),
+                      }).toList(),
+                    ),
                   ),
                 ),
               ),
@@ -160,18 +172,28 @@ class _HomeNavigatorState extends State<HomeNavigator> {
             borderRadius: BorderRadius.circular(25.0),
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: Container(
-                width: 70,
-                height: 70,
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
-                  border: Border.all(
-                    color: Colors.white.withOpacity(0.2),
-                    width: 1.5,
-                  ),
-                  borderRadius: BorderRadius.circular(25.0),
+              child: LiquidGlass(
+                shape: LiquidRoundedSuperellipse(
+                  borderRadius: Radius.circular(25.0),
                 ),
-                child: Bounce(
+                settings: LiquidGlassSettings(
+                  thickness: 15,
+                  glassColor: Color(0xFF000000),
+                  lightIntensity: 0.8,
+                  ambientStrength: 0.3,
+                ),
+                child: Container(
+                  width: 70,
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.3),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.2),
+                      width: 1.5,
+                    ),
+                    borderRadius: BorderRadius.circular(25.0),
+                  ),
+                  child: Bounce(
                   scaleFactor: 0.85,
                   onTap: () {
                     Navigator.of(context).push(
@@ -193,6 +215,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                         ),
                       ],
                     ),
+                  ),
                   ),
                 ),
               ),
