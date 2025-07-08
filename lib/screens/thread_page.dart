@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/services/data_service.dart';
@@ -186,6 +187,43 @@ class _ThreadPageState extends State<ThreadPage> {
     );
   }
 
+  Widget _buildBlurredHeader(BuildContext context) {
+    final double topPadding = MediaQuery.of(context).padding.top;
+
+    return ClipRRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          width: double.infinity,
+          height: topPadding + 56,
+          color: Colors.black.withOpacity(0.5),
+          padding: EdgeInsets.fromLTRB(8, topPadding, 8, 0),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+              const Expanded(
+                child: Center(
+                  child: Text(
+                    'Thread',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 48),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildThreadReplies(NoteModel noteForReplies) {
     if (_currentUserNpub == null || _rootNote == null) return const SizedBox.shrink();
 
@@ -306,73 +344,77 @@ class _ThreadPageState extends State<ThreadPage> {
     final NoteModel? contextNote = _focusedNote != null ? _rootNote : null;
     final isDisplayRootHighlighted = displayRoot?.id == _highlightedNoteId;
 
+    final double topPadding = MediaQuery.of(context).padding.top;
+    final double headerHeight = topPadding + 56;
+
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text('Thread'),
-        centerTitle: true,
-        backgroundColor: Colors.black,
-        elevation: 0,
-      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : displayRoot == null
               ? const Center(child: Text('Note not found.', style: TextStyle(color: Colors.white70)))
-              : SingleChildScrollView(
-                  controller: _scrollController,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (contextNote != null)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                          child: NoteWidget(
-                            note: contextNote,
-                            reactionCount: contextNote.reactionCount,
-                            replyCount: contextNote.replyCount,
-                            repostCount: contextNote.repostCount,
-                            dataService: widget.dataService,
-                            currentUserNpub: _currentUserNpub!,
-                            notesNotifier: widget.dataService.notesNotifier,
-                            profiles: widget.dataService.profilesNotifier.value,
-                            isSmallView: true,
-                            containerColor: Colors.transparent,
+              : Stack(
+                  children: [
+                    SingleChildScrollView(
+                      controller: _scrollController,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(height: headerHeight),
+                          if (contextNote != null)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                              child: NoteWidget(
+                                note: contextNote,
+                                reactionCount: contextNote.reactionCount,
+                                replyCount: contextNote.replyCount,
+                                repostCount: contextNote.repostCount,
+                                dataService: widget.dataService,
+                                currentUserNpub: _currentUserNpub!,
+                                notesNotifier: widget.dataService.notesNotifier,
+                                profiles: widget.dataService.profilesNotifier.value,
+                                isSmallView: true,
+                                containerColor: Colors.transparent,
+                              ),
+                            ),
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 500),
+                            curve: Curves.easeInOut,
+                            color: isDisplayRootHighlighted
+                                ? Theme.of(context).primaryColor.withOpacity(0.1)
+                                : Colors.transparent,
+                            child: RootNoteWidget(
+                              key: _focusedNote != null ? _focusedNoteKey : null,
+                              note: displayRoot,
+                              dataService: widget.dataService,
+                              onNavigateToMentionProfile: _navigateToProfile,
+                              isReactionGlowing: _isReactionGlowing,
+                              isReplyGlowing: _isReplyGlowing,
+                              isRepostGlowing: _isRepostGlowing,
+                              isZapGlowing: _isZapGlowing,
+                              hasReacted: _hasReacted(displayRoot),
+                              hasReplied: _hasReplied(displayRoot),
+                              hasReposted: _hasReposted(displayRoot),
+                              hasZapped: _hasZapped(displayRoot),
+                              onReactionTap: () => _handleReactionTap(displayRoot),
+                              onReplyTap: () => _handleReplyTap(displayRoot),
+                              onRepostTap: () => _handleRepostTap(displayRoot),
+                              onZapTap: () => _handleZapTap(displayRoot),
+                              onStatisticsTap: () => _handleStatisticsTap(displayRoot),
+                            ),
                           ),
-                        ),
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 500),
-                        curve: Curves.easeInOut,
-                        color: isDisplayRootHighlighted
-                            ? Theme.of(context).primaryColor.withOpacity(0.1)
-                            : Colors.transparent,
-                        child: RootNoteWidget(
-                          key: _focusedNote != null ? _focusedNoteKey : null,
-                          note: displayRoot,
-                          dataService: widget.dataService,
-                          onNavigateToMentionProfile: _navigateToProfile,
-                          isReactionGlowing: _isReactionGlowing,
-                          isReplyGlowing: _isReplyGlowing,
-                          isRepostGlowing: _isRepostGlowing,
-                          isZapGlowing: _isZapGlowing,
-                          hasReacted: _hasReacted(displayRoot),
-                          hasReplied: _hasReplied(displayRoot),
-                          hasReposted: _hasReposted(displayRoot),
-                          hasZapped: _hasZapped(displayRoot),
-                          onReactionTap: () => _handleReactionTap(displayRoot),
-                          onReplyTap: () => _handleReplyTap(displayRoot),
-                          onRepostTap: () => _handleRepostTap(displayRoot),
-                          onZapTap: () => _handleZapTap(displayRoot),
-                          onStatisticsTap: () => _handleStatisticsTap(displayRoot),
-                        ),
+                          _buildThreadReplies(displayRoot),
+                          const SizedBox(height: 24.0),
+                        ],
                       ),
-                      _buildThreadReplies(displayRoot),
-                      const SizedBox(height: 24.0),
-                    ],
-                  ),
+                    ),
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: _buildBlurredHeader(context),
+                    ),
+                  ],
                 ),
     );
   }
