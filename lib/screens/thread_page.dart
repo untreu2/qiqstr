@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:bounce/bounce.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/widgets/root_note_widget.dart';
@@ -187,37 +188,37 @@ class _ThreadPageState extends State<ThreadPage> {
     );
   }
 
-  Widget _buildBlurredHeader(BuildContext context) {
+  Widget _buildFloatingBackButton(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
 
-    return ClipRRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          width: double.infinity,
-          height: topPadding + 56,
-          color: Colors.black.withOpacity(0.5),
-          padding: EdgeInsets.fromLTRB(8, topPadding, 8, 0),
-          child: Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
+    return Positioned(
+      top: topPadding + 8,
+      left: 16,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(25.0),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.3),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.2),
+                width: 1.5,
               ),
-              const Expanded(
-                child: Center(
-                  child: Text(
-                    'Thread',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
+              borderRadius: BorderRadius.circular(25.0),
+            ),
+            child: Bounce(
+              scaleFactor: 0.85,
+              onTap: () => Navigator.pop(context),
+              behavior: HitTestBehavior.opaque,
+              child: const Icon(
+                Icons.arrow_back,
+                color: Colors.white70,
+                size: 20,
               ),
-              const SizedBox(width: 48),
-            ],
+            ),
           ),
         ),
       ),
@@ -346,7 +347,7 @@ class _ThreadPageState extends State<ThreadPage> {
     final isDisplayRootHighlighted = displayRoot?.id == _highlightedNoteId;
 
     final double topPadding = MediaQuery.of(context).padding.top;
-    final double headerHeight = topPadding + 56;
+    final double headerHeight = topPadding + 60;
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -409,12 +410,7 @@ class _ThreadPageState extends State<ThreadPage> {
                         ],
                       ),
                     ),
-                    Positioned(
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      child: _buildBlurredHeader(context),
-                    ),
+                    _buildFloatingBackButton(context),
                   ],
                 ),
     );

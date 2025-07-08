@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:bounce/bounce.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/edit_profile.dart';
 import 'package:qiqstr/screens/following_page.dart';
@@ -177,16 +179,32 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               Positioned(
                 top: MediaQuery.of(context).padding.top + -8,
                 left: 12,
-                child: GestureDetector(
-                  onTap: () => Navigator.of(context).maybePop(),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.3),
-                      shape: BoxShape.circle,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(25.0),
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.3),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.2),
+                          width: 1.5,
+                        ),
+                        borderRadius: BorderRadius.circular(25.0),
+                      ),
+                      child: Bounce(
+                        scaleFactor: 0.85,
+                        onTap: () => Navigator.of(context).maybePop(),
+                        behavior: HitTestBehavior.opaque,
+                        child: const Icon(
+                          Icons.arrow_back,
+                          color: Colors.white70,
+                          size: 20,
+                        ),
+                      ),
                     ),
-                    child: const Icon(Icons.arrow_back,
-                        size: 20, color: Colors.white),
                   ),
                 ),
               ),
