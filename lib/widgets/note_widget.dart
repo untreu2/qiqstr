@@ -249,14 +249,14 @@ class _NoteWidgetState extends State<NoteWidget>
           const SizedBox(width: 6),
           profileImage != null && profileImage.isNotEmpty
               ? CircleAvatar(
-                  radius: 10,
+                  radius: 11,
                   backgroundImage: CachedNetworkImageProvider(profileImage),
                   backgroundColor: Colors.transparent,
                 )
               : const CircleAvatar(
-                  radius: 10,
+                  radius: 11,
                   backgroundColor: Colors.grey,
-                  child: Icon(Icons.person, size: 12, color: Colors.white),
+                  child: Icon(Icons.person, size: 13, color: Colors.white),
                 ),
           const SizedBox(width: 6),
           Expanded(
@@ -329,7 +329,7 @@ class _NoteWidgetState extends State<NoteWidget>
                           child: Stack(
                             children: [
                               CircleAvatar(
-                                radius: 18.5,
+                                radius: 21,
                                 backgroundImage:
                                     (authorUser?.profileImage ?? '').isNotEmpty
                                         ? CachedNetworkImageProvider(
@@ -341,7 +341,7 @@ class _NoteWidgetState extends State<NoteWidget>
                                         : Colors.transparent,
                                 child: (authorUser?.profileImage ?? '').isEmpty
                                     ? const Icon(Icons.person,
-                                        size: 20, color: Colors.white)
+                                        size: 23, color: Colors.white)
                                     : null,
                               ),
                               if (updatedNote.isReply)
