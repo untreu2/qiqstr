@@ -44,6 +44,8 @@ class _ThreadPageState extends State<ThreadPage> {
   bool _isRepostGlowing = false;
   bool _isZapGlowing = false;
 
+  Set<String> _relevantNoteIds = {};
+
   @override
   void initState() {
     super.initState();
@@ -58,7 +60,34 @@ class _ThreadPageState extends State<ThreadPage> {
     super.dispose();
   }
 
-  void _onNotesChanged() => _loadRootNote();
+  void _onNotesChanged() {
+    final allNotes = widget.dataService.notesNotifier.value;
+    bool hasRelevantChanges = false;
+
+    for (final note in allNotes) {
+      if (_relevantNoteIds.contains(note.id)) {
+        hasRelevantChanges = true;
+        break;
+      }
+    }
+
+    if (!hasRelevantChanges && _rootNote != null) {
+      for (final note in allNotes) {
+        if (note.isReply &&
+            (note.rootId == _rootNote!.id ||
+                note.parentId == _rootNote!.id ||
+                _relevantNoteIds.contains(note.parentId ?? '') ||
+                _relevantNoteIds.contains(note.rootId ?? ''))) {
+          hasRelevantChanges = true;
+          break;
+        }
+      }
+    }
+
+    if (hasRelevantChanges) {
+      _loadRootNote();
+    }
+  }
 
   Future<void> _loadRootNote() async {
     if (!mounted) return;
@@ -75,6 +104,8 @@ class _ThreadPageState extends State<ThreadPage> {
       _focusedNote = null;
     }
 
+    _updateRelevantNoteIds();
+
     if (mounted) {
       setState(() => _isLoading = false);
       if (widget.focusedNoteId != null && (_focusedNote != null || _rootNote?.id == widget.focusedNoteId)) {
@@ -82,6 +113,25 @@ class _ThreadPageState extends State<ThreadPage> {
           _scrollToFocusedNote();
         });
       }
+    }
+  }
+
+  void _updateRelevantNoteIds() {
+    _relevantNoteIds.clear();
+
+    if (_rootNote != null) {
+      _relevantNoteIds.add(_rootNote!.id);
+
+      final threadHierarchy = widget.dataService.buildThreadHierarchy(_rootNote!.id);
+      for (final replies in threadHierarchy.values) {
+        for (final reply in replies) {
+          _relevantNoteIds.add(reply.id);
+        }
+      }
+    }
+
+    if (_focusedNote != null) {
+      _relevantNoteIds.add(_focusedNote!.id);
     }
   }
 
@@ -306,17 +356,23 @@ class _ThreadPageState extends State<ThreadPage> {
                   decoration: BoxDecoration(
                       color: isHighlighted ? Theme.of(context).primaryColor.withOpacity(0.1) : Colors.transparent,
                       borderRadius: BorderRadius.circular(8)),
-                  child: NoteWidget(
-                    note: reply,
-                    reactionCount: reply.reactionCount,
-                    replyCount: reply.replyCount,
-                    repostCount: reply.repostCount,
-                    dataService: widget.dataService,
-                    currentUserNpub: _currentUserNpub!,
-                    notesNotifier: widget.dataService.notesNotifier,
-                    profiles: widget.dataService.profilesNotifier.value,
-                    isSmallView: depth > 0,
-                    containerColor: Colors.transparent,
+                  child: ValueListenableBuilder<List<NoteModel>>(
+                    valueListenable: widget.dataService.notesNotifier,
+                    builder: (context, notes, child) {
+                      final updatedReply = notes.firstWhereOrNull((n) => n.id == reply.id) ?? reply;
+                      return NoteWidget(
+                        note: updatedReply,
+                        reactionCount: updatedReply.reactionCount,
+                        replyCount: updatedReply.replyCount,
+                        repostCount: updatedReply.repostCount,
+                        dataService: widget.dataService,
+                        currentUserNpub: _currentUserNpub!,
+                        notesNotifier: widget.dataService.notesNotifier,
+                        profiles: widget.dataService.profilesNotifier.value,
+                        isSmallView: depth > 0,
+                        containerColor: Colors.transparent,
+                      );
+                    },
                   ),
                 ),
                 if (depth < 2)
@@ -366,17 +422,24 @@ class _ThreadPageState extends State<ThreadPage> {
                           if (contextNote != null)
                             Padding(
                               padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                              child: NoteWidget(
-                                note: contextNote,
-                                reactionCount: contextNote.reactionCount,
-                                replyCount: contextNote.replyCount,
-                                repostCount: contextNote.repostCount,
-                                dataService: widget.dataService,
-                                currentUserNpub: _currentUserNpub!,
-                                notesNotifier: widget.dataService.notesNotifier,
-                                profiles: widget.dataService.profilesNotifier.value,
-                                isSmallView: true,
-                                containerColor: Colors.transparent,
+                              child: ValueListenableBuilder<List<NoteModel>>(
+                                valueListenable: widget.dataService.notesNotifier,
+                                builder: (context, notes, child) {
+                                  final updatedContextNote =
+                                      notes.firstWhereOrNull((n) => n.id == contextNote.id) ?? contextNote;
+                                  return NoteWidget(
+                                    note: updatedContextNote,
+                                    reactionCount: updatedContextNote.reactionCount,
+                                    replyCount: updatedContextNote.replyCount,
+                                    repostCount: updatedContextNote.repostCount,
+                                    dataService: widget.dataService,
+                                    currentUserNpub: _currentUserNpub!,
+                                    notesNotifier: widget.dataService.notesNotifier,
+                                    profiles: widget.dataService.profilesNotifier.value,
+                                    isSmallView: true,
+                                    containerColor: Colors.transparent,
+                                  );
+                                },
                               ),
                             ),
                           AnimatedContainer(
