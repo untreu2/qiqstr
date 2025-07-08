@@ -57,19 +57,31 @@ class WebSocketManager {
             if (!_isClosed && _webSockets.containsKey(relayUrl)) {
               onEvent?.call(event, relayUrl);
             }
-          } catch (e) {}
+          } catch (e) {
+            // Silently handle event processing errors
+          }
         },
         onDone: () {
           try {
             _handleDisconnection(relayUrl, onDisconnected);
-          } catch (e) {}
+          } catch (e) {
+            // Silently handle disconnection errors
+          }
         },
         onError: (error) {
           try {
-            _handleDisconnection(relayUrl, onDisconnected);
-          } catch (e) {}
+            // Handle specific socket errors
+            if (error is SocketException) {
+              // Socket closed or connection lost - handle gracefully
+              _handleDisconnection(relayUrl, onDisconnected);
+            } else {
+              _handleDisconnection(relayUrl, onDisconnected);
+            }
+          } catch (e) {
+            // Silently handle error handling errors
+          }
         },
-        cancelOnError: true,
+        cancelOnError: false, // Don't cancel on error to prevent cascade failures
       );
     } catch (e) {
       try {
@@ -94,8 +106,18 @@ class WebSocketManager {
 
     final futures = activeWs.map((ws) async {
       try {
-        await action(ws);
-      } catch (e) {}
+        // Check if socket is still open before executing action
+        if (ws.readyState == WebSocket.open) {
+          await action(ws);
+        }
+      } catch (e) {
+        // Handle socket errors during broadcast
+        if (e is SocketException) {
+          // Socket closed - remove from active sockets
+          _webSockets.removeWhere((key, value) => value == ws);
+        }
+        // Silently handle other errors
+      }
     });
     
     await Future.wait(futures, eagerError: false);
@@ -133,18 +155,41 @@ class WebSocketManager {
         _reconnectTimers.remove(relayUrl);
         
         ws.listen(
-          (_) {},
+          (event) {
+            // Handle events during reconnection if needed
+            try {
+              // Process events silently during reconnection
+            } catch (e) {
+              // Silently handle event processing errors
+            }
+          },
           onDone: () {
-            if (!_isClosed) {
-              reconnectRelay(relayUrl, targetNpubs, attempt: attempt + 1);
+            try {
+              if (!_isClosed) {
+                _webSockets.remove(relayUrl);
+                reconnectRelay(relayUrl, targetNpubs, attempt: attempt + 1);
+              }
+            } catch (e) {
+              // Silently handle reconnection errors
             }
           },
-          onError: (_) {
-            if (!_isClosed) {
-              reconnectRelay(relayUrl, targetNpubs, attempt: attempt + 1);
+          onError: (error) {
+            try {
+              if (!_isClosed) {
+                _webSockets.remove(relayUrl);
+                // Handle specific socket errors during reconnection
+                if (error is SocketException) {
+                  // Socket closed - attempt reconnection
+                  reconnectRelay(relayUrl, targetNpubs, attempt: attempt + 1);
+                } else {
+                  reconnectRelay(relayUrl, targetNpubs, attempt: attempt + 1);
+                }
+              }
+            } catch (e) {
+              // Silently handle error handling errors
             }
           },
-          cancelOnError: true,
+          cancelOnError: false, // Don't cancel on error to prevent cascade failures
         );
         
         onReconnected?.call(relayUrl);
@@ -177,8 +222,12 @@ class WebSocketManager {
 
     final closeFutures = _webSockets.values.map((ws) async {
       try {
-        await ws.close();
-      } catch (e) {}
+        if (ws.readyState == WebSocket.open || ws.readyState == WebSocket.connecting) {
+          await ws.close();
+        }
+      } catch (e) {
+        // Silently handle close errors - socket might already be closed
+      }
     });
     
     await Future.wait(closeFutures, eagerError: false);
@@ -285,13 +334,27 @@ class PrimalCacheClient {
             }
           }
         },
-        onError: (_) {
-          if (!completer.isCompleted) completer.complete(null);
+        onError: (error) {
+          try {
+            // Handle specific socket errors in cache client
+            if (error is SocketException) {
+              // Socket closed - complete with null
+              if (!completer.isCompleted) completer.complete(null);
+            } else {
+              if (!completer.isCompleted) completer.complete(null);
+            }
+          } catch (e) {
+            if (!completer.isCompleted) completer.complete(null);
+          }
         },
         onDone: () {
-          if (!completer.isCompleted) completer.complete(null);
+          try {
+            if (!completer.isCompleted) completer.complete(null);
+          } catch (e) {
+            // Silently handle completion errors
+          }
         },
-        cancelOnError: true,
+        cancelOnError: false, // Don't cancel on error to prevent cascade failures
       );
 
       ws.add(jsonEncode(request));

@@ -123,6 +123,7 @@ class DataService {
   int get connectedRelaysCount => _socketManager.activeSockets.length;
 
   Future<void> initialize() async {
+    // Initialize isolates and boxes in parallel
     final isolateInitFutures = [
       _initializeEventProcessorIsolate(),
       _initializeFetchProcessorIsolate(),
@@ -155,15 +156,19 @@ class DataService {
     followingBox = boxes[6] as Box<FollowingModel>;
     notificationsBox = boxes[7] as Box<NotificationModel>;
 
-    await Future.wait([
-      loadReactionsFromCache(),
-      loadRepliesFromCache(),
-      loadRepostsFromCache(),
-      loadZapsFromCache(),
-      _loadNotificationsFromCache(),
-    ]);
+    // Load cache data in background to avoid blocking initialization
+    Future.microtask(() async {
+      await Future.wait([
+        loadReactionsFromCache(),
+        loadRepliesFromCache(),
+        loadRepostsFromCache(),
+        loadZapsFromCache(),
+        _loadNotificationsFromCache(),
+      ]);
+    });
 
-    loadNotesFromCache((loadedNotes) {});
+    // Load notes cache asynchronously
+    Future.microtask(() => loadNotesFromCache((loadedNotes) {}));
 
     _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
     _isInitialized = true;
@@ -545,63 +550,97 @@ class DataService {
   }
 
   Future<void> fetchProfilesBatch(List<String> npubs) async {
-    if (_isClosed) return;
+    if (_isClosed || npubs.isEmpty) return;
 
     final primal = PrimalCacheClient();
     final now = DateTime.now();
-
+    final uniqueNpubs = npubs.toSet().toList();
     final List<String> remainingForRelay = [];
 
-    for (final pub in npubs.toSet()) {
-      if (profileCache.containsKey(pub)) {
-        if (now.difference(profileCache[pub]!.fetchedAt) < profileCacheTTL) {
+    // Process profiles in batches to avoid blocking
+    const batchSize = 10;
+    for (int i = 0; i < uniqueNpubs.length; i += batchSize) {
+      final batch = uniqueNpubs.skip(i).take(batchSize);
+      
+      for (final pub in batch) {
+        // Check cache first
+        if (profileCache.containsKey(pub)) {
+          if (now.difference(profileCache[pub]!.fetchedAt) < profileCacheTTL) {
+            continue;
+          } else {
+            profileCache.remove(pub);
+          }
+        }
+
+        // Check local storage
+        final user = usersBox?.get(pub);
+        if (user != null) {
+          final data = {
+            'name': user.name,
+            'profileImage': user.profileImage,
+            'about': user.about,
+            'nip05': user.nip05,
+            'banner': user.banner,
+            'lud16': user.lud16,
+            'website': user.website,
+          };
+          profileCache[pub] = CachedProfile(data, user.updatedAt);
           continue;
-        } else {
-          profileCache.remove(pub);
         }
+
+        remainingForRelay.add(pub);
       }
-
-      final user = usersBox?.get(pub);
-      if (user != null) {
-        final data = {
-          'name': user.name,
-          'profileImage': user.profileImage,
-          'about': user.about,
-          'nip05': user.nip05,
-          'banner': user.banner,
-          'lud16': user.lud16,
-          'website': user.website,
-        };
-        profileCache[pub] = CachedProfile(data, user.updatedAt);
-        continue;
+      
+      // Yield control periodically
+      if (i % (batchSize * 3) == 0) {
+        await Future.delayed(Duration.zero);
       }
-
-      final primalProfile = await primal.fetchUserProfile(pub);
-      if (primalProfile != null) {
-        profileCache[pub] = CachedProfile(primalProfile, now);
-
-        if (usersBox != null && usersBox!.isOpen) {
-          final userModel = UserModel.fromCachedProfile(pub, primalProfile);
-          await usersBox!.put(pub, userModel);
-        }
-        continue;
-      }
-
-      remainingForRelay.add(pub);
     }
 
+    // Fetch from Primal in background for remaining profiles
     if (remainingForRelay.isNotEmpty) {
-      final filter = Filter(
-        authors: remainingForRelay,
-        kinds: [0],
-        limit: remainingForRelay.length,
-      );
+      Future.microtask(() async {
+        final primalFutures = remainingForRelay.take(5).map((pub) async {
+          try {
+            final primalProfile = await primal.fetchUserProfile(pub);
+            if (primalProfile != null) {
+              profileCache[pub] = CachedProfile(primalProfile, now);
+              if (usersBox != null && usersBox!.isOpen) {
+                final userModel = UserModel.fromCachedProfile(pub, primalProfile);
+                await usersBox!.put(pub, userModel);
+              }
+              return pub;
+            }
+          } catch (e) {
+            print('[DataService] Error fetching profile for $pub: $e');
+          }
+          return null;
+        });
 
-      await _broadcastRequest(_createRequest(filter));
-      print(
-          '[DataService] Relay profile fetch fallback for ${remainingForRelay.length} npubs.');
+        final results = await Future.wait(primalFutures);
+        final fetchedFromPrimal = results.whereType<String>().toSet();
+        final stillRemaining = remainingForRelay.where((pub) => !fetchedFromPrimal.contains(pub)).toList();
+
+        // Fallback to relay for remaining profiles
+        if (stillRemaining.isNotEmpty) {
+          final filter = Filter(
+            authors: stillRemaining,
+            kinds: [0],
+            limit: stillRemaining.length,
+          );
+          await _broadcastRequest(_createRequest(filter));
+          print('[DataService] Relay profile fetch fallback for ${stillRemaining.length} npubs.');
+        }
+
+        // Update notifier
+        profilesNotifier.value = {
+          for (var entry in profileCache.entries)
+            entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
+        };
+      });
     }
 
+    // Update notifier immediately with cached profiles
     profilesNotifier.value = {
       for (var entry in profileCache.entries)
         entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
@@ -619,10 +658,11 @@ class DataService {
         'priority': 1,
       });
 
-      if (_pendingEvents.length >= 10) {
+      // Increased batch size and reduced timer for better performance
+      if (_pendingEvents.length >= 20) {
         _flushPendingEvents();
       } else {
-        _batchTimer ??= Timer(const Duration(milliseconds: 100), _flushPendingEvents);
+        _batchTimer ??= Timer(const Duration(milliseconds: 50), _flushPendingEvents);
       }
     } catch (e) {}
   }
@@ -631,7 +671,9 @@ class DataService {
     if (_pendingEvents.isNotEmpty) {
       final batch = List<Map<String, dynamic>>.from(_pendingEvents);
       _pendingEvents.clear();
-      _eventProcessorSendPort.send(batch);
+      
+      // Send batch asynchronously to avoid blocking
+      Future.microtask(() => _eventProcessorSendPort.send(batch));
     }
     _batchTimer?.cancel();
     _batchTimer = null;
@@ -1886,6 +1928,7 @@ class DataService {
       final allNotes = notesBox!.values.cast<NoteModel>().toList();
       if (allNotes.isEmpty) return;
 
+      // Sort notes efficiently
       allNotes.sort((a, b) {
         final aTime = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
         final bTime = b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
@@ -1895,19 +1938,31 @@ class DataService {
       final limitedNotes = allNotes.take(150).toList();
       final newNotes = <NoteModel>[];
 
-      for (final note in limitedNotes) {
-        if (!eventIds.contains(note.id)) {
-          parseContentForNote(note);
-          notes.add(note);
-          eventIds.add(note.id);
-          _addNote(note);
-          newNotes.add(note);
-        }
+      // Process notes in batches to avoid blocking
+      const batchSize = 25;
+      for (int i = 0; i < limitedNotes.length; i += batchSize) {
+        final batch = limitedNotes.skip(i).take(batchSize);
+        
+        for (final note in batch) {
+          if (!eventIds.contains(note.id)) {
+            parseContentForNote(note);
+            notes.add(note);
+            eventIds.add(note.id);
+            _addNote(note);
+            newNotes.add(note);
+          }
 
-        note.reactionCount = reactionsMap[note.id]?.length ?? 0;
-        note.replyCount = repliesMap[note.id]?.length ?? 0;
-        note.repostCount = repostsMap[note.id]?.length ?? 0;
-        note.zapAmount = zapsMap[note.id]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
+          // Update interaction counts from cache
+          note.reactionCount = reactionsMap[note.id]?.length ?? 0;
+          note.replyCount = repliesMap[note.id]?.length ?? 0;
+          note.repostCount = repostsMap[note.id]?.length ?? 0;
+          note.zapAmount = zapsMap[note.id]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
+        }
+        
+        // Yield control periodically to prevent blocking
+        if (i % (batchSize * 2) == 0) {
+          await Future.delayed(Duration.zero);
+        }
       }
 
       if (newNotes.isNotEmpty) {
@@ -1916,6 +1971,7 @@ class DataService {
 
         final cachedEventIds = newNotes.map((note) => note.id).toList();
         
+        // Fetch interactions and profiles in background
         Future.microtask(() => fetchInteractionsForEvents(cachedEventIds));
         Future.microtask(() async {
           await _fetchProfilesForAllData();
@@ -1925,7 +1981,9 @@ class DataService {
           };
         });
       }
-    } catch (e) {}
+    } catch (e) {
+      print('[DataService ERROR] Error loading notes from cache: $e');
+    }
   }
 
   Future<void> loadZapsFromCache() async {
@@ -2028,17 +2086,38 @@ class DataService {
       final allReactions = reactionsBox!.values.cast<ReactionModel>().toList();
       if (allReactions.isEmpty) return;
 
-      for (var reaction in allReactions) {
-        reactionsMap.putIfAbsent(reaction.targetEventId, () => []);
-        if (!reactionsMap[reaction.targetEventId]!
-            .any((r) => r.id == reaction.id)) {
-          reactionsMap[reaction.targetEventId]!.add(reaction);
-          onReactionsUpdated?.call(
-              reaction.targetEventId, reactionsMap[reaction.targetEventId]!);
+      // Process in batches to avoid blocking
+      const batchSize = 100;
+      final Map<String, List<ReactionModel>> tempMap = {};
+      
+      for (int i = 0; i < allReactions.length; i += batchSize) {
+        final batch = allReactions.skip(i).take(batchSize);
+        
+        for (var reaction in batch) {
+          tempMap.putIfAbsent(reaction.targetEventId, () => []);
+          if (!tempMap[reaction.targetEventId]!.any((r) => r.id == reaction.id)) {
+            tempMap[reaction.targetEventId]!.add(reaction);
+          }
+        }
+        
+        // Yield control periodically
+        if (i % (batchSize * 5) == 0) {
+          await Future.delayed(Duration.zero);
         }
       }
-      print(
-          '[DataService] Reactions cache loaded with ${allReactions.length} reactions.');
+      
+      // Merge with existing cache and notify
+      for (final entry in tempMap.entries) {
+        reactionsMap.putIfAbsent(entry.key, () => []);
+        for (final reaction in entry.value) {
+          if (!reactionsMap[entry.key]!.any((r) => r.id == reaction.id)) {
+            reactionsMap[entry.key]!.add(reaction);
+          }
+        }
+        onReactionsUpdated?.call(entry.key, reactionsMap[entry.key]!);
+      }
+      
+      print('[DataService] Reactions cache loaded with ${allReactions.length} reactions.');
     } catch (e) {
       print('[DataService ERROR] Error loading reactions from cache: $e');
     }
@@ -2050,22 +2129,41 @@ class DataService {
       final allReplies = repliesBox!.values.cast<ReplyModel>().toList();
       if (allReplies.isEmpty) return;
 
-      for (var reply in allReplies) {
-        repliesMap.putIfAbsent(reply.parentEventId, () => []);
-        if (!repliesMap[reply.parentEventId]!.any((r) => r.id == reply.id)) {
-          repliesMap[reply.parentEventId]!.add(reply);
+      // Process in batches to avoid blocking
+      const batchSize = 100;
+      final Map<String, List<ReplyModel>> tempMap = {};
+      
+      for (int i = 0; i < allReplies.length; i += batchSize) {
+        final batch = allReplies.skip(i).take(batchSize);
+        
+        for (var reply in batch) {
+          tempMap.putIfAbsent(reply.parentEventId, () => []);
+          if (!tempMap[reply.parentEventId]!.any((r) => r.id == reply.id)) {
+            tempMap[reply.parentEventId]!.add(reply);
+          }
+        }
+        
+        // Yield control periodically
+        if (i % (batchSize * 5) == 0) {
+          await Future.delayed(Duration.zero);
         }
       }
-      print(
-          '[DataService] Replies cache loaded with ${allReplies.length} replies.');
+      
+      // Merge with existing cache
+      for (final entry in tempMap.entries) {
+        repliesMap.putIfAbsent(entry.key, () => []);
+        for (final reply in entry.value) {
+          if (!repliesMap[entry.key]!.any((r) => r.id == reply.id)) {
+            repliesMap[entry.key]!.add(reply);
+          }
+        }
+      }
+      
+      print('[DataService] Replies cache loaded with ${allReplies.length} replies.');
 
       final replyIds = allReplies.map((r) => r.id).toList();
       if (replyIds.isNotEmpty) {
-        Future.microtask(() async {
-          await Future.wait([
-            fetchInteractionsForEvents(replyIds),
-          ]);
-        });
+        Future.microtask(() => fetchInteractionsForEvents(replyIds));
       }
     } catch (e) {
       print('[DataService ERROR] Error loading replies from cache: $e');
@@ -2078,16 +2176,38 @@ class DataService {
       final allReposts = repostsBox!.values.cast<RepostModel>().toList();
       if (allReposts.isEmpty) return;
 
-      for (var repost in allReposts) {
-        repostsMap.putIfAbsent(repost.originalNoteId, () => []);
-        if (!repostsMap[repost.originalNoteId]!.any((r) => r.id == repost.id)) {
-          repostsMap[repost.originalNoteId]!.add(repost);
-          onRepostsUpdated?.call(
-              repost.originalNoteId, repostsMap[repost.originalNoteId]!);
+      // Process in batches to avoid blocking
+      const batchSize = 100;
+      final Map<String, List<RepostModel>> tempMap = {};
+      
+      for (int i = 0; i < allReposts.length; i += batchSize) {
+        final batch = allReposts.skip(i).take(batchSize);
+        
+        for (var repost in batch) {
+          tempMap.putIfAbsent(repost.originalNoteId, () => []);
+          if (!tempMap[repost.originalNoteId]!.any((r) => r.id == repost.id)) {
+            tempMap[repost.originalNoteId]!.add(repost);
+          }
+        }
+        
+        // Yield control periodically
+        if (i % (batchSize * 5) == 0) {
+          await Future.delayed(Duration.zero);
         }
       }
-      print(
-          '[DataService] Reposts cache loaded with ${allReposts.length} reposts.');
+      
+      // Merge with existing cache and notify
+      for (final entry in tempMap.entries) {
+        repostsMap.putIfAbsent(entry.key, () => []);
+        for (final repost in entry.value) {
+          if (!repostsMap[entry.key]!.any((r) => r.id == repost.id)) {
+            repostsMap[entry.key]!.add(repost);
+          }
+        }
+        onRepostsUpdated?.call(entry.key, repostsMap[entry.key]!);
+      }
+      
+      print('[DataService] Reposts cache loaded with ${allReposts.length} reposts.');
     } catch (e) {
       print('[DataService ERROR] Error loading reposts from cache: $e');
     }
@@ -2569,10 +2689,18 @@ Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
           if (!completer.isCompleted) completer.complete(null);
         }
       }, onError: (error) {
-        if (!completer.isCompleted) completer.complete(null);
+        try {
+          if (!completer.isCompleted) completer.complete(null);
+        } catch (e) {
+          // Silently handle error handling errors
+        }
       }, onDone: () {
-        if (!completer.isCompleted) completer.complete(null);
-      }, cancelOnError: true);
+        try {
+          if (!completer.isCompleted) completer.complete(null);
+        } catch (e) {
+          // Silently handle completion errors
+        }
+      }, cancelOnError: false); // Don't cancel on error to prevent cascade failures
 
       if (ws.readyState == WebSocket.open) {
         ws.add(request);
@@ -2583,11 +2711,17 @@ Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
 
       try {
         await sub.cancel();
-      } catch (_) {}
+      } catch (_) {
+        // Silently handle subscription cancellation errors
+      }
       
       try {
-        await ws.close();
-      } catch (_) {}
+        if (ws.readyState == WebSocket.open || ws.readyState == WebSocket.connecting) {
+          await ws.close();
+        }
+      } catch (_) {
+        // Silently handle close errors
+      }
 
       if (eventData != null) {
         return NoteModel(
@@ -2607,8 +2741,12 @@ Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
     } catch (e) {
       print('[fetchFromSingleRelay] Error fetching from $relayUrl: $e');
       try {
-        await ws?.close();
-      } catch (_) {}
+        if (ws != null && (ws.readyState == WebSocket.open || ws.readyState == WebSocket.connecting)) {
+          await ws.close();
+        }
+      } catch (_) {
+        // Silently handle close errors
+      }
       return null;
     }
   }
