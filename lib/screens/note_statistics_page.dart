@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/note_model.dart';
 import '../services/data_service.dart';
 import '../models/user_model.dart';
+import '../colors.dart';
 
 class NoteStatisticsPage extends StatefulWidget {
   final NoteModel note;
@@ -42,14 +43,14 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
             backgroundImage: user?.profileImage.isNotEmpty == true
                 ? CachedNetworkImageProvider(user!.profileImage)
                 : null,
-            backgroundColor: Colors.grey.shade800,
+            backgroundColor: AppColors.grey800,
             child: user?.profileImage.isNotEmpty != true
-                ? const Icon(Icons.person, color: Colors.white)
+                ? const Icon(Icons.person, color: AppColors.surface)
                 : null,
           ),
           title: Text(
             user?.name ?? npub.substring(0, 8),
-            style: const TextStyle(color: Colors.white),
+            style: const TextStyle(color: AppColors.textPrimary),
           ),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -71,7 +72,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                   child: Text(
                     content,
                     style: const TextStyle(
-                      color: Colors.white70,
+                      color: AppColors.textSecondary,
                       fontSize: 13,
                     ),
                   ),
@@ -90,7 +91,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
           padding: const EdgeInsets.only(top: 32),
           child: Text(
             emptyText,
-            style: const TextStyle(color: Colors.white38),
+            style: const TextStyle(color: AppColors.textTertiary),
           ),
         ),
       );
@@ -101,7 +102,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
       itemCount: items.length,
       itemBuilder: (_, i) => items[i],
       separatorBuilder: (_, __) =>
-          const Divider(color: Colors.white12, height: 1),
+          const Divider(color: AppColors.border, height: 1),
     );
   }
 
@@ -130,7 +131,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
     return DefaultTabController(
       length: 3,
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: AppColors.background,
         body: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -144,7 +145,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                     GestureDetector(
                       onTap: () => Navigator.pop(context),
                       child: const Icon(Icons.arrow_back,
-                          color: Colors.white, size: 24),
+                          color: AppColors.textPrimary, size: 24),
                     ),
                     const SizedBox(width: 16),
                     const Text(
@@ -152,7 +153,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                       style: TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.w700,
-                        color: Colors.white,
+                        color: AppColors.textPrimary,
                         letterSpacing: -0.5,
                       ),
                     ),
@@ -161,9 +162,9 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
               ),
             ),
             const TabBar(
-              indicatorColor: Colors.white,
-              labelColor: Colors.white,
-              unselectedLabelColor: Colors.white38,
+              indicatorColor: AppColors.textPrimary,
+              labelColor: AppColors.textPrimary,
+              unselectedLabelColor: AppColors.textTertiary,
               indicatorWeight: 1.5,
               labelPadding: EdgeInsets.symmetric(vertical: 12),
               tabs: [

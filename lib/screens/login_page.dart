@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:nostr/nostr.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/screens/feed_page.dart';
+import '../colors.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -79,7 +80,7 @@ class _LoginPageState extends State<LoginPage> {
             style: TextStyle(
               fontSize: 36,
               fontWeight: FontWeight.w700,
-              color: Colors.white,
+              color: AppColors.textPrimary,
               letterSpacing: -1,
             ),
             textAlign: TextAlign.center,
@@ -89,7 +90,7 @@ class _LoginPageState extends State<LoginPage> {
             'Login securely with your private key.',
             style: TextStyle(
               fontSize: 16,
-              color: Colors.white70,
+              color: AppColors.textSecondary,
               height: 1.5,
             ),
             textAlign: TextAlign.center,
@@ -97,18 +98,18 @@ class _LoginPageState extends State<LoginPage> {
           const SizedBox(height: 40),
           TextField(
             controller: _nsecController,
-            style: const TextStyle(color: Colors.white),
+            style: const TextStyle(color: AppColors.textPrimary),
             decoration: InputDecoration(
               labelText: 'Enter your nsec...',
-              labelStyle: const TextStyle(color: Colors.white70),
+              labelStyle: const TextStyle(color: AppColors.textSecondary),
               filled: true,
-              fillColor: Colors.white10,
+              fillColor: AppColors.inputFill,
               enabledBorder: OutlineInputBorder(
-                borderSide: const BorderSide(color: Colors.white24),
+                borderSide: const BorderSide(color: AppColors.inputBorder),
                 borderRadius: BorderRadius.circular(12),
               ),
               focusedBorder: OutlineInputBorder(
-                borderSide: const BorderSide(color: Colors.white),
+                borderSide: const BorderSide(color: AppColors.inputFocused),
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
@@ -120,8 +121,8 @@ class _LoginPageState extends State<LoginPage> {
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
+                backgroundColor: AppColors.buttonPrimary,
+                foregroundColor: AppColors.background,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -138,7 +139,7 @@ class _LoginPageState extends State<LoginPage> {
           if (_message.isNotEmpty)
             Text(
               _message,
-              style: const TextStyle(color: Colors.redAccent),
+              style: const TextStyle(color: AppColors.error),
             ),
         ],
       ),
@@ -149,11 +150,11 @@ class _LoginPageState extends State<LoginPage> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: const [
-        CircularProgressIndicator(color: Colors.white),
+        CircularProgressIndicator(color: AppColors.loading),
         SizedBox(height: 20),
         Text(
           'Logging in...',
-          style: TextStyle(color: Colors.white70, fontSize: 16),
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
         ),
       ],
     );
@@ -162,7 +163,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Center(
           child: _isLoading

@@ -6,6 +6,7 @@ import 'dart:ui';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'colors.dart';
 import 'models/note_model.dart';
 import 'models/reaction_model.dart';
 import 'models/reply_model.dart';
@@ -171,12 +172,12 @@ class QiqstrApp extends ConsumerWidget {
     return MaterialApp(
       title: 'Qiqstr',
       theme: ThemeData(
-        scaffoldBackgroundColor: Colors.black,
+        scaffoldBackgroundColor: AppColors.background,
         textTheme: ThemeData.dark()
             .textTheme
             .apply(
-              bodyColor: Colors.white,
-              displayColor: Colors.white,
+              bodyColor: AppColors.textPrimary,
+              displayColor: AppColors.textPrimary,
             )
             .copyWith(
               bodyLarge: const TextStyle(height: 2.1),
@@ -187,23 +188,23 @@ class QiqstrApp extends ConsumerWidget {
               titleSmall: const TextStyle(height: 2.1),
             ),
         colorScheme: const ColorScheme.dark(
-          primary: Colors.white,
-          secondary: Colors.grey,
-          surface: Colors.black,
-          error: Colors.redAccent,
-          onPrimary: Colors.black,
-          onSecondary: Colors.white,
-          onSurface: Colors.white,
-          onError: Colors.black,
+          primary: AppColors.primary,
+          secondary: AppColors.secondary,
+          surface: AppColors.surface,
+          error: AppColors.error,
+          onPrimary: AppColors.background,
+          onSecondary: AppColors.textPrimary,
+          onSurface: AppColors.textPrimary,
+          onError: AppColors.background,
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.black,
+          backgroundColor: AppColors.background,
           elevation: 0,
           centerTitle: true,
           titleTextStyle: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w600,
-            color: Colors.white,
+            color: AppColors.textPrimary,
             height: 2.1,
           ),
         ),
@@ -224,7 +225,7 @@ class HiveErrorApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: Colors.black,
+        scaffoldBackgroundColor: AppColors.background,
         textTheme: ThemeData.dark().textTheme.copyWith(
               bodyLarge: const TextStyle(height: 2.1),
               bodyMedium: const TextStyle(height: 2.1),
@@ -239,7 +240,7 @@ class HiveErrorApp extends StatelessWidget {
             'An error occurred while initializing the application.',
             style: TextStyle(
               fontSize: 18,
-              color: Colors.white,
+              color: AppColors.textPrimary,
               height: 2.1,
             ),
             textAlign: TextAlign.center,

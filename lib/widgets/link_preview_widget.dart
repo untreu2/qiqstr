@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../colors.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:hive_flutter/hive_flutter.dart';
@@ -90,7 +91,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
       );
       if (!mounted) return;
 
-      final dominant = palette.dominantColor?.color ?? Colors.black;
+      final dominant = palette.dominantColor?.color ?? AppColors.background;
 
       final darkened = HSLColor.fromColor(dominant)
           .withLightness(
@@ -153,7 +154,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
                 width: double.infinity,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                color: _dominantColor ?? Colors.black87,
+                color: _dominantColor ?? AppColors.overlayDark,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -164,7 +165,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
                       style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: Colors.white,
+                        color: AppColors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -172,7 +173,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
                       Uri.parse(widget.url).host.replaceFirst('www.', ''),
                       style: const TextStyle(
                         fontSize: 11,
-                        color: Colors.white70,
+                        color: AppColors.textSecondary,
                       ),
                     ),
                   ],
@@ -187,9 +188,9 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
 
   Widget _placeholder() {
     return Container(
-      color: Colors.grey.shade900,
+      color: AppColors.grey900,
       child: const Center(
-        child: Icon(Icons.link, color: Colors.white38),
+        child: Icon(Icons.link, color: AppColors.textTertiary),
       ),
     );
   }

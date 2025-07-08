@@ -6,6 +6,7 @@ import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/services/media_service.dart';
 import 'package:qiqstr/widgets/note_widget.dart';
+import '../colors.dart';
 
 enum NoteLoadingState {
   loading,
@@ -238,8 +239,8 @@ class _LazyNoteWidgetState extends State<LazyNoteWidget> {
               strokeWidth: 2,
               valueColor: AlwaysStoppedAnimation<Color>(
                 _loadingState == NoteLoadingState.error 
-                    ? Colors.red.withOpacity(0.7)
-                    : Colors.white.withOpacity(0.7),
+                    ? AppColors.error.withOpacity(0.7)
+                    : AppColors.textSecondary,
               ),
             ),
           ),
@@ -248,16 +249,16 @@ class _LazyNoteWidgetState extends State<LazyNoteWidget> {
             loadingIcon,
             size: 16,
             color: _loadingState == NoteLoadingState.error 
-                ? Colors.red.withOpacity(0.7)
-                : Colors.white.withOpacity(0.7),
+                ? AppColors.error.withOpacity(0.7)
+                : AppColors.textSecondary,
           ),
           const SizedBox(width: 8),
           Text(
             loadingText,
             style: TextStyle(
               color: _loadingState == NoteLoadingState.error 
-                  ? Colors.red.withOpacity(0.7)
-                  : Colors.white.withOpacity(0.7),
+                  ? AppColors.error.withOpacity(0.7)
+                  : AppColors.textSecondary,
               fontSize: 14,
               fontWeight: FontWeight.w500,
             ),

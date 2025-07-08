@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../colors.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/note_model.dart';
 import '../models/user_model.dart';
@@ -37,7 +38,7 @@ class ReplyPreviewWidget extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: const Text(
               'Note not found',
-              style: TextStyle(color: Colors.white54, fontSize: 14),
+              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
             ),
           );
         }
@@ -66,19 +67,19 @@ class ReplyPreviewWidget extends StatelessWidget {
                     Container(
                       width: 2,
                       height: 20,
-                      color: Colors.grey.shade600,
+                      color: AppColors.grey600,
                       margin: const EdgeInsets.only(right: 8),
                     ),
                     const Icon(
                       Icons.reply,
                       size: 16,
-                      color: Colors.grey,
+                      color: AppColors.secondary,
                     ),
                     const SizedBox(width: 6),
                     const Text(
                       'Replying to',
                       style: TextStyle(
-                        color: Colors.grey,
+                        color: AppColors.secondary,
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                       ),
@@ -90,9 +91,9 @@ class ReplyPreviewWidget extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade900.withOpacity(0.3),
+                    color: AppColors.grey900.withOpacity(0.3),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade800, width: 0.5),
+                    border: Border.all(color: AppColors.grey800, width: 0.5),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -101,12 +102,12 @@ class ReplyPreviewWidget extends StatelessWidget {
                         children: [
                           CircleAvatar(
                             radius: 12,
-                            backgroundColor: Colors.white24,
+                            backgroundColor: AppColors.surfaceTransparent,
                             backgroundImage: authorImage.isNotEmpty
                                 ? CachedNetworkImageProvider(authorImage)
                                 : null,
                             child: authorImage.isEmpty
-                                ? const Icon(Icons.person, color: Colors.white, size: 12)
+                                ? const Icon(Icons.person, color: AppColors.textPrimary, size: 12)
                                 : null,
                           ),
                           const SizedBox(width: 8),
@@ -116,7 +117,7 @@ class ReplyPreviewWidget extends StatelessWidget {
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: Colors.white,
+                                color: AppColors.textPrimary,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -125,7 +126,7 @@ class ReplyPreviewWidget extends StatelessWidget {
                             '• ${_formatTimestamp(note.timestamp)}',
                             style: const TextStyle(
                               fontSize: 11,
-                              color: Colors.grey,
+                              color: AppColors.secondary,
                             ),
                           ),
                         ],
@@ -144,7 +145,7 @@ class ReplyPreviewWidget extends StatelessWidget {
                 Container(
                   margin: const EdgeInsets.symmetric(vertical: 12),
                   height: 1,
-                  color: Colors.grey.shade800,
+                  color: AppColors.grey800,
                 ),
               ],
             );

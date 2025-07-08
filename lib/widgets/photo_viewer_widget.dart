@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../colors.dart';
 
 class PhotoViewerWidget extends StatefulWidget {
   final List<String> imageUrls;
@@ -49,7 +50,7 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.background,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -86,7 +87,7 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
           child: CircularProgressIndicator(),
         ),
         backgroundDecoration: const BoxDecoration(
-          color: Colors.black,
+          color: AppColors.background,
         ),
       ),
     );

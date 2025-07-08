@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../colors.dart';
 import 'package:hive/hive.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/models/user_model.dart';
@@ -81,7 +82,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w700,
-                  color: Colors.white,
+                  color: AppColors.textPrimary,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -92,7 +93,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
             "There are ${_allUsers.length} users cached on your device.",
             style: const TextStyle(
               fontSize: 14,
-              color: Colors.white60,
+              color: AppColors.textSecondary,
               height: 1.4,
             ),
           ),
@@ -106,13 +107,13 @@ class _UserSearchPageState extends State<UserSearchPage> {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
       child: TextField(
         controller: _searchController,
-        style: const TextStyle(color: Colors.white),
+        style: const TextStyle(color: AppColors.textPrimary),
         decoration: InputDecoration(
           hintText: 'Search users...',
-          hintStyle: const TextStyle(color: Colors.white38),
-          prefixIcon: const Icon(Icons.search, color: Colors.white),
+          hintStyle: const TextStyle(color: AppColors.textTertiary),
+          prefixIcon: const Icon(Icons.search, color: AppColors.textPrimary),
           filled: true,
-          fillColor: Colors.white10,
+          fillColor: AppColors.surface,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide.none,
@@ -131,12 +132,12 @@ class _UserSearchPageState extends State<UserSearchPage> {
             : null,
         backgroundColor: Colors.grey.shade800,
       ),
-      title: Text(user.name, style: const TextStyle(color: Colors.white)),
+      title: Text(user.name, style: const TextStyle(color: AppColors.textPrimary)),
       subtitle: Text(
         user.about,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(color: Colors.white70),
+        style: const TextStyle(color: AppColors.textSecondary),
       ),
       onTap: () {
         Navigator.push(
@@ -152,7 +153,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.background,
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -163,7 +164,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
                 ? const Center(
                     child: Text(
                       'No users found.',
-                      style: TextStyle(color: Colors.white70),
+                      style: TextStyle(color: AppColors.textSecondary),
                     ),
                   )
                 : ListView.separated(
@@ -172,7 +173,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
                     itemBuilder: (context, index) =>
                         _buildUserTile(_filteredUsers[index]),
                     separatorBuilder: (_, __) => const Divider(
-                      color: Colors.white12,
+                      color: AppColors.border,
                       height: 1,
                     ),
                   ),

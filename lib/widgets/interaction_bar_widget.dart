@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:bounce/bounce.dart';
+import '../colors.dart';
 
 class InteractionBar extends StatelessWidget {
   final int reactionCount;
@@ -79,7 +80,7 @@ class InteractionBar extends StatelessWidget {
                 opacity: count > 0 ? 1.0 : 0.0,
                 child: Text(
                   '$count',
-                  style: const TextStyle(fontSize: 14, color: Colors.grey),
+                  style: const TextStyle(fontSize: 14, color: AppColors.secondary),
                 ),
               ),
             ],
@@ -98,8 +99,8 @@ class InteractionBar extends StatelessWidget {
           context: context,
           svg: 'assets/reaction_button.svg',
           color: isReactionGlowing || hasReacted
-              ? Colors.red.shade400
-              : Colors.grey,
+              ? AppColors.reaction
+              : AppColors.secondary,
           count: reactionCount,
           onTap: onReactionTap,
         ),
@@ -107,8 +108,8 @@ class InteractionBar extends StatelessWidget {
           context: context,
           svg: 'assets/reply_button.svg',
           color: isReplyGlowing || hasReplied
-              ? Colors.blue.shade200
-              : Colors.grey,
+              ? AppColors.reply
+              : AppColors.secondary,
           count: replyCount,
           onTap: onReplyTap,
         ),
@@ -116,8 +117,8 @@ class InteractionBar extends StatelessWidget {
           context: context,
           svg: 'assets/repost_button.svg',
           color: isRepostGlowing || hasReposted
-              ? Colors.green.shade400
-              : Colors.grey,
+              ? AppColors.repost
+              : AppColors.secondary,
           count: repostCount,
           onTap: onRepostTap,
         ),
@@ -125,8 +126,8 @@ class InteractionBar extends StatelessWidget {
           context: context,
           svg: 'assets/zap_button.svg',
           color: isZapGlowing || hasZapped
-              ? const Color(0xFFECB200)
-              : Colors.grey,
+              ? AppColors.zap
+              : AppColors.secondary,
           count: zapAmount,
           onTap: onZapTap,
         ),
@@ -135,7 +136,7 @@ class InteractionBar extends StatelessWidget {
           child: const Padding(
             padding: EdgeInsets.only(left: 6),
             
-            child: Icon(Icons.bar_chart, size: 19, color: Colors.grey), 
+            child: Icon(Icons.bar_chart, size: 19, color: AppColors.secondary),
           ),
         ),
       ],

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../colors.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/services/data_service.dart';
@@ -176,7 +177,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
             child: Text(
               'Loading...',
               style: TextStyle(
-                color: Colors.white70,
+                color: AppColors.textSecondary,
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
               ),
@@ -197,7 +198,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                 child: Text(
                   'No notes available yet.',
                   style: TextStyle(
-                    color: Colors.white70,
+                    color: AppColors.textSecondary,
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
                   ),
@@ -217,7 +218,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                 child: Text(
                   'No notes match the current filter.',
                   style: TextStyle(
-                    color: Colors.white70,
+                    color: AppColors.textSecondary,
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
                   ),
@@ -245,7 +246,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white38),
+                          valueColor: AlwaysStoppedAnimation<Color>(AppColors.textTertiary),
                         ),
                       ),
                     ),
@@ -273,7 +274,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                       margin: const EdgeInsets.symmetric(vertical: 10),
                       height: 1,
                       width: double.infinity,
-                      color: Colors.white24,
+                      color: AppColors.surfaceTransparent,
                     ),
                 ],
               );

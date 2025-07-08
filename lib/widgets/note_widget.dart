@@ -10,7 +10,7 @@ import 'package:qiqstr/widgets/note_content_widget.dart';
 import 'package:qiqstr/widgets/dialogs/repost_dialog.dart';
 import 'package:qiqstr/widgets/dialogs/zap_dialog.dart';
 
-
+import '../colors.dart';
 import '../models/note_model.dart';
 import '../services/data_service.dart';
 
@@ -245,18 +245,18 @@ class _NoteWidgetState extends State<NoteWidget>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Icon(Icons.repeat, size: 16, color: Colors.grey),
+          const Icon(Icons.repeat, size: 16, color: AppColors.secondary),
           const SizedBox(width: 6),
           profileImage != null && profileImage.isNotEmpty
               ? CircleAvatar(
                   radius: 11,
                   backgroundImage: CachedNetworkImageProvider(profileImage),
-                  backgroundColor: Colors.transparent,
+                  backgroundColor: AppColors.surfaceTransparent,
                 )
               : const CircleAvatar(
                   radius: 11,
-                  backgroundColor: Colors.grey,
-                  child: Icon(Icons.person, size: 13, color: Colors.white),
+                  backgroundColor: AppColors.avatarBackground,
+                  child: Icon(Icons.person, size: 13, color: AppColors.iconPrimary),
                 ),
           const SizedBox(width: 6),
           Expanded(
@@ -266,7 +266,7 @@ class _NoteWidgetState extends State<NoteWidget>
                 Flexible(
                   child: Text(
                     'Reposted by $name',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    style: const TextStyle(fontSize: 12, color: AppColors.secondary),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -274,7 +274,7 @@ class _NoteWidgetState extends State<NoteWidget>
                   const SizedBox(width: 6),
                   Text(
                     '• ${_formatTimestamp(ts)}',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    style: const TextStyle(fontSize: 12, color: AppColors.secondary),
                   ),
                 ],
               ],
@@ -304,7 +304,7 @@ class _NoteWidgetState extends State<NoteWidget>
           onDoubleTapDown: (_) => _handleReactionTap(),
           onTap: () => _navigateToThreadPage(updatedNote),
           child: Container(
-            color: widget.containerColor ?? Colors.black,
+            color: widget.containerColor ?? AppColors.background,
             padding: const EdgeInsets.only(bottom: 2),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -337,11 +337,11 @@ class _NoteWidgetState extends State<NoteWidget>
                                         : null,
                                 backgroundColor:
                                     (authorUser?.profileImage ?? '').isEmpty
-                                        ? Colors.grey
-                                        : Colors.transparent,
+                                        ? AppColors.avatarBackground
+                                        : AppColors.surfaceTransparent,
                                 child: (authorUser?.profileImage ?? '').isEmpty
                                     ? const Icon(Icons.person,
-                                        size: 23, color: Colors.white)
+                                        size: 23, color: AppColors.iconPrimary)
                                     : null,
                               ),
                               if (updatedNote.isReply)
@@ -352,13 +352,13 @@ class _NoteWidgetState extends State<NoteWidget>
                                     width: 14,
                                     height: 14,
                                     decoration: const BoxDecoration(
-                                      color: Colors.grey,
+                                      color: AppColors.secondary,
                                       shape: BoxShape.circle,
                                     ),
                                     child: const Icon(
                                       Icons.reply,
                                       size: 10,
-                                      color: Colors.white,
+                                      color: AppColors.iconPrimary,
                                     ),
                                   ),
                                 ),
@@ -390,7 +390,7 @@ class _NoteWidgetState extends State<NoteWidget>
                                           style: const TextStyle(
                                             fontSize: 14.5,
                                             fontWeight: FontWeight.w600,
-                                            color: Colors.white,
+                                            color: AppColors.textPrimary,
                                             height: 0.1,
                                           ),
                                           overflow: TextOverflow.ellipsis,
@@ -401,7 +401,7 @@ class _NoteWidgetState extends State<NoteWidget>
                                         child: Text('• $_formattedTimestamp',
                                             style: const TextStyle(
                                                 fontSize: 12,
-                                                color: Colors.grey)),
+                                                color: AppColors.secondary)),
                                       ),
                                     ],
                                   ),

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../colors.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/models/notification_model.dart';
 import 'package:qiqstr/models/user_model.dart';
@@ -178,9 +179,9 @@ class _NotificationPageState extends State<NotificationPage> {
                   onTap: () => _navigateToAuthorProfile(first.author),
                   child: CircleAvatar(
                     radius: 18,
-                    backgroundColor: Colors.grey[800],
+                    backgroundColor: AppColors.grey800,
                     backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
-                    child: image.isEmpty ? const Icon(Icons.person, size: 18, color: Colors.white) : null,
+                    child: image.isEmpty ? const Icon(Icons.person, size: 18, color: AppColors.textPrimary) : null,
                   ),
                 ),
                 title: Builder(
@@ -189,7 +190,7 @@ class _NotificationPageState extends State<NotificationPage> {
                     final titleStyle = const TextStyle(
                       fontWeight: FontWeight.w500,
                       fontSize: 15,
-                      color: Colors.white,
+                      color: AppColors.textPrimary,
                     );
                     if (item.notifications.length == 1) {
                       return GestureDetector(
@@ -239,9 +240,9 @@ class _NotificationPageState extends State<NotificationPage> {
                   onTap: () => _navigateToAuthorProfile(item.author),
                   child: CircleAvatar(
                     radius: 18,
-                    backgroundColor: Colors.grey[800],
+                    backgroundColor: AppColors.grey800,
                     backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
-                    child: image.isEmpty ? const Icon(Icons.flash_on, size: 18, color: Colors.white) : null,
+                    child: image.isEmpty ? const Icon(Icons.flash_on, size: 18, color: AppColors.textPrimary) : null,
                   ),
                 ),
                 title: GestureDetector(
@@ -251,7 +252,7 @@ class _NotificationPageState extends State<NotificationPage> {
                     style: const TextStyle(
                       fontWeight: FontWeight.w500,
                       fontSize: 15,
-                      color: Colors.white,
+                      color: AppColors.textPrimary,
                     ),
                   ),
                 )
@@ -261,7 +262,7 @@ class _NotificationPageState extends State<NotificationPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
                   item.content,
-                  style: const TextStyle(color: Colors.white70),
+                  style: const TextStyle(color: AppColors.textSecondary),
                 ),
               ),
             Padding(
@@ -284,9 +285,9 @@ class _NotificationPageState extends State<NotificationPage> {
     final topPadding = MediaQuery.of(context).padding.top;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.background,
       body: isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          ? const Center(child: CircularProgressIndicator(color: AppColors.textPrimary))
           : CustomScrollView(
               slivers: [
                 SliverToBoxAdapter(
@@ -298,7 +299,7 @@ class _NotificationPageState extends State<NotificationPage> {
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                        color: AppColors.textPrimary,
                       ),
                     ),
                   ),
@@ -309,7 +310,7 @@ class _NotificationPageState extends State<NotificationPage> {
                     child: Center(
                       child: Text(
                         'No notifications yet.',
-                        style: TextStyle(color: Colors.white54),
+                        style: TextStyle(color: AppColors.textTertiary),
                       ),
                     ),
                   )

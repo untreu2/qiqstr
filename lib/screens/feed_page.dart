@@ -8,6 +8,7 @@ import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/data_service.dart';
+import '../colors.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -93,7 +94,7 @@ class _FeedPageState extends State<FeedPage> {
         filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
         child: Container(
           width: double.infinity,
-          color: Colors.black.withOpacity(0.5),
+          color: AppColors.backgroundTransparent,
           padding: EdgeInsets.fromLTRB(16, topPadding + 4, 16, 0),
           child: Column(
             children: [
@@ -109,11 +110,11 @@ class _FeedPageState extends State<FeedPage> {
                           onTap: () => Scaffold.of(context).openDrawer(),
                           child: CircleAvatar(
                             radius: 16,
-                            backgroundColor: Colors.white24,
+                            backgroundColor: AppColors.avatarPlaceholder,
                             backgroundImage:
                                 user?.profileImage != null ? CachedNetworkImageProvider(user!.profileImage) : null,
                             child: user?.profileImage == null
-                                ? const Icon(Icons.person, color: Colors.white, size: 18)
+                                ? const Icon(Icons.person, color: AppColors.iconPrimary, size: 18)
                                 : null,
                           ),
                         ),
@@ -132,7 +133,7 @@ class _FeedPageState extends State<FeedPage> {
                           'assets/main_icon_white.svg',
                           width: 30,
                           height: 30,
-                          color: Colors.white,
+                          color: AppColors.iconPrimary,
                         ),
                       ),
                     ),
@@ -176,16 +177,16 @@ class _FeedPageState extends State<FeedPage> {
         }
       },
       style: TextButton.styleFrom(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.surfaceTransparent,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
           side: BorderSide(
-            color: isSelected ? const Color(0xFFECB200) : Colors.white30,
+            color: isSelected ? AppColors.accent : AppColors.borderAccent,
             width: 1.0,
           ),
         ),
-        foregroundColor: isSelected ? Colors.white : Colors.white70,
+        foregroundColor: isSelected ? AppColors.textPrimary : AppColors.textSecondary,
         textStyle: const TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w600,
@@ -201,15 +202,15 @@ class _FeedPageState extends State<FeedPage> {
     final double headerHeight = topPadding + 108;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.background,
       drawer: SidebarWidget(user: user),
       body: isLoading
-          ? const ColoredBox(color: Colors.black)
+          ? const ColoredBox(color: AppColors.background)
           : errorMessage != null
               ? Center(
                   child: Text(
                     errorMessage!,
-                    style: const TextStyle(color: Colors.white70),
+                    style: const TextStyle(color: AppColors.textSecondary),
                   ),
                 )
               : CustomScrollView(

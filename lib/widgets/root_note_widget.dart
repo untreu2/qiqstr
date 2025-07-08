@@ -3,7 +3,8 @@ import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/widgets/note_content_widget.dart';
-import 'package:qiqstr/widgets/interaction_bar_widget.dart'; 
+import 'package:qiqstr/widgets/interaction_bar_widget.dart';
+import '../colors.dart'; 
 
 class RootNoteWidget extends StatelessWidget {
   final NoteModel note;
@@ -57,7 +58,7 @@ class RootNoteWidget extends StatelessWidget {
     
     return Card(
         margin: EdgeInsets.zero,
-      color: Colors.black,
+      color: AppColors.background,
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
@@ -74,13 +75,13 @@ class RootNoteWidget extends StatelessWidget {
                     CircleAvatar(
                     radius: 18,
                       backgroundImage: NetworkImage(authorProfile!.profileImage), 
-                      backgroundColor: Colors.grey.shade700,
+                      backgroundColor: AppColors.grey700,
                     ),
                   ] else ...[
                     CircleAvatar(
                     radius: 18,
-                      backgroundColor: Colors.grey.shade700,
-                    child: const Icon(Icons.person, size: 22, color: Colors.white70),
+                      backgroundColor: AppColors.grey700,
+                    child: const Icon(Icons.person, size: 22, color: AppColors.textSecondary),
                     ),
                   ],
                   const SizedBox(width: 8),
@@ -89,7 +90,7 @@ class RootNoteWidget extends StatelessWidget {
                       authorName,
                       style: const TextStyle(
                       fontSize: 16,
-                        color: Colors.white,
+                        color: AppColors.textPrimary,
                         fontWeight: FontWeight.w500,
                       ),
                       overflow: TextOverflow.ellipsis,

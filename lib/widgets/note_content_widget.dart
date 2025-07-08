@@ -6,6 +6,7 @@ import 'package:qiqstr/widgets/link_preview_widget.dart';
 import 'package:qiqstr/widgets/media_preview_widget.dart';
 import 'package:qiqstr/widgets/quote_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../colors.dart';
 
 class NoteContentWidget extends StatelessWidget {
   final Map<String, dynamic> parsedContent;
@@ -62,7 +63,7 @@ class NoteContentWidget extends StatelessWidget {
           if (m.start > last) {
             spans.add(TextSpan(
               text: text.substring(last, m.start),
-              style: TextStyle(fontSize: currentFontSize, color: Colors.white),
+              style: TextStyle(fontSize: currentFontSize, color: AppColors.textPrimary),
             ));
           }
 
@@ -72,14 +73,14 @@ class NoteContentWidget extends StatelessWidget {
           if (urlMatch != null) {
             spans.add(TextSpan(
               text: urlMatch,
-              style: TextStyle(color: const Color(0xFFECB200), fontSize: currentFontSize),
+              style: TextStyle(color: AppColors.accent, fontSize: currentFontSize),
               recognizer: TapGestureRecognizer()
                 ..onTap = () => _onOpenLink(context, LinkableElement(urlMatch, urlMatch)),
             ));
           } else if (hashtagMatch != null) {
             spans.add(TextSpan(
               text: hashtagMatch,
-              style: TextStyle(color: const Color(0xFFECB200), fontSize: currentFontSize),
+              style: TextStyle(color: AppColors.accent, fontSize: currentFontSize),
               recognizer: TapGestureRecognizer()
                 ..onTap = () => _onHashtagTap(context, hashtagMatch),
             ));
@@ -90,14 +91,14 @@ class NoteContentWidget extends StatelessWidget {
         if (last < text.length) {
           spans.add(TextSpan(
             text: text.substring(last),
-            style: TextStyle(fontSize: currentFontSize, color: Colors.white),
+            style: TextStyle(fontSize: currentFontSize, color: AppColors.textPrimary),
           ));
         }
       } else if (p['type'] == 'mention') {
         final display_name = mentions[p['id']] ?? '${(p['id'] as String).substring(0, 8)}...';
         spans.add(TextSpan(
           text: '@$display_name',
-          style: TextStyle(color: const Color(0xFFECB200), fontSize: currentFontSize,
+          style: TextStyle(color: AppColors.accent, fontSize: currentFontSize,
               fontWeight: FontWeight.w500),
           recognizer: TapGestureRecognizer()
             ..onTap = () => onNavigateToMentionProfile(p['id'] as String),
@@ -106,7 +107,7 @@ class NoteContentWidget extends StatelessWidget {
         spans.add(TextSpan(
           text: p['text'] as String,
           style: TextStyle(
-            color: const Color(0xFFECB200),
+            color: AppColors.accent,
             fontSize: currentFontSize,
             fontWeight: FontWeight.w500,
           ),

@@ -3,6 +3,7 @@ import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/widgets/profile_info_widget.dart';
+import '../colors.dart';
 
 class ProfilePage extends StatelessWidget {
   final UserModel user;
@@ -12,7 +13,7 @@ class ProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.background,
       body: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../colors.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:hive_flutter/hive_flutter.dart';
@@ -95,7 +96,7 @@ class _MiniLinkPreviewWidgetState extends State<MiniLinkPreviewWidget> {
       onTap: () => _launchUrl(widget.url),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white10,
+          color: AppColors.overlayLight,
           borderRadius: BorderRadius.circular(12),
         ),
         padding: const EdgeInsets.all(8),
@@ -112,8 +113,8 @@ class _MiniLinkPreviewWidgetState extends State<MiniLinkPreviewWidget> {
                   errorBuilder: (_, __, ___) => Container(
                     width: 48,
                     height: 48,
-                    color: Colors.grey.shade800,
-                    child: const Icon(Icons.link, color: Colors.white38),
+                    color: AppColors.grey800,
+                    child: const Icon(Icons.link, color: AppColors.textTertiary),
                   ),
                 ),
               )
@@ -122,10 +123,10 @@ class _MiniLinkPreviewWidgetState extends State<MiniLinkPreviewWidget> {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade800,
+                  color: AppColors.grey800,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.link, color: Colors.white38),
+                child: const Icon(Icons.link, color: AppColors.textTertiary),
               ),
             const SizedBox(width: 12),
             Expanded(
@@ -139,7 +140,7 @@ class _MiniLinkPreviewWidgetState extends State<MiniLinkPreviewWidget> {
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontSize: 15,
-                            color: Colors.white,
+                            color: AppColors.textPrimary,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -149,7 +150,7 @@ class _MiniLinkPreviewWidgetState extends State<MiniLinkPreviewWidget> {
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontSize: 13,
-                            color: Colors.white70,
+                            color: AppColors.textSecondary,
                           ),
                         ),
                       ],
@@ -160,7 +161,7 @@ class _MiniLinkPreviewWidgetState extends State<MiniLinkPreviewWidget> {
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                           fontSize: 15,
-                          color: Colors.white,
+                          color: AppColors.textPrimary,
                           fontWeight: FontWeight.w600,
                         ),
                       ),

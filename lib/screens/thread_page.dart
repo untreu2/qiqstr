@@ -11,6 +11,7 @@ import 'package:qiqstr/widgets/dialogs/repost_dialog.dart';
 import 'package:qiqstr/widgets/dialogs/zap_dialog.dart';
 import 'package:qiqstr/screens/send_reply.dart';
 import 'package:collection/collection.dart';
+import '../colors.dart';
 
 class ThreadPage extends StatefulWidget {
   final String rootNoteId;
@@ -252,9 +253,9 @@ class _ThreadPageState extends State<ThreadPage> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.3),
+              color: AppColors.backgroundTransparent,
               border: Border.all(
-                color: Colors.white.withOpacity(0.2),
+                color: AppColors.borderLight,
                 width: 1.5,
               ),
               borderRadius: BorderRadius.circular(25.0),
@@ -265,7 +266,7 @@ class _ThreadPageState extends State<ThreadPage> {
               behavior: HitTestBehavior.opaque,
               child: const Icon(
                 Icons.arrow_back,
-                color: Colors.white70,
+                color: AppColors.textSecondary,
                 size: 20,
               ),
             ),
@@ -287,7 +288,7 @@ class _ThreadPageState extends State<ThreadPage> {
           padding: EdgeInsets.all(32.0),
           child: Text(
             'No replies yet',
-            style: TextStyle(color: Colors.white70, fontSize: 16),
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
           ),
         ),
       );
@@ -340,7 +341,7 @@ class _ThreadPageState extends State<ThreadPage> {
                   isLast: isLast,
                   parentIsLast: parentIsLast,
                   indentWidth: indentWidth,
-                  lineColor: Colors.grey[700]!,
+                  lineColor: AppColors.border,
                 ),
               ),
             ),
@@ -406,11 +407,11 @@ class _ThreadPageState extends State<ThreadPage> {
     final double headerHeight = topPadding + 60;
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: AppColors.background,
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          ? const Center(child: CircularProgressIndicator(color: AppColors.textPrimary))
           : displayRoot == null
-              ? const Center(child: Text('Note not found.', style: TextStyle(color: Colors.white70)))
+              ? const Center(child: Text('Note not found.', style: TextStyle(color: AppColors.textSecondary)))
               : Stack(
                   children: [
                     SingleChildScrollView(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../colors.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/models/user_model.dart';
@@ -167,17 +168,17 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
       labelText: label,
       labelStyle: const TextStyle(
         fontWeight: FontWeight.w600,
-        color: Colors.grey,
+        color: AppColors.textSecondary,
       ),
       filled: true,
-      fillColor: Colors.black,
+      fillColor: AppColors.background,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.white12),
+        borderSide: const BorderSide(color: AppColors.border),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.white24),
+        borderSide: const BorderSide(color: AppColors.border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -203,13 +204,13 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
 
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: AppColors.background,
         elevation: 0,
         leading: Padding(
           padding: const EdgeInsets.only(left: 8.0),
           child: IconButton(
             icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                color: Colors.white, size: 20),
+                color: AppColors.textPrimary, size: 20),
             onPressed: () => Navigator.pop(context),
           ),
         ),
@@ -222,9 +223,9 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
               alignment: Alignment.center,
               margin: const EdgeInsets.only(right: 12),
               decoration: BoxDecoration(
-                color: Colors.white10,
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white30),
+                border: Border.all(color: AppColors.border),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -236,14 +237,14 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                           child: CircularProgressIndicator(
                             strokeWidth: 2.5,
                             valueColor:
-                                AlwaysStoppedAnimation<Color>(Colors.white),
+                                AlwaysStoppedAnimation<Color>(AppColors.textPrimary),
                           ),
                         ),
                         SizedBox(width: 10),
                         Text(
                           'Updating...',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: AppColors.textPrimary,
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
                           ),
@@ -253,13 +254,13 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                         Text(
                           'Save',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: AppColors.textPrimary,
                             fontSize: 13,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                         SizedBox(width: 4),
-                        Icon(Icons.check, size: 16, color: Colors.white),
+                        Icon(Icons.check, size: 16, color: AppColors.textPrimary),
                       ],
               ),
             ),
@@ -275,13 +276,13 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
               TextFormField(
                 controller: _nameController,
                 decoration: _inputDecoration('Username'),
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: AppColors.textPrimary),
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _aboutController,
                 decoration: _inputDecoration('Bio'),
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: AppColors.textPrimary),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -297,7 +298,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                             isPicture: true,
                           ),
                 ),
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: AppColors.textPrimary),
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -313,19 +314,19 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                             isPicture: false,
                           ),
                 ),
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: AppColors.textPrimary),
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _lud16Controller,
                 decoration: _inputDecoration('Lightning address'),
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: AppColors.textPrimary),
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _websiteController,
                 decoration: _inputDecoration('Website'),
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: AppColors.textPrimary),
               ),
             ],
           ),

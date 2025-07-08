@@ -8,6 +8,7 @@ import 'package:qiqstr/screens/users_search_page.dart';
 import 'package:qiqstr/screens/notification_page.dart';
 import 'package:qiqstr/screens/share_note.dart';
 import 'package:qiqstr/services/data_service.dart';
+import '../colors.dart';
 
 class HomeNavigator extends StatefulWidget {
   final String npub;
@@ -70,9 +71,9 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                   child: Container(
                     height: 70,
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.3),
+                      color: AppColors.backgroundTransparent,
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.2),
+                        color: AppColors.borderLight,
                         width: 1.5,
                       ),
                       borderRadius: BorderRadius.circular(25.0),
@@ -113,7 +114,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                                         item['icon'],
                                         width: 20,
                                         height: 20,
-                                        color: isSelected ? Colors.amber : Colors.white70,
+                                        color: isSelected ? AppColors.accent : AppColors.textSecondary,
                                       ),
                                       ValueListenableBuilder<int>(
                                         valueListenable: widget.dataService.unreadNotificationsCountNotifier,
@@ -127,9 +128,9 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                                             child: Container(
                                               padding: const EdgeInsets.all(1),
                                               decoration: BoxDecoration(
-                                                color: Colors.white,
+                                                color: AppColors.surface,
                                                 shape: BoxShape.circle,
-                                                border: Border.all(color: Colors.black, width: 0.5),
+                                                border: Border.all(color: AppColors.textPrimary, width: 0.5),
                                               ),
                                               constraints: const BoxConstraints(
                                                 minWidth: 14,
@@ -137,7 +138,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                                               ),
                                               child: Text('$count',
                                                   style: const TextStyle(
-                                                    color: Colors.black,
+                                                    color: AppColors.textPrimary,
                                                     fontSize: 9,
                                                     fontWeight: FontWeight.bold,
                                                   ),
@@ -153,7 +154,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                                     item['icon'],
                                     width: 20,
                                     height: 20,
-                                    color: isSelected ? Colors.amber : Colors.white70,
+                                    color: isSelected ? AppColors.accent : AppColors.textSecondary,
                                   ),
                               ],
                             ),
@@ -211,7 +212,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                           'assets/new_post_button.svg',
                           width: 24,
                           height: 24,
-                          color: Colors.white70,
+                          color: AppColors.textSecondary,
                         ),
                       ],
                     ),

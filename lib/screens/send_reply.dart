@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/data_service.dart';
+import '../colors.dart';
 
 class SendReplyDialog extends StatefulWidget {
   final DataService dataService;
@@ -99,15 +100,15 @@ class _SendReplyDialogState extends State<SendReplyDialog> {
             const SizedBox(height: 16),
             Text(
               _connectionMessage,
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
+                  backgroundColor: AppColors.surface,
+                  foregroundColor: AppColors.textPrimary,
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
                 onPressed: _isPosting ? null : _sendReply,
@@ -118,7 +119,7 @@ class _SendReplyDialogState extends State<SendReplyDialog> {
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.black),
+                              AlwaysStoppedAnimation<Color>(AppColors.textPrimary),
                         ),
                       )
                     : const Text('Share'),

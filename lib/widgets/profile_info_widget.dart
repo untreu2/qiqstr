@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../colors.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -141,7 +142,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         : user.website;
 
     return Container(
-      color: Colors.black,
+      color: AppColors.background,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -167,12 +168,12 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                   placeholder: (_, __) => Container(
                     height: 130,
                     width: screenWidth,
-                    color: Colors.grey[700],
+                    color: AppColors.grey700,
                   ),
                   errorWidget: (_, __, ___) => Container(
                     height: 130,
                     width: screenWidth,
-                    color: Colors.black,
+                    color: AppColors.background,
                   ),
                 ),
               ),
@@ -187,9 +188,9 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.3),
+                        color: AppColors.background.withOpacity(0.3),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.2),
+                          color: AppColors.textPrimary.withOpacity(0.2),
                           width: 1.5,
                         ),
                         borderRadius: BorderRadius.circular(25.0),
@@ -200,7 +201,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                         behavior: HitTestBehavior.opaque,
                         child: const Icon(
                           Icons.arrow_back,
-                          color: Colors.white70,
+                          color: AppColors.textSecondary,
                           size: 20,
                         ),
                       ),
@@ -253,14 +254,14 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                                   height: 34,
                                   alignment: Alignment.center,
                                   decoration: BoxDecoration(
-                                    color: Colors.white10,
+                                    color: AppColors.overlayLight,
                                     borderRadius: BorderRadius.circular(24),
-                                    border: Border.all(color: Colors.white30),
+                                    border: Border.all(color: AppColors.borderAccent),
                                   ),
                                   child: const Text(
                                     'Edit profile',
                                     style: TextStyle(
-                                      color: Colors.white,
+                                      color: AppColors.textPrimary,
                                       fontSize: 13,
                                       fontWeight: FontWeight.w500,
                                     ),
@@ -276,15 +277,15 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                                       height: 34,
                                       alignment: Alignment.center,
                                       decoration: BoxDecoration(
-                                        color: Colors.white10,
+                                        color: AppColors.overlayLight,
                                         borderRadius: BorderRadius.circular(24),
                                         border:
-                                            Border.all(color: Colors.white30),
+                                            Border.all(color: AppColors.borderAccent),
                                       ),
                                       child: Text(
                                         _isFollowing! ? 'Following' : 'Follow',
                                         style: const TextStyle(
-                                          color: Colors.white,
+                                          color: AppColors.textPrimary,
                                           fontSize: 13,
                                           fontWeight: FontWeight.w500,
                                         ),
@@ -311,9 +312,9 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                     height: 34,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: Colors.white10,
+                      color: AppColors.overlayLight,
                       borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: Colors.white30),
+                      border: Border.all(color: AppColors.borderAccent),
                     ),
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 300),
@@ -325,7 +326,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           const Icon(Icons.copy,
-                              size: 14, color: Colors.white54),
+                              size: 14, color: AppColors.textTertiary),
                           const SizedBox(width: 6),
                           Flexible(
                             child: Text(
@@ -337,7 +338,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
-                                color: Colors.white,
+                                color: AppColors.textPrimary,
                               ),
                             ),
                           ),
@@ -356,7 +357,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                     padding: const EdgeInsets.only(top: 8.0),
                     child: Text(user.about,
                         style: const TextStyle(
-                            fontSize: 14, color: Colors.white70)),
+                            fontSize: 14, color: AppColors.textSecondary)),
                   ),
                 if (user.website.isNotEmpty)
                   Padding(
@@ -377,16 +378,16 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     return Container(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.black, width: 3),
+        border: Border.all(color: AppColors.background, width: 3),
       ),
       child: CircleAvatar(
         radius: 40,
         backgroundImage: user.profileImage.isNotEmpty
             ? CachedNetworkImageProvider(user.profileImage)
             : null,
-        backgroundColor: user.profileImage.isEmpty ? Colors.grey : null,
+        backgroundColor: user.profileImage.isEmpty ? AppColors.secondary : null,
         child: user.profileImage.isEmpty
-            ? const Icon(Icons.person, size: 40, color: Colors.white)
+            ? const Icon(Icons.person, size: 40, color: AppColors.textPrimary)
             : null,
       ),
     );
@@ -406,7 +407,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                       : user.nip05.split('@').first,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: AppColors.textPrimary,
                   ),
                 ),
                 if (user.nip05.isNotEmpty && user.nip05.contains('@'))
@@ -431,7 +432,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     return Row(
       children: [
         const Text('Following: ',
-            style: TextStyle(color: Colors.white70, fontSize: 14)),
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 14)),
         GestureDetector(
           onTap: () {
             Navigator.push(
@@ -455,7 +456,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                     '...',
                     key: ValueKey('loading'),
                     style: TextStyle(
-                        color: Colors.white54,
+                        color: AppColors.textTertiary,
                         fontSize: 14,
                         decoration: TextDecoration.underline),
                   )
@@ -463,7 +464,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                     '$_followingCount',
                     key: const ValueKey('count'),
                     style: const TextStyle(
-                        color: Colors.white,
+                        color: AppColors.textPrimary,
                         fontSize: 14,
                         decoration: TextDecoration.underline),
                   ),
@@ -474,7 +475,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           const Text(
             '• Follows you',
             style: TextStyle(
-              color: Colors.greenAccent,
+              color: AppColors.success,
               fontSize: 13,
               fontWeight: FontWeight.w400,
             ),

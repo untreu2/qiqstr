@@ -5,6 +5,7 @@ import 'package:qiqstr/utils/logout.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../colors.dart';
 
 class SidebarWidget extends StatefulWidget {
   final UserModel? user;
@@ -36,7 +37,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   Widget build(BuildContext context) {
     return Drawer(
       child: Container(
-        color: Colors.black,
+        color: AppColors.background,
         child: widget.user == null || npub == null
             ? const Center(child: CircularProgressIndicator())
             : Column(
@@ -59,7 +60,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                           child: Text(
                             widget.user!.name,
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: AppColors.textPrimary,
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
                             ),
@@ -87,8 +88,8 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                         _buildSidebarItem(
                           svgAsset: 'assets/Logout_button.svg',
                           label: 'Logout',
-                          iconColor: Colors.redAccent,
-                          textColor: Colors.redAccent,
+                          iconColor: AppColors.error,
+                          textColor: AppColors.error,
                           onTap: () => Logout.performLogout(context),
                         ),
                       ],
@@ -104,8 +105,8 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     required String svgAsset,
     required String label,
     required VoidCallback onTap,
-    Color iconColor = Colors.white,
-    Color textColor = Colors.white,
+    Color iconColor = AppColors.iconPrimary,
+    Color textColor = AppColors.textPrimary,
   }) {
     return ListTile(
       leading: SvgPicture.asset(
@@ -119,7 +120,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         style: TextStyle(color: textColor, fontSize: 18),
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      hoverColor: Colors.white.withOpacity(0.05),
+      hoverColor: AppColors.hoverTransparent,
       onTap: onTap,
     );
   }
