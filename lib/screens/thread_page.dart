@@ -318,17 +318,18 @@ class _ThreadPageState extends State<ThreadPage> {
                     containerColor: Colors.transparent,
                   ),
                 ),
-                ...((hierarchy[reply.id] ?? []).asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final nestedReply = entry.value;
-                  return _buildThreadReplyWithDepth(
-                    nestedReply,
-                    hierarchy,
-                    depth + 1,
-                    index == nestedReplies.length - 1,
-                    [...parentIsLast, isLast],
-                  );
-                })),
+                if (depth < 2)
+                  ...((hierarchy[reply.id] ?? []).asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final nestedReply = entry.value;
+                    return _buildThreadReplyWithDepth(
+                      nestedReply,
+                      hierarchy,
+                      depth + 1,
+                      index == nestedReplies.length - 1,
+                      [...parentIsLast, isLast],
+                    );
+                  })),
                 if (depth == 0) const SizedBox(height: 8),
               ],
             ),
