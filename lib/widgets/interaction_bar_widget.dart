@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:bounce/bounce.dart';
 
 class InteractionBar extends StatelessWidget {
   final int reactionCount;
@@ -62,9 +63,8 @@ class InteractionBar extends StatelessWidget {
             height: 40,
           ),
         ),
-        InkWell(
-          splashColor: Colors.transparent,
-          highlightColor: Colors.transparent,
+        Bounce(
+          scaleFactor: 0.95,
           onTap: onTap,
           child: Row(
             children: [
