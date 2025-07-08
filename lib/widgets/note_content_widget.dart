@@ -11,6 +11,7 @@ class NoteContentWidget extends StatelessWidget {
   final Map<String, dynamic> parsedContent;
   final DataService dataService;
   final void Function(String mentionId) onNavigateToMentionProfile;
+  final void Function(String noteId)? onShowMoreTap;
 
   static const double _fontSize = 15.0;
 
@@ -19,6 +20,7 @@ class NoteContentWidget extends StatelessWidget {
     required this.parsedContent,
     required this.dataService,
     required this.onNavigateToMentionProfile,
+    this.onShowMoreTap,
   }) : super(key: key);
 
   Future<void> _onOpenLink(BuildContext context, LinkableElement link) async {
@@ -99,6 +101,17 @@ class NoteContentWidget extends StatelessWidget {
               fontWeight: FontWeight.w500),
           recognizer: TapGestureRecognizer()
             ..onTap = () => onNavigateToMentionProfile(p['id'] as String),
+        ));
+      } else if (p['type'] == 'show_more') {
+        spans.add(TextSpan(
+          text: p['text'] as String,
+          style: TextStyle(
+            color: const Color(0xFFECB200),
+            fontSize: currentFontSize,
+            fontWeight: FontWeight.w500,
+          ),
+          recognizer: TapGestureRecognizer()
+            ..onTap = () => onShowMoreTap?.call(p['noteId'] as String),
         ));
       }
     }

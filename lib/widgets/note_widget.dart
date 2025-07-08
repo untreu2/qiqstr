@@ -159,6 +159,82 @@ class _NoteWidgetState extends State<NoteWidget>
     );
   }
 
+  Widget _buildNoteContent(BuildContext context, Map<String, dynamic> parsed, NoteModel note) {
+    final textParts = (parsed['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+    String fullText = '';
+
+    for (var part in textParts) {
+      if (part['type'] == 'text') {
+        fullText += part['text'] as String;
+      } else if (part['type'] == 'mention') {
+        fullText += '@mention ';
+      }
+    }
+
+    const int characterLimit = 280;
+
+    if (fullText.length <= characterLimit) {
+      return NoteContentWidget(
+        parsedContent: parsed,
+        dataService: widget.dataService,
+        onNavigateToMentionProfile: _navigateToMentionProfile,
+      );
+    }
+
+    return NoteContentWidget(
+      parsedContent: _createTruncatedParsedContentWithShowMore(parsed, characterLimit, note),
+      dataService: widget.dataService,
+      onNavigateToMentionProfile: _navigateToMentionProfile,
+      onShowMoreTap: (noteId) => _navigateToThreadPage(note),
+    );
+  }
+
+  Map<String, dynamic> _createTruncatedParsedContentWithShowMore(
+      Map<String, dynamic> originalParsed, int characterLimit, NoteModel note) {
+    final textParts = (originalParsed['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+    final truncatedParts = <Map<String, dynamic>>[];
+    int currentLength = 0;
+
+    for (var part in textParts) {
+      if (part['type'] == 'text') {
+        final text = part['text'] as String;
+        if (currentLength + text.length <= characterLimit) {
+          truncatedParts.add(part);
+          currentLength += text.length;
+        } else {
+          final remainingChars = characterLimit - currentLength;
+          if (remainingChars > 0) {
+            truncatedParts.add({
+              'type': 'text',
+              'text': text.substring(0, remainingChars) + '... ',
+            });
+          }
+          break;
+        }
+      } else if (part['type'] == 'mention') {
+        if (currentLength + 8 <= characterLimit) {
+          truncatedParts.add(part);
+          currentLength += 8;
+        } else {
+          break;
+        }
+      }
+    }
+
+    truncatedParts.add({
+      'type': 'show_more',
+      'text': 'Show more...',
+      'noteId': note.id,
+    });
+
+    return {
+      'textParts': truncatedParts,
+      'mediaUrls': originalParsed['mediaUrls'] ?? [],
+      'linkUrls': originalParsed['linkUrls'] ?? [],
+      'quoteIds': originalParsed['quoteIds'] ?? [],
+    };
+  }
+
   Widget _buildRepostInfo(String npub, DateTime? ts) {
     final user = widget.profiles[npub];
     final name = user?.name ?? 'Unknown';
@@ -332,11 +408,7 @@ class _NoteWidgetState extends State<NoteWidget>
                                 ),
                               ],
                             ),
-                            NoteContentWidget(
-                              parsedContent: parsed,
-                              dataService: widget.dataService,
-                              onNavigateToMentionProfile: _navigateToMentionProfile,
-                            ),
+                            _buildNoteContent(context, parsed, updatedNote),
                             const SizedBox(height: 10),
                             Row(
                               children: [
