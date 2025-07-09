@@ -60,6 +60,7 @@ class QuoteWidget extends StatelessWidget {
 
   Widget _contentText(BuildContext context, Map<String, dynamic> parsed) {
     final parts = parsed['textParts'] as List<Map<String, dynamic>>;
+    final colors = context.colors;
 
     return FutureBuilder<Map<String, String>>(
       future: _fetchAllMentions(
@@ -79,7 +80,7 @@ class QuoteWidget extends StatelessWidget {
               if (match.start > lastMatchEnd) {
                 spans.add(TextSpan(
                   text: text.substring(lastMatchEnd, match.start),
-                  style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
+                  style: TextStyle(color: colors.textPrimary),
                 ));
               }
               final url = text.substring(match.start, match.end);
@@ -87,9 +88,8 @@ class QuoteWidget extends StatelessWidget {
                 TextSpan(
                   text: url,
                   style: TextStyle(
-                    color: context.colors.accent,
+                    color: colors.accent,
                     fontStyle: FontStyle.normal,
-                    fontSize: 14,
                   ),
                   recognizer: TapGestureRecognizer()
                     ..onTap = () => _onOpen(LinkableElement(url, url)),
@@ -101,7 +101,7 @@ class QuoteWidget extends StatelessWidget {
             if (lastMatchEnd < text.length) {
               spans.add(TextSpan(
                 text: text.substring(lastMatchEnd),
-                style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
+                style: TextStyle(color: colors.textPrimary),
               ));
             }
           } else if (p['type'] == 'mention') {
@@ -111,9 +111,9 @@ class QuoteWidget extends StatelessWidget {
               TextSpan(
                 text: '@$display_name',
                 style: TextStyle(
-                  color: context.colors.accent,
-                  fontSize: 14,
+                  color: colors.accent,
                   fontStyle: FontStyle.normal,
+                  fontWeight: FontWeight.w500,
                 ),
                 recognizer: TapGestureRecognizer()..onTap = () => dataService.openUserProfile(context, mentionId),
               ),
