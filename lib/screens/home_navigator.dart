@@ -8,7 +8,6 @@ import 'package:qiqstr/screens/users_search_page.dart';
 import 'package:qiqstr/screens/notification_page.dart';
 import 'package:qiqstr/screens/share_note.dart';
 import 'package:qiqstr/services/data_service.dart';
-import '../colors.dart';
 import '../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
 
@@ -66,7 +65,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                   ),
                   settings: LiquidGlassSettings(
                     thickness: 15,
-                    glassColor: Color(0xFF000000),
+                    glassColor: Color(0x40000000),
                     lightIntensity: 0.8,
                     ambientStrength: 0.3,
                   ),
@@ -181,7 +180,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                 ),
                 settings: LiquidGlassSettings(
                   thickness: 15,
-                  glassColor: Color(0xFF000000),
+                  glassColor: Color(0x40000000),
                   lightIntensity: 0.8,
                   ambientStrength: 0.3,
                 ),
