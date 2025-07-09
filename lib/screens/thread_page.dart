@@ -11,7 +11,6 @@ import 'package:qiqstr/widgets/dialogs/repost_dialog.dart';
 import 'package:qiqstr/widgets/dialogs/zap_dialog.dart';
 import 'package:qiqstr/screens/send_reply.dart';
 import 'package:collection/collection.dart';
-import '../colors.dart';
 import '../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
 

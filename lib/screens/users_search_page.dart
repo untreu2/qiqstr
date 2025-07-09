@@ -1,6 +1,5 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../colors.dart';
 import '../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:hive/hive.dart';

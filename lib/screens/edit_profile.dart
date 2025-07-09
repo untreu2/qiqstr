@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../colors.dart';
 import '../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
