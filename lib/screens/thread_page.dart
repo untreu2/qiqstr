@@ -12,6 +12,8 @@ import 'package:qiqstr/widgets/dialogs/zap_dialog.dart';
 import 'package:qiqstr/screens/send_reply.dart';
 import 'package:collection/collection.dart';
 import '../colors.dart';
+import '../theme/theme_manager.dart';
+import 'package:provider/provider.dart';
 
 class ThreadPage extends StatefulWidget {
   final String rootNoteId;
@@ -253,9 +255,9 @@ class _ThreadPageState extends State<ThreadPage> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: AppColors.backgroundTransparent,
+              color: context.colors.backgroundTransparent,
               border: Border.all(
-                color: AppColors.borderLight,
+                color: context.colors.borderLight,
                 width: 1.5,
               ),
               borderRadius: BorderRadius.circular(25.0),
@@ -264,9 +266,9 @@ class _ThreadPageState extends State<ThreadPage> {
               scaleFactor: 0.85,
               onTap: () => Navigator.pop(context),
               behavior: HitTestBehavior.opaque,
-              child: const Icon(
+              child: Icon(
                 Icons.arrow_back,
-                color: AppColors.textSecondary,
+                color: context.colors.textSecondary,
                 size: 20,
               ),
             ),
@@ -283,12 +285,12 @@ class _ThreadPageState extends State<ThreadPage> {
     final directReplies = threadHierarchy[noteForReplies.id] ?? [];
 
     if (directReplies.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(32.0),
+          padding: const EdgeInsets.all(32.0),
           child: Text(
             'No replies yet',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
+            style: TextStyle(color: context.colors.textSecondary, fontSize: 16),
           ),
         ),
       );
@@ -341,7 +343,7 @@ class _ThreadPageState extends State<ThreadPage> {
                   isLast: isLast,
                   parentIsLast: parentIsLast,
                   indentWidth: indentWidth,
-                  lineColor: AppColors.border,
+                  lineColor: context.colors.border,
                 ),
               ),
             ),
@@ -399,84 +401,88 @@ class _ThreadPageState extends State<ThreadPage> {
 
   @override
   Widget build(BuildContext context) {
-    final NoteModel? displayRoot = _focusedNote ?? _rootNote;
-    final NoteModel? contextNote = _focusedNote != null ? _rootNote : null;
-    final isDisplayRootHighlighted = displayRoot?.id == _highlightedNoteId;
+    return Consumer<ThemeManager>(
+      builder: (context, themeManager, child) {
+        final NoteModel? displayRoot = _focusedNote ?? _rootNote;
+        final NoteModel? contextNote = _focusedNote != null ? _rootNote : null;
+        final isDisplayRootHighlighted = displayRoot?.id == _highlightedNoteId;
 
-    final double topPadding = MediaQuery.of(context).padding.top;
-    final double headerHeight = topPadding + 60;
+        final double topPadding = MediaQuery.of(context).padding.top;
+        final double headerHeight = topPadding + 60;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: AppColors.textPrimary))
-          : displayRoot == null
-              ? const Center(child: Text('Note not found.', style: TextStyle(color: AppColors.textSecondary)))
-              : Stack(
-                  children: [
-                    SingleChildScrollView(
-                      controller: _scrollController,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(height: headerHeight),
-                          if (contextNote != null)
-                            Padding(
-                              padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                              child: ValueListenableBuilder<List<NoteModel>>(
-                                valueListenable: widget.dataService.notesNotifier,
-                                builder: (context, notes, child) {
-                                  final updatedContextNote =
-                                      notes.firstWhereOrNull((n) => n.id == contextNote.id) ?? contextNote;
-                                  return NoteWidget(
-                                    note: updatedContextNote,
-                                    reactionCount: updatedContextNote.reactionCount,
-                                    replyCount: updatedContextNote.replyCount,
-                                    repostCount: updatedContextNote.repostCount,
-                                    dataService: widget.dataService,
-                                    currentUserNpub: _currentUserNpub!,
-                                    notesNotifier: widget.dataService.notesNotifier,
-                                    profiles: widget.dataService.profilesNotifier.value,
-                                    isSmallView: true,
-                                    containerColor: Colors.transparent,
-                                  );
-                                },
+        return Scaffold(
+          backgroundColor: context.colors.background,
+          body: _isLoading
+              ? Center(child: CircularProgressIndicator(color: context.colors.textPrimary))
+              : displayRoot == null
+                  ? Center(child: Text('Note not found.', style: TextStyle(color: context.colors.textSecondary)))
+                  : Stack(
+                      children: [
+                        SingleChildScrollView(
+                          controller: _scrollController,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(height: headerHeight),
+                              if (contextNote != null)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                                  child: ValueListenableBuilder<List<NoteModel>>(
+                                    valueListenable: widget.dataService.notesNotifier,
+                                    builder: (context, notes, child) {
+                                      final updatedContextNote =
+                                          notes.firstWhereOrNull((n) => n.id == contextNote.id) ?? contextNote;
+                                      return NoteWidget(
+                                        note: updatedContextNote,
+                                        reactionCount: updatedContextNote.reactionCount,
+                                        replyCount: updatedContextNote.replyCount,
+                                        repostCount: updatedContextNote.repostCount,
+                                        dataService: widget.dataService,
+                                        currentUserNpub: _currentUserNpub!,
+                                        notesNotifier: widget.dataService.notesNotifier,
+                                        profiles: widget.dataService.profilesNotifier.value,
+                                        isSmallView: true,
+                                        containerColor: Colors.transparent,
+                                      );
+                                    },
+                                  ),
+                                ),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 500),
+                                curve: Curves.easeInOut,
+                                color: isDisplayRootHighlighted
+                                    ? Theme.of(context).primaryColor.withOpacity(0.1)
+                                    : Colors.transparent,
+                                child: RootNoteWidget(
+                                  key: _focusedNote != null ? _focusedNoteKey : null,
+                                  note: displayRoot,
+                                  dataService: widget.dataService,
+                                  onNavigateToMentionProfile: _navigateToProfile,
+                                  isReactionGlowing: _isReactionGlowing,
+                                  isReplyGlowing: _isReplyGlowing,
+                                  isRepostGlowing: _isRepostGlowing,
+                                  isZapGlowing: _isZapGlowing,
+                                  hasReacted: _hasReacted(displayRoot),
+                                  hasReplied: _hasReplied(displayRoot),
+                                  hasReposted: _hasReposted(displayRoot),
+                                  hasZapped: _hasZapped(displayRoot),
+                                  onReactionTap: () => _handleReactionTap(displayRoot),
+                                  onReplyTap: () => _handleReplyTap(displayRoot),
+                                  onRepostTap: () => _handleRepostTap(displayRoot),
+                                  onZapTap: () => _handleZapTap(displayRoot),
+                                  onStatisticsTap: () => _handleStatisticsTap(displayRoot),
+                                ),
                               ),
-                            ),
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 500),
-                            curve: Curves.easeInOut,
-                            color: isDisplayRootHighlighted
-                                ? Theme.of(context).primaryColor.withOpacity(0.1)
-                                : Colors.transparent,
-                            child: RootNoteWidget(
-                              key: _focusedNote != null ? _focusedNoteKey : null,
-                              note: displayRoot,
-                              dataService: widget.dataService,
-                              onNavigateToMentionProfile: _navigateToProfile,
-                              isReactionGlowing: _isReactionGlowing,
-                              isReplyGlowing: _isReplyGlowing,
-                              isRepostGlowing: _isRepostGlowing,
-                              isZapGlowing: _isZapGlowing,
-                              hasReacted: _hasReacted(displayRoot),
-                              hasReplied: _hasReplied(displayRoot),
-                              hasReposted: _hasReposted(displayRoot),
-                              hasZapped: _hasZapped(displayRoot),
-                              onReactionTap: () => _handleReactionTap(displayRoot),
-                              onReplyTap: () => _handleReplyTap(displayRoot),
-                              onRepostTap: () => _handleRepostTap(displayRoot),
-                              onZapTap: () => _handleZapTap(displayRoot),
-                              onStatisticsTap: () => _handleStatisticsTap(displayRoot),
-                            ),
+                              _buildThreadReplies(displayRoot),
+                              const SizedBox(height: 24.0),
+                            ],
                           ),
-                          _buildThreadReplies(displayRoot),
-                          const SizedBox(height: 24.0),
-                        ],
-                      ),
+                        ),
+                        _buildFloatingBackButton(context),
+                      ],
                     ),
-                    _buildFloatingBackButton(context),
-                  ],
-                ),
+        );
+      },
     );
   }
 }

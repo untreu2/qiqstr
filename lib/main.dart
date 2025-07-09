@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:provider/provider.dart' as provider;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'colors.dart';
+import 'theme/theme_manager.dart' as theme;
 import 'models/note_model.dart';
 import 'models/reaction_model.dart';
 import 'models/reply_model.dart';
@@ -74,14 +76,19 @@ Future<void> main() async {
         final dataService = DataService(npub: npub, dataType: DataType.feed);
         
         // Show app immediately, initialize in background
-        runApp(ProviderScope(
-          child: QiqstrApp(
-            home: HomeNavigator(
-              npub: npub,
-              dataService: dataService,
+        runApp(
+          provider.ChangeNotifierProvider(
+            create: (context) => theme.ThemeManager(),
+            child: ProviderScope(
+              child: QiqstrApp(
+                home: HomeNavigator(
+                  npub: npub,
+                  dataService: dataService,
+                ),
+              ),
             ),
           ),
-        ));
+        );
         
         // Initialize connections in background
         Future.microtask(() async {
@@ -89,7 +96,12 @@ Future<void> main() async {
           await dataService.initializeConnections();
         });
       } else {
-        runApp(const ProviderScope(child: QiqstrApp(home: LoginPage())));
+        runApp(
+          provider.ChangeNotifierProvider(
+            create: (context) => theme.ThemeManager(),
+            child: const ProviderScope(child: QiqstrApp(home: LoginPage())),
+          ),
+        );
       }
     } catch (e) {
       print('Initialization error: $e');
@@ -169,51 +181,70 @@ class QiqstrApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return MaterialApp(
-      title: 'Qiqstr',
-      theme: ThemeData(
-        scaffoldBackgroundColor: AppColors.background,
-        textTheme: ThemeData.dark()
-            .textTheme
-            .apply(
-              bodyColor: AppColors.textPrimary,
-              displayColor: AppColors.textPrimary,
-            )
-            .copyWith(
-              bodyLarge: const TextStyle(height: 2.1),
-              bodyMedium: const TextStyle(height: 2.1),
-              bodySmall: const TextStyle(height: 2.1),
-              titleLarge: const TextStyle(height: 2.1),
-              titleMedium: const TextStyle(height: 2.1),
-              titleSmall: const TextStyle(height: 2.1),
+    return provider.Consumer<theme.ThemeManager>(
+      builder: (context, themeManager, child) {
+        final colors = themeManager.colors;
+        final isDark = themeManager.isDarkMode;
+        
+        return MaterialApp(
+          title: 'Qiqstr',
+          theme: ThemeData(
+            brightness: isDark ? Brightness.dark : Brightness.light,
+            scaffoldBackgroundColor: colors.background,
+            textTheme: (isDark ? ThemeData.dark() : ThemeData.light())
+                .textTheme
+                .apply(
+                  bodyColor: colors.textPrimary,
+                  displayColor: colors.textPrimary,
+                )
+                .copyWith(
+                  bodyLarge: TextStyle(height: 2.1, color: colors.textPrimary),
+                  bodyMedium: TextStyle(height: 2.1, color: colors.textPrimary),
+                  bodySmall: TextStyle(height: 2.1, color: colors.textPrimary),
+                  titleLarge: TextStyle(height: 2.1, color: colors.textPrimary),
+                  titleMedium: TextStyle(height: 2.1, color: colors.textPrimary),
+                  titleSmall: TextStyle(height: 2.1, color: colors.textPrimary),
+                ),
+            colorScheme: isDark
+              ? ColorScheme.dark(
+                  primary: colors.primary,
+                  secondary: colors.secondary,
+                  surface: colors.surface,
+                  error: colors.error,
+                  onPrimary: colors.background,
+                  onSecondary: colors.textPrimary,
+                  onSurface: colors.textPrimary,
+                  onError: colors.background,
+                )
+              : ColorScheme.light(
+                  primary: colors.primary,
+                  secondary: colors.secondary,
+                  surface: colors.surface,
+                  error: colors.error,
+                  onPrimary: colors.background,
+                  onSecondary: colors.textPrimary,
+                  onSurface: colors.textPrimary,
+                  onError: colors.background,
+                ),
+            appBarTheme: AppBarTheme(
+              backgroundColor: colors.background,
+              elevation: 0,
+              centerTitle: true,
+              titleTextStyle: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: colors.textPrimary,
+                height: 2.1,
+              ),
             ),
-        colorScheme: const ColorScheme.dark(
-          primary: AppColors.primary,
-          secondary: AppColors.secondary,
-          surface: AppColors.surface,
-          error: AppColors.error,
-          onPrimary: AppColors.background,
-          onSecondary: AppColors.textPrimary,
-          onSurface: AppColors.textPrimary,
-          onError: AppColors.background,
-        ),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: AppColors.background,
-          elevation: 0,
-          centerTitle: true,
-          titleTextStyle: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textPrimary,
-            height: 2.1,
+            buttonTheme: const ButtonThemeData(
+              buttonColor: Colors.deepPurpleAccent,
+              textTheme: ButtonTextTheme.primary,
+            ),
           ),
-        ),
-        buttonTheme: const ButtonThemeData(
-          buttonColor: Colors.deepPurpleAccent,
-          textTheme: ButtonTextTheme.primary,
-        ),
-      ),
-      home: home,
+          home: home,
+        );
+      },
     );
   }
 }

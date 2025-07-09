@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../colors.dart';
+import '../theme/theme_manager.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/note_model.dart';
 import '../models/user_model.dart';
@@ -36,9 +36,9 @@ class ReplyPreviewWidget extends StatelessWidget {
         if (!snapshot.hasData || snapshot.data == null) {
           return Container(
             padding: const EdgeInsets.all(16),
-            child: const Text(
+            child: Text(
               'Note not found',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+              style: TextStyle(color: context.colors.textSecondary, fontSize: 14),
             ),
           );
         }
@@ -67,19 +67,19 @@ class ReplyPreviewWidget extends StatelessWidget {
                     Container(
                       width: 2,
                       height: 20,
-                      color: AppColors.grey600,
+                      color: context.colors.grey600,
                       margin: const EdgeInsets.only(right: 8),
                     ),
-                    const Icon(
+                    Icon(
                       Icons.reply,
                       size: 16,
-                      color: AppColors.secondary,
+                      color: context.colors.secondary,
                     ),
                     const SizedBox(width: 6),
-                    const Text(
+                    Text(
                       'Replying to',
                       style: TextStyle(
-                        color: AppColors.secondary,
+                        color: context.colors.secondary,
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                       ),
@@ -91,9 +91,9 @@ class ReplyPreviewWidget extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.grey900.withOpacity(0.3),
+                    color: context.colors.grey900.withOpacity(0.3),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.grey800, width: 0.5),
+                    border: Border.all(color: context.colors.grey800, width: 0.5),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -102,31 +102,31 @@ class ReplyPreviewWidget extends StatelessWidget {
                         children: [
                           CircleAvatar(
                             radius: 12,
-                            backgroundColor: AppColors.surfaceTransparent,
+                            backgroundColor: context.colors.surfaceTransparent,
                             backgroundImage: authorImage.isNotEmpty
                                 ? CachedNetworkImageProvider(authorImage)
                                 : null,
                             child: authorImage.isEmpty
-                                ? const Icon(Icons.person, color: AppColors.textPrimary, size: 12)
+                                ? Icon(Icons.person, color: context.colors.textPrimary, size: 12)
                                 : null,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               authorName,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
+                                color: context.colors.textPrimary,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           Text(
                             '• ${_formatTimestamp(note.timestamp)}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: AppColors.secondary,
+                              color: context.colors.secondary,
                             ),
                           ),
                         ],
@@ -145,7 +145,7 @@ class ReplyPreviewWidget extends StatelessWidget {
                 Container(
                   margin: const EdgeInsets.symmetric(vertical: 12),
                   height: 1,
-                  color: AppColors.grey800,
+                  color: context.colors.grey800,
                 ),
               ],
             );

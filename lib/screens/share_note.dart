@@ -7,7 +7,7 @@ import '../services/data_service.dart';
 import '../models/user_model.dart';
 import '../widgets/quote_widget.dart';
 import '../widgets/reply_preview_widget.dart';
-import '../colors.dart';
+import '../theme/theme_manager.dart';
 
 class ShareNotePage extends StatefulWidget {
   final DataService dataService;
@@ -153,7 +153,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: Stack(
         children: [
           if (_mediaUrls.isNotEmpty)
@@ -171,7 +171,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                     child: Container(
-                      color: AppColors.background,
+                      color: context.colors.background,
                     ),
                   ),
                 ),
@@ -185,7 +185,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
               leading: Padding(
                 padding: const EdgeInsets.only(left: 8.0),
                 child: IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppColors.textPrimary, size: 20),
+                  icon: Icon(Icons.arrow_back_ios_new_rounded, color: context.colors.textPrimary, size: 20),
                   onPressed: () => Navigator.pop(context),
                 ),
               ),
@@ -195,21 +195,21 @@ class _ShareNotePageState extends State<ShareNotePage> {
                     if (_isMediaUploading)
                       Padding(
                         padding: const EdgeInsets.only(right: 8),
-                        child: const Row(
+                        child: Row(
                           children: [
                             SizedBox(
                               width: 16,
                               height: 16,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(AppColors.textPrimary),
+                                valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
                               ),
                             ),
-                            SizedBox(width: 6),
+                            const SizedBox(width: 6),
                             Text(
                               'Uploading...',
                               style: TextStyle(
-                                color: AppColors.textPrimary,
+                                color: context.colors.textPrimary,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -224,19 +224,19 @@ class _ShareNotePageState extends State<ShareNotePage> {
                         height: 34,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: AppColors.surfaceTransparent,
+                          color: context.colors.surfaceTransparent,
                           borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: AppColors.borderLight),
+                          border: Border.all(color: context.colors.borderLight),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.attach_file, size: 16, color: AppColors.textPrimary),
-                            SizedBox(width: 6),
+                            Icon(Icons.attach_file, size: 16, color: context.colors.textPrimary),
+                            const SizedBox(width: 6),
                             Text(
                               'Add media',
                               style: TextStyle(
-                                color: AppColors.textPrimary,
+                                color: context.colors.textPrimary,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -253,23 +253,23 @@ class _ShareNotePageState extends State<ShareNotePage> {
                         height: 34,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: AppColors.surfaceTransparent,
+                          color: context.colors.surfaceTransparent,
                           borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: AppColors.borderLight),
+                          border: Border.all(color: context.colors.borderLight),
                         ),
                         child: _isPosting
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 18,
                                 height: 18,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2.5,
-                                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.textPrimary),
+                                  valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
                                 ),
                               )
-                            : const Text(
+                            : Text(
                                 'Post!',
                                 style: TextStyle(
-                                  color: AppColors.textPrimary,
+                                  color: context.colors.textPrimary,
                                   fontSize: 13,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -298,11 +298,11 @@ class _ShareNotePageState extends State<ShareNotePage> {
                       children: [
                         CircleAvatar(
                           radius: 20,
-                          backgroundColor: AppColors.surfaceTransparent,
+                          backgroundColor: context.colors.surfaceTransparent,
                           backgroundImage:
                               _user?.profileImage != null ? CachedNetworkImageProvider(_user!.profileImage) : null,
                           child: _user?.profileImage == null
-                              ? const Icon(Icons.person, color: AppColors.textPrimary, size: 20)
+                              ? Icon(Icons.person, color: context.colors.textPrimary, size: 20)
                               : null,
                         ),
                         const SizedBox(width: 12),
@@ -312,11 +312,11 @@ class _ShareNotePageState extends State<ShareNotePage> {
                             controller: _noteController,
                             maxLines: null,
                             textAlignVertical: TextAlignVertical.top,
-                            style: const TextStyle(color: AppColors.textPrimary),
-                            cursorColor: AppColors.textPrimary,
-                            decoration: const InputDecoration(
+                            style: TextStyle(color: context.colors.textPrimary),
+                            cursorColor: context.colors.textPrimary,
+                            decoration: InputDecoration(
                               hintText: "What's on your mind?",
-                              hintStyle: TextStyle(color: AppColors.textSecondary),
+                              hintStyle: TextStyle(color: context.colors.textSecondary),
                               border: InputBorder.none,
                             ),
                           ),
@@ -348,7 +348,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
                                       errorBuilder: (_, __, ___) => Container(
                                         width: 160,
                                         height: 160,
-                                        color: AppColors.surface,
+                                        color: context.colors.surface,
                                         child: const Icon(Icons.broken_image),
                                       ),
                                     ),
@@ -360,13 +360,13 @@ class _ShareNotePageState extends State<ShareNotePage> {
                                       onTap: () => _removeMedia(url),
                                       child: Container(
                                         padding: const EdgeInsets.all(2),
-                                        decoration: const BoxDecoration(
-                                          color: AppColors.background,
+                                        decoration: BoxDecoration(
+                                          color: context.colors.background,
                                           shape: BoxShape.circle,
                                         ),
-                                        child: const Icon(
+                                        child: Icon(
                                           Icons.close,
-                                          color: AppColors.textPrimary,
+                                          color: context.colors.textPrimary,
                                           size: 18,
                                         ),
                                       ),

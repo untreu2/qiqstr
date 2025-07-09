@@ -52,6 +52,7 @@ dependencies:
     url_launcher: ^6.3.1
     flutter_linkify: ^6.0.0
     flutter_riverpod: ^2.6.1
+    provider: ^6.1.2
     confetti: ^0.8.0
     file_picker: ^9.2.2
     bolt11_decoder: ^1.0.2

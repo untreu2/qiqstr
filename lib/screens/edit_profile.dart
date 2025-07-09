@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../colors.dart';
+import '../theme/theme_manager.dart';
+import 'package:provider/provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/models/user_model.dart';
@@ -163,31 +165,31 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
     }
   }
 
-  InputDecoration _inputDecoration(String label, {VoidCallback? onUpload}) {
+  InputDecoration _inputDecoration(BuildContext context, String label, {VoidCallback? onUpload}) {
     return InputDecoration(
       labelText: label,
-      labelStyle: const TextStyle(
+      labelStyle: TextStyle(
         fontWeight: FontWeight.w600,
-        color: AppColors.textSecondary,
+        color: context.colors.textSecondary,
       ),
       filled: true,
-      fillColor: AppColors.background,
+      fillColor: context.colors.background,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderSide: BorderSide(color: context.colors.border),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.border),
+        borderSide: BorderSide(color: context.colors.border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFECB200), width: 2),
+        borderSide: BorderSide(color: context.colors.accent, width: 2),
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       suffixIcon: onUpload != null
           ? IconButton(
-              icon: const Icon(Icons.upload, color: Color(0xFFECB200)),
+              icon: Icon(Icons.upload, color: context.colors.accent),
               onPressed: onUpload,
             )
           : null,
@@ -196,142 +198,150 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
+    return Consumer<ThemeManager>(
+      builder: (context, themeManager, child) {
+        if (_isLoading) {
+          return Scaffold(
+            backgroundColor: context.colors.background,
+            body: Center(child: CircularProgressIndicator(color: context.colors.textPrimary)),
+          );
+        }
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 8.0),
-          child: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                color: AppColors.textPrimary, size: 20),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ),
-        actions: [
-          GestureDetector(
-            onTap: _isSaving ? null : _saveProfile,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              height: 34,
-              alignment: Alignment.center,
-              margin: const EdgeInsets.only(right: 12),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: _isSaving
-                    ? const [
-                        SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(AppColors.textPrimary),
-                          ),
-                        ),
-                        SizedBox(width: 10),
-                        Text(
-                          'Updating...',
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ]
-                    : const [
-                        Text(
-                          'Save',
-                          style: TextStyle(
-                            color: AppColors.textPrimary,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        SizedBox(width: 4),
-                        Icon(Icons.check, size: 16, color: AppColors.textPrimary),
-                      ],
+        return Scaffold(
+          backgroundColor: context.colors.background,
+          appBar: AppBar(
+            backgroundColor: context.colors.background,
+            elevation: 0,
+            leading: Padding(
+              padding: const EdgeInsets.only(left: 8.0),
+              child: IconButton(
+                icon: Icon(Icons.arrow_back_ios_new_rounded,
+                    color: context.colors.textPrimary, size: 20),
+                onPressed: () => Navigator.pop(context),
               ),
             ),
-          ),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              TextFormField(
-                controller: _nameController,
-                decoration: _inputDecoration('Username'),
-                style: const TextStyle(color: AppColors.textPrimary),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _aboutController,
-                decoration: _inputDecoration('Bio'),
-                style: const TextStyle(color: AppColors.textPrimary),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _pictureController,
-                enabled: !_isUploadingPicture,
-                decoration: _inputDecoration(
-                  'Profile image',
-                  onUpload: _isUploadingPicture
-                      ? null
-                      : () => _pickAndUploadMedia(
-                            controller: _pictureController,
-                            label: 'Profile image',
-                            isPicture: true,
-                          ),
+            actions: [
+              GestureDetector(
+                onTap: _isSaving ? null : _saveProfile,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  height: 34,
+                  alignment: Alignment.center,
+                  margin: const EdgeInsets.only(right: 12),
+                  decoration: BoxDecoration(
+                    color: context.colors.surface,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: context.colors.border),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: _isSaving
+                        ? [
+                            SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Updating...',
+                              style: TextStyle(
+                                color: context.colors.textPrimary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ]
+                        : [
+                            Text(
+                              'Save',
+                              style: TextStyle(
+                                color: context.colors.textPrimary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(Icons.check, size: 16, color: context.colors.textPrimary),
+                          ],
+                  ),
                 ),
-                style: const TextStyle(color: AppColors.textPrimary),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _bannerController,
-                enabled: !_isUploadingBanner,
-                decoration: _inputDecoration(
-                  'Banner',
-                  onUpload: _isUploadingBanner
-                      ? null
-                      : () => _pickAndUploadMedia(
-                            controller: _bannerController,
-                            label: 'Banner',
-                            isPicture: false,
-                          ),
-                ),
-                style: const TextStyle(color: AppColors.textPrimary),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _lud16Controller,
-                decoration: _inputDecoration('Lightning address'),
-                style: const TextStyle(color: AppColors.textPrimary),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _websiteController,
-                decoration: _inputDecoration('Website'),
-                style: const TextStyle(color: AppColors.textPrimary),
               ),
             ],
           ),
-        ),
-      ),
+          body: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Form(
+              key: _formKey,
+              child: ListView(
+                children: [
+                  TextFormField(
+                    controller: _nameController,
+                    decoration: _inputDecoration(context, 'Username'),
+                    style: TextStyle(color: context.colors.textPrimary),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _aboutController,
+                    decoration: _inputDecoration(context, 'Bio'),
+                    style: TextStyle(color: context.colors.textPrimary),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _pictureController,
+                    enabled: !_isUploadingPicture,
+                    decoration: _inputDecoration(
+                      context,
+                      'Profile image',
+                      onUpload: _isUploadingPicture
+                          ? null
+                          : () => _pickAndUploadMedia(
+                                controller: _pictureController,
+                                label: 'Profile image',
+                                isPicture: true,
+                              ),
+                    ),
+                    style: TextStyle(color: context.colors.textPrimary),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _bannerController,
+                    enabled: !_isUploadingBanner,
+                    decoration: _inputDecoration(
+                      context,
+                      'Banner',
+                      onUpload: _isUploadingBanner
+                          ? null
+                          : () => _pickAndUploadMedia(
+                                controller: _bannerController,
+                                label: 'Banner',
+                                isPicture: false,
+                              ),
+                    ),
+                    style: TextStyle(color: context.colors.textPrimary),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _lud16Controller,
+                    decoration: _inputDecoration(context, 'Lightning address'),
+                    style: TextStyle(color: context.colors.textPrimary),
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _websiteController,
+                    decoration: _inputDecoration(context, 'Website'),
+                    style: TextStyle(color: context.colors.textPrimary),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

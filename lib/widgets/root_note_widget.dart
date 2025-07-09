@@ -4,7 +4,7 @@ import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/widgets/note_content_widget.dart';
 import 'package:qiqstr/widgets/interaction_bar_widget.dart';
-import '../colors.dart'; 
+import '../theme/theme_manager.dart';
 
 class RootNoteWidget extends StatelessWidget {
   final NoteModel note;
@@ -58,7 +58,7 @@ class RootNoteWidget extends StatelessWidget {
     
     return Card(
         margin: EdgeInsets.zero,
-      color: AppColors.background,
+      color: context.colors.background,
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: Padding(
@@ -75,22 +75,22 @@ class RootNoteWidget extends StatelessWidget {
                     CircleAvatar(
                     radius: 18,
                       backgroundImage: NetworkImage(authorProfile!.profileImage), 
-                      backgroundColor: AppColors.grey700,
+                    backgroundColor: context.colors.grey700,
                     ),
                   ] else ...[
                     CircleAvatar(
                     radius: 18,
-                      backgroundColor: AppColors.grey700,
-                    child: const Icon(Icons.person, size: 22, color: AppColors.textSecondary),
+                    backgroundColor: context.colors.grey700,
+                    child: Icon(Icons.person, size: 22, color: context.colors.textSecondary),
                     ),
                   ],
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       authorName,
-                      style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
-                        color: AppColors.textPrimary,
+                      color: context.colors.textPrimary,
                         fontWeight: FontWeight.w500,
                       ),
                       overflow: TextOverflow.ellipsis,

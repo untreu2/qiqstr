@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../colors.dart';
+import '../theme/theme_manager.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:hive_flutter/hive_flutter.dart';
@@ -91,7 +91,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
       );
       if (!mounted) return;
 
-      final dominant = palette.dominantColor?.color ?? AppColors.background;
+      final dominant = palette.dominantColor?.color ?? context.colors.background;
 
       final darkened = HSLColor.fromColor(dominant)
           .withLightness(
@@ -154,7 +154,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
                 width: double.infinity,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                color: _dominantColor ?? AppColors.overlayDark,
+                color: _dominantColor ?? context.colors.overlayDark,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -162,18 +162,18 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
                       _title!,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: AppColors.textPrimary,
+                        color: context.colors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       Uri.parse(widget.url).host.replaceFirst('www.', ''),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
-                        color: AppColors.textSecondary,
+                        color: context.colors.textSecondary,
                       ),
                     ),
                   ],
@@ -188,9 +188,9 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
 
   Widget _placeholder() {
     return Container(
-      color: AppColors.grey900,
-      child: const Center(
-        child: Icon(Icons.link, color: AppColors.textTertiary),
+      color: context.colors.grey900,
+      child: Center(
+        child: Icon(Icons.link, color: context.colors.textTertiary),
       ),
     );
   }

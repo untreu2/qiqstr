@@ -5,6 +5,7 @@ import 'package:nostr/nostr.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/screens/feed_page.dart';
 import '../colors.dart';
+import '../theme/theme_manager.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -75,22 +76,22 @@ class _LoginPageState extends State<LoginPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
+          Text(
             'Welcome to Qiqstr!',
             style: TextStyle(
               fontSize: 36,
               fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+              color: context.colors.textPrimary,
               letterSpacing: -1,
             ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Login securely with your private key.',
             style: TextStyle(
               fontSize: 16,
-              color: AppColors.textSecondary,
+              color: context.colors.textSecondary,
               height: 1.5,
             ),
             textAlign: TextAlign.center,
@@ -98,18 +99,18 @@ class _LoginPageState extends State<LoginPage> {
           const SizedBox(height: 40),
           TextField(
             controller: _nsecController,
-            style: const TextStyle(color: AppColors.textPrimary),
+            style: TextStyle(color: context.colors.textPrimary),
             decoration: InputDecoration(
               labelText: 'Enter your nsec...',
-              labelStyle: const TextStyle(color: AppColors.textSecondary),
+              labelStyle: TextStyle(color: context.colors.textSecondary),
               filled: true,
-              fillColor: AppColors.inputFill,
+              fillColor: context.colors.inputFill,
               enabledBorder: OutlineInputBorder(
-                borderSide: const BorderSide(color: AppColors.inputBorder),
+                borderSide: BorderSide(color: context.colors.inputBorder),
                 borderRadius: BorderRadius.circular(12),
               ),
               focusedBorder: OutlineInputBorder(
-                borderSide: const BorderSide(color: AppColors.inputFocused),
+                borderSide: BorderSide(color: context.colors.inputFocused),
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
@@ -121,8 +122,8 @@ class _LoginPageState extends State<LoginPage> {
             child: ElevatedButton(
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: AppColors.buttonPrimary,
-                foregroundColor: AppColors.background,
+                backgroundColor: context.colors.buttonPrimary,
+                foregroundColor: context.colors.background,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -139,7 +140,7 @@ class _LoginPageState extends State<LoginPage> {
           if (_message.isNotEmpty)
             Text(
               _message,
-              style: const TextStyle(color: AppColors.error),
+              style: TextStyle(color: context.colors.error),
             ),
         ],
       ),
@@ -149,12 +150,12 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildLoadingScreen() {
     return Column(
       mainAxisSize: MainAxisSize.min,
-      children: const [
-        CircularProgressIndicator(color: AppColors.loading),
-        SizedBox(height: 20),
+      children: [
+        CircularProgressIndicator(color: context.colors.loading),
+        const SizedBox(height: 20),
         Text(
           'Logging in...',
-          style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
+          style: TextStyle(color: context.colors.textSecondary, fontSize: 16),
         ),
       ],
     );
@@ -163,7 +164,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: SafeArea(
         child: Center(
           child: _isLoading

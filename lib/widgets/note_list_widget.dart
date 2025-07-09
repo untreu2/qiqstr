@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../colors.dart';
+import '../theme/theme_manager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/services/data_service.dart';
@@ -170,14 +170,14 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   @override
   Widget build(BuildContext context) {
     if (_isInitializing || _currentUserNpub == null) {
-      return const SliverToBoxAdapter(
+      return SliverToBoxAdapter(
         child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 40),
+          padding: const EdgeInsets.symmetric(vertical: 40),
           child: Center(
             child: Text(
               'Loading...',
               style: TextStyle(
-                color: AppColors.textSecondary,
+                color: context.colors.textSecondary,
                 fontSize: 16,
                 fontWeight: FontWeight.w500,
               ),
@@ -191,14 +191,14 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       valueListenable: _dataService.notesNotifier,
       builder: (context, notes, child) {
         if (notes.isEmpty) {
-          return const SliverToBoxAdapter(
+          return SliverToBoxAdapter(
             child: Center(
               child: Padding(
-                padding: EdgeInsets.all(24),
+                padding: const EdgeInsets.all(24),
                 child: Text(
                   'No notes available yet.',
                   style: TextStyle(
-                    color: AppColors.textSecondary,
+                    color: context.colors.textSecondary,
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
                   ),
@@ -211,14 +211,14 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         final filteredNotes = _getFilteredNotes(notes);
 
         if (filteredNotes.isEmpty) {
-          return const SliverToBoxAdapter(
+          return SliverToBoxAdapter(
             child: Center(
               child: Padding(
-                padding: EdgeInsets.all(24),
+                padding: const EdgeInsets.all(24),
                 child: Text(
                   'No notes match the current filter.',
                   style: TextStyle(
-                    color: AppColors.textSecondary,
+                    color: context.colors.textSecondary,
                     fontSize: 16,
                     fontWeight: FontWeight.w500,
                   ),
@@ -238,15 +238,15 @@ class _NoteListWidgetState extends State<NoteListWidget> {
             (context, index) {
               if (index == displayNotes.length) {
                 if (_isLoadingMore && itemsToShow < totalItems) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
+                  return Padding(
+                    padding: const EdgeInsets.all(16),
                     child: Center(
                       child: SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(AppColors.textTertiary),
+                          valueColor: AlwaysStoppedAnimation<Color>(context.colors.textTertiary),
                         ),
                       ),
                     ),
@@ -274,7 +274,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                       margin: const EdgeInsets.symmetric(vertical: 10),
                       height: 1,
                       width: double.infinity,
-                      color: AppColors.surfaceTransparent,
+                      color: context.colors.surfaceTransparent,
                     ),
                 ],
               );

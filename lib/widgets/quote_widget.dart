@@ -1,6 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import '../colors.dart';
+import '../theme/theme_manager.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
@@ -79,15 +79,15 @@ class QuoteWidget extends StatelessWidget {
               if (match.start > lastMatchEnd) {
                 spans.add(TextSpan(
                   text: text.substring(lastMatchEnd, match.start),
-                  style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                  style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
                 ));
               }
               final url = text.substring(match.start, match.end);
               spans.add(
                 TextSpan(
                   text: url,
-                  style: const TextStyle(
-                    color: AppColors.accent,
+                  style: TextStyle(
+                    color: context.colors.accent,
                     fontStyle: FontStyle.normal,
                     fontSize: 14,
                   ),
@@ -101,7 +101,7 @@ class QuoteWidget extends StatelessWidget {
             if (lastMatchEnd < text.length) {
               spans.add(TextSpan(
                 text: text.substring(lastMatchEnd),
-                style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
               ));
             }
           } else if (p['type'] == 'mention') {
@@ -110,8 +110,8 @@ class QuoteWidget extends StatelessWidget {
             spans.add(
               TextSpan(
                 text: '@$display_name',
-                style: const TextStyle(
-                  color: AppColors.accent,
+                style: TextStyle(
+                  color: context.colors.accent,
                   fontSize: 14,
                   fontStyle: FontStyle.normal,
                 ),
@@ -154,16 +154,16 @@ class QuoteWidget extends StatelessWidget {
               CircleAvatar(
                 radius: 14,
                 backgroundImage: img.isNotEmpty ? CachedNetworkImageProvider(img) : null,
-                backgroundColor: img.isEmpty ? AppColors.secondary : AppColors.surfaceTransparent,
-                child: img.isEmpty ? const Icon(Icons.person, size: 14, color: AppColors.textPrimary) : null,
+                backgroundColor: img.isEmpty ? context.colors.secondary : context.colors.surfaceTransparent,
+                child: img.isEmpty ? Icon(Icons.person, size: 14, color: context.colors.textPrimary) : null,
               ),
               const SizedBox(width: 8),
               Text(
                 name,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
+                  color: context.colors.textPrimary,
                 ),
               ),
             ],
@@ -183,22 +183,22 @@ class QuoteWidget extends StatelessWidget {
             margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.background,
+              color: context.colors.background,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.textPrimary, width: 0.8),
+              border: Border.all(color: context.colors.textPrimary, width: 0.8),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.textPrimary.withOpacity(0.05),
+                  color: context.colors.textPrimary.withOpacity(0.05),
                   blurRadius: 6,
                   offset: const Offset(0, 2),
                 ),
               ],
             ),
-            child: const Center(
+            child: Center(
               child: Text(
                 'Event not found',
                 style: TextStyle(
-                  color: AppColors.textSecondary,
+                  color: context.colors.textSecondary,
                   fontSize: 14,
                 ),
               ),
@@ -215,10 +215,10 @@ class QuoteWidget extends StatelessWidget {
           decoration: BoxDecoration(
             color: const Color(0xFF1E1E1E),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.grey800, width: 1),
+            border: Border.all(color: context.colors.grey800, width: 1),
             boxShadow: [
               BoxShadow(
-                color: AppColors.background.withOpacity(0.1),
+                color: context.colors.background.withOpacity(0.1),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -235,7 +235,7 @@ class QuoteWidget extends StatelessWidget {
                     _formatTimestamp(n.timestamp),
                     style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.textSecondary,
+                      color: context.colors.textSecondary,
                       fontWeight: FontWeight.w400,
                     ),
                   ),
@@ -249,7 +249,7 @@ class QuoteWidget extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: DefaultTextStyle(
-                    style: const TextStyle(fontSize: 15, color: AppColors.textPrimary),
+                    style: TextStyle(fontSize: 15, color: context.colors.textPrimary),
                     child: _contentText(context, parsed),
                   ),
                 ),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../colors.dart';
+import '../theme/theme_manager.dart';
+import 'package:provider/provider.dart';
 import 'package:hive/hive.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/models/user_model.dart';
@@ -87,7 +89,7 @@ class _FollowingListPageState extends State<FollowingListPage> {
     return 6;
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 60, 16, 8),
       child: Column(
@@ -96,17 +98,17 @@ class _FollowingListPageState extends State<FollowingListPage> {
           Row(
             children: [
               IconButton(
-                icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+                icon: Icon(Icons.arrow_back, color: context.colors.textPrimary),
                 onPressed: () => Navigator.pop(context),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: AutoSizeText(
                   "${widget.display_name}'s Following",
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: context.colors.textPrimary,
                     letterSpacing: -0.5,
                   ),
                   maxLines: 1,
@@ -121,18 +123,18 @@ class _FollowingListPageState extends State<FollowingListPage> {
     );
   }
 
-  Widget _buildSearchInput() {
+  Widget _buildSearchInput(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
       child: TextField(
         controller: _searchController,
-        style: const TextStyle(color: AppColors.textPrimary),
+        style: TextStyle(color: context.colors.textPrimary),
         decoration: InputDecoration(
           hintText: 'Search following...',
-          hintStyle: const TextStyle(color: AppColors.textTertiary),
-          prefixIcon: const Icon(Icons.search, color: AppColors.textPrimary),
+          hintStyle: TextStyle(color: context.colors.textTertiary),
+          prefixIcon: Icon(Icons.search, color: context.colors.textPrimary),
           filled: true,
-          fillColor: AppColors.surface,
+          fillColor: context.colors.surface,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide.none,
@@ -143,7 +145,7 @@ class _FollowingListPageState extends State<FollowingListPage> {
     );
   }
 
-  Widget _buildUserTile(UserModel user) {
+  Widget _buildUserTile(BuildContext context, UserModel user) {
     return ListTile(
       leading: CircleAvatar(
         backgroundImage: user.profileImage.isNotEmpty
@@ -151,12 +153,12 @@ class _FollowingListPageState extends State<FollowingListPage> {
             : null,
         backgroundColor: Colors.grey.shade800,
       ),
-      title: Text(user.name, style: const TextStyle(color: AppColors.textPrimary)),
+      title: Text(user.name, style: TextStyle(color: context.colors.textPrimary)),
       subtitle: Text(
         user.about,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(color: AppColors.textSecondary),
+        style: TextStyle(color: context.colors.textSecondary),
       ),
       onTap: () {
         Navigator.push(
@@ -171,34 +173,38 @@ class _FollowingListPageState extends State<FollowingListPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHeader(),
-          _buildSearchInput(),
-          Expanded(
-            child: _filteredFollowings.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No followings found.',
-                      style: TextStyle(color: AppColors.textSecondary),
-                    ),
-                  )
-                : ListView.separated(
-                    padding: EdgeInsets.zero,
-                    itemCount: _filteredFollowings.length,
-                    itemBuilder: (context, index) =>
-                        _buildUserTile(_filteredFollowings[index]),
-                    separatorBuilder: (_, __) => const Divider(
-                      color: AppColors.border,
-                      height: 1,
-                    ),
-                  ),
+    return Consumer<ThemeManager>(
+      builder: (context, themeManager, child) {
+        return Scaffold(
+          backgroundColor: context.colors.background,
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(context),
+              _buildSearchInput(context),
+              Expanded(
+                child: _filteredFollowings.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No followings found.',
+                          style: TextStyle(color: context.colors.textSecondary),
+                        ),
+                      )
+                    : ListView.separated(
+                        padding: EdgeInsets.zero,
+                        itemCount: _filteredFollowings.length,
+                        itemBuilder: (context, index) =>
+                            _buildUserTile(context, _filteredFollowings[index]),
+                        separatorBuilder: (_, __) => Divider(
+                          color: context.colors.border,
+                          height: 1,
+                        ),
+                      ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:bounce/bounce.dart';
-import '../colors.dart';
+import '../theme/theme_manager.dart';
 
 class InteractionBar extends StatelessWidget {
   final int reactionCount;
@@ -54,6 +54,8 @@ class InteractionBar extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
+    final colors = context.colors;
+    
     return Stack(
       alignment: Alignment.center,
       children: [
@@ -80,7 +82,7 @@ class InteractionBar extends StatelessWidget {
                 opacity: count > 0 ? 1.0 : 0.0,
                 child: Text(
                   '$count',
-                  style: const TextStyle(fontSize: 14, color: AppColors.secondary),
+                  style: TextStyle(fontSize: 14, color: colors.secondary),
                 ),
               ),
             ],
@@ -92,6 +94,8 @@ class InteractionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -99,8 +103,8 @@ class InteractionBar extends StatelessWidget {
           context: context,
           svg: 'assets/reaction_button.svg',
           color: isReactionGlowing || hasReacted
-              ? AppColors.reaction
-              : AppColors.secondary,
+              ? colors.reaction
+              : colors.secondary,
           count: reactionCount,
           onTap: onReactionTap,
         ),
@@ -108,8 +112,8 @@ class InteractionBar extends StatelessWidget {
           context: context,
           svg: 'assets/reply_button.svg',
           color: isReplyGlowing || hasReplied
-              ? AppColors.reply
-              : AppColors.secondary,
+              ? colors.reply
+              : colors.secondary,
           count: replyCount,
           onTap: onReplyTap,
         ),
@@ -117,8 +121,8 @@ class InteractionBar extends StatelessWidget {
           context: context,
           svg: 'assets/repost_button.svg',
           color: isRepostGlowing || hasReposted
-              ? AppColors.repost
-              : AppColors.secondary,
+              ? colors.repost
+              : colors.secondary,
           count: repostCount,
           onTap: onRepostTap,
         ),
@@ -126,17 +130,16 @@ class InteractionBar extends StatelessWidget {
           context: context,
           svg: 'assets/zap_button.svg',
           color: isZapGlowing || hasZapped
-              ? AppColors.zap
-              : AppColors.secondary,
+              ? colors.zap
+              : colors.secondary,
           count: zapAmount,
           onTap: onZapTap,
         ),
         GestureDetector(
           onTap: onStatisticsTap,
-          child: const Padding(
-            padding: EdgeInsets.only(left: 6),
-            
-            child: Icon(Icons.bar_chart, size: 19, color: AppColors.secondary),
+          child: Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: Icon(Icons.bar_chart, size: 19, color: colors.secondary),
           ),
         ),
       ],

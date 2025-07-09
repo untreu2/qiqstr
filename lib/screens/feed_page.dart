@@ -8,7 +8,7 @@ import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/data_service.dart';
-import '../colors.dart';
+import '../theme/theme_manager.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -89,12 +89,14 @@ class _FeedPageState extends State<FeedPage> {
 
 
   Widget _buildHeaderWithFilters(BuildContext context, double topPadding) {
+    final colors = context.colors;
+    
     return ClipRRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
         child: Container(
           width: double.infinity,
-          color: AppColors.backgroundTransparent,
+          color: colors.backgroundTransparent,
           padding: EdgeInsets.fromLTRB(16, topPadding + 4, 16, 0),
           child: Column(
             children: [
@@ -110,11 +112,11 @@ class _FeedPageState extends State<FeedPage> {
                           onTap: () => Scaffold.of(context).openDrawer(),
                           child: CircleAvatar(
                             radius: 16,
-                            backgroundColor: AppColors.avatarPlaceholder,
+                            backgroundColor: colors.avatarPlaceholder,
                             backgroundImage:
                                 user?.profileImage != null ? CachedNetworkImageProvider(user!.profileImage) : null,
                             child: user?.profileImage == null
-                                ? const Icon(Icons.person, color: AppColors.iconPrimary, size: 18)
+                                ? Icon(Icons.person, color: colors.iconPrimary, size: 18)
                                 : null,
                           ),
                         ),
@@ -133,7 +135,7 @@ class _FeedPageState extends State<FeedPage> {
                           'assets/main_icon_white.svg',
                           width: 30,
                           height: 30,
-                          color: AppColors.iconPrimary,
+                          color: colors.iconPrimary,
                         ),
                       ),
                     ),
@@ -168,6 +170,8 @@ class _FeedPageState extends State<FeedPage> {
 
   Widget _buildFilterButton(BuildContext context, NoteListFilterType filterType, String label) {
     final bool isSelected = _selectedFilterType == filterType;
+    final colors = context.colors;
+    
     return TextButton(
       onPressed: () {
         if (_selectedFilterType != filterType) {
@@ -177,16 +181,16 @@ class _FeedPageState extends State<FeedPage> {
         }
       },
       style: TextButton.styleFrom(
-        backgroundColor: AppColors.surfaceTransparent,
+        backgroundColor: colors.surfaceTransparent,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
           side: BorderSide(
-            color: isSelected ? AppColors.accent : AppColors.borderAccent,
+            color: isSelected ? colors.accent : colors.borderAccent,
             width: 1.0,
           ),
         ),
-        foregroundColor: isSelected ? AppColors.textPrimary : AppColors.textSecondary,
+        foregroundColor: isSelected ? colors.textPrimary : colors.textSecondary,
         textStyle: const TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w600,
@@ -200,17 +204,18 @@ class _FeedPageState extends State<FeedPage> {
   Widget build(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
     final double headerHeight = topPadding + 108;
+    final colors = context.colors;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: colors.background,
       drawer: SidebarWidget(user: user),
       body: isLoading
-          ? const ColoredBox(color: AppColors.background)
+          ? ColoredBox(color: colors.background)
           : errorMessage != null
               ? Center(
                   child: Text(
                     errorMessage!,
-                    style: const TextStyle(color: AppColors.textSecondary),
+                    style: TextStyle(color: colors.textSecondary),
                   ),
                 )
               : CustomScrollView(
@@ -228,6 +233,9 @@ class _FeedPageState extends State<FeedPage> {
                           child: _buildHeaderWithFilters(context, topPadding),
                         ),
                       ),
+                    ),
+                    const SliverToBoxAdapter(
+                      child: SizedBox(height: 8),
                     ),
                     NoteListWidget(
                       npub: widget.npub,

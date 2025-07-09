@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../colors.dart';
+import '../theme/theme_manager.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/photo_viewer_widget.dart';
 import 'video_preview.dart';
@@ -143,12 +143,12 @@ class MediaPreviewWidget extends StatelessWidget {
               ),
               if (index == 3 && imageUrls.length > 4)
                 Container(
-                  color: AppColors.overlayDark,
+                  color: context.colors.overlayDark,
                   alignment: Alignment.center,
                   child: Text(
                     '+${imageUrls.length - 4}',
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
+                    style: TextStyle(
+                      color: context.colors.textPrimary,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),

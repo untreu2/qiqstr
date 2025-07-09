@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/data_service.dart';
-import '../../colors.dart';
+import '../../theme/theme_manager.dart';
 
 Future<void> showZapDialog({
   required BuildContext context,
@@ -16,7 +16,7 @@ Future<void> showZapDialog({
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true, 
-    backgroundColor: AppColors.background,
+    backgroundColor: context.colors.background,
     shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
     builder: (modalContext) => Padding(
@@ -32,34 +32,34 @@ Future<void> showZapDialog({
           TextField(
             controller: amountController,
             keyboardType: TextInputType.number,
-            style: const TextStyle(color: AppColors.textPrimary),
-            decoration: const InputDecoration(
+            style: TextStyle(color: context.colors.textPrimary),
+            decoration: InputDecoration(
               labelText: 'Amount (sats)',
-              labelStyle: TextStyle(color: AppColors.secondary),
+              labelStyle: TextStyle(color: context.colors.secondary),
               enabledBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: AppColors.secondary)),
+                  borderSide: BorderSide(color: context.colors.secondary)),
               focusedBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: AppColors.textPrimary)),
+                  borderSide: BorderSide(color: context.colors.textPrimary)),
             ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: noteController,
-            style: const TextStyle(color: AppColors.textPrimary),
-            decoration: const InputDecoration(
+            style: TextStyle(color: context.colors.textPrimary),
+            decoration: InputDecoration(
               labelText: 'Comment... (Optional)',
-              labelStyle: TextStyle(color: AppColors.secondary),
+              labelStyle: TextStyle(color: context.colors.secondary),
               enabledBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: AppColors.secondary)),
+                  borderSide: BorderSide(color: context.colors.secondary)),
               focusedBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: AppColors.textPrimary)),
+                  borderSide: BorderSide(color: context.colors.textPrimary)),
             ),
           ),
           const SizedBox(height: 20),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.buttonPrimary,
-                foregroundColor: AppColors.background,
+                backgroundColor: context.colors.buttonPrimary,
+                foregroundColor: context.colors.background,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
             onPressed: () async {

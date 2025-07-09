@@ -10,9 +10,9 @@ import 'package:qiqstr/widgets/note_content_widget.dart';
 import 'package:qiqstr/widgets/dialogs/repost_dialog.dart';
 import 'package:qiqstr/widgets/dialogs/zap_dialog.dart';
 
-import '../colors.dart';
 import '../models/note_model.dart';
 import '../services/data_service.dart';
+import '../theme/theme_manager.dart';
 
 class NoteWidget extends StatefulWidget {
   final NoteModel note;
@@ -240,54 +240,61 @@ class _NoteWidgetState extends State<NoteWidget>
     final name = user?.name ?? 'Unknown';
     final profileImage = user?.profileImage;
 
-    return GestureDetector(
-      onTap: () => _navigateToProfile(npub),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const Icon(Icons.repeat, size: 16, color: AppColors.secondary),
-          const SizedBox(width: 6),
-          profileImage != null && profileImage.isNotEmpty
-              ? CircleAvatar(
-                  radius: 11,
-                  backgroundImage: CachedNetworkImageProvider(profileImage),
-                  backgroundColor: AppColors.surfaceTransparent,
-                )
-              : const CircleAvatar(
-                  radius: 11,
-                  backgroundColor: AppColors.avatarBackground,
-                  child: Icon(Icons.person, size: 13, color: AppColors.iconPrimary),
+    return Builder(
+      builder: (context) {
+        final colors = context.colors;
+        return GestureDetector(
+          onTap: () => _navigateToProfile(npub),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(Icons.repeat, size: 16, color: colors.secondary),
+              const SizedBox(width: 6),
+              profileImage != null && profileImage.isNotEmpty
+                  ? CircleAvatar(
+                      radius: 11,
+                      backgroundImage: CachedNetworkImageProvider(profileImage),
+                      backgroundColor: colors.surfaceTransparent,
+                    )
+                  : CircleAvatar(
+                      radius: 11,
+                      backgroundColor: colors.avatarBackground,
+                      child: Icon(Icons.person, size: 13, color: colors.iconPrimary),
+                    ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'Reposted by $name',
+                        style: TextStyle(fontSize: 12, color: colors.secondary),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (ts != null) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        '• ${_formatTimestamp(ts)}',
+                        style: TextStyle(fontSize: 12, color: colors.secondary),
+                      ),
+                    ],
+                  ],
                 ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Text(
-                    'Reposted by $name',
-                    style: const TextStyle(fontSize: 12, color: AppColors.secondary),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (ts != null) ...[
-                  const SizedBox(width: 6),
-                  Text(
-                    '• ${_formatTimestamp(ts)}',
-                    style: const TextStyle(fontSize: 12, color: AppColors.secondary),
-                  ),
-                ],
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      }
     );
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final colors = context.colors;
+    
     return ValueListenableBuilder<List<NoteModel>>(
       valueListenable: widget.notesNotifier,
       builder: (context, notes, _) {
@@ -304,7 +311,7 @@ class _NoteWidgetState extends State<NoteWidget>
           onDoubleTapDown: (_) => _handleReactionTap(),
           onTap: () => _navigateToThreadPage(updatedNote),
           child: Container(
-            color: widget.containerColor ?? AppColors.background,
+            color: widget.containerColor ?? colors.background,
             padding: const EdgeInsets.only(bottom: 2),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -337,11 +344,11 @@ class _NoteWidgetState extends State<NoteWidget>
                                         : null,
                                 backgroundColor:
                                     (authorUser?.profileImage ?? '').isEmpty
-                                        ? AppColors.avatarBackground
-                                        : AppColors.surfaceTransparent,
+                                        ? colors.avatarBackground
+                                        : colors.surfaceTransparent,
                                 child: (authorUser?.profileImage ?? '').isEmpty
-                                    ? const Icon(Icons.person,
-                                        size: 23, color: AppColors.iconPrimary)
+                                    ? Icon(Icons.person,
+                                        size: 23, color: colors.iconPrimary)
                                     : null,
                               ),
                               if (updatedNote.isReply)
@@ -351,14 +358,14 @@ class _NoteWidgetState extends State<NoteWidget>
                                   child: Container(
                                     width: 14,
                                     height: 14,
-                                    decoration: const BoxDecoration(
-                                      color: AppColors.secondary,
+                                    decoration: BoxDecoration(
+                                      color: colors.secondary,
                                       shape: BoxShape.circle,
                                     ),
-                                    child: const Icon(
+                                    child: Icon(
                                       Icons.reply,
                                       size: 10,
-                                      color: AppColors.iconPrimary,
+                                      color: colors.iconPrimary,
                                     ),
                                   ),
                                 ),
@@ -387,10 +394,10 @@ class _NoteWidgetState extends State<NoteWidget>
                                               ? (authorUser?.name ?? 'Unknown')
                                                   .substring(0, 25)
                                               : (authorUser?.name ?? 'Unknown'),
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 14.5,
                                             fontWeight: FontWeight.w600,
-                                            color: AppColors.textPrimary,
+                                            color: colors.textPrimary,
                                             height: 0.1,
                                           ),
                                           overflow: TextOverflow.ellipsis,
@@ -399,9 +406,9 @@ class _NoteWidgetState extends State<NoteWidget>
                                       Padding(
                                         padding: const EdgeInsets.only(left: 6),
                                         child: Text('• $_formattedTimestamp',
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                                 fontSize: 12,
-                                                color: AppColors.secondary)),
+                                                color: colors.secondary)),
                                       ),
                                     ],
                                   ),
