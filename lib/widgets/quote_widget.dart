@@ -213,12 +213,12 @@ class QuoteWidget extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E1E1E),
+            color: context.colors.surface,
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: context.colors.grey800, width: 1),
+            border: Border.all(color: context.colors.border, width: 1),
             boxShadow: [
               BoxShadow(
-                color: context.colors.background.withOpacity(0.1),
+                color: context.colors.textPrimary.withOpacity(0.1),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
