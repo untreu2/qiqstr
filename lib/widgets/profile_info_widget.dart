@@ -297,7 +297,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                _buildNameRow(user),
+                _buildNameRow(context, user),
                 const SizedBox(height: 6),
                 const SizedBox(height: 6),
                 GestureDetector(
@@ -349,15 +349,13 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                 ),
                 const SizedBox(height: 6),
                 if (user.lud16.isNotEmpty)
-                  Text(user.lud16,
-                      style: const TextStyle(
-                          fontSize: 13, color: Color(0xFFECB200))),
+                  Text(user.lud16, style: TextStyle(fontSize: 13, color: context.colors.accent)),
                 if (user.about.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8.0),
                     child: Text(user.about,
                         style: TextStyle(
-                            fontSize: 14, color: context.colors.textSecondary)),
+                            fontSize: 14, color: context.colors.secondary)),
                   ),
                 if (user.website.isNotEmpty)
                   Padding(
@@ -393,7 +391,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     );
   }
 
-  Widget _buildNameRow(UserModel user) {
+  Widget _buildNameRow(BuildContext context, UserModel user) {
     return Row(
       children: [
         Flexible(
@@ -415,9 +413,9 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                 if (user.nip05.isNotEmpty && user.nip05.contains('@'))
                   TextSpan(
                     text: '@${user.nip05.split('@').last}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFFECB200),
+                      color: context.colors.accent,
                     ),
                   ),
               ],

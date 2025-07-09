@@ -115,8 +115,8 @@ class AppColors {
 class AppColorsLight {
   // Primary colors
   static const Color primary = Colors.black;
-  static const Color secondary = Colors.grey;
-  static const Color accent = Color(0xFF8B0000); // Koyu kırmızı for links, hashtags, etc.
+  static const Color secondary = Color.fromARGB(255, 74, 69, 69);
+  static const Color accent = Color(0xFF8B0000);
   
   // Background colors
   static const Color background = Colors.white;

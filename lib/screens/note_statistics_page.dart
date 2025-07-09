@@ -4,7 +4,6 @@ import '../models/note_model.dart';
 import '../services/data_service.dart';
 import '../models/user_model.dart';
 import '../colors.dart';
-import '../theme/theme_manager.dart';
 
 class NoteStatisticsPage extends StatefulWidget {
   final NoteModel note;
