@@ -162,18 +162,18 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
                       _title!,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: context.colors.textPrimary,
+                        color: Colors.white,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       Uri.parse(widget.url).host.replaceFirst('www.', ''),
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 11,
-                        color: context.colors.textSecondary,
+                        color: Colors.white70,
                       ),
                     ),
                   ],

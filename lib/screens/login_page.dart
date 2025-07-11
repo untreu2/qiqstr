@@ -4,7 +4,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:nostr/nostr.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/screens/feed_page.dart';
-import '../colors.dart';
 import '../theme/theme_manager.dart';
 
 class LoginPage extends StatefulWidget {
