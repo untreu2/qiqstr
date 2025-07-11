@@ -822,7 +822,7 @@ class DataService {
           notes.add(noteModel);
           eventIds.add(noteModel.id);
           await notesBox?.put(noteModel.id, noteModel);
-          _addNote(noteModel);
+          addNote(noteModel);
 
           if (reply.author == npub) {
             onNewNote?.call(noteModel);
@@ -1203,7 +1203,7 @@ class DataService {
     return result == 0 ? a.id.compareTo(b.id) : result;
   }
 
-  void _addNote(NoteModel note) {
+  void addNote(NoteModel note) {
     _itemsTree.add(note);
     notesNotifier.value = _itemsTree.toList();
   }
@@ -1825,7 +1825,7 @@ class DataService {
         notes.add(replyNoteModel);
         eventIds.add(replyNoteModel.id);
         await notesBox?.put(replyNoteModel.id, replyNoteModel);
-        _addNote(replyNoteModel);
+        addNote(replyNoteModel);
       }
 
       final note = notes.firstWhereOrNull((n) => n.id == parentEventId);
@@ -1948,7 +1948,7 @@ class DataService {
             parseContentForNote(note);
             notes.add(note);
             eventIds.add(note.id);
-            _addNote(note);
+            addNote(note);
             newNotes.add(note);
           }
 
@@ -2314,7 +2314,7 @@ Future<void> _subscribeToNotifications() async {
           eventIds.add(note.id);
 
           await notesBox?.put(note.id, note);
-          _addNote(note);
+          addNote(note);
         }
       }
 

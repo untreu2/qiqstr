@@ -147,6 +147,8 @@ class NoteProcessor {
         await dataService.notesBox!.put(newNote.id, newNote);
       }
 
+      dataService.addNote(newNote);
+
       dataService.onNewNote?.call(newNote);
 
       final List<String> authorsToFetch = [noteAuthor];
