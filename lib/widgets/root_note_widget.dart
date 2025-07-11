@@ -123,6 +123,7 @@ class RootNoteWidget extends StatelessWidget {
                 onRepostTap: onRepostTap,
                 onZapTap: onZapTap,
                 onStatisticsTap: onStatisticsTap,
+              isLarge: true,
               ),
             ],
           ),

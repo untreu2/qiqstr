@@ -24,6 +24,7 @@ class InteractionBar extends StatelessWidget {
   final VoidCallback onRepostTap;
   final VoidCallback onZapTap;
   final VoidCallback onStatisticsTap;
+  final bool isLarge;
 
   const InteractionBar({
     super.key,
@@ -44,6 +45,7 @@ class InteractionBar extends StatelessWidget {
     required this.onRepostTap,
     required this.onZapTap,
     required this.onStatisticsTap,
+    this.isLarge = false,
   });
 
   Widget _buildAction({
@@ -55,6 +57,10 @@ class InteractionBar extends StatelessWidget {
   }) {
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     final colors = context.colors;
+
+    final double iconSize = isLarge ? 16 : 14;
+    final double fontSize = isLarge ? 15 : 14;
+    final double spacing = isLarge ? 6 : 5;
     
     return Stack(
       alignment: Alignment.center,
@@ -73,16 +79,16 @@ class InteractionBar extends StatelessWidget {
             children: [
               SvgPicture.asset(
                 svg,
-                width: 14 * textScaleFactor,
-                height: 14 * textScaleFactor,
+                width: iconSize * textScaleFactor,
+                height: iconSize * textScaleFactor,
                 colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
               ),
-              const SizedBox(width: 5),
+              SizedBox(width: spacing),
               Opacity(
                 opacity: count > 0 ? 1.0 : 0.0,
                 child: Text(
                   '$count',
-                  style: TextStyle(fontSize: 14, color: colors.secondary),
+                  style: TextStyle(fontSize: fontSize, color: colors.secondary),
                 ),
               ),
             ],
@@ -95,6 +101,7 @@ class InteractionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final double statsIconSize = isLarge ? 22 : 19;
     
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -139,7 +146,7 @@ class InteractionBar extends StatelessWidget {
           onTap: onStatisticsTap,
           child: Padding(
             padding: const EdgeInsets.only(left: 6),
-            child: Icon(Icons.bar_chart, size: 19, color: colors.secondary),
+            child: Icon(Icons.bar_chart, size: statsIconSize, color: colors.secondary),
           ),
         ),
       ],
