@@ -89,6 +89,7 @@ class DataService {
   bool _isClosed = false;
 
   Timer? _cacheCleanupTimer;
+  Timer? _interactionRefreshTimer;
   final int currentLimit = 50;
 
   final Map<String, Completer<Map<String, String>>> _pendingProfileRequests =
@@ -173,6 +174,7 @@ class DataService {
     _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
     _isInitialized = true;
     _startCacheCleanup();
+    _startInteractionRefresh();
   }
 
   Future<void> reloadInteractionCounts() async {
@@ -434,12 +436,15 @@ class DataService {
   Request _createRequest(Filter filter) => Request(generateUUID(), [filter]);
 
   void _startRealTimeSubscription(List<String> targetNpubs) {
+    final sinceTimestamp = (notes.isNotEmpty)
+        ? (notes.first.timestamp.millisecondsSinceEpoch ~/ 1000)
+        : (DateTime.now().subtract(const Duration(hours: 1)).millisecondsSinceEpoch ~/ 1000);
+
+    // Subscribe to new notes and reposts
     final filterNotes = Filter(
       authors: targetNpubs,
       kinds: [1],
-      since: (notes.isNotEmpty)
-          ? (notes.first.timestamp.millisecondsSinceEpoch ~/ 1000)
-          : null,
+      since: sinceTimestamp,
     );
     final requestNotes = Request(generateUUID(), [filterNotes]);
     _safeBroadcast(requestNotes.serialize());
@@ -447,16 +452,56 @@ class DataService {
     final filterReposts = Filter(
       authors: targetNpubs,
       kinds: [6],
-      since: (notes.isNotEmpty)
-          ? (notes.first.timestamp.millisecondsSinceEpoch ~/ 1000)
-          : null,
+      since: sinceTimestamp,
     );
-
     final requestReposts = Request(generateUUID(), [filterReposts]);
     _safeBroadcast(requestReposts.serialize());
 
-    print(
-        '[DataService] Started real-time subscription for notes, reactions, and reposts separately.');
+    // Subscribe to real-time interactions for existing notes
+    _startRealTimeInteractionSubscription();
+
+    print('[DataService] Started enhanced real-time subscription for notes, reposts, and interactions.');
+  }
+
+  void _startRealTimeInteractionSubscription() {
+    if (notes.isEmpty) return;
+    
+    final allEventIds = notes.map((note) => note.id).toList();
+    final sinceTimestamp = DateTime.now().subtract(const Duration(minutes: 5)).millisecondsSinceEpoch ~/ 1000;
+    
+    // Subscribe to real-time reactions
+    final reactionFilter = Filter(
+      kinds: [7],
+      e: allEventIds,
+      since: sinceTimestamp,
+    );
+    _safeBroadcast(Request(generateUUID(), [reactionFilter]).serialize());
+    
+    // Subscribe to real-time replies
+    final replyFilter = Filter(
+      kinds: [1],
+      e: allEventIds,
+      since: sinceTimestamp,
+    );
+    _safeBroadcast(Request(generateUUID(), [replyFilter]).serialize());
+    
+    // Subscribe to real-time reposts
+    final repostFilter = Filter(
+      kinds: [6],
+      e: allEventIds,
+      since: sinceTimestamp,
+    );
+    _safeBroadcast(Request(generateUUID(), [repostFilter]).serialize());
+    
+    // Subscribe to real-time zaps
+    final zapFilter = Filter(
+      kinds: [9735],
+      e: allEventIds,
+      since: sinceTimestamp,
+    );
+    _safeBroadcast(Request(generateUUID(), [zapFilter]).serialize());
+    
+    print('[DataService] Started real-time interaction subscriptions for ${allEventIds.length} notes.');
   }
 
   Future<void> _subscribeToFollowing() async {
@@ -509,6 +554,9 @@ class DataService {
     await _subscribeToAllReposts();
     await _subscribeToAllZaps();
     await _subscribeToNotifications();
+    
+    // Start periodic interaction refresh
+    _scheduleInteractionRefresh();
 
     if (dataType == DataType.feed) {
       _startRealTimeSubscription(targetNpubs);
@@ -1209,11 +1257,33 @@ class DataService {
   }
 
   Future<void> _subscribeToAllZaps() async {
-    if (_isClosed) return;
-    List<String> allEventIds = notes.map((n) => n.id).toList();
-    if (allEventIds.isEmpty) return;
-    final filter = Filter(kinds: [9735], e: allEventIds, limit: 1000);
-    await _broadcastRequest(_createRequest(filter));
+    if (_isClosed || notes.isEmpty) return;
+    
+    final allEventIds = notes.map((n) => n.id).toList();
+    const batchSize = 50;
+    
+    final futures = <Future>[];
+    for (int i = 0; i < allEventIds.length; i += batchSize) {
+      final endIndex = (i + batchSize > allEventIds.length) ? allEventIds.length : i + batchSize;
+      final batch = allEventIds.sublist(i, endIndex);
+      
+      if (batch.isNotEmpty) {
+        final filter = Filter(kinds: [9735], e: batch, limit: 500);
+        futures.add(_broadcastRequest(_createRequest(filter)));
+      }
+      
+      if (futures.length >= 3) {
+        await Future.wait(futures);
+        futures.clear();
+        await Future.delayed(const Duration(milliseconds: 50));
+      }
+    }
+    
+    if (futures.isNotEmpty) {
+      await Future.wait(futures);
+    }
+    
+    print('[DataService] Subscribed to zaps for ${allEventIds.length} notes.');
   }
 
   Future<void> _subscribeToAllReactions() async {
@@ -1243,6 +1313,8 @@ class DataService {
     if (futures.isNotEmpty) {
       await Future.wait(futures);
     }
+    
+    print('[DataService] Subscribed to reactions for ${allEventIds.length} notes.');
   }
 
   Future<void> _subscribeToAllReplies() async {
@@ -1271,6 +1343,8 @@ class DataService {
     if (futures.isNotEmpty) {
       await Future.wait(futures);
     }
+    
+    print('[DataService] Subscribed to replies for ${allEventIds.length} notes.');
   }
 
   Future<void> _subscribeToAllReposts() async {
@@ -1299,6 +1373,8 @@ class DataService {
     if (futures.isNotEmpty) {
       await Future.wait(futures);
     }
+    
+    print('[DataService] Subscribed to reposts for ${allEventIds.length} notes.');
   }
 
   void _startCacheCleanup() {
@@ -1357,6 +1433,81 @@ class DataService {
         return replies.isEmpty;
       });
     });
+  }
+
+  void _startInteractionRefresh() {
+    _interactionRefreshTimer?.cancel();
+    _interactionRefreshTimer = Timer.periodic(const Duration(minutes: 2), (timer) async {
+      if (_isClosed) {
+        timer.cancel();
+        return;
+      }
+      await _refreshAllInteractions();
+    });
+  }
+
+  void _scheduleInteractionRefresh() {
+    // Initial refresh after 30 seconds
+    Future.delayed(const Duration(seconds: 30), () {
+      if (!_isClosed) {
+        _refreshAllInteractions();
+      }
+    });
+  }
+
+  Future<void> _refreshAllInteractions() async {
+    if (_isClosed || notes.isEmpty) return;
+    
+    print('[DataService] Refreshing all interactions...');
+    
+    final allEventIds = notes.map((note) => note.id).toList();
+    
+    // Refresh interactions in batches to avoid overwhelming the relays
+    const batchSize = 25;
+    final futures = <Future>[];
+    
+    for (int i = 0; i < allEventIds.length; i += batchSize) {
+      final endIndex = (i + batchSize > allEventIds.length) ? allEventIds.length : i + batchSize;
+      final batch = allEventIds.sublist(i, endIndex);
+      
+      if (batch.isNotEmpty) {
+        // Refresh reactions
+        final reactionFilter = Filter(kinds: [7], e: batch, limit: 500);
+        futures.add(_broadcastRequest(Request(generateUUID(), [reactionFilter])));
+        
+        // Refresh replies
+        final replyFilter = Filter(kinds: [1], e: batch, limit: 500);
+        futures.add(_broadcastRequest(Request(generateUUID(), [replyFilter])));
+        
+        // Refresh reposts
+        final repostFilter = Filter(kinds: [6], e: batch, limit: 500);
+        futures.add(_broadcastRequest(Request(generateUUID(), [repostFilter])));
+        
+        // Refresh zaps
+        final zapFilter = Filter(kinds: [9735], e: batch, limit: 500);
+        futures.add(_broadcastRequest(Request(generateUUID(), [zapFilter])));
+      }
+      
+      // Process in smaller batches to avoid overwhelming
+      if (futures.length >= 8) {
+        await Future.wait(futures);
+        futures.clear();
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+    }
+    
+    if (futures.isNotEmpty) {
+      await Future.wait(futures);
+    }
+    
+    // Update interaction counts after refresh
+    await reloadInteractionCounts();
+    
+    print('[DataService] Interaction refresh completed for ${allEventIds.length} notes.');
+  }
+
+  Future<void> forceRefreshInteractions() async {
+    await _refreshAllInteractions();
   }
 
   Future<void> shareNote(String noteContent) async {
@@ -2307,11 +2458,14 @@ Future<void> _subscribeToNotifications() async {
 
   Future<void> _handleNewNotes(dynamic data) async {
     if (data is List<NoteModel> && data.isNotEmpty) {
+      final newNoteIds = <String>[];
+      
       for (var note in data) {
         if (!eventIds.contains(note.id)) {
           parseContentForNote(note);
           notes.add(note);
           eventIds.add(note.id);
+          newNoteIds.add(note.id);
 
           await notesBox?.put(note.id, note);
           addNote(note);
@@ -2320,8 +2474,51 @@ Future<void> _subscribeToNotifications() async {
 
       print('[DataService] Handled new notes: ${data.length} notes added.');
 
-      data.map((note) => note.id).toList();
+      // Subscribe to interactions for newly added notes
+      if (newNoteIds.isNotEmpty) {
+        _subscribeToInteractionsForNewNotes(newNoteIds);
+      }
     }
+  }
+
+  void _subscribeToInteractionsForNewNotes(List<String> newNoteIds) {
+    if (_isClosed || newNoteIds.isEmpty) return;
+    
+    final sinceTimestamp = DateTime.now().subtract(const Duration(minutes: 5)).millisecondsSinceEpoch ~/ 1000;
+    
+    // Subscribe to reactions for new notes
+    final reactionFilter = Filter(
+      kinds: [7],
+      e: newNoteIds,
+      since: sinceTimestamp,
+    );
+    _safeBroadcast(Request(generateUUID(), [reactionFilter]).serialize());
+    
+    // Subscribe to replies for new notes
+    final replyFilter = Filter(
+      kinds: [1],
+      e: newNoteIds,
+      since: sinceTimestamp,
+    );
+    _safeBroadcast(Request(generateUUID(), [replyFilter]).serialize());
+    
+    // Subscribe to reposts for new notes
+    final repostFilter = Filter(
+      kinds: [6],
+      e: newNoteIds,
+      since: sinceTimestamp,
+    );
+    _safeBroadcast(Request(generateUUID(), [repostFilter]).serialize());
+    
+    // Subscribe to zaps for new notes
+    final zapFilter = Filter(
+      kinds: [9735],
+      e: newNoteIds,
+      since: sinceTimestamp,
+    );
+    _safeBroadcast(Request(generateUUID(), [zapFilter]).serialize());
+    
+    print('[DataService] Subscribed to interactions for ${newNoteIds.length} new notes.');
   }
 
 Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
@@ -2804,6 +3001,7 @@ Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
     _isClosed = true;
 
     _cacheCleanupTimer?.cancel();
+    _interactionRefreshTimer?.cancel();
 
     try {
       if (_sendPortReadyCompleter.isCompleted) {
