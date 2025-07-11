@@ -73,15 +73,15 @@ class RootNoteWidget extends StatelessWidget {
 
                   if (authorProfile?.profileImage.isNotEmpty ?? false) ...[
                     CircleAvatar(
-                    radius: 18,
+                    radius: 21,
                       backgroundImage: NetworkImage(authorProfile!.profileImage), 
                     backgroundColor: context.colors.grey700,
                     ),
                   ] else ...[
                     CircleAvatar(
-                    radius: 18,
+                    radius: 21,
                     backgroundColor: context.colors.grey700,
-                    child: Icon(Icons.person, size: 22, color: context.colors.textSecondary),
+                    child: Icon(Icons.person, size: 23, color: context.colors.iconPrimary),
                     ),
                   ],
                   const SizedBox(width: 8),
