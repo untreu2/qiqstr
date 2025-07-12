@@ -146,70 +146,34 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Stack(
-            children: [
-              GestureDetector(
-                onTap: () {
-                  if (user.banner.isNotEmpty) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            PhotoViewerWidget(imageUrls: [user.banner]),
-                      ),
-                    );
-                  }
-                },
-                child: CachedNetworkImage(
-                  imageUrl: user.banner,
-                  width: screenWidth,
-                  height: 130,
-                  fit: BoxFit.cover,
-                  placeholder: (_, __) => Container(
-                    height: 130,
-                    width: screenWidth,
-                    color: context.colors.grey700,
+          GestureDetector(
+            onTap: () {
+              if (user.banner.isNotEmpty) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        PhotoViewerWidget(imageUrls: [user.banner]),
                   ),
-                  errorWidget: (_, __, ___) => Container(
-                    height: 130,
-                    width: screenWidth,
-                    color: context.colors.background,
-                  ),
-                ),
+                );
+              }
+            },
+            child: CachedNetworkImage(
+              imageUrl: user.banner,
+              width: screenWidth,
+              height: 130,
+              fit: BoxFit.cover,
+              placeholder: (_, __) => Container(
+                height: 130,
+                width: screenWidth,
+                color: context.colors.grey700,
               ),
-              Positioned(
-                top: MediaQuery.of(context).padding.top + -8,
-                left: 12,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(25.0),
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: context.colors.background.withOpacity(0.3),
-                        border: Border.all(
-                          color: context.colors.textPrimary.withOpacity(0.2),
-                          width: 1.5,
-                        ),
-                        borderRadius: BorderRadius.circular(25.0),
-                      ),
-                      child: Bounce(
-                        scaleFactor: 0.85,
-                        onTap: () => Navigator.of(context).maybePop(),
-                        behavior: HitTestBehavior.opaque,
-                        child: Icon(
-                          Icons.arrow_back,
-                          color: context.colors.textSecondary,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+              errorWidget: (_, __, ___) => Container(
+                height: 130,
+                width: screenWidth,
+                color: context.colors.background,
               ),
-            ],
+            ),
           ),
           Container(
             transform: Matrix4.translationValues(0, -30, 0),
