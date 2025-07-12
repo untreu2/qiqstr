@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:nostr/nostr.dart';
 import 'package:qiqstr/services/data_service.dart';
-import 'package:qiqstr/screens/feed_page.dart';
+import 'package:qiqstr/screens/home_navigator.dart';
 import '../theme/theme_manager.dart';
 
 class LoginPage extends StatefulWidget {
@@ -45,17 +45,18 @@ class _LoginPageState extends State<LoginPage> {
       await _secureStorage.write(key: 'privateKey', value: nsecHex);
       await _secureStorage.write(key: 'npub', value: npubHex);
 
-      _tempService = DataService(npub: npubHex, dataType: DataType.feed);
-      await _tempService!.initialize();
-      await _tempService?.closeConnections();
-      _tempService = null;
+      final dataService = DataService(npub: npubHex, dataType: DataType.feed);
+      await dataService.initialize();
 
       if (mounted) {
         setState(() => _isLoading = false);
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => FeedPage(npub: npubHex),
+            builder: (_) => HomeNavigator(
+              npub: npubHex,
+              dataService: dataService,
+            ),
           ),
         );
       }
