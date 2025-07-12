@@ -10,6 +10,7 @@ import 'package:qiqstr/screens/note_statistics_page.dart';
 import 'package:qiqstr/widgets/dialogs/repost_dialog.dart';
 import 'package:qiqstr/widgets/dialogs/zap_dialog.dart';
 import 'package:qiqstr/screens/send_reply.dart';
+import 'package:qiqstr/screens/share_note.dart';
 import 'package:collection/collection.dart';
 import '../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
@@ -200,11 +201,13 @@ class _ThreadPageState extends State<ThreadPage> {
       if (mounted) setState(() => _isReplyGlowing = false);
     });
 
-    showDialog(
-      context: context,
-      builder: (_) => SendReplyDialog(
-        dataService: widget.dataService,
-        noteId: note.id,
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ShareNotePage(
+          dataService: widget.dataService,
+          replyToNoteId: note.id,
+        ),
       ),
     );
   }
