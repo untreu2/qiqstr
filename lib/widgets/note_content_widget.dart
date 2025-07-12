@@ -117,7 +117,18 @@ class NoteContentWidget extends StatelessWidget {
         ));
       }
     }
-    return RichText(text: TextSpan(children: spans));
+    return RichText(
+      text: TextSpan(children: spans),
+      textHeightBehavior: const TextHeightBehavior(
+        applyHeightToFirstAscent: false,
+        applyHeightToLastDescent: false,
+      ),
+      strutStyle: StrutStyle(
+        fontSize: currentFontSize,
+        height: 1.4,
+        forceStrutHeight: true,
+      ),
+    );
   }
 
   @override
