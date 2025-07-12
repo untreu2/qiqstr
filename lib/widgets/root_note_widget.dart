@@ -66,38 +66,52 @@ class RootNoteWidget extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+            GestureDetector(
+              onTap: () => dataService.openUserProfile(context, note.author),
+              child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-
-
                   if (authorProfile?.profileImage.isNotEmpty ?? false) ...[
                     CircleAvatar(
-                    radius: 21,
-                      backgroundImage: NetworkImage(authorProfile!.profileImage), 
-                    backgroundColor: context.colors.grey700,
+                      radius: 21,
+                      backgroundImage: NetworkImage(authorProfile!.profileImage),
+                      backgroundColor: context.colors.grey700,
                     ),
                   ] else ...[
                     CircleAvatar(
-                    radius: 21,
-                    backgroundColor: context.colors.grey700,
-                    child: Icon(Icons.person, size: 23, color: context.colors.iconPrimary),
+                      radius: 21,
+                      backgroundColor: context.colors.grey700,
+                      child: Icon(Icons.person, size: 23, color: context.colors.iconPrimary),
                     ),
                   ],
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      authorName,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: context.colors.textPrimary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          authorName,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: context.colors.textPrimary,
+                            fontWeight: FontWeight.w500,
+                            height: 1.2,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (authorProfile?.nip05.isNotEmpty == true)
+                          Text(
+                            authorProfile!.nip05,
+                            style: TextStyle(fontSize: 13, color: context.colors.secondary),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
                     ),
                   ),
                 ],
               ),
+            ),
             const SizedBox(height: 12), 
               NoteContentWidget(
                 parsedContent: parsedContent,
