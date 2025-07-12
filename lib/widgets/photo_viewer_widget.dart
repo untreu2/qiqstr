@@ -1,7 +1,9 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import '../theme/theme_manager.dart';
 
 class PhotoViewerWidget extends StatefulWidget {
@@ -50,45 +52,122 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: context.colors.background,
+      backgroundColor: Colors.black,
       extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.close, size: 28),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          '${currentIndex + 1} / ${widget.imageUrls.length}',
-          style: const TextStyle(fontWeight: FontWeight.w500),
-        ),
-      ),
-      body: PhotoViewGallery.builder(
-        itemCount: widget.imageUrls.length,
-        pageController: _pageController,
-        onPageChanged: (index) {
-          setState(() {
-            currentIndex = index;
-          });
-        },
-        builder: (context, index) {
-          final imageUrl = widget.imageUrls[index];
-          return PhotoViewGalleryPageOptions(
-            imageProvider: CachedNetworkImageProvider(imageUrl),
-            minScale: PhotoViewComputedScale.contained,
-            maxScale: PhotoViewComputedScale.covered * 2,
-            heroAttributes: PhotoViewHeroAttributes(tag: imageUrl),
-            basePosition: Alignment.center,
-          );
-        },
-        loadingBuilder: (context, event) => const Center(
-          child: CircularProgressIndicator(),
-        ),
-        backgroundDecoration: BoxDecoration(
-          color: context.colors.background,
-        ),
+      body: Stack(
+        children: [
+          // Blurred background image
+          Positioned.fill(
+            child: CachedNetworkImage(
+              imageUrl: widget.imageUrls[currentIndex],
+              fit: BoxFit.cover,
+              imageBuilder: (context, imageProvider) => ClipRect(
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      image: DecorationImage(
+                        image: imageProvider,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    child: Container(
+                      color: Colors.black.withOpacity(0.3),
+                    ),
+                  ),
+                ),
+              ),
+              placeholder: (context, url) => Container(color: Colors.black),
+              errorWidget: (context, url, error) => Container(color: Colors.black),
+            ),
+          ),
+          PhotoViewGallery.builder(
+            itemCount: widget.imageUrls.length,
+            pageController: _pageController,
+            onPageChanged: (index) {
+              setState(() {
+                currentIndex = index;
+              });
+            },
+            builder: (context, index) {
+              final imageUrl = widget.imageUrls[index];
+              return PhotoViewGalleryPageOptions(
+                imageProvider: CachedNetworkImageProvider(imageUrl),
+                minScale: PhotoViewComputedScale.contained,
+                maxScale: PhotoViewComputedScale.covered * 2,
+                heroAttributes: PhotoViewHeroAttributes(tag: imageUrl),
+                basePosition: Alignment.center,
+              );
+            },
+            loadingBuilder: (context, event) => const Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+            backgroundDecoration: const BoxDecoration(
+              color: Colors.transparent,
+            ),
+          ),
+          // Glass-like bottom bar (moved from top)
+          Positioned(
+            bottom: 80,
+            left: 0,
+            right: 0,
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(25.0),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                  child: LiquidGlass(
+                    shape: LiquidRoundedSuperellipse(
+                      borderRadius: Radius.circular(25.0),
+                    ),
+                    settings: LiquidGlassSettings(
+                      thickness: 15,
+                      glassColor: Color(0xFF000000),
+                      lightIntensity: 0.8,
+                      ambientStrength: 0.3,
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.3),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.2),
+                          width: 1.5,
+                        ),
+                        borderRadius: BorderRadius.circular(25.0),
+                      ),
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 48), // Balance space for close button
+                          Expanded(
+                            child: Center(
+                              child: Text(
+                                '${currentIndex + 1} / ${widget.imageUrls.length}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

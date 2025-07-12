@@ -180,6 +180,25 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
         onVerticalDragEnd: _handleVerticalDragEnd,
         child: Stack(
           children: [
+            // Blurred background video
+            if (_isInitialized)
+              Positioned.fill(
+                child: Transform.scale(
+                  scale: 1.2, // Scale up to avoid black edges
+                  child: ClipRect(
+                    child: AspectRatio(
+                      aspectRatio: _controller.value.aspectRatio,
+                      child: ImageFiltered(
+                        imageFilter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
+                        child: Container(
+                          color: Colors.black.withOpacity(0.3),
+                          child: VideoPlayer(_controller),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             if (_isInitialized)
               Center(
                 child: AspectRatio(
