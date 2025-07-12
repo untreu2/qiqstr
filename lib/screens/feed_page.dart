@@ -93,7 +93,7 @@ class _FeedPageState extends State<FeedPage> {
     
     return ClipRRect(
       child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
         child: Container(
           width: double.infinity,
           color: colors.backgroundTransparent,
