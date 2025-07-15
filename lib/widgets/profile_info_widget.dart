@@ -5,7 +5,6 @@ import '../theme/theme_manager.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:bounce/bounce.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/edit_profile.dart';
 import 'package:qiqstr/screens/following_page.dart';

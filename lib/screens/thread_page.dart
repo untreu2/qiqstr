@@ -9,7 +9,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/screens/note_statistics_page.dart';
 import 'package:qiqstr/widgets/dialogs/repost_dialog.dart';
 import 'package:qiqstr/widgets/dialogs/zap_dialog.dart';
-import 'package:qiqstr/screens/send_reply.dart';
 import 'package:qiqstr/screens/share_note.dart';
 import 'package:collection/collection.dart';
 import '../theme/theme_manager.dart';

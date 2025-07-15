@@ -5,7 +5,6 @@ import 'dart:isolate';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
-import 'package:nostr/nostr.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:qiqstr/constants/relays.dart';
 import 'package:qiqstr/models/zap_model.dart';
@@ -14,7 +13,6 @@ import 'package:qiqstr/models/notification_model.dart';
 import 'package:qiqstr/services/isolate_manager.dart';
 import 'package:qiqstr/services/media_service.dart';
 import 'package:qiqstr/services/relay_service.dart';
-import 'package:uuid/uuid.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/user_model.dart';
 import '../models/note_model.dart';
@@ -26,6 +24,7 @@ import 'package:collection/collection.dart';
 import 'package:http/http.dart' as http;
 import 'package:qiqstr/services/note_processor.dart';
 import 'package:crypto/crypto.dart';
+import 'nostr_service.dart';
 
 enum DataType { feed, profile, note }
 
@@ -102,7 +101,6 @@ class DataService {
 
   Function(List<NoteModel>)? _onCacheLoad;
 
-  static final Uuid _uuid = Uuid();
 
   final Duration profileCacheTTL = const Duration(minutes: 30);
   final Duration cacheCleanupInterval = const Duration(hours: 6);
@@ -433,29 +431,27 @@ class DataService {
     note.videoUrl = null;
   }
 
-  Request _createRequest(Filter filter) => Request(generateUUID(), [filter]);
-
   void _startRealTimeSubscription(List<String> targetNpubs) {
     final sinceTimestamp = (notes.isNotEmpty)
         ? (notes.first.timestamp.millisecondsSinceEpoch ~/ 1000)
         : (DateTime.now().subtract(const Duration(hours: 1)).millisecondsSinceEpoch ~/ 1000);
 
     // Subscribe to new notes and reposts
-    final filterNotes = Filter(
+    final filterNotes = NostrService.createNotesFilter(
       authors: targetNpubs,
       kinds: [1],
       since: sinceTimestamp,
     );
-    final requestNotes = Request(generateUUID(), [filterNotes]);
-    _safeBroadcast(requestNotes.serialize());
+    final requestNotes = NostrService.createRequest(filterNotes);
+    _safeBroadcast(NostrService.serializeRequest(requestNotes));
 
-    final filterReposts = Filter(
+    final filterReposts = NostrService.createNotesFilter(
       authors: targetNpubs,
       kinds: [6],
       since: sinceTimestamp,
     );
-    final requestReposts = Request(generateUUID(), [filterReposts]);
-    _safeBroadcast(requestReposts.serialize());
+    final requestReposts = NostrService.createRequest(filterReposts);
+    _safeBroadcast(NostrService.serializeRequest(requestReposts));
 
     // Subscribe to real-time interactions for existing notes
     _startRealTimeInteractionSubscription();
@@ -470,47 +466,42 @@ class DataService {
     final sinceTimestamp = DateTime.now().subtract(const Duration(minutes: 5)).millisecondsSinceEpoch ~/ 1000;
     
     // Subscribe to real-time reactions
-    final reactionFilter = Filter(
-      kinds: [7],
-      e: allEventIds,
+    final reactionFilter = NostrService.createReactionFilter(
+      eventIds: allEventIds,
       since: sinceTimestamp,
     );
-    _safeBroadcast(Request(generateUUID(), [reactionFilter]).serialize());
+    _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(reactionFilter)));
     
     // Subscribe to real-time replies
-    final replyFilter = Filter(
-      kinds: [1],
-      e: allEventIds,
+    final replyFilter = NostrService.createReplyFilter(
+      eventIds: allEventIds,
       since: sinceTimestamp,
     );
-    _safeBroadcast(Request(generateUUID(), [replyFilter]).serialize());
+    _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(replyFilter)));
     
     // Subscribe to real-time reposts
-    final repostFilter = Filter(
-      kinds: [6],
-      e: allEventIds,
+    final repostFilter = NostrService.createRepostFilter(
+      eventIds: allEventIds,
       since: sinceTimestamp,
     );
-    _safeBroadcast(Request(generateUUID(), [repostFilter]).serialize());
+    _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(repostFilter)));
     
     // Subscribe to real-time zaps
-    final zapFilter = Filter(
-      kinds: [9735],
-      e: allEventIds,
+    final zapFilter = NostrService.createZapFilter(
+      eventIds: allEventIds,
       since: sinceTimestamp,
     );
-    _safeBroadcast(Request(generateUUID(), [zapFilter]).serialize());
+    _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(zapFilter)));
     
     print('[DataService] Started real-time interaction subscriptions for ${allEventIds.length} notes.');
   }
 
   Future<void> _subscribeToFollowing() async {
-    final filter = Filter(
+    final filter = NostrService.createFollowingFilter(
       authors: [npub],
-      kinds: [3],
     );
-    final request = Request(generateUUID(), [filter]);
-    await _broadcastRequest(request);
+    final request = NostrService.serializeRequest(NostrService.createRequest(filter));
+    await _safeBroadcast(request);
     print('[DataService] Subscribed to following events (kind 3).');
   }
 
@@ -566,8 +557,7 @@ class DataService {
     await getCachedUserProfile(npub);
   }
 
-  Future<void> _broadcastRequest(Request request) async =>
-      await _safeBroadcast(request.serialize());
+  Future<void> _broadcastRequest(String serializedRequest) async => await _safeBroadcast(serializedRequest);
 
   Future<void> _safeBroadcast(String message) async {
     try {
@@ -584,7 +574,7 @@ class DataService {
       sinceTimestamp = notes.first.timestamp;
     }
 
-    final filter = Filter(
+    final filter = NostrService.createNotesFilter(
       authors: targetNpubs,
       kinds: [1, 6],
       limit: currentLimit,
@@ -593,7 +583,7 @@ class DataService {
           : null,
     );
 
-    await _broadcastRequest(_createRequest(filter));
+    await _broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter)));
     print('[DataService] Fetched notes with filter: $filter');
   }
 
@@ -671,12 +661,11 @@ class DataService {
 
         // Fallback to relay for remaining profiles
         if (stillRemaining.isNotEmpty) {
-          final filter = Filter(
+          final filter = NostrService.createProfileFilter(
             authors: stillRemaining,
-            kinds: [0],
             limit: stillRemaining.length,
           );
-          await _broadcastRequest(_createRequest(filter));
+          await _broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter)));
           print('[DataService] Relay profile fetch fallback for ${stillRemaining.length} npubs.');
         }
 
@@ -1068,8 +1057,8 @@ class DataService {
           } catch (_) {}
           return;
         }
-        final request = _createRequest(
-            Filter(authors: [targetNpub], kinds: [3], limit: 1000));
+        final filter = NostrService.createFollowingFilter(authors: [targetNpub], limit: 1000);
+        final request = NostrService.serializeRequest(NostrService.createRequest(filter));
         final completer = Completer<void>();
 
         sub = ws.listen((event) {
@@ -1094,7 +1083,7 @@ class DataService {
         }, cancelOnError: true);
 
         if (ws.readyState == WebSocket.open) {
-          ws.add(request.serialize());
+          ws.add(request);
         }
         
         await completer.future.timeout(const Duration(seconds: 3),
@@ -1151,13 +1140,12 @@ class DataService {
           return;
         }
 
-        final filter = Filter(
-          kinds: [3],
-          p: [targetNpub],
+        final filter = NostrService.createFollowingFilter(
+          authors: [targetNpub],
           limit: 1000,
         );
 
-        final request = Request(generateUUID(), [filter]);
+        final request = NostrService.serializeRequest(NostrService.createRequest(filter));
         final completer = Completer<void>();
 
         sub = ws.listen((event) {
@@ -1181,7 +1169,7 @@ class DataService {
         }, cancelOnError: true);
 
         if (ws.readyState == WebSocket.open) {
-          ws.add(request.serialize());
+          ws.add(request);
         }
 
         await completer.future.timeout(const Duration(seconds: 3),
@@ -1213,13 +1201,13 @@ class DataService {
       List<String> targetNpubs, Function(NoteModel) onOlderNote) async {
     if (_isClosed || notes.isEmpty) return;
     final lastNote = notes.last;
-    final filter = Filter(
+    final filter = NostrService.createNotesFilter(
       authors: targetNpubs,
       kinds: [1, 6],
       limit: currentLimit,
       until: lastNote.timestamp.millisecondsSinceEpoch ~/ 1000,
     );
-    final request = _createRequest(filter);
+    final request = NostrService.serializeRequest(NostrService.createRequest(filter));
 
     await _broadcastRequest(request);
 
@@ -1268,8 +1256,8 @@ class DataService {
       final batch = allEventIds.sublist(i, endIndex);
       
       if (batch.isNotEmpty) {
-        final filter = Filter(kinds: [9735], e: batch, limit: 500);
-        futures.add(_broadcastRequest(_createRequest(filter)));
+        final filter = NostrService.createZapFilter(eventIds: batch, limit: 500);
+        futures.add(_broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter))));
       }
       
       if (futures.length >= 3) {
@@ -1298,8 +1286,8 @@ class DataService {
       final batch = allEventIds.sublist(i, endIndex);
       
       if (batch.isNotEmpty) {
-        final filter = Filter(kinds: [7], e: batch, limit: 500);
-        final request = Request(generateUUID(), [filter]);
+        final filter = NostrService.createReactionFilter(eventIds: batch, limit: 500);
+        final request = NostrService.serializeRequest(NostrService.createRequest(filter));
         futures.add(_broadcastRequest(request));
       }
       
@@ -1329,8 +1317,8 @@ class DataService {
       final batch = allEventIds.sublist(i, endIndex);
       
       if (batch.isNotEmpty) {
-        final filter = Filter(kinds: [1], e: batch, limit: 500);
-        futures.add(_broadcastRequest(_createRequest(filter)));
+        final filter = NostrService.createReplyFilter(eventIds: batch, limit: 500);
+        futures.add(_broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter))));
       }
       
       if (futures.length >= 3) {
@@ -1359,8 +1347,8 @@ class DataService {
       final batch = allEventIds.sublist(i, endIndex);
       
       if (batch.isNotEmpty) {
-        final filter = Filter(kinds: [6], e: batch, limit: 500);
-        futures.add(_broadcastRequest(_createRequest(filter)));
+        final filter = NostrService.createRepostFilter(eventIds: batch, limit: 500);
+        futures.add(_broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter))));
       }
       
       if (futures.length >= 3) {
@@ -1472,20 +1460,20 @@ class DataService {
       
       if (batch.isNotEmpty) {
         // Refresh reactions
-        final reactionFilter = Filter(kinds: [7], e: batch, limit: 500);
-        futures.add(_broadcastRequest(Request(generateUUID(), [reactionFilter])));
+        final reactionFilter = NostrService.createReactionFilter(eventIds: batch, limit: 500);
+        futures.add(_broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(reactionFilter))));
         
         // Refresh replies
-        final replyFilter = Filter(kinds: [1], e: batch, limit: 500);
-        futures.add(_broadcastRequest(Request(generateUUID(), [replyFilter])));
+        final replyFilter = NostrService.createReplyFilter(eventIds: batch, limit: 500);
+        futures.add(_broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(replyFilter))));
         
         // Refresh reposts
-        final repostFilter = Filter(kinds: [6], e: batch, limit: 500);
-        futures.add(_broadcastRequest(Request(generateUUID(), [repostFilter])));
+        final repostFilter = NostrService.createRepostFilter(eventIds: batch, limit: 500);
+        futures.add(_broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(repostFilter))));
         
         // Refresh zaps
-        final zapFilter = Filter(kinds: [9735], e: batch, limit: 500);
-        futures.add(_broadcastRequest(Request(generateUUID(), [zapFilter])));
+        final zapFilter = NostrService.createZapFilter(eventIds: batch, limit: 500);
+        futures.add(_broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(zapFilter))));
       }
       
       // Process in smaller batches to avoid overwhelming
@@ -1518,19 +1506,18 @@ class DataService {
         throw Exception('Private key not found.');
       }
 
-      final event = Event.from(
-        kind: 1,
-        tags: [],
+      final event = NostrService.createNoteEvent(
         content: noteContent,
-        privkey: privateKey,
+        privateKey: privateKey,
       );
-      final serializedEvent = event.serialize();
+      final serializedEvent = NostrService.serializeEvent(event);
       await initializeConnections();
       await _socketManager.broadcast(serializedEvent);
 
       final timestamp = DateTime.now();
+      final eventJson = NostrService.eventToJson(event);
       final newNote = NoteModel(
-        id: event.id,
+        id: eventJson['id'],
         content: noteContent,
         author: npub,
         timestamp: timestamp,
@@ -1579,19 +1566,14 @@ class DataService {
         DateTime.now().add(Duration(minutes: 10)).millisecondsSinceEpoch ~/
             1000;
 
-    final authEvent = Event.from(
-      kind: 24242,
-      content: 'Upload ${file.uri.pathSegments.last}',
-      tags: [
-        ['t', 'upload'],
-        ['x', sha256Hash],
-        ['expiration', expiration.toString()],
-      ],
-      privkey: privateKey,
+    final authEvent = NostrService.createMediaUploadAuthEvent(
+      fileName: file.uri.pathSegments.last,
+      sha256Hash: sha256Hash,
+      expiration: expiration,
+      privateKey: privateKey,
     );
 
-    final encodedAuth =
-        base64.encode(utf8.encode(jsonEncode(authEvent.toJson())));
+    final encodedAuth = NostrService.createBlossomAuthHeader(authEvent: authEvent);
     final authHeader = 'Nostr $encodedAuth';
 
     final cleanedUrl = blossomUrl.replaceAll(RegExp(r'/+$'), '');
@@ -1651,20 +1633,18 @@ class DataService {
       if (lud16.isNotEmpty) profileContent['lud16'] = lud16;
       if (website.isNotEmpty) profileContent['website'] = website;
 
-      final event = Event.from(
-        kind: 0,
-        tags: [],
-        content: jsonEncode(profileContent),
-        privkey: privateKey,
+      final event = NostrService.createProfileEvent(
+        profileContent: profileContent,
+        privateKey: privateKey,
       );
       await initializeConnections();
-      await _socketManager.broadcast(event.serialize());
+      await _socketManager.broadcast(NostrService.serializeEvent(event));
 
-      final updatedAt =
-          DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000);
+      final eventJson = NostrService.eventToJson(event);
+      final updatedAt = DateTime.fromMillisecondsSinceEpoch(eventJson['created_at'] * 1000);
 
       final userModel = UserModel(
-        npub: event.pubkey,
+        npub: eventJson['pubkey'],
         name: name,
         about: about,
         profileImage: picture,
@@ -1675,18 +1655,18 @@ class DataService {
         updatedAt: updatedAt,
       );
 
-      profileCache[event.pubkey] = CachedProfile(
+      profileCache[eventJson['pubkey']] = CachedProfile(
         profileContent.map((key, value) => MapEntry(key, value.toString())),
         updatedAt,
       );
 
       if (usersBox != null && usersBox!.isOpen) {
-        await usersBox!.put(event.pubkey, userModel);
+        await usersBox!.put(eventJson['pubkey'], userModel);
       }
 
       profilesNotifier.value = {
         ...profilesNotifier.value,
-        event.pubkey: userModel,
+        eventJson['pubkey']: userModel,
       };
 
       print('[DataService] Profile updated and sent successfully.');
@@ -1713,17 +1693,15 @@ class DataService {
 
       currentFollowing.add(followNpub);
 
-      final tags = currentFollowing.map((pubkey) => ['p', pubkey, '']).toList();
+      currentFollowing.map((pubkey) => ['p', pubkey, '']).toList();
 
-      final event = Event.from(
-        kind: 3,
-        tags: tags,
-        content: "",
-        privkey: privateKey,
+      final event = NostrService.createFollowEvent(
+        followingPubkeys: currentFollowing,
+        privateKey: privateKey,
       );
       await initializeConnections();
 
-      await _socketManager.broadcast(event.serialize());
+      await _socketManager.broadcast(NostrService.serializeEvent(event));
 
       final updatedFollowingModel = FollowingModel(
         pubkeys: currentFollowing,
@@ -1756,17 +1734,15 @@ class DataService {
 
       currentFollowing.remove(unfollowNpub);
 
-      final tags = currentFollowing.map((pubkey) => ['p', pubkey, '']).toList();
+      currentFollowing.map((pubkey) => ['p', pubkey, '']).toList();
 
-      final event = Event.from(
-        kind: 3,
-        tags: tags,
-        content: "",
-        privkey: privateKey,
+      final event = NostrService.createFollowEvent(
+        followingPubkeys: currentFollowing,
+        privateKey: privateKey,
       );
       await initializeConnections();
 
-      await _socketManager.broadcast(event.serialize());
+      await _socketManager.broadcast(NostrService.serializeEvent(event));
 
       final updatedFollowingModel = FollowingModel(
         pubkeys: currentFollowing,
@@ -1841,14 +1817,13 @@ class DataService {
       tags.add(['e', noteId]);
     }
 
-    final zapRequest = Event.from(
-      kind: 9734,
+    final zapRequest = NostrService.createZapRequestEvent(
       tags: tags,
       content: content,
-      privkey: privateKey,
+      privateKey: privateKey,
     );
 
-    final encodedZap = Uri.encodeComponent(jsonEncode(zapRequest.toJson()));
+    final encodedZap = Uri.encodeComponent(jsonEncode(NostrService.eventToJson(zapRequest)));
     final zapUrl = Uri.parse(
       '$callback?amount=$amountMillisats&nostr=$encodedZap${lnurlBech32.isNotEmpty ? '&lnurl=$lnurlBech32' : ''}',
     );
@@ -1877,18 +1852,15 @@ class DataService {
         throw Exception('Private key not found.');
       }
 
-      final event = Event.from(
-        kind: 7,
-        tags: [
-          ['e', targetEventId]
-        ],
+      final event = NostrService.createReactionEvent(
+        targetEventId: targetEventId,
         content: reactionContent,
-        privkey: privateKey,
+        privateKey: privateKey,
       );
       await initializeConnections();
-      await _socketManager.broadcast(event.serialize());
+      await _socketManager.broadcast(NostrService.serializeEvent(event));
 
-      final reaction = ReactionModel.fromEvent(event.toJson());
+      final reaction = ReactionModel.fromEvent(NostrService.eventToJson(event));
       reactionsMap.putIfAbsent(targetEventId, () => []);
       reactionsMap[targetEventId]!.add(reaction);
       await reactionsBox?.put(reaction.id, reaction);
@@ -1944,16 +1916,15 @@ class DataService {
         tags.add(['r', relayUrl]);
       }
 
-      final event = Event.from(
-        kind: 1,
-        tags: tags,
+      final event = NostrService.createReplyEvent(
         content: replyContent,
-        privkey: privateKey,
+        privateKey: privateKey,
+        tags: tags,
       );
       await initializeConnections();
-      await _socketManager.broadcast(event.serialize());
+      await _socketManager.broadcast(NostrService.serializeEvent(event));
 
-      final reply = ReplyModel.fromEvent(event.toJson());
+      final reply = ReplyModel.fromEvent(NostrService.eventToJson(event));
       repliesMap.putIfAbsent(parentEventId, () => []);
       repliesMap[parentEventId]!.add(reply);
       await repliesBox?.put(reply.id, reply);
@@ -1967,7 +1938,7 @@ class DataService {
         isReply: true,
         parentId: parentEventId,
         rootId: rootId,
-        rawWs: jsonEncode(event.toJson()),
+        rawWs: jsonEncode(NostrService.eventToJson(event)),
       );
 
       parseContentForNote(replyNoteModel);
@@ -2014,10 +1985,6 @@ class DataService {
         throw Exception('Private key not found.');
       }
 
-      final tags = [
-        ['e', note.id],
-        ['p', note.author],
-      ];
 
       final content = note.rawWs ??
           jsonEncode({
@@ -2029,16 +1996,16 @@ class DataService {
             'tags': [],
           });
 
-      final event = Event.from(
-        kind: 6,
-        tags: tags,
+      final event = NostrService.createRepostEvent(
+        noteId: note.id,
+        noteAuthor: note.author,
         content: content,
-        privkey: privateKey,
+        privateKey: privateKey,
       );
       await initializeConnections();
-      await _socketManager.broadcast(event.serialize());
+      await _socketManager.broadcast(NostrService.serializeEvent(event));
 
-      final repost = RepostModel.fromEvent(event.toJson(), note.id);
+      final repost = RepostModel.fromEvent(NostrService.eventToJson(event), note.id);
       repostsMap.putIfAbsent(note.id, () => []);
       repostsMap[note.id]!.add(repost);
       await repostsBox?.put(repost.id, repost);
@@ -2436,14 +2403,14 @@ Future<void> _subscribeToNotifications() async {
 
     sinceTimestamp ??= DateTime.now().subtract(const Duration(days: 1)).millisecondsSinceEpoch ~/ 1000;
 
-    final filter = Filter(
-      p: [npub],
+    final filter = NostrService.createNotificationFilter(
+      pubkeys: [npub],
       kinds: [1, 6, 7, 9735],
       since: sinceTimestamp,
       limit: 50,
     );
 
-    final request = _createRequest(filter);
+    final request = NostrService.serializeRequest(NostrService.createRequest(filter));
 
     try {
       await _broadcastRequest(request);
@@ -2487,36 +2454,32 @@ Future<void> _subscribeToNotifications() async {
     final sinceTimestamp = DateTime.now().subtract(const Duration(minutes: 5)).millisecondsSinceEpoch ~/ 1000;
     
     // Subscribe to reactions for new notes
-    final reactionFilter = Filter(
-      kinds: [7],
-      e: newNoteIds,
+    final reactionFilter = NostrService.createReactionFilter(
+      eventIds: newNoteIds,
       since: sinceTimestamp,
     );
-    _safeBroadcast(Request(generateUUID(), [reactionFilter]).serialize());
+    _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(reactionFilter)));
     
     // Subscribe to replies for new notes
-    final replyFilter = Filter(
-      kinds: [1],
-      e: newNoteIds,
+    final replyFilter = NostrService.createReplyFilter(
+      eventIds: newNoteIds,
       since: sinceTimestamp,
     );
-    _safeBroadcast(Request(generateUUID(), [replyFilter]).serialize());
+    _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(replyFilter)));
     
     // Subscribe to reposts for new notes
-    final repostFilter = Filter(
-      kinds: [6],
-      e: newNoteIds,
+    final repostFilter = NostrService.createRepostFilter(
+      eventIds: newNoteIds,
       since: sinceTimestamp,
     );
-    _safeBroadcast(Request(generateUUID(), [repostFilter]).serialize());
+    _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(repostFilter)));
     
     // Subscribe to zaps for new notes
-    final zapFilter = Filter(
-      kinds: [9735],
-      e: newNoteIds,
+    final zapFilter = NostrService.createZapFilter(
+      eventIds: newNoteIds,
       since: sinceTimestamp,
     );
-    _safeBroadcast(Request(generateUUID(), [zapFilter]).serialize());
+    _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(zapFilter)));
     
     print('[DataService] Subscribed to interactions for ${newNoteIds.length} new notes.');
   }
@@ -2659,23 +2622,19 @@ Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
       final String type = fetchData['type'];
       final List<String> eventIds = List<String>.from(fetchData['eventIds']);
 
-      Request request;
+      String request;
       if (type == 'reaction') {
-        request = Request(generateUUID(), [
-          Filter(kinds: [7], e: eventIds, limit: 1000)
-        ]);
+        final filter = NostrService.createReactionFilter(eventIds: eventIds, limit: 1000);
+        request = NostrService.serializeRequest(NostrService.createRequest(filter));
       } else if (type == 'reply') {
-        request = Request(generateUUID(), [
-          Filter(kinds: [1], e: eventIds, limit: 1000)
-        ]);
+        final filter = NostrService.createReplyFilter(eventIds: eventIds, limit: 1000);
+        request = NostrService.serializeRequest(NostrService.createRequest(filter));
       } else if (type == 'repost') {
-        request = Request(generateUUID(), [
-          Filter(kinds: [6], e: eventIds, limit: 1000)
-        ]);
+        final filter = NostrService.createRepostFilter(eventIds: eventIds, limit: 1000);
+        request = NostrService.serializeRequest(NostrService.createRequest(filter));
       } else if (type == 'zap') {
-        request = Request(generateUUID(), [
-          Filter(kinds: [9735], e: eventIds, limit: 1000)
-        ]);
+        final filter = NostrService.createZapFilter(eventIds: eventIds, limit: 1000);
+        request = NostrService.serializeRequest(NostrService.createRequest(filter));
       } else {
         return;
       }
@@ -2948,7 +2907,7 @@ Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
     }
   }
 
-  String generateUUID() => _uuid.v4().replaceAll('-', '');
+  String generateUUID() => NostrService.generateUUID();
 
   
   List<NoteModel> getThreadReplies(String rootNoteId) {

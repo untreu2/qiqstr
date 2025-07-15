@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
-import 'package:nostr/nostr.dart';
 import 'network_service.dart';
+import 'nostr_service.dart';
 
 class BatchItem<T> {
   final T data;
@@ -178,16 +178,16 @@ class BatchProcessingService {
       
       if (batch.isNotEmpty) {
         // Create requests for different interaction types
-        final reactionFilter = Filter(kinds: [7], e: batch, limit: 500);
-        final replyFilter = Filter(kinds: [1], e: batch, limit: 500);
-        final repostFilter = Filter(kinds: [6], e: batch, limit: 500);
-        final zapFilter = Filter(kinds: [9735], e: batch, limit: 500);
+        final reactionFilter = NostrService.createReactionFilter(eventIds: batch, limit: 500);
+        final replyFilter = NostrService.createReplyFilter(eventIds: batch, limit: 500);
+        final repostFilter = NostrService.createRepostFilter(eventIds: batch, limit: 500);
+        final zapFilter = NostrService.createZapFilter(eventIds: batch, limit: 500);
         
         futures.addAll([
-          _networkService.broadcastRequest(_networkService.createRequest(reactionFilter)),
-          _networkService.broadcastRequest(_networkService.createRequest(replyFilter)),
-          _networkService.broadcastRequest(_networkService.createRequest(repostFilter)),
-          _networkService.broadcastRequest(_networkService.createRequest(zapFilter)),
+          _networkService.broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(reactionFilter))),
+          _networkService.broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(replyFilter))),
+          _networkService.broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(repostFilter))),
+          _networkService.broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(zapFilter))),
         ]);
       }
       
@@ -216,8 +216,8 @@ class BatchProcessingService {
       final batch = eventIds.sublist(i, endIndex);
       
       if (batch.isNotEmpty) {
-        final filter = Filter(kinds: [7, 1, 6, 9735], e: batch, limit: 1000);
-        futures.add(_networkService.broadcastRequest(_networkService.createRequest(filter)));
+        final filter = NostrService.createCombinedInteractionFilter(eventIds: batch, limit: 1000);
+        futures.add(_networkService.broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter))));
       }
       
       if (futures.length >= 3) {

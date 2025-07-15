@@ -1,18 +1,15 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:nostr/nostr.dart';
-import 'package:uuid/uuid.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import '../constants/relays.dart';
 import 'relay_service.dart';
+import 'nostr_service.dart';
 
 class NetworkService {
   final WebSocketManager _socketManager;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  static final Uuid _uuid = Uuid();
   
   bool _isClosed = false;
 
@@ -32,8 +29,8 @@ class NetworkService {
     // Just a placeholder for the network layer
   }
 
-  Future<void> broadcastRequest(Request request) async {
-    await _socketManager.broadcast(request.serialize());
+  Future<void> broadcastRequest(String serializedRequest) async {
+    await _socketManager.broadcast(serializedRequest);
   }
 
   Future<void> safeBroadcast(String message) async {
@@ -44,7 +41,8 @@ class NetworkService {
     }
   }
 
-  Request createRequest(Filter filter) => Request(generateUUID(), [filter]);
+  String createRequest(String filterJson) =>
+      NostrService.serializeRequest(NostrService.createRequest(NostrService.createNotesFilter()));
 
   Future<void> shareNote(String noteContent, String npub) async {
     if (_isClosed) return;
@@ -55,14 +53,12 @@ class NetworkService {
         throw Exception('Private key not found.');
       }
 
-      final event = Event.from(
-        kind: 1,
-        tags: [],
+      final event = NostrService.createNoteEvent(
         content: noteContent,
-        privkey: privateKey,
+        privateKey: privateKey,
       );
       
-      await _socketManager.broadcast(event.serialize());
+      await _socketManager.broadcast(NostrService.serializeEvent(event));
     } catch (e) {
       print('[NetworkService ERROR] Error sharing note: $e');
       rethrow;
@@ -78,14 +74,13 @@ class NetworkService {
         throw Exception('Private key not found.');
       }
 
-      final event = Event.from(
-        kind: 7,
-        tags: [['e', targetEventId]],
+      final event = NostrService.createReactionEvent(
+        targetEventId: targetEventId,
         content: reactionContent,
-        privkey: privateKey,
+        privateKey: privateKey,
       );
       
-      await _socketManager.broadcast(event.serialize());
+      await _socketManager.broadcast(NostrService.serializeEvent(event));
     } catch (e) {
       print('[NetworkService ERROR] Error sending reaction: $e');
       rethrow;
@@ -101,23 +96,19 @@ class NetworkService {
         throw Exception('Private key not found.');
       }
 
-      List<List<String>> tags = [
-        ['e', parentEventId, '', 'root'],
-        ['p', parentAuthor, '', 'mention'],
-      ];
+      final tags = NostrService.createReplyTags(
+        rootId: parentEventId,
+        parentAuthor: parentAuthor,
+        relayUrls: relaySetMainSockets,
+      );
 
-      for (final relayUrl in relaySetMainSockets) {
-        tags.add(['r', relayUrl]);
-      }
-
-      final event = Event.from(
-        kind: 1,
-        tags: tags,
+      final event = NostrService.createReplyEvent(
         content: replyContent,
-        privkey: privateKey,
+        privateKey: privateKey,
+        tags: tags,
       );
       
-      await _socketManager.broadcast(event.serialize());
+      await _socketManager.broadcast(NostrService.serializeEvent(event));
     } catch (e) {
       print('[NetworkService ERROR] Error sending reply: $e');
       rethrow;
@@ -133,11 +124,6 @@ class NetworkService {
         throw Exception('Private key not found.');
       }
 
-      final tags = [
-        ['e', noteId],
-        ['p', noteAuthor],
-      ];
-
       final content = rawContent ?? jsonEncode({
         'id': noteId,
         'pubkey': noteAuthor,
@@ -145,14 +131,14 @@ class NetworkService {
         'tags': [],
       });
 
-      final event = Event.from(
-        kind: 6,
-        tags: tags,
+      final event = NostrService.createRepostEvent(
+        noteId: noteId,
+        noteAuthor: noteAuthor,
         content: content,
-        privkey: privateKey,
+        privateKey: privateKey,
       );
       
-      await _socketManager.broadcast(event.serialize());
+      await _socketManager.broadcast(NostrService.serializeEvent(event));
     } catch (e) {
       print('[NetworkService ERROR] Error sending repost: $e');
       rethrow;
@@ -203,24 +189,20 @@ class NetworkService {
     final amountMillisats = (amountSats * 1000).toString();
     final relays = relaySetMainSockets;
 
-    final List<List<String>> tags = [
-      ['relays', ...relays.map((e) => e.toString())],
-      ['amount', amountMillisats],
-      ['p', recipientPubkey],
-    ];
-
-    if (noteId != null && noteId.isNotEmpty) {
-      tags.add(['e', noteId]);
-    }
-
-    final zapRequest = Event.from(
-      kind: 9734,
-      tags: tags,
-      content: content,
-      privkey: privateKey,
+    final tags = NostrService.createZapRequestTags(
+      relays: relays.map((e) => e.toString()).toList(),
+      amountMillisats: amountMillisats,
+      recipientPubkey: recipientPubkey,
+      noteId: noteId,
     );
 
-    final encodedZap = Uri.encodeComponent(jsonEncode(zapRequest.toJson()));
+    final zapRequest = NostrService.createZapRequestEvent(
+      tags: tags,
+      content: content,
+      privateKey: privateKey,
+    );
+
+    final encodedZap = Uri.encodeComponent(jsonEncode(NostrService.eventToJson(zapRequest)));
     final zapUrl = Uri.parse('$callback?amount=$amountMillisats&nostr=$encodedZap');
 
     final invoiceResponse = await http.get(zapUrl);
@@ -249,35 +231,18 @@ class NetworkService {
     }
 
     final fileBytes = await file.readAsBytes();
-    final sha256Hash = sha256.convert(fileBytes).toString();
-
-    String mimeType = 'application/octet-stream';
-    final lowerPath = filePath.toLowerCase();
-    if (lowerPath.endsWith('.jpg') || lowerPath.endsWith('.jpeg')) {
-      mimeType = 'image/jpeg';
-    } else if (lowerPath.endsWith('.png')) {
-      mimeType = 'image/png';
-    } else if (lowerPath.endsWith('.gif')) {
-      mimeType = 'image/gif';
-    } else if (lowerPath.endsWith('.mp4')) {
-      mimeType = 'video/mp4';
-    }
-
+    final sha256Hash = NostrService.calculateSha256Hash(fileBytes);
+    final mimeType = NostrService.detectMimeType(filePath);
     final expiration = DateTime.now().add(Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000;
 
-    final authEvent = Event.from(
-      kind: 24242,
-      content: 'Upload ${file.uri.pathSegments.last}',
-      tags: [
-        ['t', 'upload'],
-        ['x', sha256Hash],
-        ['expiration', expiration.toString()],
-      ],
-      privkey: privateKey,
+    final authEvent = NostrService.createMediaUploadAuthEvent(
+      fileName: file.uri.pathSegments.last,
+      sha256Hash: sha256Hash,
+      expiration: expiration,
+      privateKey: privateKey,
     );
 
-    final encodedAuth = base64.encode(utf8.encode(jsonEncode(authEvent.toJson())));
-    final authHeader = 'Nostr $encodedAuth';
+    final authHeader = NostrService.createBlossomAuthHeader(authEvent: authEvent);
 
     final cleanedUrl = blossomUrl.replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$cleanedUrl/upload');
@@ -306,7 +271,7 @@ class NetworkService {
     throw Exception('Upload succeeded but response does not contain a valid URL.');
   }
 
-  String generateUUID() => _uuid.v4().replaceAll('-', '');
+  String generateUUID() => NostrService.generateUUID();
 
   int get connectedRelaysCount => _socketManager.activeSockets.length;
 

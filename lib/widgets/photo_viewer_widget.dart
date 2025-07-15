@@ -4,7 +4,6 @@ import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
-import '../theme/theme_manager.dart';
 
 class PhotoViewerWidget extends StatefulWidget {
   final List<String> imageUrls;
