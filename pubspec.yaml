@@ -54,15 +54,15 @@ dependencies:
     flutter_riverpod: ^2.6.1
     provider: ^6.1.2
     confetti: ^0.8.0
-    file_picker: ^9.2.2
+    file_picker: ^10.2.0
     bolt11_decoder: ^1.0.2
-    dotted_border: ^2.1.0
+    dotted_border: ^3.1.0
     shimmer: ^3.0.0
     nostr_nip19: ^0.1.0
     visibility_detector: ^0.4.0+2
     flutter_cache_manager: ^3.4.1
     better_player_plus: ^1.0.8
-    native_video_player: ^3.0.0
+    native_video_player: ^4.0.0
     auto_size_text: ^3.0.0
     collection: ^1.19.1
     http: ^1.4.0
@@ -83,7 +83,7 @@ dev_dependencies:
     # activated in the `analysis_options.yaml` file located at the root of your
     # package. See that file for information about deactivating specific lint
     # rules and activating additional ones.
-    flutter_lints: ^5.0.0
+    flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
