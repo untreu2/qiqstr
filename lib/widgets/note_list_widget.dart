@@ -40,7 +40,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   NoteListFilterType? _lastFilterType;
   int _lastNotesHash = 0;
 
-  static const int _itemsPerPage = 20;
+  static const int _itemsPerPage = 50;
   int _currentPage = 0;
   bool _isLoadingMore = false;
 
@@ -55,12 +55,57 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   void _onScroll() {
     if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
-      _loadMoreItems();
+      final filteredNotes = _getFilteredNotes(_dataService.notesNotifier.value);
+      final totalItems = filteredNotes.length;
+      final visibleItems = (_currentPage + 1) * _itemsPerPage;
+      
+      print('[NoteListWidget] Scroll detected. Visible: $visibleItems, Total: $totalItems, Current limit: ${_dataService.currentNotesLimit}');
+      
+      // If we're showing all available notes and have reached the current limit, load more from network
+      if (visibleItems >= totalItems && totalItems >= _dataService.currentNotesLimit * 0.8) {
+        print('[NoteListWidget] Reached end of notes and near limit, loading more from network');
+        _loadMoreItems();
+      } else if (visibleItems >= totalItems) {
+        // We've shown all available notes but haven't reached the limit threshold, still try to load more
+        print('[NoteListWidget] Reached end of available notes, attempting to load more');
+        _loadMoreItems();
+      } else {
+        // Just show more from cache
+        print('[NoteListWidget] Showing more from cache');
+        _showMoreFromCache();
+      }
     }
   }
 
   void _loadMoreItems() {
-    if (_isLoadingMore || _cachedFilteredNotes.isEmpty) return;
+    if (_isLoadingMore) return;
+
+    print('[NoteListWidget] Loading more notes from network. Current limit: ${_dataService.currentNotesLimit}');
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    // Call the new progressive loading method
+    _dataService.loadMoreNotes().then((_) {
+      print('[NoteListWidget] Successfully loaded more notes. New limit: ${_dataService.currentNotesLimit}');
+      if (mounted) {
+        setState(() {
+          _isLoadingMore = false;
+        });
+      }
+    }).catchError((error) {
+      print('[NoteListWidget] Error loading more notes: $error');
+      if (mounted) {
+        setState(() {
+          _isLoadingMore = false;
+        });
+      }
+    });
+  }
+
+  void _showMoreFromCache() {
+    if (_isLoadingMore) return;
 
     setState(() {
       _isLoadingMore = true;
@@ -237,7 +282,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
           delegate: SliverChildBuilderDelegate(
             (context, index) {
               if (index == displayNotes.length) {
-                if (_isLoadingMore && itemsToShow < totalItems) {
+                if (_isLoadingMore) {
                   return Padding(
                     padding: const EdgeInsets.all(16),
                     child: Center(
@@ -279,7 +324,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                 ],
               );
             },
-            childCount: displayNotes.length + (_isLoadingMore && itemsToShow < totalItems ? 1 : 0),
+            childCount: displayNotes.length + (_isLoadingMore ? 1 : 0),
           ),
         );
       },

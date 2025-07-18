@@ -89,7 +89,7 @@ class DataService {
 
   Timer? _cacheCleanupTimer;
   Timer? _interactionRefreshTimer;
-  final int currentLimit = 50;
+  int currentLimit = 100;
 
   final Map<String, Completer<Map<String, String>>> _pendingProfileRequests =
       {};
@@ -120,6 +120,7 @@ class DataService {
   });
 
   int get connectedRelaysCount => _socketManager.activeSockets.length;
+  int get currentNotesLimit => currentLimit;
 
   Future<void> initialize() async {
     // Initialize isolates and boxes in parallel
@@ -1197,32 +1198,39 @@ class DataService {
     return followers;
   }
 
-  Future<void> fetchOlderNotes(
-      List<String> targetNpubs, Function(NoteModel) onOlderNote) async {
-    if (_isClosed || notes.isEmpty) return;
-    final lastNote = notes.last;
+  Future<void> loadMoreNotes() async {
+    if (_isClosed) return;
+
+    List<String> targetNpubs;
+    if (dataType == DataType.feed) {
+      final following = await getFollowingList(npub);
+      following.add(npub);
+      targetNpubs = following.toSet().toList();
+    } else {
+      targetNpubs = [npub];
+    }
+
+    // Increase the limit progressively
+    final previousLimit = currentLimit;
+    currentLimit += 50;
+    
+    print('[DataService] Loading more notes with increased limit: $previousLimit -> $currentLimit');
+
     final filter = NostrService.createNotesFilter(
       authors: targetNpubs,
       kinds: [1, 6],
       limit: currentLimit,
-      until: lastNote.timestamp.millisecondsSinceEpoch ~/ 1000,
     );
-    final request = NostrService.serializeRequest(NostrService.createRequest(filter));
 
-    await _broadcastRequest(request);
-
-    _onCacheLoad = (List<NoteModel> newNotes) async {
-      for (var note in newNotes) {
-        if (!eventIds.contains(note.id)) {
-          parseContentForNote(note);
-          notes.add(note);
-          eventIds.add(note.id);
-          onOlderNote(note);
-        }
+    await _broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter)));
+    
+    // Also refresh interactions for any new notes that might come in
+    Future.delayed(const Duration(seconds: 2), () {
+      if (!_isClosed && notes.isNotEmpty) {
+        final newNoteIds = notes.map((note) => note.id).toList();
+        _subscribeToInteractionsForNewNotes(newNoteIds);
       }
-      print(
-          '[DataService] Fetched and processed ${newNotes.length} older notes.');
-    };
+    });
   }
 
   final SplayTreeSet<NoteModel> _itemsTree = SplayTreeSet(_compareNotes);
