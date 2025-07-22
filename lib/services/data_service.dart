@@ -1015,16 +1015,28 @@ class DataService {
 
     if (notesBox != null && notesBox!.isOpen) {
       final inHive = notesBox!.get(eventIdHex);
-      if (inHive != null) return inHive;
+      if (inHive != null) {
+        // Add to memory and notify if not already there
+        if (!eventIds.contains(inHive.id)) {
+          parseContentForNote(inHive);
+          notes.add(inHive);
+          eventIds.add(inHive.id);
+          addNote(inHive);
+        }
+        return inHive;
+      }
     }
 
     final fetchedNote = await fetchNoteByIdIndependently(eventIdHex);
     if (fetchedNote == null) return null;
 
+    parseContentForNote(fetchedNote);
     notes.add(fetchedNote);
     eventIds.add(fetchedNote.id);
     await notesBox?.put(fetchedNote.id, fetchedNote);
+    addNote(fetchedNote);
 
+    print('[DataService] Fetched and added note to cache: ${fetchedNote.id}');
     return fetchedNote;
   }
 

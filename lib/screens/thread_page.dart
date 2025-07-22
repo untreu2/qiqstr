@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:bounce/bounce.dart';
@@ -59,27 +60,40 @@ class _ThreadPageState extends State<ThreadPage> {
   void dispose() {
     widget.dataService.notesNotifier.removeListener(_onNotesChanged);
     _scrollController.dispose();
+    _reloadTimer?.cancel();
     super.dispose();
   }
 
   void _onNotesChanged() {
+    if (_isLoading) return; // Prevent changes during loading
+    
     final allNotes = widget.dataService.notesNotifier.value;
     bool hasRelevantChanges = false;
 
-    for (final note in allNotes) {
-      if (_relevantNoteIds.contains(note.id)) {
+    // Check if any relevant notes have actually changed
+    final currentRelevantNotes = allNotes.where((note) => _relevantNoteIds.contains(note.id)).toList();
+    
+    // Only reload if we have new relevant notes or if existing relevant notes have changed
+    if (_rootNote != null) {
+      final currentRootNote = allNotes.firstWhereOrNull((n) => n.id == _rootNote!.id);
+      if (currentRootNote != null && currentRootNote != _rootNote) {
         hasRelevantChanges = true;
-        break;
       }
     }
 
+    if (!hasRelevantChanges && _focusedNote != null) {
+      final currentFocusedNote = allNotes.firstWhereOrNull((n) => n.id == _focusedNote!.id);
+      if (currentFocusedNote != null && currentFocusedNote != _focusedNote) {
+        hasRelevantChanges = true;
+      }
+    }
+
+    // Check for new replies to relevant notes
     if (!hasRelevantChanges && _rootNote != null) {
       for (final note in allNotes) {
         if (note.isReply &&
-            (note.rootId == _rootNote!.id ||
-                note.parentId == _rootNote!.id ||
-                _relevantNoteIds.contains(note.parentId ?? '') ||
-                _relevantNoteIds.contains(note.rootId ?? ''))) {
+            (note.rootId == _rootNote!.id || note.parentId == _rootNote!.id) &&
+            !_relevantNoteIds.contains(note.id)) {
           hasRelevantChanges = true;
           break;
         }
@@ -87,8 +101,20 @@ class _ThreadPageState extends State<ThreadPage> {
     }
 
     if (hasRelevantChanges) {
-      _loadRootNote();
+      // Use a debounced approach to prevent rapid successive reloads
+      _debounceReload();
     }
+  }
+
+  Timer? _reloadTimer;
+  
+  void _debounceReload() {
+    _reloadTimer?.cancel();
+    _reloadTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted && !_isLoading) {
+        _loadRootNote();
+      }
+    });
   }
 
   Future<void> _loadRootNote() async {
@@ -106,7 +132,16 @@ class _ThreadPageState extends State<ThreadPage> {
       _focusedNote = null;
     }
 
+    // If we have a focused note but no root note, or if the focused note is a reply
+    // but we don't have its parent/root context, fetch the missing notes
+    await _fetchMissingContextNotes();
+
     _updateRelevantNoteIds();
+
+    // After fetching context notes, also fetch their replies to build complete thread
+    if (_rootNote != null) {
+      await _fetchThreadReplies(_rootNote!.id);
+    }
 
     if (mounted) {
       setState(() => _isLoading = false);
@@ -115,6 +150,89 @@ class _ThreadPageState extends State<ThreadPage> {
           _scrollToFocusedNote();
         });
       }
+    }
+  }
+
+  Future<void> _fetchMissingContextNotes() async {
+    final List<String> notesToFetch = [];
+    
+    // If root note is missing, try to fetch it
+    if (_rootNote == null) {
+      notesToFetch.add(widget.rootNoteId);
+    }
+    
+    // If focused note is missing, try to fetch it
+    if (widget.focusedNoteId != null && _focusedNote == null) {
+      notesToFetch.add(widget.focusedNoteId!);
+    }
+    
+    // If we have a focused note that's a reply, ensure we have its parent/root context
+    if (_focusedNote != null && _focusedNote!.isReply) {
+      if (_focusedNote!.rootId != null && _focusedNote!.rootId!.isNotEmpty) {
+        final rootExists = widget.dataService.notesNotifier.value.any((n) => n.id == _focusedNote!.rootId);
+        if (!rootExists) {
+          notesToFetch.add(_focusedNote!.rootId!);
+        }
+      }
+      
+      if (_focusedNote!.parentId != null && _focusedNote!.parentId!.isNotEmpty && _focusedNote!.parentId != _focusedNote!.rootId) {
+        final parentExists = widget.dataService.notesNotifier.value.any((n) => n.id == _focusedNote!.parentId);
+        if (!parentExists) {
+          notesToFetch.add(_focusedNote!.parentId!);
+        }
+      }
+    }
+    
+    // Fetch missing notes
+    if (notesToFetch.isNotEmpty) {
+      print('[ThreadPage] Fetching missing context notes: $notesToFetch');
+      await _fetchNotesById(notesToFetch);
+      
+      // Refresh our local references after fetching
+      final updatedNotes = widget.dataService.notesNotifier.value;
+      _rootNote = updatedNotes.firstWhereOrNull((n) => n.id == widget.rootNoteId);
+      if (widget.focusedNoteId != null) {
+        _focusedNote = updatedNotes.firstWhereOrNull((n) => n.id == widget.focusedNoteId);
+      }
+    }
+  }
+
+  Future<void> _fetchNotesById(List<String> noteIds) async {
+    final futures = noteIds.map((noteId) async {
+      try {
+        final note = await widget.dataService.getCachedNote(noteId);
+        if (note != null) {
+          print('[ThreadPage] Successfully fetched note: $noteId');
+          // The note should already be added to the notes list by getCachedNote
+        } else {
+          print('[ThreadPage] Failed to fetch note: $noteId');
+        }
+      } catch (e) {
+        print('[ThreadPage] Error fetching note $noteId: $e');
+      }
+    });
+    
+    await Future.wait(futures);
+  }
+
+  Future<void> _fetchThreadReplies(String rootNoteId) async {
+    try {
+      // Fetch replies for the root note to ensure we have the complete thread context
+      final allEventIds = [rootNoteId];
+      
+      // Also include any other relevant notes we've identified
+      allEventIds.addAll(_relevantNoteIds);
+      
+      print('[ThreadPage] Fetching replies for thread context: $allEventIds');
+      
+      // Use the existing interaction fetching mechanism
+      await widget.dataService.fetchInteractionsForEvents(allEventIds);
+      
+      // Small delay to allow for processing
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+    } catch (e) {
+      print('[ThreadPage] Error fetching thread replies: $e');
     }
   }
 
