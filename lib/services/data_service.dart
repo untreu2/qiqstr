@@ -5,6 +5,7 @@ import 'dart:isolate';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:hive/hive.dart';
+import 'package:nostr/nostr.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:qiqstr/constants/relays.dart';
 import 'package:qiqstr/models/zap_model.dart';
@@ -1586,14 +1587,19 @@ class DataService {
         DateTime.now().add(Duration(minutes: 10)).millisecondsSinceEpoch ~/
             1000;
 
-    final authEvent = NostrService.createMediaUploadAuthEvent(
-      fileName: file.uri.pathSegments.last,
-      sha256Hash: sha256Hash,
-      expiration: expiration,
-      privateKey: privateKey,
+    final authEvent = Event.from(
+      kind: 24242,
+      content: 'Upload ${file.uri.pathSegments.last}',
+      tags: [
+        ['t', 'upload'],
+        ['x', sha256Hash],
+        ['expiration', expiration.toString()],
+      ],
+      privkey: privateKey,
     );
 
-    final encodedAuth = NostrService.createBlossomAuthHeader(authEvent: authEvent);
+    final encodedAuth =
+        base64.encode(utf8.encode(jsonEncode(authEvent.toJson())));
     final authHeader = 'Nostr $encodedAuth';
 
     final cleanedUrl = blossomUrl.replaceAll(RegExp(r'/+$'), '');

@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
+import 'package:nostr/nostr.dart';
+import 'package:crypto/crypto.dart';
 import '../constants/relays.dart';
 import 'relay_service.dart';
 import 'nostr_service.dart';
@@ -231,18 +233,35 @@ class NetworkService {
     }
 
     final fileBytes = await file.readAsBytes();
-    final sha256Hash = NostrService.calculateSha256Hash(fileBytes);
-    final mimeType = NostrService.detectMimeType(filePath);
+    final sha256Hash = sha256.convert(fileBytes).toString();
+
+    String mimeType = 'application/octet-stream';
+    final lowerPath = filePath.toLowerCase();
+    if (lowerPath.endsWith('.jpg') || lowerPath.endsWith('.jpeg')) {
+      mimeType = 'image/jpeg';
+    } else if (lowerPath.endsWith('.png')) {
+      mimeType = 'image/png';
+    } else if (lowerPath.endsWith('.gif')) {
+      mimeType = 'image/gif';
+    } else if (lowerPath.endsWith('.mp4')) {
+      mimeType = 'video/mp4';
+    }
+
     final expiration = DateTime.now().add(Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000;
 
-    final authEvent = NostrService.createMediaUploadAuthEvent(
-      fileName: file.uri.pathSegments.last,
-      sha256Hash: sha256Hash,
-      expiration: expiration,
-      privateKey: privateKey,
+    final authEvent = Event.from(
+      kind: 24242,
+      content: 'Upload ${file.uri.pathSegments.last}',
+      tags: [
+        ['t', 'upload'],
+        ['x', sha256Hash],
+        ['expiration', expiration.toString()],
+      ],
+      privkey: privateKey,
     );
 
-    final authHeader = NostrService.createBlossomAuthHeader(authEvent: authEvent);
+    final encodedAuth = base64.encode(utf8.encode(jsonEncode(authEvent.toJson())));
+    final authHeader = 'Nostr $encodedAuth';
 
     final cleanedUrl = blossomUrl.replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$cleanedUrl/upload');

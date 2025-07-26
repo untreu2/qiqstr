@@ -105,23 +105,6 @@ class NostrService {
     );
   }
 
-  static Event createMediaUploadAuthEvent({
-    required String fileName,
-    required String sha256Hash,
-    required int expiration,
-    required String privateKey,
-  }) {
-    return Event.from(
-      kind: 24242,
-      content: 'Upload $fileName',
-      tags: [
-        ['t', 'upload'],
-        ['x', sha256Hash],
-        ['expiration', expiration.toString()],
-      ],
-      privkey: privateKey,
-    );
-  }
 
   // Filter creation methods
   static Filter createNotesFilter({
@@ -265,13 +248,6 @@ class NostrService {
 
   static Map<String, dynamic> eventToJson(Event event) => event.toJson();
 
-  // Media upload helper
-  static String createBlossomAuthHeader({
-    required Event authEvent,
-  }) {
-    final encodedAuth = base64.encode(utf8.encode(jsonEncode(authEvent.toJson())));
-    return 'Nostr $encodedAuth';
-  }
 
   // Zap request helpers
   static List<List<String>> createZapRequestTags({
