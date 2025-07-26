@@ -71,7 +71,7 @@ class _ThreadPageState extends State<ThreadPage> {
     bool hasRelevantChanges = false;
 
     // Check if any relevant notes have actually changed
-    final currentRelevantNotes = allNotes.where((note) => _relevantNoteIds.contains(note.id)).toList();
+    allNotes.where((note) => _relevantNoteIds.contains(note.id)).toList();
     
     // Only reload if we have new relevant notes or if existing relevant notes have changed
     if (_rootNote != null) {

@@ -151,10 +151,13 @@ class _NoteWidgetState extends State<NoteWidget>
     final String rootIdToShow =
         (note.isReply && note.rootId != null && note.rootId!.isNotEmpty) ? note.rootId! : note.id;
 
+    // Only pass focusedNoteId if the note is a reply and we're showing a different root
+    final String? focusedNoteId = (note.isReply && rootIdToShow != note.id) ? note.id : null;
+
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => ThreadPage(rootNoteId: rootIdToShow, dataService: widget.dataService, focusedNoteId: note.id),
+        builder: (_) => ThreadPage(rootNoteId: rootIdToShow, dataService: widget.dataService, focusedNoteId: focusedNoteId),
       ),
     );
   }
