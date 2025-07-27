@@ -30,6 +30,11 @@ class _NotificationPageState extends State<NotificationPage> {
     
     _updateDisplayData(widget.dataService.notificationsNotifier.value, isInitialLoad: true);
     widget.dataService.notificationsNotifier.addListener(_handleNotificationsUpdate);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        widget.dataService.markAllUserNotificationsAsRead();
+      }
+    });
   }
 
   @override
