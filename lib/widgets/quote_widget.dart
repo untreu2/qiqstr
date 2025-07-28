@@ -186,13 +186,6 @@ class QuoteWidget extends StatelessWidget {
               color: context.colors.background,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: context.colors.textPrimary, width: 0.8),
-              boxShadow: [
-                BoxShadow(
-                  color: context.colors.textPrimary.withOpacity(0.05),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
             ),
             child: Center(
               child: Text(
@@ -216,13 +209,6 @@ class QuoteWidget extends StatelessWidget {
             color: context.colors.surface,
             borderRadius: BorderRadius.circular(24),
             border: Border.all(color: context.colors.border, width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: context.colors.textPrimary.withOpacity(0.1),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
