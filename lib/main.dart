@@ -73,9 +73,12 @@ Future<void> main() async {
         await _openHiveBoxesParallel(npub);
 
         // Initialize DataService asynchronously
+        // Initialize DataService and connections BEFORE showing the app
         final dataService = DataService(npub: npub, dataType: DataType.feed);
-        
-        // Show app immediately, initialize in background
+        await dataService.initialize();
+        await dataService.initializeConnections();
+
+        // Show app after initialization is complete
         runApp(
           provider.ChangeNotifierProvider(
             create: (context) => theme.ThemeManager(),
@@ -89,12 +92,6 @@ Future<void> main() async {
             ),
           ),
         );
-        
-        // Initialize connections in background
-        Future.microtask(() async {
-          await dataService.initialize();
-          await dataService.initializeConnections();
-        });
       } else {
         runApp(
           provider.ChangeNotifierProvider(
@@ -167,8 +164,14 @@ Future<void> _openHiveBoxesParallel(String npub) async {
 Future<void> _handleInitializationError(dynamic error) async {
   try {
     await Hive.deleteFromDisk();
-    print('Hive data deleted. Restarting app...');
-    main();
+    print('Hive data deleted. Navigating to login page...');
+    // Navigate to LoginPage as a safe fallback instead of recursively calling main()
+    runApp(
+      provider.ChangeNotifierProvider(
+        create: (context) => theme.ThemeManager(),
+        child: const ProviderScope(child: QiqstrApp(home: LoginPage())),
+      ),
+    );
   } catch (deleteError) {
     print('Failed to delete Hive data: $deleteError');
     runApp(const HiveErrorApp());
