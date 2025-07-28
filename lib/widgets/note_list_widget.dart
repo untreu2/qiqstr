@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../theme/theme_manager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/services/data_service.dart';
-import 'package:qiqstr/widgets/lazy_note_widget.dart';
+import 'package:qiqstr/widgets/note_widget.dart';
 
 enum NoteListFilterType {
   latest,
@@ -30,103 +31,55 @@ class NoteListWidget extends StatefulWidget {
 class _NoteListWidgetState extends State<NoteListWidget> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   final ScrollController _scrollController = ScrollController();
+  late DataService _dataService;
 
   String? _currentUserNpub;
   bool _isInitializing = true;
+  bool _isLoadingMore = false;
 
-  late DataService _dataService;
-
-  List<NoteModel> _cachedFilteredNotes = [];
-  NoteListFilterType? _lastFilterType;
-  int _lastNotesHash = 0;
-
+  List<NoteModel> _filteredNotes = [];
+  
   static const int _itemsPerPage = 50;
   int _currentPage = 0;
-  bool _isLoadingMore = false;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _setupInitialService();
+      _initialize();
     });
   }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
-      final filteredNotes = _getFilteredNotes(_dataService.notesNotifier.value);
-      final totalItems = filteredNotes.length;
-      final visibleItems = (_currentPage + 1) * _itemsPerPage;
-      
-      print('[NoteListWidget] Scroll detected. Visible: $visibleItems, Total: $totalItems, Current limit: ${_dataService.currentNotesLimit}');
-      
-      // If we're showing all available notes and have reached the current limit, load more from network
-      if (visibleItems >= totalItems && totalItems >= _dataService.currentNotesLimit * 0.8) {
-        print('[NoteListWidget] Reached end of notes and near limit, loading more from network');
-        _loadMoreItems();
-      } else if (visibleItems >= totalItems) {
-        // We've shown all available notes but haven't reached the limit threshold, still try to load more
-        print('[NoteListWidget] Reached end of available notes, attempting to load more');
-        _loadMoreItems();
-      } else {
-        // Just show more from cache
-        print('[NoteListWidget] Showing more from cache');
-        _showMoreFromCache();
-      }
+  
+  @override
+  void didUpdateWidget(NoteListWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.filterType != widget.filterType) {
+      _updateFilteredNotes(_dataService.notesNotifier.value);
     }
   }
 
-  void _loadMoreItems() {
-    if (_isLoadingMore) return;
-
-    print('[NoteListWidget] Loading more notes from network. Current limit: ${_dataService.currentNotesLimit}');
-
-    setState(() {
-      _isLoadingMore = true;
-    });
-
-    // Call the new progressive loading method
-    _dataService.loadMoreNotes().then((_) {
-      print('[NoteListWidget] Successfully loaded more notes. New limit: ${_dataService.currentNotesLimit}');
-      if (mounted) {
-        setState(() {
-          _isLoadingMore = false;
-        });
-      }
-    }).catchError((error) {
-      print('[NoteListWidget] Error loading more notes: $error');
-      if (mounted) {
-        setState(() {
-          _isLoadingMore = false;
-        });
-      }
-    });
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    _dataService.notesNotifier.removeListener(_onNotesChanged);
+    _dataService.closeConnections();
+    super.dispose();
   }
 
-  void _showMoreFromCache() {
-    if (_isLoadingMore) return;
-
-    setState(() {
-      _isLoadingMore = true;
-      _currentPage++;
-    });
-
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (mounted) {
-        setState(() {
-          _isLoadingMore = false;
-        });
-      }
-    });
+  void _onNotesChanged() {
+    if (mounted) {
+      _updateFilteredNotes(_dataService.notesNotifier.value);
+    }
   }
 
-  Future<void> _setupInitialService() async {
+  Future<void> _initialize() async {
     _currentUserNpub = await _secureStorage.read(key: 'npub');
-    if (!mounted || _currentUserNpub == null) return;
+    if (!mounted) return;
 
     _dataService = _createDataService();
-
+    _dataService.notesNotifier.addListener(_onNotesChanged);
     await _dataService.initialize();
     _dataService.initializeConnections();
 
@@ -139,196 +92,132 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     return DataService(
       npub: widget.npub,
       dataType: widget.dataType,
-      onNewNote: _handleNewNote,
-      onReactionsUpdated: (_, __) => _updateSafely(),
-      onRepliesUpdated: (_, __) => _updateSafely(),
-      onRepostsUpdated: (_, __) => _updateSafely(),
-      onReactionCountUpdated: (_, __) => _updateSafely(),
-      onReplyCountUpdated: (_, __) => _updateSafely(),
-      onRepostCountUpdated: (_, __) => _updateSafely(),
+      onNewNote: (_) {},
+      onReactionsUpdated: (_, __) {},
+      onRepliesUpdated: (_, __) {},
+      onRepostsUpdated: (_, __) {},
+      onReactionCountUpdated: (_, __) {},
+      onReplyCountUpdated: (_, __) {},
+      onRepostCountUpdated: (_, __) {},
     );
   }
+  
+  void _onScroll() {
+    if (!_isLoadingMore && _scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.9) {
+      final allAvailableNotes = _filteredNotes.length;
+      final currentlyVisibleNotes = (_currentPage + 1) * _itemsPerPage;
 
-  void _handleNewNote(NoteModel note) {
-    _invalidateCache();
-    _updateSafely();
-  }
-
-  void _invalidateCache() {
-    _cachedFilteredNotes.clear();
-    _lastFilterType = null;
-    _lastNotesHash = 0;
-    _currentPage = 0;
-  }
-
-  void _updateSafely() {
-    if (mounted) setState(() {});
-  }
-
-  List<NoteModel> _getFilteredNotes(List<NoteModel> notes) {
-    final currentHash = notes.length.hashCode ^ widget.filterType.hashCode;
-    if (_lastFilterType == widget.filterType && _lastNotesHash == currentHash && _cachedFilteredNotes.isNotEmpty) {
-      return _cachedFilteredNotes;
+      if (currentlyVisibleNotes >= allAvailableNotes) {
+        _loadMoreItemsFromNetwork();
+      } else {
+        _showMoreFromCache();
+      }
     }
+  }
 
+  void _loadMoreItemsFromNetwork() {
+    if (_isLoadingMore) return;
+
+    setState(() => _isLoadingMore = true);
+
+    _dataService.loadMoreNotes().whenComplete(() {
+      if (mounted) {
+        setState(() => _isLoadingMore = false);
+      }
+    });
+  }
+
+  void _showMoreFromCache() {
+    if (_isLoadingMore) return;
+    setState(() {
+      _currentPage++;
+    });
+  }
+
+  Future<void> _updateFilteredNotes(List<NoteModel> notes) async {
     List<NoteModel> filtered;
     switch (widget.filterType) {
       case NoteListFilterType.popular:
-        final cutoffTime = DateTime.now().subtract(const Duration(hours: 24));
-        filtered = notes.where((n) => n.timestamp.isAfter(cutoffTime) && (!n.isReply || n.isRepost)).toList();
-
-        filtered.sort((a, b) {
-          final aScore = _calculateEngagementScore(a);
-          final bScore = _calculateEngagementScore(b);
-          return bScore.compareTo(aScore);
-        });
+        filtered = await compute(_filterAndSortPopular, notes);
         break;
-
       case NoteListFilterType.media:
         filtered = notes.where((n) => n.hasMedia && (!n.isReply || n.isRepost)).toList();
         break;
-
       case NoteListFilterType.latest:
         filtered = notes.where((n) => !n.isReply || n.isRepost).toList();
         break;
     }
-
-    _cachedFilteredNotes = filtered;
-    _lastFilterType = widget.filterType;
-    _lastNotesHash = currentHash;
-
-    return filtered;
-  }
-
-  int _calculateEngagementScore(NoteModel note) {
-    return note.reactionCount + note.replyCount + note.repostCount + (note.zapAmount ~/ 1000);
-  }
-
-  @override
-  void dispose() {
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
-    _dataService.closeConnections();
-    super.dispose();
+    
+    if (mounted) {
+      setState(() {
+        _filteredNotes = filtered;
+        _currentPage = 0;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isInitializing || _currentUserNpub == null) {
-      return SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 40),
-          child: Center(
-            child: Text(
-              'Loading...',
-              style: TextStyle(
-                color: context.colors.textSecondary,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-        ),
+      return const SliverToBoxAdapter(
+        child: Center(child: Padding(padding: EdgeInsets.all(40.0), child: Text("Loading..."))),
       );
     }
 
-    return ValueListenableBuilder<List<NoteModel>>(
-      valueListenable: _dataService.notesNotifier,
-      builder: (context, notes, child) {
-        if (notes.isEmpty) {
-          return SliverToBoxAdapter(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  'No notes available yet.',
-                  style: TextStyle(
-                    color: context.colors.textSecondary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
+    if (_filteredNotes.isEmpty) {
+      return const SliverToBoxAdapter(
+        child: Center(child: Padding(padding: EdgeInsets.all(24.0), child: Text('No notes found.'))),
+      );
+    }
+
+    final totalItems = _filteredNotes.length;
+    final visibleItems = (_currentPage + 1) * _itemsPerPage;
+    final itemsToShow = visibleItems > totalItems ? totalItems : visibleItems;
+
+    return SliverList.separated(
+      itemCount: itemsToShow + (_isLoadingMore ? 1 : 0),
+      separatorBuilder: (context, index) => Container(
+        margin: const EdgeInsets.symmetric(vertical: 10),
+        height: 1,
+        width: double.infinity,
+        color: context.colors.surfaceTransparent,
+      ),
+      itemBuilder: (context, index) {
+        if (index >= itemsToShow) {
+          return const Center(
+            child: Padding(
+              padding: EdgeInsets.all(16.0),
+              child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
             ),
           );
         }
 
-        final filteredNotes = _getFilteredNotes(notes);
-
-        if (filteredNotes.isEmpty) {
-          return SliverToBoxAdapter(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  'No notes match the current filter.',
-                  style: TextStyle(
-                    color: context.colors.textSecondary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ),
-          );
-        }
-
-        final totalItems = filteredNotes.length;
-        final visibleItems = (_currentPage + 1) * _itemsPerPage;
-        final itemsToShow = visibleItems > totalItems ? totalItems : visibleItems;
-        final displayNotes = filteredNotes.take(itemsToShow).toList();
-
-        return SliverList(
-          delegate: SliverChildBuilderDelegate(
-            (context, index) {
-              if (index == displayNotes.length) {
-                if (_isLoadingMore) {
-                  return Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Center(
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(context.colors.textTertiary),
-                        ),
-                      ),
-                    ),
-                  );
-                }
-                return null;
-              }
-
-              final note = displayNotes[index];
-
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  LazyNoteWidget(
-                    key: ValueKey(note.id),
-                    note: note,
-                    dataService: _dataService,
-                    currentUserNpub: _currentUserNpub!,
-                    notesNotifier: _dataService.notesNotifier,
-                    profiles: _dataService.profilesNotifier.value,
-                    isSmallView: true,
-                  ),
-                  if (index < displayNotes.length - 1)
-                    Container(
-                      margin: const EdgeInsets.symmetric(vertical: 10),
-                      height: 1,
-                      width: double.infinity,
-                      color: context.colors.surfaceTransparent,
-                    ),
-                ],
-              );
-            },
-            childCount: displayNotes.length + (_isLoadingMore ? 1 : 0),
-          ),
+        final note = _filteredNotes[index];
+        return NoteWidget(
+          key: ValueKey(note.id),
+          note: note,
+          reactionCount: note.reactionCount,
+          replyCount: note.replyCount,
+          repostCount: note.repostCount,
+          dataService: _dataService,
+          currentUserNpub: _currentUserNpub!,
+          notesNotifier: _dataService.notesNotifier,
+          profiles: _dataService.profilesNotifier.value,
+          isSmallView: true,
         );
       },
     );
   }
+}
 
+List<NoteModel> _filterAndSortPopular(List<NoteModel> notes) {
+  final cutoffTime = DateTime.now().subtract(const Duration(hours: 24));
+  final filtered = notes.where((n) => n.timestamp.isAfter(cutoffTime) && (!n.isReply || n.isRepost)).toList();
+
+  int calculateEngagementScore(NoteModel note) {
+    return note.reactionCount + note.replyCount + note.repostCount + (note.zapAmount ~/ 1000);
+  }
+
+  filtered.sort((a, b) => calculateEngagementScore(b).compareTo(calculateEngagementScore(a)));
+  return filtered;
 }

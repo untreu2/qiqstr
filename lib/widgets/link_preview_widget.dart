@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../theme/theme_manager.dart';
 import 'package:http/http.dart' as http;
@@ -7,6 +8,27 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:palette_generator/palette_generator.dart';
 
 import '../models/link_preview_model.dart';
+
+Future<LinkPreviewModel?> _fetchAndParseLink(String url) async {
+  try {
+    final response = await http.get(Uri.parse(url));
+    if (response.statusCode == 200) {
+      final document = html_parser.parse(response.body);
+      final metaOgTitle = document.querySelector('meta[property="og:title"]');
+      final metaTitle = document.querySelector('title');
+      final metaOgImage = document.querySelector('meta[property="og:image"]');
+
+      final String parsedTitle =
+          metaOgTitle?.attributes['content'] ?? metaTitle?.text ?? url;
+      final String? parsedImage = metaOgImage?.attributes['content'];
+
+      return LinkPreviewModel(title: parsedTitle, imageUrl: parsedImage);
+    }
+  } catch (e) {
+    // Don't print errors in production
+  }
+  return null;
+}
 
 class LinkPreviewWidget extends StatefulWidget {
   final String url;
@@ -48,32 +70,19 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
 
   Future<void> _fetchPreviewData() async {
     try {
-      final response = await http.get(Uri.parse(widget.url));
-      if (response.statusCode == 200) {
-        final document = html_parser.parse(response.body);
-        final metaOgTitle = document.querySelector('meta[property="og:title"]');
-        final metaTitle = document.querySelector('title');
-        final metaOgImage = document.querySelector('meta[property="og:image"]');
+      final model = await compute(_fetchAndParseLink, widget.url);
 
-        final String parsedTitle =
-            metaOgTitle?.attributes['content'] ?? metaTitle?.text ?? widget.url;
-        final String? parsedImage = metaOgImage?.attributes['content'];
+      if (!mounted) return;
 
-        if (!mounted) return;
-
-        final model =
-            LinkPreviewModel(title: parsedTitle, imageUrl: parsedImage);
+      if (model != null) {
         _cacheBox.put(widget.url, model);
-
         setState(() {
-          _title = parsedTitle;
-          _imageUrl = parsedImage;
+          _title = model.title;
+          _imageUrl = model.imageUrl;
           _isLoading = false;
         });
-
         _updateDominantColor();
       } else {
-        if (!mounted) return;
         setState(() => _isLoading = false);
       }
     } catch (e) {

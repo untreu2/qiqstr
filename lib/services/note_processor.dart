@@ -141,6 +141,14 @@ class NoteProcessor {
     dataService.parseContentForNote(newNote);
 
     if (!dataService.eventIds.contains(newNote.id)) {
+      final List<String> authorsToFetch = [noteAuthor];
+      if (isOuterEventRepost) {
+        authorsToFetch.add(outerEventAuthor);
+      }
+      await Future.wait(authorsToFetch
+          .toSet()
+          .map((pubkey) => dataService.getCachedUserProfile(pubkey)));
+
       dataService.notes.add(newNote);
       dataService.eventIds.add(newNote.id);
       if (dataService.notesBox != null && dataService.notesBox!.isOpen) {
@@ -150,12 +158,6 @@ class NoteProcessor {
       dataService.addNote(newNote);
 
       dataService.onNewNote?.call(newNote);
-
-      final List<String> authorsToFetch = [noteAuthor];
-      if (isOuterEventRepost) {
-        authorsToFetch.add(outerEventAuthor);
-      }
-      await dataService.fetchProfilesBatch(authorsToFetch.toSet().toList());
     }
 
     Future.microtask(() async {

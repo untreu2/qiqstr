@@ -297,165 +297,155 @@ class _NoteWidgetState extends State<NoteWidget>
   Widget build(BuildContext context) {
     super.build(context);
     final colors = context.colors;
-    
-    return ValueListenableBuilder<List<NoteModel>>(
-      valueListenable: widget.notesNotifier,
-      builder: (context, notes, _) {
-        final index = notes.indexWhere((n) => n.id == widget.note.id);
-        if (index == -1) return const SizedBox.shrink();
-        final updatedNote = notes[index];
 
-        widget.dataService.parseContentForNote(updatedNote);
-        final parsed = updatedNote.parsedContent!;
+    widget.dataService.parseContentForNote(widget.note);
+    final parsed = widget.note.parsedContent!;
+    final authorUser = widget.profiles[widget.note.author];
 
-        final authorUser = widget.profiles[updatedNote.author];
-
-        return GestureDetector(
-          onDoubleTapDown: (_) => _handleReactionTap(),
-          onTap: () => _navigateToThreadPage(updatedNote),
-          child: Container(
-            color: widget.containerColor ?? colors.background,
-            padding: const EdgeInsets.only(bottom: 2),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (updatedNote.isRepost && updatedNote.repostedBy != null) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: _buildRepostInfo(
-                        updatedNote.repostedBy!, updatedNote.repostTimestamp),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      GestureDetector(
-                        onTap: () => _navigateToProfile(updatedNote.author),
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 8),
-                          child: Stack(
-                            children: [
-                              CircleAvatar(
-                                radius: 21,
-                                backgroundImage:
-                                    (authorUser?.profileImage ?? '').isNotEmpty
-                                        ? CachedNetworkImageProvider(
-                                            authorUser!.profileImage)
-                                        : null,
-                                backgroundColor:
-                                    (authorUser?.profileImage ?? '').isEmpty
-                                        ? colors.avatarBackground
-                                        : colors.surfaceTransparent,
-                                child: (authorUser?.profileImage ?? '').isEmpty
-                                    ? Icon(Icons.person,
-                                        size: 23, color: colors.iconPrimary)
+    return GestureDetector(
+      onDoubleTapDown: (_) => _handleReactionTap(),
+      onTap: () => _navigateToThreadPage(widget.note),
+      child: Container(
+        color: widget.containerColor ?? colors.background,
+        padding: const EdgeInsets.only(bottom: 2),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.note.isRepost && widget.note.repostedBy != null) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: _buildRepostInfo(
+                    widget.note.repostedBy!, widget.note.repostTimestamp),
+              ),
+              const SizedBox(height: 8),
+            ],
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GestureDetector(
+                    onTap: () => _navigateToProfile(widget.note.author),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Stack(
+                        children: [
+                          CircleAvatar(
+                            radius: 21,
+                            backgroundImage:
+                                (authorUser?.profileImage ?? '').isNotEmpty
+                                    ? CachedNetworkImageProvider(
+                                        authorUser!.profileImage)
                                     : null,
-                              ),
-                              if (updatedNote.isReply)
-                                Positioned(
-                                  top: 0,
-                                  left: 0,
-                                  child: Container(
-                                    width: 14,
-                                    height: 14,
-                                    decoration: BoxDecoration(
-                                      color: colors.secondary,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      Icons.reply,
-                                      size: 10,
-                                      color: colors.iconPrimary,
-                                    ),
-                                  ),
-                                ),
-                            ],
+                            backgroundColor:
+                                (authorUser?.profileImage ?? '').isEmpty
+                                    ? colors.avatarBackground
+                                    : colors.surfaceTransparent,
+                            child: (authorUser?.profileImage ?? '').isEmpty
+                                ? Icon(Icons.person,
+                                    size: 23, color: colors.iconPrimary)
+                                : null,
                           ),
-                        ),
+                          if (widget.note.isReply)
+                            Positioned(
+                              top: 0,
+                              left: 0,
+                              child: Container(
+                                width: 14,
+                                height: 14,
+                                decoration: BoxDecoration(
+                                  color: colors.secondary,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.reply,
+                                  size: 10,
+                                  color: colors.iconPrimary,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Row(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          (authorUser?.name ?? 'Unknown')
-                                                      .length >
-                                                  25
-                                              ? (authorUser?.name ?? 'Unknown')
-                                                  .substring(0, 25)
-                                              : (authorUser?.name ?? 'Unknown'),
-                                          style: TextStyle(
-                                            fontSize: 14.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: colors.textPrimary,
-                                            height: 0.1,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
+                            Expanded(
+                              child: Row(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.center,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      (authorUser?.name ?? 'Unknown')
+                                                  .length >
+                                              25
+                                          ? (authorUser?.name ?? 'Unknown')
+                                              .substring(0, 25)
+                                          : (authorUser?.name ?? 'Unknown'),
+                                      style: TextStyle(
+                                        fontSize: 14.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: colors.textPrimary,
+                                        height: 0.1,
                                       ),
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 6),
-                                        child: Text('• $_formattedTimestamp',
-                                            style: TextStyle(
-                                                fontSize: 12,
-                                                color: colors.secondary)),
-                                      ),
-                                    ],
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            _buildNoteContent(context, parsed, updatedNote),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: InteractionBar(
-                                    reactionCount: updatedNote.reactionCount,
-                                    replyCount: updatedNote.replyCount,
-                                    repostCount: updatedNote.repostCount,
-                                    zapAmount: updatedNote.zapAmount,
-                                    isReactionGlowing: _isReactionGlowing,
-                                    isReplyGlowing: _isReplyGlowing,
-                                    isRepostGlowing: _isRepostGlowing,
-                                    isZapGlowing: _isZapGlowing,
-                                    hasReacted: _hasReacted(),
-                                    hasReplied: _hasReplied(),
-                                    hasReposted: _hasReposted(),
-                                    hasZapped: _hasZapped(),
-                                    onReactionTap: _handleReactionTap,
-                                    onReplyTap: _handleReplyTap,
-                                    onRepostTap: _handleRepostTap,
-                                    onZapTap: _handleZapTap,
-                                    onStatisticsTap: _navigateToStatisticsPage,
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 6),
+                                    child: Text('• $_formattedTimestamp',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: colors.secondary)),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ],
                         ),
-                      ),
-                    ],
+                        _buildNoteContent(context, parsed, widget.note),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: InteractionBar(
+                                reactionCount: widget.note.reactionCount,
+                                replyCount: widget.note.replyCount,
+                                repostCount: widget.note.repostCount,
+                                zapAmount: widget.note.zapAmount,
+                                isReactionGlowing: _isReactionGlowing,
+                                isReplyGlowing: _isReplyGlowing,
+                                isRepostGlowing: _isRepostGlowing,
+                                isZapGlowing: _isZapGlowing,
+                                hasReacted: _hasReacted(),
+                                hasReplied: _hasReplied(),
+                                hasReposted: _hasReposted(),
+                                hasZapped: _hasZapped(),
+                                onReactionTap: _handleReactionTap,
+                                onReplyTap: _handleReplyTap,
+                                onRepostTap: _handleRepostTap,
+                                onZapTap: _handleZapTap,
+                                onStatisticsTap: _navigateToStatisticsPage,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
   }
 }
