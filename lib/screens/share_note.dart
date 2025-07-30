@@ -15,7 +15,6 @@ class ShareNotePage extends StatefulWidget {
   final DataService dataService;
   final String? initialText;
   final String? replyToNoteId;
-//
   const ShareNotePage({
     super.key,
     required this.dataService,
@@ -33,7 +32,10 @@ class _ShareNotePageState extends State<ShareNotePage> {
   bool _isPosting = false;
   bool _isMediaUploading = false;
   final List<String> _mediaUrls = [];
-  final String _serverUrl = "https://blossom.primal.net";
+  static const String _serverUrl = "https://blossom.primal.net";
+  static const int _maxMediaFiles = 10;
+  static const int _maxNoteLength = 2000;
+  static const int _maxUserSuggestions = 5;
   UserModel? _user;
   List<UserModel> _allUsers = [];
   List<UserModel> _filteredUsers = [];
@@ -56,61 +58,85 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Future<void> _initializeText() async {
-    String initialText = (widget.initialText != null && widget.initialText!.startsWith('nostr:')) ? '' : widget.initialText ?? '';
+    try {
+      String initialText = (widget.initialText != null && widget.initialText!.startsWith('nostr:')) ? '' : widget.initialText ?? '';
 
-    final mentionRegex = RegExp(r'nostr:(npub1[0-9a-z]+)');
-    final matches = mentionRegex.allMatches(initialText);
+      final mentionRegex = RegExp(r'nostr:(npub1[0-9a-z]+)');
+      final matches = mentionRegex.allMatches(initialText);
 
-    if (matches.isEmpty) {
+      if (matches.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _noteController.text = initialText;
+            _updateRichText();
+          });
+        }
+        return;
+      }
+
+      final npubs = matches.map((m) => m.group(1)!).toList();
+      final resolvedNames = await widget.dataService.resolveMentions(npubs);
+
+      String newText = initialText;
+      for (var match in matches.toList().reversed) {
+        final npub = match.group(1)!;
+        final username = (resolvedNames[npub] ?? npub.substring(0, 10)).replaceAll(' ', '_');
+        final mentionKey = '@$username';
+        _mentionMap[mentionKey] = 'nostr:$npub';
+        newText = newText.replaceRange(match.start, match.end, mentionKey);
+      }
+
       if (mounted) {
         setState(() {
-          _noteController.text = initialText;
+          _noteController.text = newText;
           _updateRichText();
         });
       }
-      return;
-    }
-
-    final npubs = matches.map((m) => m.group(1)!).toList();
-    final resolvedNames = await widget.dataService.resolveMentions(npubs);
-
-    String newText = initialText;
-    for (var match in matches.toList().reversed) {
-      final npub = match.group(1)!;
-      final username = (resolvedNames[npub] ?? npub.substring(0, 10)).replaceAll(' ', '_');
-      final mentionKey = '@$username';
-      _mentionMap[mentionKey] = 'nostr:$npub';
-      newText = newText.replaceRange(match.start, match.end, mentionKey);
-    }
-
-    if (mounted) {
-      setState(() {
-        _noteController.text = newText;
-        _updateRichText();
-      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error initializing text: ${e.toString()}')),
+        );
+      }
     }
   }
 
   Future<void> _loadUsers() async {
-    final box = await Hive.openBox<UserModel>('users');
-    if (mounted) {
-      setState(() {
-        _allUsers = box.values.toList();
-      });
+    try {
+      final box = await Hive.openBox<UserModel>('users');
+      if (mounted) {
+        setState(() {
+          _allUsers = box.values.toList();
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading users: ${e.toString()}')),
+        );
+      }
     }
   }
 
   Future<void> _loadProfile() async {
-    const storage = FlutterSecureStorage();
-    final npub = await storage.read(key: 'npub');
-    if (npub == null) return;
+    try {
+      const storage = FlutterSecureStorage();
+      final npub = await storage.read(key: 'npub');
+      if (npub == null || npub.isEmpty) return;
 
-    final profileData = await widget.dataService.getCachedUserProfile(npub);
+      final profileData = await widget.dataService.getCachedUserProfile(npub);
 
-    if (!mounted) return;
-    setState(() {
-      _user = UserModel.fromCachedProfile(npub, profileData);
-    });
+      if (!mounted) return;
+      setState(() {
+        _user = UserModel.fromCachedProfile(npub, profileData);
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading profile: ${e.toString()}')),
+        );
+      }
+    }
   }
 
   @override
@@ -122,31 +148,71 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Future<void> _selectMedia() async {
-    final result = await FilePicker.platform.pickFiles(
-      allowMultiple: true,
-      type: FileType.media,
-    );
+    if (_isMediaUploading) return;
 
-    if (result != null && result.files.isNotEmpty) {
-      setState(() {
-        _isMediaUploading = true;
-      });
-      try {
-        for (var file in result.files) {
-          if (file.path != null) {
-            final url = await widget.dataService.sendMedia(file.path!, _serverUrl);
+    if (_mediaUrls.length >= _maxMediaFiles) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Maximum $_maxMediaFiles media files allowed')),
+      );
+      return;
+    }
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.media,
+        allowedExtensions: null,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        final remainingSlots = _maxMediaFiles - _mediaUrls.length;
+        final filesToProcess = result.files.take(remainingSlots).toList();
+
+        if (result.files.length > remainingSlots) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Only $remainingSlots more files can be added')),
+          );
+        }
+
+        if (!mounted) return;
+        setState(() {
+          _isMediaUploading = true;
+        });
+
+        for (var file in filesToProcess) {
+          if (file.path != null && file.size <= 50 * 1024 * 1024) {
+            // 50MB limit
+            try {
+              final url = await widget.dataService.sendMedia(file.path!, _serverUrl);
+              if (mounted) {
+                setState(() {
+                  _mediaUrls.add(url);
+                });
+              }
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error uploading ${file.name}: ${e.toString()}')),
+                );
+              }
+            }
+          } else if (file.size > 50 * 1024 * 1024) {
             if (mounted) {
-              setState(() {
-                _mediaUrls.add(url);
-              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('${file.name} is too large (max 50MB)')),
+              );
             }
           }
         }
-      } catch (e) {
+      }
+    } catch (e) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error uploading media: $e')),
+          SnackBar(content: Text('Error selecting media: ${e.toString()}')),
         );
-      } finally {
+      }
+    } finally {
+      if (mounted) {
         setState(() {
           _isMediaUploading = false;
         });
@@ -159,19 +225,29 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
     final hasQuote = widget.initialText != null && widget.initialText!.startsWith('nostr:');
 
-    String noteText = _noteController.text;
-    _mentionMap.forEach((key, value) {
-      noteText = noteText.replaceAll(key, value);
-    });
-    noteText = noteText.trim();
+    String noteText = _noteController.text.trim();
 
-    if (noteText.isEmpty && _mediaUrls.isEmpty && !hasQuote) {
+    // Validate note length
+    if (noteText.length > _maxNoteLength) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a note')),
+        SnackBar(content: Text('Note is too long (max $_maxNoteLength characters)')),
       );
       return;
     }
 
+    // Replace mentions
+    _mentionMap.forEach((key, value) {
+      noteText = noteText.replaceAll(key, value);
+    });
+
+    if (noteText.isEmpty && _mediaUrls.isEmpty && !hasQuote) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a note or add media')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
     setState(() {
       _isPosting = true;
     });
@@ -181,16 +257,27 @@ class _ShareNotePageState extends State<ShareNotePage> {
       final quotePart = hasQuote ? "\n\n${widget.initialText}" : "";
       final finalNoteContent = "$noteText$mediaPart$quotePart".trim();
 
-      if (widget.replyToNoteId != null) {
+      if (widget.replyToNoteId != null && widget.replyToNoteId!.isNotEmpty) {
         await widget.dataService.sendReply(widget.replyToNoteId!, finalNoteContent);
       } else {
         await widget.dataService.shareNote(finalNoteContent);
       }
-      Navigator.of(context).pop();
+
+      if (mounted) {
+        Navigator.of(context).pop(true); // Return true to indicate success
+      }
     } catch (error) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sharing note: $error')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error sharing note: ${error.toString()}'),
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: _shareNote,
+            ),
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -256,58 +343,86 @@ class _ShareNotePageState extends State<ShareNotePage> {
     if (_userSearchQuery.isEmpty) {
       if (mounted) {
         setState(() {
-          _filteredUsers = _allUsers.take(5).toList();
+          _filteredUsers = _allUsers.take(_maxUserSuggestions).toList();
         });
       }
       return;
     }
 
-    final query = _userSearchQuery.toLowerCase();
+    final query = _userSearchQuery.toLowerCase().trim();
+    if (query.isEmpty) return;
+
     final filtered = _allUsers.where((user) {
-      return user.name.toLowerCase().contains(query) || user.nip05.toLowerCase().contains(query);
+      final name = user.name.toLowerCase();
+      final nip05 = user.nip05.toLowerCase();
+      return name.contains(query) || nip05.contains(query);
     }).toList();
 
-    filtered.sort((a, b) => a.name.toLowerCase().indexOf(query).compareTo(b.name.toLowerCase().indexOf(query)));
+    // Sort by relevance: exact matches first, then starts with, then contains
+    filtered.sort((a, b) {
+      final aName = a.name.toLowerCase();
+      final bName = b.name.toLowerCase();
+
+      final aExact = aName == query ? 0 : 1;
+      final bExact = bName == query ? 0 : 1;
+      if (aExact != bExact) return aExact.compareTo(bExact);
+
+      final aStarts = aName.startsWith(query) ? 0 : 1;
+      final bStarts = bName.startsWith(query) ? 0 : 1;
+      if (aStarts != bStarts) return aStarts.compareTo(bStarts);
+
+      final aIndex = aName.indexOf(query);
+      final bIndex = bName.indexOf(query);
+      return aIndex.compareTo(bIndex);
+    });
 
     if (mounted) {
       setState(() {
-        _filteredUsers = filtered.take(5).toList();
+        _filteredUsers = filtered.take(_maxUserSuggestions).toList();
       });
     }
   }
 
   void _onUserSelected(UserModel user) {
-    final text = _noteController.text;
-    final selection = _noteController.selection;
-    final cursorPos = selection.baseOffset;
+    try {
+      final text = _noteController.text;
+      final selection = _noteController.selection;
+      final cursorPos = selection.baseOffset;
 
-    if (cursorPos == -1) return;
+      if (cursorPos == -1) return;
 
-    final textBeforeCursor = text.substring(0, cursorPos);
-    final atIndex = textBeforeCursor.lastIndexOf('@');
+      final textBeforeCursor = text.substring(0, cursorPos);
+      final atIndex = textBeforeCursor.lastIndexOf('@');
 
-    if (atIndex == -1) return;
+      if (atIndex == -1) return;
 
-    final username = user.name.replaceAll(' ', '_');
-    final mentionKey = '@$username';
-    final npubBech32 = encodeBasicBech32(user.npub, 'npub');
-    _mentionMap[mentionKey] = 'nostr:$npubBech32';
+      final username = user.name.replaceAll(RegExp(r'\s+'), '_');
+      final mentionKey = '@$username';
+      final npubBech32 = encodeBasicBech32(user.npub, 'npub');
+      _mentionMap[mentionKey] = 'nostr:$npubBech32';
 
-    final textAfterCursor = text.substring(cursorPos);
-    final newText = '${text.substring(0, atIndex)}$mentionKey $textAfterCursor';
+      final textAfterCursor = text.substring(cursorPos);
+      final newText = '${text.substring(0, atIndex)}$mentionKey $textAfterCursor';
 
-    final newCursorPos = atIndex + mentionKey.length + 1;
+      final newCursorPos = atIndex + mentionKey.length + 1;
 
-    if (mounted) {
-      _noteController.value = TextEditingValue(
-        text: newText,
-        selection: TextSelection.fromPosition(TextPosition(offset: newCursorPos)),
-      );
+      if (mounted) {
+        _noteController.value = TextEditingValue(
+          text: newText,
+          selection: TextSelection.fromPosition(TextPosition(offset: newCursorPos)),
+        );
 
-      setState(() {
-        _isSearchingUsers = false;
-        _filteredUsers = [];
-      });
+        setState(() {
+          _isSearchingUsers = false;
+          _filteredUsers = [];
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error selecting user: ${e.toString()}')),
+        );
+      }
     }
   }
 
@@ -316,62 +431,78 @@ class _ShareNotePageState extends State<ShareNotePage> {
     final spans = <InlineSpan>[];
     var lastEnd = 0;
 
-    final mentionKeys = _mentionMap.keys.map((e) => RegExp.escape(e)).join('|');
+    try {
+      final mentionKeys = _mentionMap.keys.map((e) => RegExp.escape(e)).join('|');
 
-    final pattern = [if (mentionKeys.isNotEmpty) '($mentionKeys)', r'(https?:\/\/[^\s]+)', r'(#\w+)'].where((p) => p.isNotEmpty).join('|');
+      final patterns = <String>[];
+      if (mentionKeys.isNotEmpty) patterns.add('($mentionKeys)');
+      patterns.addAll([r'(https?:\/\/[^\s]+)', r'(#\w+)']);
 
-    if (pattern.isEmpty) {
-      spans.add(TextSpan(text: text));
-    } else {
-      final regex = RegExp(pattern, caseSensitive: false);
-      final matches = regex.allMatches(text);
+      final pattern = patterns.join('|');
 
-      for (final match in matches) {
-        if (match.start > lastEnd) {
-          spans.add(TextSpan(text: text.substring(lastEnd, match.start)));
-        }
+      if (pattern.isEmpty || text.isEmpty) {
+        spans.add(TextSpan(text: text));
+      } else {
+        final regex = RegExp(pattern, caseSensitive: false);
+        final matches = regex.allMatches(text);
 
-        final matchedText = match.group(0)!;
-        if (_mentionMap.containsKey(matchedText)) {
-          spans.add(
-            TextSpan(
-              text: matchedText,
-              style: TextStyle(
-                color: context.colors.accent,
-                fontWeight: FontWeight.w500,
+        for (final match in matches) {
+          if (match.start > lastEnd) {
+            spans.add(TextSpan(text: text.substring(lastEnd, match.start)));
+          }
+
+          final matchedText = match.group(0)!;
+          if (_mentionMap.containsKey(matchedText)) {
+            spans.add(
+              TextSpan(
+                text: matchedText,
+                style: TextStyle(
+                  color: context.colors.accent,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-          );
-        } else if (matchedText.startsWith('http')) {
-          spans.add(
-            TextSpan(
-              text: matchedText,
-              style: TextStyle(color: context.colors.accent),
-            ),
-          );
-        } else if (matchedText.startsWith('#')) {
-          spans.add(
-            TextSpan(
-              text: matchedText,
-              style: TextStyle(color: context.colors.accent),
-            ),
-          );
+            );
+          } else if (matchedText.startsWith('http')) {
+            spans.add(
+              TextSpan(
+                text: matchedText,
+                style: TextStyle(color: context.colors.accent),
+              ),
+            );
+          } else if (matchedText.startsWith('#')) {
+            spans.add(
+              TextSpan(
+                text: matchedText,
+                style: TextStyle(color: context.colors.accent),
+              ),
+            );
+          }
+          lastEnd = match.end;
         }
-        lastEnd = match.end;
+
+        if (lastEnd < text.length) {
+          spans.add(TextSpan(text: text.substring(lastEnd)));
+        }
       }
 
-      if (lastEnd < text.length) {
-        spans.add(TextSpan(text: text.substring(lastEnd)));
+      if (mounted) {
+        setState(() {
+          _richTextSpan = TextSpan(
+            children: spans,
+            style: TextStyle(color: context.colors.textPrimary, fontSize: 15),
+          );
+        });
       }
-    }
-
-    if (mounted) {
-      setState(() {
-        _richTextSpan = TextSpan(
-          children: spans,
-          style: TextStyle(color: context.colors.textPrimary, fontSize: 15),
-        );
-      });
+    } catch (e) {
+      // Fallback to plain text if regex fails
+      if (mounted) {
+        setState(() {
+          _richTextSpan = TextSpan(
+            text: text,
+            style: TextStyle(color: context.colors.textPrimary, fontSize: 15),
+          );
+        });
+      }
     }
   }
 
@@ -642,37 +773,43 @@ class _ShareNotePageState extends State<ShareNotePage> {
   Widget _buildUserSuggestions() {
     if (_filteredUsers.isEmpty) return const SizedBox.shrink();
 
-    return Material(
-      elevation: 4.0,
-      borderRadius: const BorderRadius.only(
-        topLeft: Radius.circular(12),
-        topRight: Radius.circular(12),
-      ),
-      color: context.colors.surface,
-      child: Container(
-        constraints: const BoxConstraints(maxHeight: 200),
-        child: ListView.builder(
-          padding: EdgeInsets.zero,
-          shrinkWrap: true,
-          itemCount: _filteredUsers.length,
-          itemBuilder: (context, index) {
-            final user = _filteredUsers[index];
-            return ListTile(
-              leading: CircleAvatar(
-                radius: 20,
-                backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
-                backgroundColor: Colors.grey.shade800,
-              ),
-              title: Text(user.name, style: TextStyle(color: context.colors.textPrimary)),
-              subtitle: Text(
-                user.nip05,
-                style: TextStyle(color: context.colors.textSecondary),
-              ),
-              onTap: () => _onUserSelected(user),
-            );
-          },
+    return Column(
+      children: [
+        Material(
+          elevation: 4.0,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(12),
+            topRight: Radius.circular(12),
+          ),
+          color: context.colors.surface,
+          child: Container(
+            constraints: const BoxConstraints(maxHeight: 200),
+            child: ListView.builder(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              itemCount: _filteredUsers.length,
+              itemBuilder: (context, index) {
+                final user = _filteredUsers[index];
+                return ListTile(
+                  leading: CircleAvatar(
+                    radius: 20,
+                    backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
+                    backgroundColor: context.colors.surfaceTransparent,
+                    child: user.profileImage.isEmpty ? Icon(Icons.person, color: context.colors.textPrimary, size: 20) : null,
+                  ),
+                  title: Text(user.name, style: TextStyle(color: context.colors.textPrimary)),
+                  subtitle: Text(
+                    user.nip05,
+                    style: TextStyle(color: context.colors.textSecondary),
+                  ),
+                  onTap: () => _onUserSelected(user),
+                );
+              },
+            ),
+          ),
         ),
-      ),
+        const SizedBox(height: 24),
+      ],
     );
   }
 }
