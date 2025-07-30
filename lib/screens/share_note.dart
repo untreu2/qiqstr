@@ -283,10 +283,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
         TextSpan(
           text: '@$username',
           style: TextStyle(color: context.colors.accent),
-          recognizer: TapGestureRecognizer()
-            ..onTap = () {
-              // maybe navigate to profile or show info
-            },
+          recognizer: TapGestureRecognizer()..onTap = () {},
         ),
       );
       lastEnd = match.end;
@@ -308,6 +305,9 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   @override
   Widget build(BuildContext context) {
+    final textStyle = TextStyle(fontSize: 15, height: 1.4);
+    final strutStyle = StrutStyle(fontSize: 15, height: 1.4);
+
     return Scaffold(
       backgroundColor: context.colors.background,
       body: Stack(
@@ -453,7 +453,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
                               dataService: widget.dataService,
                             ),
                           Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               CircleAvatar(
                                 radius: 20,
@@ -465,17 +465,21 @@ class _ShareNotePageState extends State<ShareNotePage> {
                               Expanded(
                                 child: Stack(
                                   children: [
-                                    RichText(text: _richTextSpan),
+                                    RichText(
+                                      text: _richTextSpan,
+                                      strutStyle: strutStyle,
+                                    ),
                                     TextField(
                                       focusNode: _focusNode,
                                       controller: _noteController,
                                       maxLines: null,
                                       textAlignVertical: TextAlignVertical.top,
-                                      style: const TextStyle(color: Colors.transparent, fontSize: 15),
+                                      style: textStyle.copyWith(color: Colors.transparent),
                                       cursorColor: context.colors.textPrimary,
+                                      strutStyle: strutStyle,
                                       decoration: InputDecoration(
                                         hintText: _noteController.text.isEmpty ? "What's on your mind?" : "",
-                                        hintStyle: TextStyle(color: context.colors.textSecondary, fontSize: 15),
+                                        hintStyle: textStyle.copyWith(color: context.colors.textSecondary),
                                         border: InputBorder.none,
                                         contentPadding: EdgeInsets.zero,
                                         isCollapsed: true,
