@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:nostr/nostr.dart';
@@ -12,11 +13,79 @@ import 'nostr_service.dart';
 class NetworkService {
   final WebSocketManager _socketManager;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-  
+
   bool _isClosed = false;
 
-  NetworkService({required List<String> relayUrls}) 
-      : _socketManager = WebSocketManager(relayUrls: relayUrls);
+  // Connection pooling and management
+  final Map<String, http.Client> _httpClients = {};
+  final Map<String, DateTime> _clientLastUsed = {};
+  Timer? _clientCleanupTimer;
+
+  // Request batching and throttling
+  final Map<String, Timer> _requestTimers = {};
+
+  // Performance metrics
+  int _totalRequests = 0;
+  int _successfulRequests = 0;
+  int _failedRequests = 0;
+  final List<Duration> _requestTimes = [];
+
+  // Rate limiting
+  final Map<String, List<DateTime>> _requestHistory = {};
+  static const int _maxRequestsPerMinute = 60;
+
+  NetworkService({required List<String> relayUrls}) : _socketManager = WebSocketManager(relayUrls: relayUrls) {
+    _startClientManagement();
+  }
+
+  void _startClientManagement() {
+    _clientCleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      _cleanupIdleClients();
+    });
+  }
+
+  void _cleanupIdleClients() {
+    final now = DateTime.now();
+    final keysToRemove = <String>[];
+
+    for (final entry in _clientLastUsed.entries) {
+      if (now.difference(entry.value) > const Duration(minutes: 10)) {
+        keysToRemove.add(entry.key);
+      }
+    }
+
+    for (final key in keysToRemove) {
+      _httpClients[key]?.close();
+      _httpClients.remove(key);
+      _clientLastUsed.remove(key);
+    }
+  }
+
+  http.Client _getHttpClient(String baseUrl) {
+    _clientLastUsed[baseUrl] = DateTime.now();
+
+    if (!_httpClients.containsKey(baseUrl)) {
+      _httpClients[baseUrl] = http.Client();
+    }
+
+    return _httpClients[baseUrl]!;
+  }
+
+  bool _isRateLimited(String endpoint) {
+    final now = DateTime.now();
+    final history = _requestHistory[endpoint] ?? [];
+
+    // Remove requests older than 1 minute
+    history.removeWhere((time) => now.difference(time) > const Duration(minutes: 1));
+    _requestHistory[endpoint] = history;
+
+    return history.length >= _maxRequestsPerMinute;
+  }
+
+  void _recordRequest(String endpoint) {
+    _requestHistory.putIfAbsent(endpoint, () => []);
+    _requestHistory[endpoint]!.add(DateTime.now());
+  }
 
   Future<void> initializeConnections(List<String> targetNpubs) async {
     await _socketManager.connectRelays(
@@ -32,23 +101,53 @@ class NetworkService {
   }
 
   Future<void> broadcastRequest(String serializedRequest) async {
-    await _socketManager.broadcast(serializedRequest);
+    final stopwatch = Stopwatch()..start();
+    _totalRequests++;
+
+    try {
+      await _socketManager.broadcast(serializedRequest);
+      _successfulRequests++;
+    } catch (e) {
+      _failedRequests++;
+      rethrow;
+    } finally {
+      stopwatch.stop();
+      _requestTimes.add(stopwatch.elapsed);
+
+      // Keep only recent measurements
+      if (_requestTimes.length > 100) {
+        _requestTimes.removeAt(0);
+      }
+    }
   }
 
   Future<void> safeBroadcast(String message) async {
     try {
-      await _socketManager.broadcast(message);
+      await broadcastRequest(message);
     } catch (e) {
       print('[NetworkService ERROR] Broadcast failed: $e');
     }
   }
 
-  String createRequest(String filterJson) =>
-      NostrService.serializeRequest(NostrService.createRequest(NostrService.createNotesFilter()));
+  // Batched broadcast for multiple messages
+  Future<void> batchBroadcast(List<String> messages, {Duration delay = const Duration(milliseconds: 10)}) async {
+    if (messages.isEmpty) return;
+
+    for (int i = 0; i < messages.length; i++) {
+      await safeBroadcast(messages[i]);
+
+      // Add delay between messages to prevent overwhelming
+      if (i < messages.length - 1 && delay.inMilliseconds > 0) {
+        await Future.delayed(delay);
+      }
+    }
+  }
+
+  String createRequest(String filterJson) => NostrService.serializeRequest(NostrService.createRequest(NostrService.createNotesFilter()));
 
   Future<void> shareNote(String noteContent, String npub) async {
     if (_isClosed) return;
-    
+
     try {
       final privateKey = await _secureStorage.read(key: 'privateKey');
       if (privateKey == null || privateKey.isEmpty) {
@@ -59,7 +158,7 @@ class NetworkService {
         content: noteContent,
         privateKey: privateKey,
       );
-      
+
       await _socketManager.broadcast(NostrService.serializeEvent(event));
     } catch (e) {
       print('[NetworkService ERROR] Error sharing note: $e');
@@ -69,7 +168,7 @@ class NetworkService {
 
   Future<void> sendReaction(String targetEventId, String reactionContent) async {
     if (_isClosed) return;
-    
+
     try {
       final privateKey = await _secureStorage.read(key: 'privateKey');
       if (privateKey == null || privateKey.isEmpty) {
@@ -81,7 +180,7 @@ class NetworkService {
         content: reactionContent,
         privateKey: privateKey,
       );
-      
+
       await _socketManager.broadcast(NostrService.serializeEvent(event));
     } catch (e) {
       print('[NetworkService ERROR] Error sending reaction: $e');
@@ -91,7 +190,7 @@ class NetworkService {
 
   Future<void> sendReply(String parentEventId, String replyContent, String parentAuthor) async {
     if (_isClosed) return;
-    
+
     try {
       final privateKey = await _secureStorage.read(key: 'privateKey');
       if (privateKey == null || privateKey.isEmpty) {
@@ -109,7 +208,7 @@ class NetworkService {
         privateKey: privateKey,
         tags: tags,
       );
-      
+
       await _socketManager.broadcast(NostrService.serializeEvent(event));
     } catch (e) {
       print('[NetworkService ERROR] Error sending reply: $e');
@@ -119,19 +218,20 @@ class NetworkService {
 
   Future<void> sendRepost(String noteId, String noteAuthor, String? rawContent) async {
     if (_isClosed) return;
-    
+
     try {
       final privateKey = await _secureStorage.read(key: 'privateKey');
       if (privateKey == null || privateKey.isEmpty) {
         throw Exception('Private key not found.');
       }
 
-      final content = rawContent ?? jsonEncode({
-        'id': noteId,
-        'pubkey': noteAuthor,
-        'kind': 1,
-        'tags': [],
-      });
+      final content = rawContent ??
+          jsonEncode({
+            'id': noteId,
+            'pubkey': noteAuthor,
+            'kind': 1,
+            'tags': [],
+          });
 
       final event = NostrService.createRepostEvent(
         noteId: noteId,
@@ -139,7 +239,7 @@ class NetworkService {
         content: content,
         privateKey: privateKey,
       );
-      
+
       await _socketManager.broadcast(NostrService.serializeEvent(event));
     } catch (e) {
       print('[NetworkService ERROR] Error sending repost: $e');
@@ -154,6 +254,12 @@ class NetworkService {
     String? noteId,
     String content = '',
   }) async {
+    // Rate limiting check
+    if (_isRateLimited('zap')) {
+      throw Exception('Rate limit exceeded for zap requests');
+    }
+    _recordRequest('zap');
+
     final privateKey = await _secureStorage.read(key: 'privateKey');
     if (privateKey == null || privateKey.isEmpty) {
       throw Exception('Private key not found.');
@@ -171,11 +277,34 @@ class NetworkService {
     final display_name = parts[0];
     final domain = parts[1];
 
-    // Fetch LNURL data
+    // Enhanced LNURL fetch with retry logic
     final uri = Uri.parse('https://$domain/.well-known/lnurlp/$display_name');
-    final response = await http.get(uri);
-    if (response.statusCode != 200) {
-      throw Exception('LNURL fetch failed with status: ${response.statusCode}');
+    final client = _getHttpClient(domain);
+
+    http.Response? response;
+    int attempts = 0;
+    const maxAttempts = 3;
+
+    while (attempts < maxAttempts) {
+      try {
+        response = await client.get(uri).timeout(const Duration(seconds: 10));
+        if (response.statusCode == 200) break;
+
+        attempts++;
+        if (attempts < maxAttempts) {
+          await Future.delayed(Duration(seconds: pow(2, attempts).toInt()));
+        }
+      } catch (e) {
+        attempts++;
+        if (attempts >= maxAttempts) {
+          throw Exception('LNURL fetch failed after $maxAttempts attempts: $e');
+        }
+        await Future.delayed(Duration(seconds: pow(2, attempts).toInt()));
+      }
+    }
+
+    if (response == null || response.statusCode != 200) {
+      throw Exception('LNURL fetch failed with status: ${response?.statusCode ?? 'unknown'}');
     }
 
     final lnurlJson = jsonDecode(response.body);
@@ -207,18 +336,34 @@ class NetworkService {
     final encodedZap = Uri.encodeComponent(jsonEncode(NostrService.eventToJson(zapRequest)));
     final zapUrl = Uri.parse('$callback?amount=$amountMillisats&nostr=$encodedZap');
 
-    final invoiceResponse = await http.get(zapUrl);
-    if (invoiceResponse.statusCode != 200) {
-      throw Exception('Zap callback failed: ${invoiceResponse.body}');
+    // Enhanced invoice request with retry
+    attempts = 0;
+    while (attempts < maxAttempts) {
+      try {
+        final invoiceResponse = await client.get(zapUrl).timeout(const Duration(seconds: 15));
+        if (invoiceResponse.statusCode == 200) {
+          final invoiceJson = jsonDecode(invoiceResponse.body);
+          final invoice = invoiceJson['pr'];
+          if (invoice == null || invoice.toString().isEmpty) {
+            throw Exception('Invoice not returned by zap server.');
+          }
+          return invoice;
+        }
+
+        attempts++;
+        if (attempts < maxAttempts) {
+          await Future.delayed(Duration(seconds: pow(2, attempts).toInt()));
+        }
+      } catch (e) {
+        attempts++;
+        if (attempts >= maxAttempts) {
+          throw Exception('Zap callback failed after $maxAttempts attempts: $e');
+        }
+        await Future.delayed(Duration(seconds: pow(2, attempts).toInt()));
+      }
     }
 
-    final invoiceJson = jsonDecode(invoiceResponse.body);
-    final invoice = invoiceJson['pr'];
-    if (invoice == null || invoice.toString().isEmpty) {
-      throw Exception('Invoice not returned by zap server.');
-    }
-
-    return invoice;
+    throw Exception('Zap callback failed after $maxAttempts attempts');
   }
 
   Future<String> uploadMedia(String filePath, String blossomUrl) async {
@@ -294,9 +439,44 @@ class NetworkService {
 
   int get connectedRelaysCount => _socketManager.activeSockets.length;
 
+  // Enhanced statistics
+  Map<String, dynamic> getNetworkStats() {
+    final successRate = _totalRequests > 0 ? (_successfulRequests / _totalRequests * 100).toStringAsFixed(2) : '0.00';
+
+    final avgRequestTime =
+        _requestTimes.isNotEmpty ? _requestTimes.fold<int>(0, (sum, d) => sum + d.inMilliseconds) / _requestTimes.length : 0.0;
+
+    return {
+      'totalRequests': _totalRequests,
+      'successfulRequests': _successfulRequests,
+      'failedRequests': _failedRequests,
+      'successRate': '$successRate%',
+      'avgRequestTimeMs': avgRequestTime.round(),
+      'connectedRelays': connectedRelaysCount,
+      'activeHttpClients': _httpClients.length,
+      'rateLimitStatus': {
+        for (final entry in _requestHistory.entries) entry.key: '${entry.value.length}/$_maxRequestsPerMinute per minute',
+      },
+    };
+  }
+
   Future<void> closeConnections() async {
     if (_isClosed) return;
     _isClosed = true;
+
+    // Cancel timers
+    _clientCleanupTimer?.cancel();
+    for (final timer in _requestTimers.values) {
+      timer.cancel();
+    }
+
+    // Close HTTP clients
+    for (final client in _httpClients.values) {
+      client.close();
+    }
+    _httpClients.clear();
+
+    // Close WebSocket connections
     await _socketManager.closeConnections();
   }
 }

@@ -2,8 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:isolate';
 import 'dart:collection';
+import 'dart:math';
 import '../models/note_model.dart';
-import '../services/data_service.dart';
+import 'base/isolate_types.dart';
 
 class EventBatch {
   final List<Map<String, dynamic>> events;
@@ -14,6 +15,10 @@ class EventBatch {
 }
 
 class IsolateManager {
+  // Configuration constants
+  static const int _optimalBatchSize = 50;
+  static const Duration _maxProcessingTime = Duration(seconds: 5);
+
   static void eventProcessorEntryPoint(SendPort sendPort) {
     final ReceivePort port = ReceivePort();
     sendPort.send(port.sendPort);
@@ -24,19 +29,19 @@ class IsolateManager {
 
     void _processQueue() async {
       if (_isProcessing || _processingQueue.isEmpty) return;
-      
+
       _isProcessing = true;
-      
+
       while (_processingQueue.isNotEmpty) {
         final batch = _processingQueue.removeFirst();
         final results = <Map<String, dynamic>>[];
-        
+
         // Process events in batch with optimized parsing
         for (final event in batch.events) {
           try {
             final eventRaw = event['eventRaw'];
             if (eventRaw == null) continue;
-            
+
             // Fast JSON parsing with minimal validation
             final decodedEvent = _fastJsonDecode(eventRaw);
             if (decodedEvent == null) continue;
@@ -48,7 +53,7 @@ class IsolateManager {
             final kind = eventData['kind'] as int?;
             final eventId = eventData['id'] as String?;
             final author = eventData['pubkey'] as String?;
-            
+
             if (kind == null || eventId == null || author == null) continue;
 
             results.add({
@@ -64,7 +69,7 @@ class IsolateManager {
             results.add({'error': 'Parse error'});
           }
         }
-        
+
         // Send results in batch
         if (results.isNotEmpty) {
           sendPort.send({
@@ -74,7 +79,7 @@ class IsolateManager {
           });
         }
       }
-      
+
       _isProcessing = false;
     }
 
@@ -86,12 +91,9 @@ class IsolateManager {
           final priority = event['priority'] as int? ?? 2;
           if (priority > maxPriority) maxPriority = priority;
         }
-        
-        _processingQueue.add(EventBatch(
-          List<Map<String, dynamic>>.from(message),
-          maxPriority
-        ));
-        
+
+        _processingQueue.add(EventBatch(List<Map<String, dynamic>>.from(message), maxPriority));
+
         // Process immediately for high priority events
         if (maxPriority > 2) {
           _processQueue();
@@ -113,11 +115,11 @@ class IsolateManager {
 
     void _flushBatches() {
       if (_batchedRequests.isEmpty) return;
-      
+
       for (final entry in _batchedRequests.entries) {
         final type = entry.key;
         final eventIds = entry.value;
-        
+
         if (eventIds.isNotEmpty) {
           sendPort.send({
             'type': type,
@@ -127,7 +129,7 @@ class IsolateManager {
           });
         }
       }
-      
+
       _batchedRequests.clear();
       _batchTimer?.cancel();
       _batchTimer = null;
@@ -144,7 +146,7 @@ class IsolateManager {
             // Batch requests by type
             _batchedRequests.putIfAbsent(type, () => []);
             _batchedRequests[type]!.addAll(List<String>.from(eventIds));
-            
+
             // Flush immediately for high priority
             if (priority > 2) {
               _flushBatches();
@@ -173,46 +175,49 @@ class IsolateManager {
 
     void _processCacheQueue() async {
       if (_isProcessingCache || _cacheLoadQueue.isEmpty) return;
-      
+
       _isProcessingCache = true;
-      
+
       while (_cacheLoadQueue.isNotEmpty) {
         final data = _cacheLoadQueue.removeFirst();
         _processCacheLoad(data, sendPort);
       }
-      
+
       _isProcessingCache = false;
     }
 
     void _processNotesQueue() async {
       if (_isProcessingNotes || _newNotesQueue.isEmpty) return;
-      
+
       _isProcessingNotes = true;
-      
+
       while (_newNotesQueue.isNotEmpty) {
         final data = _newNotesQueue.removeFirst();
         _processNewNotes(data, sendPort);
       }
-      
+
       _isProcessingNotes = false;
     }
 
     isolateReceivePort.listen((message) {
-      if (message is IsolateMessage) {
-        switch (message.type) {
-          case MessageType.cacheload:
-            _cacheLoadQueue.add(message.data);
+      if (message is Map<String, dynamic>) {
+        final type = message['type'] as String?;
+        final data = message['data'];
+
+        switch (type) {
+          case 'cacheload':
+            _cacheLoadQueue.add(data.toString());
             Future.microtask(_processCacheQueue);
             break;
-          case MessageType.newnotes:
-            _newNotesQueue.add(message.data);
+          case 'newnotes':
+            _newNotesQueue.add(data.toString());
             Future.microtask(_processNotesQueue);
             break;
-          case MessageType.close:
+          case 'close':
             isolateReceivePort.close();
             return;
-          case MessageType.error:
-            sendPort.send(IsolateMessage(MessageType.error, message.data));
+          case 'error':
+            sendPort.send({'type': 'error', 'data': data});
             break;
         }
       } else if (message == 'close') {
@@ -225,9 +230,7 @@ class IsolateManager {
   static List<dynamic>? _fastJsonDecode(String jsonString) {
     try {
       final decoded = jsonDecode(jsonString);
-      if (decoded is List &&
-          decoded.length > 2 &&
-          decoded[0] != 'EOSE') {
+      if (decoded is List && decoded.length > 2 && decoded[0] != 'EOSE') {
         return decoded;
       }
     } catch (e) {
@@ -239,48 +242,44 @@ class IsolateManager {
   static void _processCacheLoad(String data, SendPort sendPort) {
     try {
       final jsonData = jsonDecode(data) as List<dynamic>;
-      
+
       // Process in chunks to avoid memory spikes
       const chunkSize = 50;
       final chunks = <List<NoteModel>>[];
-      
+
       for (int i = 0; i < jsonData.length; i += chunkSize) {
         final endIndex = (i + chunkSize > jsonData.length) ? jsonData.length : i + chunkSize;
         final chunk = jsonData.sublist(i, endIndex);
-        
-        final parsedChunk = chunk
-            .map((json) => NoteModel.fromJson(json as Map<String, dynamic>))
-            .toList();
+
+        final parsedChunk = chunk.map((json) => NoteModel.fromJson(json as Map<String, dynamic>)).toList();
         chunks.add(parsedChunk);
       }
-      
+
       // Send chunks separately to avoid large message passing
       for (final chunk in chunks) {
-        sendPort.send(IsolateMessage(MessageType.cacheload, chunk));
+        sendPort.send({'type': 'cacheload', 'data': chunk});
       }
     } catch (e) {
-      sendPort.send(IsolateMessage(MessageType.error, e.toString()));
+      sendPort.send({'type': 'error', 'data': e.toString()});
     }
   }
 
   static void _processNewNotes(String data, SendPort sendPort) {
     try {
       final jsonData = jsonDecode(data) as List<dynamic>;
-      
+
       // Process in smaller batches for better responsiveness
       const batchSize = 20;
       for (int i = 0; i < jsonData.length; i += batchSize) {
         final endIndex = (i + batchSize > jsonData.length) ? jsonData.length : i + batchSize;
         final batch = jsonData.sublist(i, endIndex);
-        
-        final parsedNotes = batch
-            .map((json) => NoteModel.fromJson(json as Map<String, dynamic>))
-            .toList();
-        
-        sendPort.send(IsolateMessage(MessageType.newnotes, parsedNotes));
+
+        final parsedNotes = batch.map((json) => NoteModel.fromJson(json as Map<String, dynamic>)).toList();
+
+        sendPort.send({'type': 'newnotes', 'data': parsedNotes});
       }
     } catch (e) {
-      sendPort.send(IsolateMessage(MessageType.error, e.toString()));
+      sendPort.send({'type': 'error', 'data': e.toString()});
     }
   }
 }

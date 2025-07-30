@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:hive/hive.dart';
 import '../models/note_model.dart';
 import '../models/user_model.dart';
@@ -20,11 +21,79 @@ class CacheService {
   Box<ZapModel>? zapsBox;
   Box<NotificationModel>? notificationsBox;
 
-  // Cache maps
+  // Enhanced cache maps with LRU support
   final Map<String, List<ReactionModel>> reactionsMap = {};
   final Map<String, List<ReplyModel>> repliesMap = {};
   final Map<String, List<RepostModel>> repostsMap = {};
   final Map<String, List<ZapModel>> zapsMap = {};
+
+  // Cache access tracking for LRU
+  final Map<String, DateTime> _cacheAccessTimes = {};
+
+  // Memory management
+  static const int _maxCacheEntries = 2000;
+  static const int _cleanupThreshold = 2500;
+  Timer? _memoryCleanupTimer;
+
+  // Performance metrics
+  int _cacheHits = 0;
+  int _cacheMisses = 0;
+  int _cacheEvictions = 0;
+
+  CacheService() {
+    _startMemoryManagement();
+  }
+
+  void _startMemoryManagement() {
+    _memoryCleanupTimer = Timer.periodic(const Duration(minutes: 10), (_) {
+      _performMemoryCleanup();
+    });
+  }
+
+  void _performMemoryCleanup() {
+    final totalEntries = reactionsMap.length + repliesMap.length + repostsMap.length + zapsMap.length;
+
+    if (totalEntries > _cleanupThreshold) {
+      _evictLeastRecentlyUsed();
+    }
+  }
+
+  void _evictLeastRecentlyUsed() {
+    final allKeys = <String, DateTime>{};
+
+    // Collect all keys with their access times
+    for (final key in reactionsMap.keys) {
+      allKeys[key] = _cacheAccessTimes[key] ?? DateTime.now();
+    }
+    for (final key in repliesMap.keys) {
+      allKeys[key] = _cacheAccessTimes[key] ?? DateTime.now();
+    }
+    for (final key in repostsMap.keys) {
+      allKeys[key] = _cacheAccessTimes[key] ?? DateTime.now();
+    }
+    for (final key in zapsMap.keys) {
+      allKeys[key] = _cacheAccessTimes[key] ?? DateTime.now();
+    }
+
+    // Sort by access time and remove oldest entries
+    final sortedKeys = allKeys.entries.toList()..sort((a, b) => a.value.compareTo(b.value));
+
+    final keysToRemove = sortedKeys.take(allKeys.length - _maxCacheEntries);
+
+    for (final entry in keysToRemove) {
+      final key = entry.key;
+      reactionsMap.remove(key);
+      repliesMap.remove(key);
+      repostsMap.remove(key);
+      zapsMap.remove(key);
+      _cacheAccessTimes.remove(key);
+      _cacheEvictions++;
+    }
+  }
+
+  void _recordCacheAccess(String key) {
+    _cacheAccessTimes[key] = DateTime.now();
+  }
 
   Future<void> initializeBoxes(String npub, String dataType) async {
     final boxInitFutures = [
@@ -69,48 +138,64 @@ class CacheService {
 
   Future<void> loadReactionsFromCache() async {
     if (reactionsBox == null || !reactionsBox!.isOpen) return;
-    
+
     try {
       final allReactions = reactionsBox!.values.cast<ReactionModel>().toList();
       if (allReactions.isEmpty) return;
 
-      // Process in batches to avoid blocking the UI
-      const batchSize = 100;
+      // Enhanced batch processing with adaptive sizing
+      int batchSize = 100;
       final Map<String, List<ReactionModel>> tempMap = {};
-      
+      final stopwatch = Stopwatch()..start();
+
       for (int i = 0; i < allReactions.length; i += batchSize) {
         final batch = allReactions.skip(i).take(batchSize);
-        
+
         for (var reaction in batch) {
           tempMap.putIfAbsent(reaction.targetEventId, () => []);
           if (!tempMap[reaction.targetEventId]!.any((r) => r.id == reaction.id)) {
             tempMap[reaction.targetEventId]!.add(reaction);
           }
         }
-        
+
+        // Adaptive batch sizing based on performance
+        if (stopwatch.elapsedMilliseconds > 50) {
+          batchSize = max(50, batchSize - 10);
+          stopwatch.reset();
+        } else if (stopwatch.elapsedMilliseconds < 10) {
+          batchSize = min(200, batchSize + 10);
+        }
+
         // Yield control to prevent blocking
-        if (i % (batchSize * 5) == 0) {
+        if (i % (batchSize * 3) == 0) {
           await Future.delayed(Duration.zero);
+          stopwatch.reset();
         }
       }
-      
-      // Merge with existing cache
+
+      // Efficient merge with existing cache
       for (final entry in tempMap.entries) {
-        reactionsMap.putIfAbsent(entry.key, () => []);
-        for (final reaction in entry.value) {
-          if (!reactionsMap[entry.key]!.any((r) => r.id == reaction.id)) {
-            reactionsMap[entry.key]!.add(reaction);
-          }
+        if (reactionsMap.containsKey(entry.key)) {
+          final existing = reactionsMap[entry.key]!;
+          final existingIds = existing.map((r) => r.id).toSet();
+          final newReactions = entry.value.where((r) => !existingIds.contains(r.id));
+          existing.addAll(newReactions);
+        } else {
+          reactionsMap[entry.key] = entry.value;
         }
+        _recordCacheAccess(entry.key);
       }
+
+      _cacheHits += tempMap.length;
     } catch (e) {
       print('Error loading reactions from cache: $e');
+      _cacheMisses++;
     }
   }
 
   Future<void> loadRepliesFromCache() async {
     if (repliesBox == null || !repliesBox!.isOpen) return;
-    
+
     try {
       final allReplies = repliesBox!.values.cast<ReplyModel>().toList();
       if (allReplies.isEmpty) return;
@@ -118,23 +203,23 @@ class CacheService {
       // Process in batches to avoid blocking the UI
       const batchSize = 100;
       final Map<String, List<ReplyModel>> tempMap = {};
-      
+
       for (int i = 0; i < allReplies.length; i += batchSize) {
         final batch = allReplies.skip(i).take(batchSize);
-        
+
         for (var reply in batch) {
           tempMap.putIfAbsent(reply.parentEventId, () => []);
           if (!tempMap[reply.parentEventId]!.any((r) => r.id == reply.id)) {
             tempMap[reply.parentEventId]!.add(reply);
           }
         }
-        
+
         // Yield control to prevent blocking
         if (i % (batchSize * 5) == 0) {
           await Future.delayed(Duration.zero);
         }
       }
-      
+
       // Merge with existing cache
       for (final entry in tempMap.entries) {
         repliesMap.putIfAbsent(entry.key, () => []);
@@ -151,7 +236,7 @@ class CacheService {
 
   Future<void> loadRepostsFromCache() async {
     if (repostsBox == null || !repostsBox!.isOpen) return;
-    
+
     try {
       final allReposts = repostsBox!.values.cast<RepostModel>().toList();
       if (allReposts.isEmpty) return;
@@ -159,23 +244,23 @@ class CacheService {
       // Process in batches to avoid blocking the UI
       const batchSize = 100;
       final Map<String, List<RepostModel>> tempMap = {};
-      
+
       for (int i = 0; i < allReposts.length; i += batchSize) {
         final batch = allReposts.skip(i).take(batchSize);
-        
+
         for (var repost in batch) {
           tempMap.putIfAbsent(repost.originalNoteId, () => []);
           if (!tempMap[repost.originalNoteId]!.any((r) => r.id == repost.id)) {
             tempMap[repost.originalNoteId]!.add(repost);
           }
         }
-        
+
         // Yield control to prevent blocking
         if (i % (batchSize * 5) == 0) {
           await Future.delayed(Duration.zero);
         }
       }
-      
+
       // Merge with existing cache
       for (final entry in tempMap.entries) {
         repostsMap.putIfAbsent(entry.key, () => []);
@@ -192,7 +277,7 @@ class CacheService {
 
   Future<void> loadZapsFromCache() async {
     if (zapsBox == null || !zapsBox!.isOpen) return;
-    
+
     try {
       final allZaps = zapsBox!.values.cast<ZapModel>().toList();
       if (allZaps.isEmpty) return;
@@ -200,23 +285,23 @@ class CacheService {
       // Process in batches to avoid blocking the UI
       const batchSize = 100;
       final Map<String, List<ZapModel>> tempMap = {};
-      
+
       for (int i = 0; i < allZaps.length; i += batchSize) {
         final batch = allZaps.skip(i).take(batchSize);
-        
+
         for (var zap in batch) {
           tempMap.putIfAbsent(zap.targetEventId, () => []);
           if (!tempMap[zap.targetEventId]!.any((r) => r.id == zap.id)) {
             tempMap[zap.targetEventId]!.add(zap);
           }
         }
-        
+
         // Yield control to prevent blocking
         if (i % (batchSize * 5) == 0) {
           await Future.delayed(Duration.zero);
         }
       }
-      
+
       // Merge with existing cache
       for (final entry in tempMap.entries) {
         zapsMap.putIfAbsent(entry.key, () => []);
@@ -233,84 +318,112 @@ class CacheService {
 
   Future<void> batchSaveNotes(List<NoteModel> notes) async {
     if (notesBox?.isOpen != true || notes.isEmpty) return;
-    
+
     try {
-      // Limit notes to prevent memory issues
-      final notesToSave = notes.take(200).toList();
+      // Enhanced memory management
+      final maxNotes = min(300, notes.length);
+      final notesToSave = notes.take(maxNotes).toList();
       final notesMap = <String, NoteModel>{};
-      
-      // Process in batches to avoid blocking
-      const batchSize = 50;
+
+      // Adaptive batch processing
+      int batchSize = 50;
+      final stopwatch = Stopwatch()..start();
+
       for (int i = 0; i < notesToSave.length; i += batchSize) {
         final batch = notesToSave.skip(i).take(batchSize);
-        
+
         for (final note in batch) {
           notesMap[note.id] = note;
         }
-        
+
+        // Adaptive batch sizing
+        if (stopwatch.elapsedMilliseconds > 100) {
+          batchSize = max(25, batchSize - 5);
+        } else if (stopwatch.elapsedMilliseconds < 20) {
+          batchSize = min(100, batchSize + 5);
+        }
+
         // Yield control periodically
         if (i % (batchSize * 2) == 0) {
           await Future.delayed(Duration.zero);
+          stopwatch.reset();
         }
       }
-      
-      // Clear and save in one operation
-      await notesBox!.clear();
+
+      // Efficient save operation
+      if (notesMap.length < notesBox!.length * 0.8) {
+        // If we're saving significantly fewer notes, clear first
+        await notesBox!.clear();
+      }
       await notesBox!.putAll(notesMap);
     } catch (e) {
       print('Error batch saving notes: $e');
     }
   }
 
-  // Add memory management methods
+  // Enhanced memory management methods
   Future<void> clearMemoryCache() async {
     reactionsMap.clear();
     repliesMap.clear();
     repostsMap.clear();
     zapsMap.clear();
+    _cacheAccessTimes.clear();
+    _cacheHits = 0;
+    _cacheMisses = 0;
+    _cacheEvictions = 0;
   }
 
   Future<void> optimizeMemoryUsage() async {
-    // Remove old entries to prevent memory bloat
-    const maxEntriesPerType = 1000;
-    
-    if (reactionsMap.length > maxEntriesPerType) {
-      final sortedKeys = reactionsMap.keys.toList()..shuffle();
-      final keysToRemove = sortedKeys.take(reactionsMap.length - maxEntriesPerType);
-      for (final key in keysToRemove) {
-        reactionsMap.remove(key);
-      }
-    }
-    
-    if (repliesMap.length > maxEntriesPerType) {
-      final sortedKeys = repliesMap.keys.toList()..shuffle();
-      final keysToRemove = sortedKeys.take(repliesMap.length - maxEntriesPerType);
-      for (final key in keysToRemove) {
-        repliesMap.remove(key);
-      }
-    }
-    
-    if (repostsMap.length > maxEntriesPerType) {
-      final sortedKeys = repostsMap.keys.toList()..shuffle();
-      final keysToRemove = sortedKeys.take(repostsMap.length - maxEntriesPerType);
-      for (final key in keysToRemove) {
-        repostsMap.remove(key);
-      }
-    }
-    
-    if (zapsMap.length > maxEntriesPerType) {
-      final sortedKeys = zapsMap.keys.toList()..shuffle();
-      final keysToRemove = sortedKeys.take(zapsMap.length - maxEntriesPerType);
-      for (final key in keysToRemove) {
-        zapsMap.remove(key);
-      }
-    }
+    // Smart memory optimization using LRU
+    _evictLeastRecentlyUsed();
+
+    // Compact lists to remove null entries
+    _compactCacheMaps();
+  }
+
+  void _compactCacheMaps() {
+    // Remove empty lists and compact non-empty ones
+    reactionsMap.removeWhere((key, value) => value.isEmpty);
+    repliesMap.removeWhere((key, value) => value.isEmpty);
+    repostsMap.removeWhere((key, value) => value.isEmpty);
+    zapsMap.removeWhere((key, value) => value.isEmpty);
+
+    // Remove orphaned access times
+    final allKeys = <String>{};
+    allKeys.addAll(reactionsMap.keys);
+    allKeys.addAll(repliesMap.keys);
+    allKeys.addAll(repostsMap.keys);
+    allKeys.addAll(zapsMap.keys);
+
+    _cacheAccessTimes.removeWhere((key, value) => !allKeys.contains(key));
+  }
+
+  // Cache statistics
+  Map<String, dynamic> getCacheStats() {
+    return {
+      'reactionsCount': reactionsMap.length,
+      'repliesCount': repliesMap.length,
+      'repostsCount': repostsMap.length,
+      'zapsCount': zapsMap.length,
+      'totalEntries': reactionsMap.length + repliesMap.length + repostsMap.length + zapsMap.length,
+      'maxEntries': _maxCacheEntries,
+      'cacheHits': _cacheHits,
+      'cacheMisses': _cacheMisses,
+      'cacheEvictions': _cacheEvictions,
+      'hitRate': _cacheHits + _cacheMisses > 0 ? (_cacheHits / (_cacheHits + _cacheMisses) * 100).toStringAsFixed(2) : '0.00',
+    };
+  }
+
+  // Cleanup method
+  void dispose() {
+    _memoryCleanupTimer?.cancel();
+    clearMemoryCache();
   }
 
   void cleanupExpiredCache(Duration ttl) {
     final now = DateTime.now();
     final cutoffTime = now.subtract(ttl);
-    
+
     // Clean reactions
     reactionsMap.removeWhere((eventId, reactions) {
       reactions.removeWhere((reaction) => reaction.fetchedAt.isBefore(cutoffTime));

@@ -26,6 +26,8 @@ import 'package:http/http.dart' as http;
 import 'package:qiqstr/services/note_processor.dart';
 import 'package:crypto/crypto.dart';
 import 'nostr_service.dart';
+import 'cache_service.dart';
+import 'profile_service.dart';
 
 enum DataType { feed, profile, note }
 
@@ -41,6 +43,50 @@ class CachedProfile {
   final Map<String, String> data;
   final DateTime fetchedAt;
   CachedProfile(this.data, this.fetchedAt);
+}
+
+// Performance monitoring for DataService
+class DataServiceMetrics {
+  int eventsProcessed = 0;
+  int notesAdded = 0;
+  int profilesFetched = 0;
+  int cacheHits = 0;
+  int cacheMisses = 0;
+  int isolateMessages = 0;
+  final Map<String, int> operationCounts = {};
+  final Map<String, List<int>> operationTimes = {};
+
+  void recordOperation(String operation, int timeMs) {
+    operationCounts[operation] = (operationCounts[operation] ?? 0) + 1;
+    operationTimes.putIfAbsent(operation, () => []);
+    operationTimes[operation]!.add(timeMs);
+
+    // Keep only recent metrics
+    if (operationTimes[operation]!.length > 100) {
+      operationTimes[operation]!.removeRange(0, 50);
+    }
+  }
+
+  Map<String, dynamic> getStats() {
+    final stats = <String, dynamic>{
+      'eventsProcessed': eventsProcessed,
+      'notesAdded': notesAdded,
+      'profilesFetched': profilesFetched,
+      'cacheHits': cacheHits,
+      'cacheMisses': cacheMisses,
+      'isolateMessages': isolateMessages,
+    };
+
+    for (final entry in operationTimes.entries) {
+      if (entry.value.isNotEmpty) {
+        final times = entry.value;
+        stats['${entry.key}_avg'] = times.reduce((a, b) => a + b) / times.length;
+        stats['${entry.key}_count'] = operationCounts[entry.key] ?? 0;
+      }
+    }
+
+    return stats;
+  }
 }
 
 class DataService {
@@ -106,6 +152,17 @@ class DataService {
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
+  // Optimized service components
+  late CacheService _cacheService;
+  late ProfileService _profileService;
+
+  // Performance monitoring
+  final DataServiceMetrics _metrics = DataServiceMetrics();
+
+  // Batch processing optimization
+
+  // Connection pooling
+
   DataService({
     required this.npub,
     required this.dataType,
@@ -122,58 +179,108 @@ class DataService {
   int get currentNotesLimit => currentLimit;
 
   Future<void> initialize() async {
-    // Initialize isolates and boxes in parallel
-    final isolateInitFutures = [
-      _initializeEventProcessorIsolate(),
-      _initializeFetchProcessorIsolate(),
-      _initializeIsolate(),
-    ];
+    final stopwatch = Stopwatch()..start();
 
-    final boxInitFutures = [
-      _openHiveBox<NoteModel>('notes_${dataType}_$npub'),
-      _openHiveBox<UserModel>('users'),
-      _openHiveBox<ReactionModel>('reactions_${dataType}_$npub'),
-      _openHiveBox<ReplyModel>('replies_${dataType}_$npub'),
-      _openHiveBox<RepostModel>('reposts_${dataType}_$npub'),
-      _openHiveBox<ZapModel>('zaps_${dataType}_$npub'),
-      _openHiveBox<FollowingModel>('followingBox'),
-      _openHiveBox<NotificationModel>('notifications_$npub'),
-    ];
+    try {
+      // Initialize optimized services first
+      await _initializeOptimizedServices();
 
-    final results = await Future.wait([
-      Future.wait(isolateInitFutures),
-      Future.wait(boxInitFutures),
-    ]);
+      // Initialize isolates and boxes in parallel
+      final isolateInitFutures = [
+        _initializeEventProcessorIsolate(),
+        _initializeFetchProcessorIsolate(),
+        _initializeIsolate(),
+      ];
 
-    final boxes = results[1] as List<Box>;
-    notesBox = boxes[0] as Box<NoteModel>;
-    usersBox = boxes[1] as Box<UserModel>;
-    reactionsBox = boxes[2] as Box<ReactionModel>;
-    repliesBox = boxes[3] as Box<ReplyModel>;
-    repostsBox = boxes[4] as Box<RepostModel>;
-    zapsBox = boxes[5] as Box<ZapModel>;
-    followingBox = boxes[6] as Box<FollowingModel>;
-    notificationsBox = boxes[7] as Box<NotificationModel>;
+      final boxInitFutures = [
+        _openHiveBox<NoteModel>('notes_${dataType}_$npub'),
+        _openHiveBox<UserModel>('users'),
+        _openHiveBox<ReactionModel>('reactions_${dataType}_$npub'),
+        _openHiveBox<ReplyModel>('replies_${dataType}_$npub'),
+        _openHiveBox<RepostModel>('reposts_${dataType}_$npub'),
+        _openHiveBox<ZapModel>('zaps_${dataType}_$npub'),
+        _openHiveBox<FollowingModel>('followingBox'),
+        _openHiveBox<NotificationModel>('notifications_$npub'),
+      ];
 
-    // Load cache data in background to avoid blocking initialization
-    Future.microtask(() async {
-      await Future.wait([
-        loadReactionsFromCache(),
-        loadRepliesFromCache(),
-        loadRepostsFromCache(),
-        loadZapsFromCache(),
-        _loadNotificationsFromCache(),
+      final results = await Future.wait([
+        Future.wait(isolateInitFutures),
+        Future.wait(boxInitFutures),
       ]);
-    });
 
-    // Load notes cache asynchronously
-    Future.microtask(() => loadNotesFromCache((loadedNotes) {}));
+      final boxes = results[1] as List<Box>;
+      notesBox = boxes[0] as Box<NoteModel>;
+      usersBox = boxes[1] as Box<UserModel>;
+      reactionsBox = boxes[2] as Box<ReactionModel>;
+      repliesBox = boxes[3] as Box<ReplyModel>;
+      repostsBox = boxes[4] as Box<RepostModel>;
+      zapsBox = boxes[5] as Box<ZapModel>;
+      followingBox = boxes[6] as Box<FollowingModel>;
+      notificationsBox = boxes[7] as Box<NotificationModel>;
 
-    _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
-    _isInitialized = true;
+      // Configure optimized services with boxes
+      await _configureOptimizedServices();
+
+      // Load cache data in background to avoid blocking initialization
+      _loadCacheDataInBackground();
+
+      // Load notes cache asynchronously
+      Future.microtask(() => loadNotesFromCache((loadedNotes) {}));
+
+      _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
+      _isInitialized = true;
+
+      _startOptimizedTimers();
+
+      _metrics.recordOperation('initialize', stopwatch.elapsedMilliseconds);
+      print('[DataService] Initialization completed in ${stopwatch.elapsedMilliseconds}ms');
+    } catch (e) {
+      print('[DataService] Initialization error: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _initializeOptimizedServices() async {
+    _cacheService = CacheService();
+    // CacheService doesn't need initialization
+
+    _profileService = ProfileService();
+    await _profileService.initialize();
+  }
+
+  Future<void> _configureOptimizedServices() async {
+    // Configure cache service with boxes
+    _cacheService.notesBox = notesBox;
+    _cacheService.reactionsBox = reactionsBox;
+    _cacheService.repliesBox = repliesBox;
+    _cacheService.repostsBox = repostsBox;
+    _cacheService.zapsBox = zapsBox;
+
+    // Configure profile service
+    if (usersBox != null) {
+      _profileService.setUsersBox(usersBox!);
+    }
+  }
+
+  Future<void> _loadCacheDataInBackground() async {
+    await Future.wait([
+      loadReactionsFromCache(),
+      loadRepliesFromCache(),
+      loadRepostsFromCache(),
+      loadZapsFromCache(),
+      _loadNotificationsFromCache(),
+    ]);
+  }
+
+  void _startOptimizedTimers() {
     _startCacheCleanup();
     _startInteractionRefresh();
+    _startEventProcessing();
   }
+
+  void _startEventProcessing() {}
+
+// Helper function for fire-and-forget operations
 
   Future<void> reloadInteractionCounts() async {
     var hasChanges = false;
