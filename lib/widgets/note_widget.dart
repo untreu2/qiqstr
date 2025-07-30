@@ -44,8 +44,7 @@ class NoteWidget extends StatefulWidget {
   _NoteWidgetState createState() => _NoteWidgetState();
 }
 
-class _NoteWidgetState extends State<NoteWidget>
-    with AutomaticKeepAliveClientMixin {
+class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -74,31 +73,24 @@ class _NoteWidgetState extends State<NoteWidget>
     return '${(d.inDays / 365).floor()}y';
   }
 
-  void _navigateToMentionProfile(String id) =>
-      widget.dataService.openUserProfile(context, id);
+  void _navigateToMentionProfile(String id) => widget.dataService.openUserProfile(context, id);
 
   void _navigateToStatisticsPage() => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => NoteStatisticsPage(
-              note: widget.note, dataService: widget.dataService),
+          builder: (_) => NoteStatisticsPage(note: widget.note, dataService: widget.dataService),
         ),
-      );    
+      );
 
-  bool _hasZapped() => (widget.dataService.zapsMap[widget.note.id] ?? [])
-      .any((z) => z.sender == widget.currentUserNpub);
-  bool _hasReacted() => (widget.dataService.reactionsMap[widget.note.id] ?? [])
-      .any((e) => e.author == widget.currentUserNpub);
-  bool _hasReplied() => (widget.dataService.repliesMap[widget.note.id] ?? [])
-      .any((e) => e.author == widget.currentUserNpub);
-  bool _hasReposted() => (widget.dataService.repostsMap[widget.note.id] ?? [])
-      .any((e) => e.repostedBy == widget.currentUserNpub);
+  bool _hasZapped() => (widget.dataService.zapsMap[widget.note.id] ?? []).any((z) => z.sender == widget.currentUserNpub);
+  bool _hasReacted() => (widget.dataService.reactionsMap[widget.note.id] ?? []).any((e) => e.author == widget.currentUserNpub);
+  bool _hasReplied() => (widget.dataService.repliesMap[widget.note.id] ?? []).any((e) => e.author == widget.currentUserNpub);
+  bool _hasReposted() => (widget.dataService.repostsMap[widget.note.id] ?? []).any((e) => e.repostedBy == widget.currentUserNpub);
 
   void _handleReactionTap() async {
     if (_hasReacted()) return;
     setState(() => _isReactionGlowing = true);
-    Future.delayed(const Duration(milliseconds: 400),
-        () => mounted ? setState(() => _isReactionGlowing = false) : null);
+    Future.delayed(const Duration(milliseconds: 400), () => mounted ? setState(() => _isReactionGlowing = false) : null);
     try {
       await widget.dataService.sendReaction(widget.note.id, '+');
     } catch (_) {}
@@ -106,8 +98,7 @@ class _NoteWidgetState extends State<NoteWidget>
 
   void _handleReplyTap() {
     setState(() => _isReplyGlowing = true);
-    Future.delayed(const Duration(milliseconds: 400),
-        () => mounted ? setState(() => _isReplyGlowing = false) : null);
+    Future.delayed(const Duration(milliseconds: 400), () => mounted ? setState(() => _isReplyGlowing = false) : null);
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -134,9 +125,8 @@ class _NoteWidgetState extends State<NoteWidget>
 
   void _handleZapTap() {
     setState(() => _isZapGlowing = true);
-    Future.delayed(const Duration(milliseconds: 400),
-        () => mounted ? setState(() => _isZapGlowing = false) : null);
-    
+    Future.delayed(const Duration(milliseconds: 400), () => mounted ? setState(() => _isZapGlowing = false) : null);
+
     showZapDialog(
       context: context,
       dataService: widget.dataService,
@@ -144,12 +134,10 @@ class _NoteWidgetState extends State<NoteWidget>
     );
   }
 
-  void _navigateToProfile(String npub) =>
-      widget.dataService.openUserProfile(context, npub);
-  
+  void _navigateToProfile(String npub) => widget.dataService.openUserProfile(context, npub);
+
   void _navigateToThreadPage(NoteModel note) {
-    final String rootIdToShow =
-        (note.isReply && note.rootId != null && note.rootId!.isNotEmpty) ? note.rootId! : note.id;
+    final String rootIdToShow = (note.isReply && note.rootId != null && note.rootId!.isNotEmpty) ? note.rootId! : note.id;
 
     // Only pass focusedNoteId if the note is a reply and we're showing a different root
     final String? focusedNoteId = (note.isReply && rootIdToShow != note.id) ? note.id : null;
@@ -192,8 +180,7 @@ class _NoteWidgetState extends State<NoteWidget>
     );
   }
 
-  Map<String, dynamic> _createTruncatedParsedContentWithShowMore(
-      Map<String, dynamic> originalParsed, int characterLimit, NoteModel note) {
+  Map<String, dynamic> _createTruncatedParsedContentWithShowMore(Map<String, dynamic> originalParsed, int characterLimit, NoteModel note) {
     final textParts = (originalParsed['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
     final truncatedParts = <Map<String, dynamic>>[];
     int currentLength = 0;
@@ -243,54 +230,52 @@ class _NoteWidgetState extends State<NoteWidget>
     final name = user?.name ?? 'Unknown';
     final profileImage = user?.profileImage;
 
-    return Builder(
-      builder: (context) {
-        final colors = context.colors;
-        return GestureDetector(
-          onTap: () => _navigateToProfile(npub),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Icon(Icons.repeat, size: 16, color: colors.secondary),
-              const SizedBox(width: 6),
-              profileImage != null && profileImage.isNotEmpty
-                  ? CircleAvatar(
-                      radius: 11,
-                      backgroundImage: CachedNetworkImageProvider(profileImage),
-                      backgroundColor: colors.surfaceTransparent,
-                    )
-                  : CircleAvatar(
-                      radius: 11,
-                      backgroundColor: colors.avatarBackground,
-                      child: Icon(Icons.person, size: 13, color: colors.iconPrimary),
+    return Builder(builder: (context) {
+      final colors = context.colors;
+      return GestureDetector(
+        onTap: () => _navigateToProfile(npub),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(Icons.repeat, size: 16, color: colors.secondary),
+            const SizedBox(width: 6),
+            profileImage != null && profileImage.isNotEmpty
+                ? CircleAvatar(
+                    radius: 11,
+                    backgroundImage: CachedNetworkImageProvider(profileImage),
+                    backgroundColor: colors.surfaceTransparent,
+                  )
+                : CircleAvatar(
+                    radius: 11,
+                    backgroundColor: colors.avatarBackground,
+                    child: Icon(Icons.person, size: 13, color: colors.iconPrimary),
+                  ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      'Reposted by $name',
+                      style: TextStyle(fontSize: 12, color: colors.secondary),
+                      overflow: TextOverflow.ellipsis,
                     ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        'Reposted by $name',
-                        style: TextStyle(fontSize: 12, color: colors.secondary),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                  ),
+                  if (ts != null) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      '• ${_formatTimestamp(ts)}',
+                      style: TextStyle(fontSize: 12, color: colors.secondary),
                     ),
-                    if (ts != null) ...[
-                      const SizedBox(width: 6),
-                      Text(
-                        '• ${_formatTimestamp(ts)}',
-                        style: TextStyle(fontSize: 12, color: colors.secondary),
-                      ),
-                    ],
                   ],
-                ),
+                ],
               ),
-            ],
-          ),
-        );
-      }
-    );
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   @override
@@ -314,8 +299,7 @@ class _NoteWidgetState extends State<NoteWidget>
             if (widget.note.isRepost && widget.note.repostedBy != null) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: _buildRepostInfo(
-                    widget.note.repostedBy!, widget.note.repostTimestamp),
+                child: _buildRepostInfo(widget.note.repostedBy!, widget.note.repostTimestamp),
               ),
               const SizedBox(height: 8),
             ],
@@ -333,18 +317,10 @@ class _NoteWidgetState extends State<NoteWidget>
                           CircleAvatar(
                             radius: 21,
                             backgroundImage:
-                                (authorUser?.profileImage ?? '').isNotEmpty
-                                    ? CachedNetworkImageProvider(
-                                        authorUser!.profileImage)
-                                    : null,
-                            backgroundColor:
-                                (authorUser?.profileImage ?? '').isEmpty
-                                    ? colors.avatarBackground
-                                    : colors.surfaceTransparent,
-                            child: (authorUser?.profileImage ?? '').isEmpty
-                                ? Icon(Icons.person,
-                                    size: 23, color: colors.iconPrimary)
-                                : null,
+                                (authorUser?.profileImage ?? '').isNotEmpty ? CachedNetworkImageProvider(authorUser!.profileImage) : null,
+                            backgroundColor: (authorUser?.profileImage ?? '').isEmpty ? colors.avatarBackground : colors.surfaceTransparent,
+                            child:
+                                (authorUser?.profileImage ?? '').isEmpty ? Icon(Icons.person, size: 23, color: colors.iconPrimary) : null,
                           ),
                           if (widget.note.isReply)
                             Positioned(
@@ -378,16 +354,12 @@ class _NoteWidgetState extends State<NoteWidget>
                           children: [
                             Expanded(
                               child: Row(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
                                   Flexible(
                                     child: Text(
-                                      (authorUser?.name ?? 'Unknown')
-                                                  .length >
-                                              25
-                                          ? (authorUser?.name ?? 'Unknown')
-                                              .substring(0, 25)
+                                      (authorUser?.name ?? 'Unknown').length > 25
+                                          ? (authorUser?.name ?? 'Unknown').substring(0, 25)
                                           : (authorUser?.name ?? 'Unknown'),
                                       style: TextStyle(
                                         fontSize: 14.5,
@@ -400,10 +372,7 @@ class _NoteWidgetState extends State<NoteWidget>
                                   ),
                                   Padding(
                                     padding: const EdgeInsets.only(left: 6),
-                                    child: Text('• $_formattedTimestamp',
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            color: colors.secondary)),
+                                    child: Text('• $_formattedTimestamp', style: TextStyle(fontSize: 12, color: colors.secondary)),
                                   ),
                                 ],
                               ),
@@ -416,9 +385,9 @@ class _NoteWidgetState extends State<NoteWidget>
                           children: [
                             Expanded(
                               child: InteractionBar(
-                                reactionCount: widget.note.reactionCount,
-                                replyCount: widget.note.replyCount,
-                                repostCount: widget.note.repostCount,
+                                reactionCount: widget.reactionCount,
+                                replyCount: widget.replyCount,
+                                repostCount: widget.repostCount,
                                 zapAmount: widget.note.zapAmount,
                                 isReactionGlowing: _isReactionGlowing,
                                 isReplyGlowing: _isReplyGlowing,
