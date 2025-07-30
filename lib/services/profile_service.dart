@@ -3,7 +3,6 @@ import 'dart:collection';
 import 'package:hive/hive.dart';
 import '../models/user_model.dart';
 import 'relay_service.dart';
-import 'base/service_base.dart';
 
 class CachedProfile {
   final Map<String, String> data;

@@ -2,9 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:isolate';
 import 'dart:collection';
-import 'dart:math';
 import '../models/note_model.dart';
-import 'base/isolate_types.dart';
 
 class EventBatch {
   final List<Map<String, dynamic>> events;
@@ -16,8 +14,6 @@ class EventBatch {
 
 class IsolateManager {
   // Configuration constants
-  static const int _optimalBatchSize = 50;
-  static const Duration _maxProcessingTime = Duration(seconds: 5);
 
   static void eventProcessorEntryPoint(SendPort sendPort) {
     final ReceivePort port = ReceivePort();

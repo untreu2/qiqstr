@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/profile_page.dart';
+import 'package:qiqstr/screens/relay_page.dart';
 import 'package:qiqstr/utils/logout.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -39,7 +40,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     return Consumer<ThemeManager>(
       builder: (context, themeManager, child) {
         final colors = themeManager.colors;
-        
+
         return Drawer(
           child: Container(
             color: colors.background,
@@ -55,10 +56,8 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                             CircleAvatar(
                               radius: 32,
                               backgroundImage: widget.user!.profileImage.isNotEmpty
-                                  ? CachedNetworkImageProvider(
-                                      widget.user!.profileImage)
-                                  : const AssetImage('assets/default_profile.png')
-                                      as ImageProvider,
+                                  ? CachedNetworkImageProvider(widget.user!.profileImage)
+                                  : const AssetImage('assets/default_profile.png') as ImageProvider,
                             ),
                             const SizedBox(width: 16),
                             Expanded(
@@ -86,8 +85,18 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) =>
-                                      ProfilePage(user: widget.user!),
+                                  builder: (context) => ProfilePage(user: widget.user!),
+                                ),
+                              ),
+                            ),
+                            _buildSidebarItem(
+                              colors: colors,
+                              svgAsset: 'assets/relay_1.svg',
+                              label: 'Relays',
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const RelayPage(),
                                 ),
                               ),
                             ),
