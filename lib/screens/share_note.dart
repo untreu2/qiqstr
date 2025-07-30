@@ -37,7 +37,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
   @override
   void initState() {
     super.initState();
-    _noteController = TextEditingController(text: widget.initialText ?? '');
+    _noteController = TextEditingController(
+        text: (widget.initialText != null && widget.initialText!.startsWith('nostr:')) ? '' : widget.initialText ?? '');
     _loadProfile();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
@@ -77,8 +78,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
       try {
         for (var file in result.files) {
           if (file.path != null) {
-            final url =
-                await widget.dataService.sendMedia(file.path!, _serverUrl);
+            final url = await widget.dataService.sendMedia(file.path!, _serverUrl);
             if (mounted) {
               setState(() {
                 _mediaUrls.add(url);
@@ -100,19 +100,25 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   Future<void> _shareNote() async {
     if (_isPosting) return;
-    if (_noteController.text.trim().isEmpty && _mediaUrls.isEmpty) {
+
+    final hasQuote = widget.initialText != null && widget.initialText!.startsWith('nostr:');
+    final noteText = _noteController.text.trim();
+
+    if (noteText.isEmpty && _mediaUrls.isEmpty && !hasQuote) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a note')),
       );
       return;
     }
+
     setState(() {
       _isPosting = true;
     });
+
     try {
-      final noteText = _noteController.text.trim();
-      final mediaPart = _mediaUrls.isNotEmpty ? "\n${_mediaUrls.join("\n")}" : "";
-      final finalNoteContent = "$noteText$mediaPart".trim();
+      final mediaPart = _mediaUrls.isNotEmpty ? "\n\n${_mediaUrls.join("\n")}" : "";
+      final quotePart = hasQuote ? "\n\n${widget.initialText}" : "";
+      final finalNoteContent = "$noteText$mediaPart$quotePart".trim();
 
       if (widget.replyToNoteId != null) {
         await widget.dataService.sendReply(widget.replyToNoteId!, finalNoteContent);
@@ -148,7 +154,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
       _mediaUrls.insert(newIndex, item);
     });
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -299,11 +304,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
                         CircleAvatar(
                           radius: 20,
                           backgroundColor: context.colors.surfaceTransparent,
-                          backgroundImage:
-                              _user?.profileImage != null ? CachedNetworkImageProvider(_user!.profileImage) : null,
-                          child: _user?.profileImage == null
-                              ? Icon(Icons.person, color: context.colors.textPrimary, size: 20)
-                              : null,
+                          backgroundImage: _user?.profileImage != null ? CachedNetworkImageProvider(_user!.profileImage) : null,
+                          child: _user?.profileImage == null ? Icon(Icons.person, color: context.colors.textPrimary, size: 20) : null,
                         ),
                         const SizedBox(width: 12),
                         Expanded(
