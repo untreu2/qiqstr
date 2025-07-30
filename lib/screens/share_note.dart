@@ -1,5 +1,4 @@
 import 'dart:ui';
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -16,7 +15,7 @@ class ShareNotePage extends StatefulWidget {
   final DataService dataService;
   final String? initialText;
   final String? replyToNoteId;
-
+//
   const ShareNotePage({
     super.key,
     required this.dataService,
@@ -40,20 +39,56 @@ class _ShareNotePageState extends State<ShareNotePage> {
   List<UserModel> _filteredUsers = [];
   bool _isSearchingUsers = false;
   String _userSearchQuery = '';
+  final Map<String, String> _mentionMap = {};
   TextSpan _richTextSpan = const TextSpan();
 
   @override
   void initState() {
     super.initState();
-    _noteController = TextEditingController(
-        text: (widget.initialText != null && widget.initialText!.startsWith('nostr:')) ? '' : widget.initialText ?? '');
+    _noteController = TextEditingController();
     _loadProfile();
     _loadUsers();
     _noteController.addListener(_onTextChanged);
+    _initializeText();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
-      _updateRichTextSpan();
     });
+  }
+
+  Future<void> _initializeText() async {
+    String initialText = (widget.initialText != null && widget.initialText!.startsWith('nostr:')) ? '' : widget.initialText ?? '';
+
+    final mentionRegex = RegExp(r'nostr:(npub1[0-9a-z]+)');
+    final matches = mentionRegex.allMatches(initialText);
+
+    if (matches.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _noteController.text = initialText;
+          _updateRichText();
+        });
+      }
+      return;
+    }
+
+    final npubs = matches.map((m) => m.group(1)!).toList();
+    final resolvedNames = await widget.dataService.resolveMentions(npubs);
+
+    String newText = initialText;
+    for (var match in matches.toList().reversed) {
+      final npub = match.group(1)!;
+      final username = (resolvedNames[npub] ?? npub.substring(0, 10)).replaceAll(' ', '_');
+      final mentionKey = '@$username';
+      _mentionMap[mentionKey] = 'nostr:$npub';
+      newText = newText.replaceRange(match.start, match.end, mentionKey);
+    }
+
+    if (mounted) {
+      setState(() {
+        _noteController.text = newText;
+        _updateRichText();
+      });
+    }
   }
 
   Future<void> _loadUsers() async {
@@ -123,7 +158,12 @@ class _ShareNotePageState extends State<ShareNotePage> {
     if (_isPosting) return;
 
     final hasQuote = widget.initialText != null && widget.initialText!.startsWith('nostr:');
-    final noteText = _noteController.text.trim();
+
+    String noteText = _noteController.text;
+    _mentionMap.forEach((key, value) {
+      noteText = noteText.replaceAll(key, value);
+    });
+    noteText = noteText.trim();
 
     if (noteText.isEmpty && _mediaUrls.isEmpty && !hasQuote) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -177,7 +217,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   void _onTextChanged() {
-    _updateRichTextSpan();
+    _updateRichText();
     final text = _noteController.text;
     final cursorPos = _noteController.selection.baseOffset;
 
@@ -238,7 +278,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   void _onUserSelected(UserModel user) {
     final text = _noteController.text;
-    final cursorPos = _noteController.selection.baseOffset;
+    final selection = _noteController.selection;
+    final cursorPos = selection.baseOffset;
 
     if (cursorPos == -1) return;
 
@@ -247,13 +288,22 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
     if (atIndex == -1) return;
 
+    final username = user.name.replaceAll(' ', '_');
+    final mentionKey = '@$username';
     final npubBech32 = encodeBasicBech32(user.npub, 'npub');
-    final newText = '${text.substring(0, atIndex)}nostr:$npubBech32 ${text.substring(cursorPos)}';
+    _mentionMap[mentionKey] = 'nostr:$npubBech32';
 
-    _noteController.text = newText;
-    _noteController.selection = TextSelection.fromPosition(TextPosition(offset: atIndex + 'nostr:$npubBech32 '.length));
+    final textAfterCursor = text.substring(cursorPos);
+    final newText = '${text.substring(0, atIndex)}$mentionKey $textAfterCursor';
+
+    final newCursorPos = atIndex + mentionKey.length + 1;
 
     if (mounted) {
+      _noteController.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.fromPosition(TextPosition(offset: newCursorPos)),
+      );
+
       setState(() {
         _isSearchingUsers = false;
         _filteredUsers = [];
@@ -261,36 +311,58 @@ class _ShareNotePageState extends State<ShareNotePage> {
     }
   }
 
-  Future<void> _updateRichTextSpan() async {
+  void _updateRichText() {
     final text = _noteController.text;
-    final mentionRegex = RegExp(r'nostr:(npub1[0-9a-z]+)');
-    final matches = mentionRegex.allMatches(text);
-
-    final mentionIds = matches.map((m) => m.group(1)!).toList();
-    final mentionsMap = await widget.dataService.resolveMentions(mentionIds);
-
     final spans = <InlineSpan>[];
     var lastEnd = 0;
 
-    for (final match in matches) {
-      if (match.start > lastEnd) {
-        spans.add(TextSpan(text: text.substring(lastEnd, match.start)));
+    final mentionKeys = _mentionMap.keys.map((e) => RegExp.escape(e)).join('|');
+
+    final pattern = [if (mentionKeys.isNotEmpty) '($mentionKeys)', r'(https?:\/\/[^\s]+)', r'(#\w+)'].where((p) => p.isNotEmpty).join('|');
+
+    if (pattern.isEmpty) {
+      spans.add(TextSpan(text: text));
+    } else {
+      final regex = RegExp(pattern, caseSensitive: false);
+      final matches = regex.allMatches(text);
+
+      for (final match in matches) {
+        if (match.start > lastEnd) {
+          spans.add(TextSpan(text: text.substring(lastEnd, match.start)));
+        }
+
+        final matchedText = match.group(0)!;
+        if (_mentionMap.containsKey(matchedText)) {
+          spans.add(
+            TextSpan(
+              text: matchedText,
+              style: TextStyle(
+                color: context.colors.accent,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          );
+        } else if (matchedText.startsWith('http')) {
+          spans.add(
+            TextSpan(
+              text: matchedText,
+              style: TextStyle(color: context.colors.accent),
+            ),
+          );
+        } else if (matchedText.startsWith('#')) {
+          spans.add(
+            TextSpan(
+              text: matchedText,
+              style: TextStyle(color: context.colors.accent),
+            ),
+          );
+        }
+        lastEnd = match.end;
       }
 
-      final npub = match.group(1)!;
-      final username = mentionsMap[npub] ?? '${npub.substring(0, 8)}...';
-      spans.add(
-        TextSpan(
-          text: '@$username',
-          style: TextStyle(color: context.colors.accent),
-          recognizer: TapGestureRecognizer()..onTap = () {},
-        ),
-      );
-      lastEnd = match.end;
-    }
-
-    if (lastEnd < text.length) {
-      spans.add(TextSpan(text: text.substring(lastEnd)));
+      if (lastEnd < text.length) {
+        spans.add(TextSpan(text: text.substring(lastEnd)));
+      }
     }
 
     if (mounted) {
