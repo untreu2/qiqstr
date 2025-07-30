@@ -1,8 +1,11 @@
 import 'dart:ui';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:hive/hive.dart';
+import 'package:nostr_nip19/nostr_nip19.dart';
 import '../services/data_service.dart';
 import '../models/user_model.dart';
 import '../widgets/quote_widget.dart';
@@ -33,6 +36,11 @@ class _ShareNotePageState extends State<ShareNotePage> {
   final List<String> _mediaUrls = [];
   final String _serverUrl = "https://blossom.primal.net";
   UserModel? _user;
+  List<UserModel> _allUsers = [];
+  List<UserModel> _filteredUsers = [];
+  bool _isSearchingUsers = false;
+  String _userSearchQuery = '';
+  TextSpan _richTextSpan = const TextSpan();
 
   @override
   void initState() {
@@ -40,9 +48,21 @@ class _ShareNotePageState extends State<ShareNotePage> {
     _noteController = TextEditingController(
         text: (widget.initialText != null && widget.initialText!.startsWith('nostr:')) ? '' : widget.initialText ?? '');
     _loadProfile();
+    _loadUsers();
+    _noteController.addListener(_onTextChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
+      _updateRichTextSpan();
     });
+  }
+
+  Future<void> _loadUsers() async {
+    final box = await Hive.openBox<UserModel>('users');
+    if (mounted) {
+      setState(() {
+        _allUsers = box.values.toList();
+      });
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -60,6 +80,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   @override
   void dispose() {
+    _noteController.removeListener(_onTextChanged);
     _noteController.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -153,6 +174,136 @@ class _ShareNotePageState extends State<ShareNotePage> {
       final String item = _mediaUrls.removeAt(oldIndex);
       _mediaUrls.insert(newIndex, item);
     });
+  }
+
+  void _onTextChanged() {
+    _updateRichTextSpan();
+    final text = _noteController.text;
+    final cursorPos = _noteController.selection.baseOffset;
+
+    if (cursorPos == -1) {
+      if (mounted) {
+        setState(() {
+          _isSearchingUsers = false;
+        });
+      }
+      return;
+    }
+
+    final textBeforeCursor = text.substring(0, cursorPos);
+    final words = textBeforeCursor.split(' ');
+    final currentWord = words.isNotEmpty ? words.last : '';
+
+    if (currentWord.startsWith('@')) {
+      final searchQuery = currentWord.substring(1);
+      if (mounted) {
+        setState(() {
+          _userSearchQuery = searchQuery;
+          _isSearchingUsers = true;
+          _filterUsers();
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _isSearchingUsers = false;
+        });
+      }
+    }
+  }
+
+  void _filterUsers() {
+    if (_userSearchQuery.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _filteredUsers = _allUsers.take(5).toList();
+        });
+      }
+      return;
+    }
+
+    final query = _userSearchQuery.toLowerCase();
+    final filtered = _allUsers.where((user) {
+      return user.name.toLowerCase().contains(query) || user.nip05.toLowerCase().contains(query);
+    }).toList();
+
+    filtered.sort((a, b) => a.name.toLowerCase().indexOf(query).compareTo(b.name.toLowerCase().indexOf(query)));
+
+    if (mounted) {
+      setState(() {
+        _filteredUsers = filtered.take(5).toList();
+      });
+    }
+  }
+
+  void _onUserSelected(UserModel user) {
+    final text = _noteController.text;
+    final cursorPos = _noteController.selection.baseOffset;
+
+    if (cursorPos == -1) return;
+
+    final textBeforeCursor = text.substring(0, cursorPos);
+    final atIndex = textBeforeCursor.lastIndexOf('@');
+
+    if (atIndex == -1) return;
+
+    final npubBech32 = encodeBasicBech32(user.npub, 'npub');
+    final newText = '${text.substring(0, atIndex)}nostr:$npubBech32 ${text.substring(cursorPos)}';
+
+    _noteController.text = newText;
+    _noteController.selection = TextSelection.fromPosition(TextPosition(offset: atIndex + 'nostr:$npubBech32 '.length));
+
+    if (mounted) {
+      setState(() {
+        _isSearchingUsers = false;
+        _filteredUsers = [];
+      });
+    }
+  }
+
+  Future<void> _updateRichTextSpan() async {
+    final text = _noteController.text;
+    final mentionRegex = RegExp(r'nostr:(npub1[0-9a-z]+)');
+    final matches = mentionRegex.allMatches(text);
+
+    final mentionIds = matches.map((m) => m.group(1)!).toList();
+    final mentionsMap = await widget.dataService.resolveMentions(mentionIds);
+
+    final spans = <InlineSpan>[];
+    var lastEnd = 0;
+
+    for (final match in matches) {
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(text: text.substring(lastEnd, match.start)));
+      }
+
+      final npub = match.group(1)!;
+      final username = mentionsMap[npub] ?? '${npub.substring(0, 8)}...';
+      spans.add(
+        TextSpan(
+          text: '@$username',
+          style: TextStyle(color: context.colors.accent),
+          recognizer: TapGestureRecognizer()
+            ..onTap = () {
+              // maybe navigate to profile or show info
+            },
+        ),
+      );
+      lastEnd = match.end;
+    }
+
+    if (lastEnd < text.length) {
+      spans.add(TextSpan(text: text.substring(lastEnd)));
+    }
+
+    if (mounted) {
+      setState(() {
+        _richTextSpan = TextSpan(
+          children: spans,
+          style: TextStyle(color: context.colors.textPrimary, fontSize: 15),
+        );
+      });
+    }
   }
 
   @override
@@ -288,112 +439,163 @@ class _ShareNotePageState extends State<ShareNotePage> {
             ),
             body: SafeArea(
               bottom: false,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (widget.replyToNoteId != null)
-                      ReplyPreviewWidget(
-                        noteId: widget.replyToNoteId!,
-                        dataService: widget.dataService,
-                      ),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        CircleAvatar(
-                          radius: 20,
-                          backgroundColor: context.colors.surfaceTransparent,
-                          backgroundImage: _user?.profileImage != null ? CachedNetworkImageProvider(_user!.profileImage) : null,
-                          child: _user?.profileImage == null ? Icon(Icons.person, color: context.colors.textPrimary, size: 20) : null,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            focusNode: _focusNode,
-                            controller: _noteController,
-                            maxLines: null,
-                            textAlignVertical: TextAlignVertical.top,
-                            style: TextStyle(color: context.colors.textPrimary),
-                            cursorColor: context.colors.textPrimary,
-                            decoration: InputDecoration(
-                              hintText: "What's on your mind?",
-                              hintStyle: TextStyle(color: context.colors.textSecondary),
-                              border: InputBorder.none,
+              child: Column(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (widget.replyToNoteId != null)
+                            ReplyPreviewWidget(
+                              noteId: widget.replyToNoteId!,
+                              dataService: widget.dataService,
                             ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    if (_mediaUrls.isNotEmpty)
-                      SizedBox(
-                        height: 170,
-                        child: ReorderableListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _mediaUrls.length,
-                          onReorder: _reorderMedia,
-                          itemBuilder: (context, index) {
-                            final url = _mediaUrls[index];
-                            return Padding(
-                              key: ValueKey(url),
-                              padding: const EdgeInsets.only(right: 8.0),
-                              child: Stack(
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.network(
-                                      url,
-                                      width: 160,
-                                      height: 160,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => Container(
-                                        width: 160,
-                                        height: 160,
-                                        color: context.colors.surface,
-                                        child: const Icon(Icons.broken_image),
-                                      ),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    top: 8,
-                                    right: 8,
-                                    child: GestureDetector(
-                                      onTap: () => _removeMedia(url),
-                                      child: Container(
-                                        padding: const EdgeInsets.all(2),
-                                        decoration: BoxDecoration(
-                                          color: context.colors.background,
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: Icon(
-                                          Icons.close,
-                                          color: context.colors.textPrimary,
-                                          size: 18,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              CircleAvatar(
+                                radius: 20,
+                                backgroundColor: context.colors.surfaceTransparent,
+                                backgroundImage: _user?.profileImage != null ? CachedNetworkImageProvider(_user!.profileImage) : null,
+                                child: _user?.profileImage == null ? Icon(Icons.person, color: context.colors.textPrimary, size: 20) : null,
                               ),
-                            );
-                          },
-                        ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Stack(
+                                  children: [
+                                    RichText(text: _richTextSpan),
+                                    TextField(
+                                      focusNode: _focusNode,
+                                      controller: _noteController,
+                                      maxLines: null,
+                                      textAlignVertical: TextAlignVertical.top,
+                                      style: const TextStyle(color: Colors.transparent, fontSize: 15),
+                                      cursorColor: context.colors.textPrimary,
+                                      decoration: InputDecoration(
+                                        hintText: _noteController.text.isEmpty ? "What's on your mind?" : "",
+                                        hintStyle: TextStyle(color: context.colors.textSecondary, fontSize: 15),
+                                        border: InputBorder.none,
+                                        contentPadding: EdgeInsets.zero,
+                                        isCollapsed: true,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          if (_mediaUrls.isNotEmpty)
+                            SizedBox(
+                              height: 170,
+                              child: ReorderableListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: _mediaUrls.length,
+                                onReorder: _reorderMedia,
+                                itemBuilder: (context, index) {
+                                  final url = _mediaUrls[index];
+                                  return Padding(
+                                    key: ValueKey(url),
+                                    padding: const EdgeInsets.only(right: 8.0),
+                                    child: Stack(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(8),
+                                          child: Image.network(
+                                            url,
+                                            width: 160,
+                                            height: 160,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) => Container(
+                                              width: 160,
+                                              height: 160,
+                                              color: context.colors.surface,
+                                              child: const Icon(Icons.broken_image),
+                                            ),
+                                          ),
+                                        ),
+                                        Positioned(
+                                          top: 8,
+                                          right: 8,
+                                          child: GestureDetector(
+                                            onTap: () => _removeMedia(url),
+                                            child: Container(
+                                              padding: const EdgeInsets.all(2),
+                                              decoration: BoxDecoration(
+                                                color: context.colors.background,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: Icon(
+                                                Icons.close,
+                                                color: context.colors.textPrimary,
+                                                size: 18,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          if (widget.initialText != null && widget.initialText!.startsWith('nostr:'))
+                            Padding(
+                              padding: const EdgeInsets.only(top: 16),
+                              child: QuoteWidget(
+                                bech32: widget.initialText!.replaceFirst('nostr:', ''),
+                                dataService: widget.dataService,
+                              ),
+                            ),
+                        ],
                       ),
-                    if (widget.initialText != null && widget.initialText!.startsWith('nostr:'))
-                      Padding(
-                        padding: const EdgeInsets.only(top: 16),
-                        child: QuoteWidget(
-                          bech32: widget.initialText!.replaceFirst('nostr:', ''),
-                          dataService: widget.dataService,
-                        ),
-                      ),
-                  ],
-                ),
+                    ),
+                  ),
+                  if (_isSearchingUsers) _buildUserSuggestions(),
+                ],
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildUserSuggestions() {
+    if (_filteredUsers.isEmpty) return const SizedBox.shrink();
+
+    return Material(
+      elevation: 4.0,
+      borderRadius: const BorderRadius.only(
+        topLeft: Radius.circular(12),
+        topRight: Radius.circular(12),
+      ),
+      color: context.colors.surface,
+      child: Container(
+        constraints: const BoxConstraints(maxHeight: 200),
+        child: ListView.builder(
+          padding: EdgeInsets.zero,
+          shrinkWrap: true,
+          itemCount: _filteredUsers.length,
+          itemBuilder: (context, index) {
+            final user = _filteredUsers[index];
+            return ListTile(
+              leading: CircleAvatar(
+                radius: 20,
+                backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
+                backgroundColor: Colors.grey.shade800,
+              ),
+              title: Text(user.name, style: TextStyle(color: context.colors.textPrimary)),
+              subtitle: Text(
+                user.nip05,
+                style: TextStyle(color: context.colors.textSecondary),
+              ),
+              onTap: () => _onUserSelected(user),
+            );
+          },
+        ),
       ),
     );
   }
