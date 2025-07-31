@@ -1,5 +1,4 @@
 import 'dart:ui';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qiqstr/screens/feed_page.dart';
@@ -41,7 +40,6 @@ class _HomeNavigatorState extends State<HomeNavigator> {
     );
   }
 
-
   Widget _buildCustomBottomBar() {
     List<Map<String, dynamic>> items = [
       {'icon': 'assets/home_gap.svg', 'index': 0},
@@ -58,29 +56,19 @@ class _HomeNavigatorState extends State<HomeNavigator> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(25.0),
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                child: LiquidGlass(
-                  shape: LiquidRoundedSuperellipse(
-                    borderRadius: Radius.circular(25.0),
-                  ),
-                  settings: LiquidGlassSettings(
-                    thickness: 15,
-                    glassColor: Color(0x40000000),
-                    lightIntensity: 0.8,
-                    ambientStrength: 0.3,
-                  ),
-                  child: Container(
-                    height: 70,
-                    decoration: BoxDecoration(
-                      color: context.colors.backgroundTransparent,
-                      border: Border.all(
-                        color: context.colors.borderLight,
-                        width: 1.5,
-                      ),
-                      borderRadius: BorderRadius.circular(25.0),
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: context.colors.backgroundTransparent,
+                    border: Border.all(
+                      color: context.colors.borderLight,
+                      width: 1.5,
                     ),
-                    child: Row(
-                      children: items.map((item) {
+                    borderRadius: BorderRadius.circular(25.0),
+                  ),
+                  child: Row(
+                    children: items.map((item) {
                       final bool isSelected = _currentIndex == item['index'];
                       final index = item['index'];
 
@@ -162,8 +150,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                           ),
                         ),
                       );
-                      }).toList(),
-                    ),
+                    }).toList(),
                   ),
                 ),
               ),
@@ -173,29 +160,19 @@ class _HomeNavigatorState extends State<HomeNavigator> {
           ClipRRect(
             borderRadius: BorderRadius.circular(25.0),
             child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: LiquidGlass(
-                shape: LiquidRoundedSuperellipse(
-                  borderRadius: Radius.circular(25.0),
-                ),
-                settings: LiquidGlassSettings(
-                  thickness: 15,
-                  glassColor: Color(0x40000000),
-                  lightIntensity: 0.8,
-                  ambientStrength: 0.3,
-                ),
-                child: Container(
-                  width: 70,
-                  height: 70,
-                  decoration: BoxDecoration(
-                    color: context.colors.backgroundTransparent,
-                    border: Border.all(
-                      color: context.colors.borderLight,
-                      width: 1.5,
-                    ),
-                    borderRadius: BorderRadius.circular(25.0),
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  color: context.colors.backgroundTransparent,
+                  border: Border.all(
+                    color: context.colors.borderLight,
+                    width: 1.5,
                   ),
-                  child: Bounce(
+                  borderRadius: BorderRadius.circular(25.0),
+                ),
+                child: Bounce(
                   scaleFactor: 0.85,
                   onTap: () {
                     Navigator.of(context).push(
@@ -217,7 +194,6 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                         ),
                       ],
                     ),
-                  ),
                   ),
                 ),
               ),
