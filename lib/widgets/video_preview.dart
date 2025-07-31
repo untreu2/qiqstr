@@ -1,6 +1,5 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
@@ -173,8 +172,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black
-          .withOpacity(1.0 - (_dragOffset.abs() / 300).clamp(0.0, 1.0)),
+      backgroundColor: Colors.black.withOpacity(1.0 - (_dragOffset.abs() / 300).clamp(0.0, 1.0)),
       body: GestureDetector(
         onVerticalDragUpdate: _handleVerticalDragUpdate,
         onVerticalDragEnd: _handleVerticalDragEnd,
@@ -207,8 +205,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                 ),
               )
             else
-              const Center(
-                  child: CircularProgressIndicator(color: Colors.white)),
+              const Center(child: CircularProgressIndicator(color: Colors.white)),
             if (_isInitialized)
               Positioned(
                 bottom: 80,
@@ -219,83 +216,70 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(25.0),
                     child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                      child: LiquidGlass(
-                        shape: LiquidRoundedSuperellipse(
-                          borderRadius: Radius.circular(25.0),
-                        ),
-                        settings: LiquidGlassSettings(
-                          thickness: 15,
-                          glassColor: Color(0xFF000000),
-                          lightIntensity: 0.8,
-                          ambientStrength: 0.3,
-                        ),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.3),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.2),
-                              width: 1.5,
-                            ),
-                            borderRadius: BorderRadius.circular(25.0),
+                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.3),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.2),
+                            width: 1.5,
                           ),
-                          child: Row(
-                    children: [
-                      IconButton(
-                        icon: Icon(
-                          _controller.value.isPlaying
-                              ? Icons.pause
-                              : Icons.play_arrow,
-                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(25.0),
                         ),
-                        onPressed: () {
-                          setState(() {
-                            if (_controller.value.isPlaying) {
-                              _controller.pause();
-                            } else {
-                              _controller.play();
-                            }
-                          });
-                        },
-                      ),
-                      Text(
-                        _formatDuration(_position),
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: SliderTheme(
-                            data: SliderTheme.of(context).copyWith(
-                              activeTrackColor: Colors.amber,
-                              inactiveTrackColor: Colors.white24,
-                              thumbColor: Colors.white,
-                              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                              overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                              trackHeight: 3,
-                            ),
-                            child: Slider(
-                              value: _controller.value.position.inMilliseconds.toDouble(),
-                              max: _controller.value.duration.inMilliseconds.toDouble(),
-                              onChanged: (value) {
-                                final position = Duration(milliseconds: value.toInt());
-                                _controller.seekTo(position);
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: Icon(
+                                _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
+                                color: Colors.white,
+                              ),
+                              onPressed: () {
+                                setState(() {
+                                  if (_controller.value.isPlaying) {
+                                    _controller.pause();
+                                  } else {
+                                    _controller.play();
+                                  }
+                                });
                               },
                             ),
-                          ),
-                        ),
-                      ),
-                      Text(
-                        _formatDuration(_controller.value.duration),
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                            ],
-                          ),
+                            Text(
+                              _formatDuration(_position),
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                child: SliderTheme(
+                                  data: SliderTheme.of(context).copyWith(
+                                    activeTrackColor: Colors.amber,
+                                    inactiveTrackColor: Colors.white24,
+                                    thumbColor: Colors.white,
+                                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                                    trackHeight: 3,
+                                  ),
+                                  child: Slider(
+                                    value: _controller.value.position.inMilliseconds.toDouble(),
+                                    max: _controller.value.duration.inMilliseconds.toDouble(),
+                                    onChanged: (value) {
+                                      final position = Duration(milliseconds: value.toInt());
+                                      _controller.seekTo(position);
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Text(
+                              _formatDuration(_controller.value.duration),
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close, color: Colors.white),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                          ],
                         ),
                       ),
                     ),

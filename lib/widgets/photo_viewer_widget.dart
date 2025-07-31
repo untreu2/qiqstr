@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:liquid_glass_renderer/liquid_glass_renderer.dart';
 
 class PhotoViewerWidget extends StatefulWidget {
   final List<String> imageUrls;
@@ -118,48 +117,37 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(25.0),
                 child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                  child: LiquidGlass(
-                    shape: LiquidRoundedSuperellipse(
-                      borderRadius: Radius.circular(25.0),
-                    ),
-                    settings: LiquidGlassSettings(
-                      thickness: 15,
-                      glassColor: Color(0xFF000000),
-                      lightIntensity: 0.8,
-                      ambientStrength: 0.3,
-                    ),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.3),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.2),
-                          width: 1.5,
-                        ),
-                        borderRadius: BorderRadius.circular(25.0),
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.3),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.2),
+                        width: 1.5,
                       ),
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 48), // Balance space for close button
-                          Expanded(
-                            child: Center(
-                              child: Text(
-                                '${currentIndex + 1} / ${widget.imageUrls.length}',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 16,
-                                ),
+                      borderRadius: BorderRadius.circular(25.0),
+                    ),
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 48), // Balance space for close button
+                        Expanded(
+                          child: Center(
+                            child: Text(
+                              '${currentIndex + 1} / ${widget.imageUrls.length}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                                fontSize: 16,
                               ),
                             ),
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                            onPressed: () => Navigator.of(context).pop(),
-                          ),
-                        ],
-                      ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
                     ),
                   ),
                 ),
