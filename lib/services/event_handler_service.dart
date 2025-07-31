@@ -86,6 +86,131 @@ class EventHandlerService {
     }
   }
 
+  // INSTANT PROCESSING FOR USER INTERACTIONS
+  // Process user events immediately without batching delays
+
+  // Process user reaction instantly
+  Future<void> processUserReactionInstantly(Map<String, dynamic> eventData) async {
+    final eventId = eventData['id'] as String?;
+    if (eventId != null && _processedEventIds.contains(eventId)) {
+      return;
+    }
+
+    if (eventId != null) {
+      _processedEventIds.add(eventId);
+    }
+
+    await handleReactionEvent(eventData);
+    _eventsProcessed++;
+    print('[EventHandler] User reaction processed instantly: $eventId');
+  }
+
+  // Process user reply instantly
+  Future<void> processUserReplyInstantly(Map<String, dynamic> eventData, String parentEventId) async {
+    final eventId = eventData['id'] as String?;
+    if (eventId != null && _processedEventIds.contains(eventId)) {
+      return;
+    }
+
+    if (eventId != null) {
+      _processedEventIds.add(eventId);
+    }
+
+    await handleReplyEvent(eventData, parentEventId);
+    _eventsProcessed++;
+    print('[EventHandler] User reply processed instantly: $eventId');
+  }
+
+  // Process user repost instantly
+  Future<void> processUserRepostInstantly(Map<String, dynamic> eventData) async {
+    final eventId = eventData['id'] as String?;
+    if (eventId != null && _processedEventIds.contains(eventId)) {
+      return;
+    }
+
+    if (eventId != null) {
+      _processedEventIds.add(eventId);
+    }
+
+    await handleRepostEvent(eventData);
+    _eventsProcessed++;
+    print('[EventHandler] User repost processed instantly: $eventId');
+  }
+
+  // Process user note instantly
+  Future<void> processUserNoteInstantly(Map<String, dynamic> eventData) async {
+    final eventId = eventData['id'] as String?;
+    if (eventId != null && _processedEventIds.contains(eventId)) {
+      return;
+    }
+
+    if (eventId != null) {
+      _processedEventIds.add(eventId);
+    }
+
+    await _handleNoteOrReply(eventData);
+    _eventsProcessed++;
+    print('[EventHandler] User note processed instantly: $eventId');
+  }
+
+  // Process user zap instantly
+  Future<void> processUserZapInstantly(Map<String, dynamic> eventData) async {
+    final eventId = eventData['id'] as String?;
+    if (eventId != null && _processedEventIds.contains(eventId)) {
+      return;
+    }
+
+    if (eventId != null) {
+      _processedEventIds.add(eventId);
+    }
+
+    await handleZapEvent(eventData);
+    _eventsProcessed++;
+    print('[EventHandler] User zap processed instantly: $eventId');
+  }
+
+  Future<void> processUserEventInstantly(Map<String, dynamic> eventData) async {
+    final eventId = eventData['id'] as String?;
+    final kind = eventData['kind'] as int?;
+
+    if (eventId == null || kind == null) return;
+
+    if (_processedEventIds.contains(eventId)) {
+      return;
+    }
+
+    _processedEventIds.add(eventId);
+    _eventsProcessed++;
+
+    final eventType = _getEventTypeName(kind);
+    _eventTypeCounts[eventType] = (_eventTypeCounts[eventType] ?? 0) + 1;
+
+    switch (kind) {
+      case 7: // Reaction
+        await handleReactionEvent(eventData);
+        break;
+      case 6: // Repost
+        await handleRepostEvent(eventData);
+        break;
+      case 1: // Note/Reply
+        await _handleNoteOrReply(eventData);
+        break;
+      case 9735: // Zap
+        await handleZapEvent(eventData);
+        break;
+      case 0: // Profile
+        await handleProfileEvent(eventData);
+        break;
+      case 3: // Following
+        await handleFollowingEvent(eventData);
+        break;
+      default:
+        break;
+    }
+
+    print('[EventHandler] User $eventType processed instantly: $eventId');
+  }
+
   void _processPendingEvents() {
     if (_isProcessing || _pendingEvents.isEmpty) return;
 

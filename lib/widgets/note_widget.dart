@@ -92,7 +92,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     setState(() => _isReactionGlowing = true);
     Future.delayed(const Duration(milliseconds: 400), () => mounted ? setState(() => _isReactionGlowing = false) : null);
     try {
-      await widget.dataService.sendReaction(widget.note.id, '+');
+      await widget.dataService.sendReactionInstantly(widget.note.id, '+');
     } catch (_) {}
   }
 

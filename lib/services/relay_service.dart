@@ -242,6 +242,30 @@ class WebSocketManager {
     }
   }
 
+  Future<void> instantBroadcast(String message) async {
+    await _broadcastMessage(message);
+  }
+
+  Future<void> instantBroadcastToAll(String message) async {
+    final activeWs = activeSockets;
+    if (activeWs.isEmpty) return;
+
+    final futures = activeWs.map((ws) async {
+      try {
+        if (ws.readyState == WebSocket.open) {
+          _updateMessageStats(ws, message);
+          ws.add(message);
+        }
+      } catch (e) {
+        if (e is SocketException) {
+          _webSockets.removeWhere((key, value) => value == ws);
+        }
+      }
+    });
+
+    await Future.wait(futures, eagerError: false);
+  }
+
   void _processMessageQueue() {
     if (_isProcessingMessages || _messageQueue.isEmpty) return;
 

@@ -258,9 +258,9 @@ class _ShareNotePageState extends State<ShareNotePage> {
       final finalNoteContent = "$noteText$mediaPart$quotePart".trim();
 
       if (widget.replyToNoteId != null && widget.replyToNoteId!.isNotEmpty) {
-        await widget.dataService.sendReply(widget.replyToNoteId!, finalNoteContent);
+        await widget.dataService.sendReplyInstantly(widget.replyToNoteId!, finalNoteContent);
       } else {
-        await widget.dataService.shareNote(finalNoteContent);
+        await widget.dataService.shareNoteInstantly(finalNoteContent);
       }
 
       if (mounted) {

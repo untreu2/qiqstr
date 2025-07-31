@@ -1967,6 +1967,278 @@ class DataService {
     }
   }
 
+  Future<void> sendReactionInstantly(String targetEventId, String reactionContent) async {
+    if (_isClosed) return;
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found.');
+      }
+
+      final event = NostrService.createReactionEvent(
+        targetEventId: targetEventId,
+        content: reactionContent,
+        privateKey: privateKey,
+      );
+
+      final serializedEvent = NostrService.serializeEvent(event);
+      final activeSockets = _socketManager.activeSockets;
+
+      for (final ws in activeSockets) {
+        if (ws.readyState == WebSocket.open) {
+          ws.add(serializedEvent);
+        }
+      }
+
+      final reaction = ReactionModel.fromEvent(NostrService.eventToJson(event));
+      reactionsMap.putIfAbsent(targetEventId, () => []);
+      reactionsMap[targetEventId]!.add(reaction);
+
+      if (reactionsBox != null) {
+        reactionsBox!.put(reaction.id, reaction).catchError((error) {
+          print('[DataService] Error saving reaction to cache: $error');
+        });
+      }
+
+      final note = notes.firstWhereOrNull((n) => n.id == targetEventId);
+      if (note != null) {
+        note.reactionCount = reactionsMap[targetEventId]!.length;
+      }
+
+      onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
+      notesNotifier.value = _getFilteredNotesList();
+
+      print('[DataService] Reaction broadcasted instantly to ${activeSockets.length} relays');
+    } catch (e) {
+      print('[DataService ERROR] Error sending instant reaction: $e');
+      throw e;
+    }
+  }
+
+  Future<void> sendReplyInstantly(String parentEventId, String replyContent) async {
+    if (_isClosed) return;
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found.');
+      }
+
+      final parentNote = notes.firstWhereOrNull((note) => note.id == parentEventId);
+      if (parentNote == null) {
+        throw Exception('Parent note not found.');
+      }
+
+      String rootId;
+      String replyId = parentEventId;
+
+      if (parentNote.isReply && parentNote.rootId != null) {
+        rootId = parentNote.rootId!;
+      } else {
+        rootId = parentEventId;
+      }
+
+      List<List<String>> tags = [];
+
+      if (rootId != replyId) {
+        tags.add(['e', rootId, '', 'root']);
+        tags.add(['e', replyId, '', 'reply']);
+      } else {
+        tags.add(['e', rootId, '', 'root']);
+      }
+
+      tags.add(['p', parentNote.author, '', 'mention']);
+
+      for (final relayUrl in relaySetMainSockets) {
+        tags.add(['r', relayUrl]);
+      }
+
+      final event = NostrService.createReplyEvent(
+        content: replyContent,
+        privateKey: privateKey,
+        tags: tags,
+      );
+
+      final serializedEvent = NostrService.serializeEvent(event);
+      final activeSockets = _socketManager.activeSockets;
+
+      for (final ws in activeSockets) {
+        if (ws.readyState == WebSocket.open) {
+          ws.add(serializedEvent);
+        }
+      }
+
+      final reply = ReplyModel.fromEvent(NostrService.eventToJson(event));
+      repliesMap.putIfAbsent(parentEventId, () => []);
+      repliesMap[parentEventId]!.add(reply);
+
+      if (repliesBox != null) {
+        repliesBox!.put(reply.id, reply).catchError((error) {
+          print('[DataService] Error saving reply to cache: $error');
+        });
+      }
+
+      final replyNoteModel = NoteModel(
+        id: reply.id,
+        content: reply.content,
+        author: reply.author,
+        timestamp: reply.timestamp,
+        isReply: true,
+        parentId: parentEventId,
+        rootId: rootId,
+        rawWs: jsonEncode(NostrService.eventToJson(event)),
+      );
+
+      parseContentForNote(replyNoteModel);
+
+      if (!eventIds.contains(replyNoteModel.id)) {
+        notes.add(replyNoteModel);
+        eventIds.add(replyNoteModel.id);
+        if (notesBox != null) {
+          notesBox!.put(replyNoteModel.id, replyNoteModel).catchError((error) {
+            print('[DataService] Error saving reply note to cache: $error');
+          });
+        }
+        addNote(replyNoteModel);
+      }
+
+      final note = notes.firstWhereOrNull((n) => n.id == parentEventId);
+      if (note != null) {
+        note.replyCount = repliesMap[parentEventId]!.length;
+        if (!note.replyIds.contains(reply.id)) {
+          note.replyIds.add(reply.id);
+        }
+      }
+
+      if (rootId != parentEventId) {
+        final rootNote = notes.firstWhereOrNull((n) => n.id == rootId);
+        if (rootNote != null && !rootNote.replyIds.contains(reply.id)) {
+          rootNote.replyIds.add(reply.id);
+        }
+      }
+
+      onRepliesUpdated?.call(parentEventId, repliesMap[parentEventId]!);
+      onNewNote?.call(replyNoteModel);
+      notesNotifier.value = _getFilteredNotesList();
+
+      print('[DataService] Reply broadcasted instantly to ${activeSockets.length} relays');
+    } catch (e) {
+      print('[DataService ERROR] Error sending instant reply: $e');
+      throw e;
+    }
+  }
+
+  Future<void> sendRepostInstantly(NoteModel note) async {
+    if (_isClosed) return;
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found.');
+      }
+
+      final content = note.rawWs ??
+          jsonEncode({
+            'id': note.id,
+            'pubkey': note.author,
+            'content': note.content,
+            'created_at': note.timestamp.millisecondsSinceEpoch ~/ 1000,
+            'kind': note.isRepost ? 6 : 1,
+            'tags': [],
+          });
+
+      final event = NostrService.createRepostEvent(
+        noteId: note.id,
+        noteAuthor: note.author,
+        content: content,
+        privateKey: privateKey,
+      );
+
+      final serializedEvent = NostrService.serializeEvent(event);
+      final activeSockets = _socketManager.activeSockets;
+
+      for (final ws in activeSockets) {
+        if (ws.readyState == WebSocket.open) {
+          ws.add(serializedEvent);
+        }
+      }
+
+      final repost = RepostModel.fromEvent(NostrService.eventToJson(event), note.id);
+      repostsMap.putIfAbsent(note.id, () => []);
+      repostsMap[note.id]!.add(repost);
+
+      if (repostsBox != null) {
+        repostsBox!.put(repost.id, repost).catchError((error) {
+          print('[DataService] Error saving repost to cache: $error');
+        });
+      }
+
+      final updatedNote = notes.firstWhereOrNull((n) => n.id == note.id);
+      if (updatedNote != null) {
+        updatedNote.repostCount = repostsMap[note.id]!.length;
+      }
+
+      onRepostsUpdated?.call(note.id, repostsMap[note.id]!);
+      notesNotifier.value = _getFilteredNotesList();
+
+      print('[DataService] Repost broadcasted instantly to ${activeSockets.length} relays');
+    } catch (e) {
+      print('[DataService ERROR] Error sending instant repost: $e');
+      throw e;
+    }
+  }
+
+  Future<void> shareNoteInstantly(String noteContent) async {
+    if (_isClosed) return;
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found.');
+      }
+
+      final event = NostrService.createNoteEvent(
+        content: noteContent,
+        privateKey: privateKey,
+      );
+
+      final serializedEvent = NostrService.serializeEvent(event);
+      final activeSockets = _socketManager.activeSockets;
+
+      for (final ws in activeSockets) {
+        if (ws.readyState == WebSocket.open) {
+          ws.add(serializedEvent);
+        }
+      }
+
+      final timestamp = DateTime.now();
+      final eventJson = NostrService.eventToJson(event);
+      final newNote = NoteModel(
+        id: eventJson['id'],
+        content: noteContent,
+        author: npub,
+        timestamp: timestamp,
+        isRepost: false,
+      );
+
+      parseContentForNote(newNote);
+
+      notes.add(newNote);
+      eventIds.add(newNote.id);
+
+      if (notesBox != null) {
+        notesBox!.put(newNote.id, newNote).catchError((error) {
+          print('[DataService] Error saving note to cache: $error');
+        });
+      }
+
+      addNote(newNote);
+      onNewNote?.call(newNote);
+
+      print('[DataService] Note broadcasted instantly to ${activeSockets.length} relays');
+    } catch (e) {
+      print('[DataService ERROR] Error sharing instant note: $e');
+      throw e;
+    }
+  }
+
   Future<void> sendReply(String parentEventId, String replyContent) async {
     if (_isClosed) return;
     try {

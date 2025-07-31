@@ -66,13 +66,13 @@ class _ThreadPageState extends State<ThreadPage> {
 
   void _onNotesChanged() {
     if (_isLoading) return; // Prevent changes during loading
-    
+
     final allNotes = widget.dataService.notesNotifier.value;
     bool hasRelevantChanges = false;
 
     // Check if any relevant notes have actually changed
     allNotes.where((note) => _relevantNoteIds.contains(note.id)).toList();
-    
+
     // Only reload if we have new relevant notes or if existing relevant notes have changed
     if (_rootNote != null) {
       final currentRootNote = allNotes.firstWhereOrNull((n) => n.id == _rootNote!.id);
@@ -91,9 +91,7 @@ class _ThreadPageState extends State<ThreadPage> {
     // Check for new replies to relevant notes
     if (!hasRelevantChanges && _rootNote != null) {
       for (final note in allNotes) {
-        if (note.isReply &&
-            (note.rootId == _rootNote!.id || note.parentId == _rootNote!.id) &&
-            !_relevantNoteIds.contains(note.id)) {
+        if (note.isReply && (note.rootId == _rootNote!.id || note.parentId == _rootNote!.id) && !_relevantNoteIds.contains(note.id)) {
           hasRelevantChanges = true;
           break;
         }
@@ -107,7 +105,7 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Timer? _reloadTimer;
-  
+
   void _debounceReload() {
     _reloadTimer?.cancel();
     _reloadTimer = Timer(const Duration(milliseconds: 300), () {
@@ -155,17 +153,17 @@ class _ThreadPageState extends State<ThreadPage> {
 
   Future<void> _fetchMissingContextNotes() async {
     final List<String> notesToFetch = [];
-    
+
     // If root note is missing, try to fetch it
     if (_rootNote == null) {
       notesToFetch.add(widget.rootNoteId);
     }
-    
+
     // If focused note is missing, try to fetch it
     if (widget.focusedNoteId != null && _focusedNote == null) {
       notesToFetch.add(widget.focusedNoteId!);
     }
-    
+
     // If we have a focused note that's a reply, ensure we have its parent/root context
     if (_focusedNote != null && _focusedNote!.isReply) {
       if (_focusedNote!.rootId != null && _focusedNote!.rootId!.isNotEmpty) {
@@ -174,7 +172,7 @@ class _ThreadPageState extends State<ThreadPage> {
           notesToFetch.add(_focusedNote!.rootId!);
         }
       }
-      
+
       if (_focusedNote!.parentId != null && _focusedNote!.parentId!.isNotEmpty && _focusedNote!.parentId != _focusedNote!.rootId) {
         final parentExists = widget.dataService.notesNotifier.value.any((n) => n.id == _focusedNote!.parentId);
         if (!parentExists) {
@@ -182,12 +180,12 @@ class _ThreadPageState extends State<ThreadPage> {
         }
       }
     }
-    
+
     // Fetch missing notes
     if (notesToFetch.isNotEmpty) {
       print('[ThreadPage] Fetching missing context notes: $notesToFetch');
       await _fetchNotesById(notesToFetch);
-      
+
       // Refresh our local references after fetching
       final updatedNotes = widget.dataService.notesNotifier.value;
       _rootNote = updatedNotes.firstWhereOrNull((n) => n.id == widget.rootNoteId);
@@ -211,7 +209,7 @@ class _ThreadPageState extends State<ThreadPage> {
         print('[ThreadPage] Error fetching note $noteId: $e');
       }
     });
-    
+
     await Future.wait(futures);
   }
 
@@ -219,18 +217,17 @@ class _ThreadPageState extends State<ThreadPage> {
     try {
       // Fetch replies for the root note to ensure we have the complete thread context
       final allEventIds = [rootNoteId];
-      
+
       // Also include any other relevant notes we've identified
       allEventIds.addAll(_relevantNoteIds);
-      
+
       print('[ThreadPage] Fetching replies for thread context: $allEventIds');
-      
+
       // Use the existing interaction fetching mechanism
       await widget.dataService.fetchInteractionsForEvents(allEventIds);
-      
+
       // Small delay to allow for processing
       await Future.delayed(const Duration(milliseconds: 100));
-      
     } catch (e) {
       print('[ThreadPage] Error fetching thread replies: $e');
     }
@@ -265,8 +262,7 @@ class _ThreadPageState extends State<ThreadPage> {
     if (_focusedNote != null) {
       final context = _focusedNoteKey.currentContext;
       if (context != null) {
-        Scrollable.ensureVisible(context,
-            duration: const Duration(milliseconds: 500), curve: Curves.easeInOut, alignment: 0.1);
+        Scrollable.ensureVisible(context, duration: const Duration(milliseconds: 500), curve: Curves.easeInOut, alignment: 0.1);
       }
     }
 
@@ -275,26 +271,22 @@ class _ThreadPageState extends State<ThreadPage> {
 
   bool _hasReacted(NoteModel note) {
     if (_currentUserNpub == null) return false;
-    return (widget.dataService.reactionsMap[note.id] ?? [])
-        .any((e) => e.author == _currentUserNpub);
+    return (widget.dataService.reactionsMap[note.id] ?? []).any((e) => e.author == _currentUserNpub);
   }
 
   bool _hasReplied(NoteModel note) {
     if (_currentUserNpub == null) return false;
-    return (widget.dataService.repliesMap[note.id] ?? [])
-        .any((e) => e.author == _currentUserNpub);
+    return (widget.dataService.repliesMap[note.id] ?? []).any((e) => e.author == _currentUserNpub);
   }
 
   bool _hasReposted(NoteModel note) {
     if (_currentUserNpub == null) return false;
-    return (widget.dataService.repostsMap[note.id] ?? [])
-        .any((e) => e.repostedBy == _currentUserNpub);
+    return (widget.dataService.repostsMap[note.id] ?? []).any((e) => e.repostedBy == _currentUserNpub);
   }
 
   bool _hasZapped(NoteModel note) {
     if (_currentUserNpub == null) return false;
-    return (widget.dataService.zapsMap[note.id] ?? [])
-        .any((z) => z.sender == _currentUserNpub);
+    return (widget.dataService.zapsMap[note.id] ?? []).any((z) => z.sender == _currentUserNpub);
   }
 
   void _navigateToProfile(String npub) {
@@ -308,7 +300,7 @@ class _ThreadPageState extends State<ThreadPage> {
       if (mounted) setState(() => _isReactionGlowing = false);
     });
     try {
-      await widget.dataService.sendReaction(note.id, '+');
+      await widget.dataService.sendReactionInstantly(note.id, '+');
     } catch (_) {}
   }
 
@@ -549,8 +541,7 @@ class _ThreadPageState extends State<ThreadPage> {
                                   child: ValueListenableBuilder<List<NoteModel>>(
                                     valueListenable: widget.dataService.notesNotifier,
                                     builder: (context, notes, child) {
-                                      final updatedContextNote =
-                                          notes.firstWhereOrNull((n) => n.id == contextNote.id) ?? contextNote;
+                                      final updatedContextNote = notes.firstWhereOrNull((n) => n.id == contextNote.id) ?? contextNote;
                                       return NoteWidget(
                                         note: updatedContextNote,
                                         reactionCount: updatedContextNote.reactionCount,
@@ -569,9 +560,7 @@ class _ThreadPageState extends State<ThreadPage> {
                               AnimatedContainer(
                                 duration: const Duration(milliseconds: 500),
                                 curve: Curves.easeInOut,
-                                color: isDisplayRootHighlighted
-                                    ? Theme.of(context).primaryColor.withOpacity(0.1)
-                                    : Colors.transparent,
+                                color: isDisplayRootHighlighted ? Theme.of(context).primaryColor.withOpacity(0.1) : Colors.transparent,
                                 child: RootNoteWidget(
                                   key: _focusedNote != null ? _focusedNoteKey : null,
                                   note: displayRoot,

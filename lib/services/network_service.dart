@@ -129,6 +129,142 @@ class NetworkService {
     }
   }
 
+  // INSTANT BROADCASTING FOR USER INTERACTIONS
+  // Bypass all queuing and delays for user-initiated actions
+  Future<void> instantBroadcast(String message) async {
+    final stopwatch = Stopwatch()..start();
+    _totalRequests++;
+
+    try {
+      await _socketManager.executeOnActiveSockets((ws) {
+        ws.add(message);
+      });
+      _successfulRequests++;
+      print('[NetworkService] Instant broadcast completed in ${stopwatch.elapsedMilliseconds}ms');
+    } catch (e) {
+      _failedRequests++;
+      print('[NetworkService ERROR] Instant broadcast failed: $e');
+      rethrow;
+    } finally {
+      stopwatch.stop();
+      _requestTimes.add(stopwatch.elapsed);
+
+      // Keep only recent measurements
+      if (_requestTimes.length > 100) {
+        _requestTimes.removeAt(0);
+      }
+    }
+  }
+
+  Future<void> instantBroadcastUserReaction(String targetEventId, String reactionContent) async {
+    if (_isClosed) return;
+
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found.');
+      }
+
+      final event = NostrService.createReactionEvent(
+        targetEventId: targetEventId,
+        content: reactionContent,
+        privateKey: privateKey,
+      );
+
+      // Use instant broadcast instead of regular broadcast
+      await instantBroadcast(NostrService.serializeEvent(event));
+    } catch (e) {
+      print('[NetworkService ERROR] Error sending instant reaction: $e');
+      rethrow;
+    }
+  }
+
+  // Instant broadcast for user replies
+  Future<void> instantBroadcastUserReply(String parentEventId, String replyContent, String parentAuthor) async {
+    if (_isClosed) return;
+
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found.');
+      }
+
+      final tags = NostrService.createReplyTags(
+        rootId: parentEventId,
+        parentAuthor: parentAuthor,
+        relayUrls: relaySetMainSockets,
+      );
+
+      final event = NostrService.createReplyEvent(
+        content: replyContent,
+        privateKey: privateKey,
+        tags: tags,
+      );
+
+      // Use instant broadcast instead of regular broadcast
+      await instantBroadcast(NostrService.serializeEvent(event));
+    } catch (e) {
+      print('[NetworkService ERROR] Error sending instant reply: $e');
+      rethrow;
+    }
+  }
+
+  // Instant broadcast for user reposts
+  Future<void> instantBroadcastUserRepost(String noteId, String noteAuthor, String? rawContent) async {
+    if (_isClosed) return;
+
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found.');
+      }
+
+      final content = rawContent ??
+          jsonEncode({
+            'id': noteId,
+            'pubkey': noteAuthor,
+            'kind': 1,
+            'tags': [],
+          });
+
+      final event = NostrService.createRepostEvent(
+        noteId: noteId,
+        noteAuthor: noteAuthor,
+        content: content,
+        privateKey: privateKey,
+      );
+
+      // Use instant broadcast instead of regular broadcast
+      await instantBroadcast(NostrService.serializeEvent(event));
+    } catch (e) {
+      print('[NetworkService ERROR] Error sending instant repost: $e');
+      rethrow;
+    }
+  }
+
+  // Instant broadcast for user notes
+  Future<void> instantBroadcastUserNote(String noteContent) async {
+    if (_isClosed) return;
+
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found.');
+      }
+
+      final event = NostrService.createNoteEvent(
+        content: noteContent,
+        privateKey: privateKey,
+      );
+
+      // Use instant broadcast instead of regular broadcast
+      await instantBroadcast(NostrService.serializeEvent(event));
+    } catch (e) {
+      print('[NetworkService ERROR] Error sending instant note: $e');
+      rethrow;
+    }
+  }
+
   // Batched broadcast for multiple messages
   Future<void> batchBroadcast(List<String> messages, {Duration delay = const Duration(milliseconds: 10)}) async {
     if (messages.isEmpty) return;

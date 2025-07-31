@@ -23,23 +23,20 @@ Future<void> showRepostDialog({
           leading: Icon(Icons.repeat, color: context.colors.iconPrimary),
           title: Text('Repost', style: TextStyle(color: context.colors.textPrimary, fontSize: 16)),
           onTap: () async {
-            Navigator.pop(modalContext); 
+            Navigator.pop(modalContext);
             try {
-              await dataService.sendRepost(note);
-            } catch (_) {
-              
-              
-            }
+              await dataService.sendRepostInstantly(note);
+            } catch (_) {}
           },
         ),
         ListTile(
           leading: Icon(Icons.format_quote, color: context.colors.iconPrimary),
           title: Text('Quote', style: TextStyle(color: context.colors.textPrimary, fontSize: 16)),
           onTap: () {
-            Navigator.pop(modalContext); 
+            Navigator.pop(modalContext);
             final bech32 = encodeBasicBech32(note.id, 'note');
             final quoteText = 'nostr:$bech32';
-            
+
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -51,8 +48,6 @@ Future<void> showRepostDialog({
             );
           },
         ),
-        
-        
         const SizedBox(height: 45),
       ],
     ),
