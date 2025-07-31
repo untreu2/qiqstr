@@ -193,12 +193,12 @@ class DataService {
       ];
 
       final boxInitFutures = [
-        _openHiveBox<NoteModel>('notes_${dataType}_$npub'),
+        _openHiveBox<NoteModel>('notes'),
         _openHiveBox<UserModel>('users'),
-        _openHiveBox<ReactionModel>('reactions_${dataType}_$npub'),
-        _openHiveBox<ReplyModel>('replies_${dataType}_$npub'),
-        _openHiveBox<RepostModel>('reposts_${dataType}_$npub'),
-        _openHiveBox<ZapModel>('zaps_${dataType}_$npub'),
+        _openHiveBox<ReactionModel>('reactions'),
+        _openHiveBox<ReplyModel>('replies'),
+        _openHiveBox<RepostModel>('reposts'),
+        _openHiveBox<ZapModel>('zaps'),
         _openHiveBox<FollowingModel>('followingBox'),
         _openHiveBox<NotificationModel>('notifications_$npub'),
       ];
@@ -297,7 +297,7 @@ class DataService {
       }
     }
     if (hasChanges) {
-      notesNotifier.value = _itemsTree.toList();
+      notesNotifier.value = _getFilteredNotesList();
     }
   }
 
@@ -854,7 +854,7 @@ class DataService {
           note.reactionCount = reactionsMap[targetEventId]!.length;
         }
 
-        notesNotifier.value = _itemsTree.toList();
+        notesNotifier.value = _getFilteredNotesList();
         await fetchProfilesBatch([reaction.author]);
       }
     } catch (e) {
@@ -888,7 +888,7 @@ class DataService {
           note.repostCount = repostsMap[originalNoteId]!.length;
         }
 
-        notesNotifier.value = _itemsTree.toList();
+        notesNotifier.value = _getFilteredNotesList();
         await fetchProfilesBatch([repost.repostedBy]);
       }
     } catch (e) {
@@ -955,7 +955,7 @@ class DataService {
           }
         }
 
-        notesNotifier.value = _itemsTree.toList();
+        notesNotifier.value = _getFilteredNotesList();
         await fetchProfilesBatch([reply.author]);
       }
     } catch (e) {
@@ -1322,7 +1322,16 @@ class DataService {
 
   void addNote(NoteModel note) {
     _itemsTree.add(note);
-    notesNotifier.value = _itemsTree.toList();
+    notesNotifier.value = _getFilteredNotesList();
+  }
+
+  List<NoteModel> _getFilteredNotesList() {
+    final allNotes = _itemsTree.toList();
+    if (dataType == DataType.profile) {
+      // For profile, only show notes authored by the profile owner or reposted by the profile owner
+      return allNotes.where((note) => note.author == npub || (note.isRepost && note.repostedBy == npub)).toList();
+    }
+    return allNotes;
   }
 
   Future<void> _subscribeToAllZaps() async {
@@ -1951,7 +1960,7 @@ class DataService {
       }
 
       onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
-      notesNotifier.value = _itemsTree.toList();
+      notesNotifier.value = _getFilteredNotesList();
     } catch (e) {
       print('[DataService ERROR] Error sending reaction: $e');
       throw e;
@@ -2046,7 +2055,7 @@ class DataService {
 
       onRepliesUpdated?.call(parentEventId, repliesMap[parentEventId]!);
       onNewNote?.call(replyNoteModel);
-      notesNotifier.value = _itemsTree.toList();
+      notesNotifier.value = _getFilteredNotesList();
 
       print('[DataService] Reply sent and added to local notes: ${reply.id}');
     } catch (e) {
@@ -2093,7 +2102,7 @@ class DataService {
       }
 
       onRepostsUpdated?.call(note.id, repostsMap[note.id]!);
-      notesNotifier.value = _itemsTree.toList();
+      notesNotifier.value = _getFilteredNotesList();
     } catch (e) {
       print('[DataService ERROR] Error sending repost: $e');
       throw e;
@@ -2123,14 +2132,24 @@ class DataService {
       final allNotes = notesBox!.values.cast<NoteModel>().toList();
       if (allNotes.isEmpty) return;
 
+      // Filter notes based on dataType
+      List<NoteModel> filteredNotes;
+      if (dataType == DataType.profile) {
+        // For profile, only show notes authored by the profile owner or reposted by the profile owner
+        filteredNotes = allNotes.where((note) => note.author == npub || (note.isRepost && note.repostedBy == npub)).toList();
+      } else {
+        // For feed and other types, show all notes
+        filteredNotes = allNotes;
+      }
+
       // Sort notes efficiently
-      allNotes.sort((a, b) {
+      filteredNotes.sort((a, b) {
         final aTime = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
         final bTime = b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
         return bTime.compareTo(aTime);
       });
 
-      final limitedNotes = allNotes.take(150).toList();
+      final limitedNotes = filteredNotes.take(150).toList();
       final newNotes = <NoteModel>[];
 
       // Process notes in batches to avoid blocking
@@ -2161,7 +2180,7 @@ class DataService {
       }
 
       if (newNotes.isNotEmpty) {
-        notesNotifier.value = _itemsTree.toList();
+        notesNotifier.value = _getFilteredNotesList();
         onLoad(newNotes);
 
         final cachedEventIds = newNotes.map((note) => note.id).toList();
@@ -2218,7 +2237,7 @@ class DataService {
       final note = notes.firstWhereOrNull((n) => n.id == key);
       if (note != null) {
         note.zapAmount = zapsMap[key]!.fold(0, (sum, z) => sum + z.amount);
-        notesNotifier.value = _itemsTree.toList();
+        notesNotifier.value = _getFilteredNotesList();
       }
     } catch (e) {
       print("error: $e");
@@ -2271,7 +2290,7 @@ class DataService {
       }
     }
 
-    notesNotifier.value = _itemsTree.toList();
+    notesNotifier.value = _getFilteredNotesList();
   }
 
   Future<void> loadReactionsFromCache() async {
@@ -2326,6 +2345,7 @@ class DataService {
       // Process in batches to avoid blocking
       const batchSize = 100;
       final Map<String, List<ReplyModel>> tempMap = {};
+      final List<NoteModel> replyNotes = [];
 
       for (int i = 0; i < allReplies.length; i += batchSize) {
         final batch = allReplies.skip(i).take(batchSize);
@@ -2334,6 +2354,26 @@ class DataService {
           tempMap.putIfAbsent(reply.parentEventId, () => []);
           if (!tempMap[reply.parentEventId]!.any((r) => r.id == reply.id)) {
             tempMap[reply.parentEventId]!.add(reply);
+
+            // Create NoteModel for the reply if it doesn't exist in notes
+            if (!eventIds.contains(reply.id)) {
+              final replyNoteModel = NoteModel(
+                id: reply.id,
+                content: reply.content,
+                author: reply.author,
+                timestamp: reply.timestamp,
+                isReply: true,
+                parentId: reply.parentEventId,
+                rootId: reply.rootEventId,
+                rawWs: '', // We don't have the raw WebSocket data for cached replies
+              );
+
+              parseContentForNote(replyNoteModel);
+              replyNotes.add(replyNoteModel);
+              notes.add(replyNoteModel);
+              eventIds.add(replyNoteModel.id);
+              addNote(replyNoteModel);
+            }
           }
         }
 
@@ -2353,7 +2393,7 @@ class DataService {
         }
       }
 
-      print('[DataService] Replies cache loaded with ${allReplies.length} replies.');
+      print('[DataService] Replies cache loaded with ${allReplies.length} replies, ${replyNotes.length} added as notes.');
 
       final replyIds = allReplies.map((r) => r.id).toList();
       if (replyIds.isNotEmpty) {
@@ -2501,17 +2541,26 @@ class DataService {
 
       for (var note in data) {
         if (!eventIds.contains(note.id)) {
-          parseContentForNote(note);
-          notes.add(note);
-          eventIds.add(note.id);
-          newNoteIds.add(note.id);
+          // Filter notes based on dataType before adding
+          bool shouldAdd = true;
+          if (dataType == DataType.profile) {
+            // For profile, only add notes authored by this user or reposted by this user
+            shouldAdd = note.author == npub || (note.isRepost && note.repostedBy == npub);
+          }
 
-          await notesBox?.put(note.id, note);
-          addNote(note);
+          if (shouldAdd) {
+            parseContentForNote(note);
+            notes.add(note);
+            eventIds.add(note.id);
+            newNoteIds.add(note.id);
+
+            await notesBox?.put(note.id, note);
+            addNote(note);
+          }
         }
       }
 
-      print('[DataService] Handled new notes: ${data.length} notes added.');
+      print('[DataService] Handled new notes: ${data.length} notes processed, ${newNoteIds.length} added.');
 
       // Subscribe to interactions for newly added notes
       if (newNoteIds.isNotEmpty) {
