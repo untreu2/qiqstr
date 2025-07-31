@@ -8,7 +8,6 @@ import 'package:qiqstr/widgets/note_widget.dart';
 
 enum NoteListFilterType {
   latest,
-  popular,
   media,
 }
 
@@ -38,7 +37,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   bool _isLoadingMore = false;
 
   List<NoteModel> _filteredNotes = [];
-  
+
   static const int _itemsPerPage = 50;
   int _currentPage = 0;
 
@@ -50,7 +49,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       _initialize();
     });
   }
-  
+
   @override
   void didUpdateWidget(NoteListWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -101,7 +100,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       onRepostCountUpdated: (_, __) {},
     );
   }
-  
+
   void _onScroll() {
     if (!_isLoadingMore && _scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.9) {
       final allAvailableNotes = _filteredNotes.length;
@@ -137,9 +136,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   Future<void> _updateFilteredNotes(List<NoteModel> notes) async {
     List<NoteModel> filtered;
     switch (widget.filterType) {
-      case NoteListFilterType.popular:
-        filtered = await compute(_filterAndSortPopular, notes);
-        break;
       case NoteListFilterType.media:
         filtered = notes.where((n) => n.hasMedia && (!n.isReply || n.isRepost)).toList();
         break;
@@ -147,7 +143,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         filtered = notes.where((n) => !n.isReply || n.isRepost).toList();
         break;
     }
-    
+
     if (mounted) {
       setState(() {
         _filteredNotes = filtered;
@@ -208,16 +204,4 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       },
     );
   }
-}
-
-List<NoteModel> _filterAndSortPopular(List<NoteModel> notes) {
-  final cutoffTime = DateTime.now().subtract(const Duration(hours: 24));
-  final filtered = notes.where((n) => n.timestamp.isAfter(cutoffTime) && (!n.isReply || n.isRepost)).toList();
-
-  int calculateEngagementScore(NoteModel note) {
-    return note.reactionCount + note.replyCount + note.repostCount + (note.zapAmount ~/ 1000);
-  }
-
-  filtered.sort((a, b) => calculateEngagementScore(b).compareTo(calculateEngagementScore(a)));
-  return filtered;
 }
