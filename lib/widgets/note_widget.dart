@@ -249,13 +249,28 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
             profileImage != null && profileImage.isNotEmpty
                 ? CircleAvatar(
                     radius: 11,
-                    backgroundImage: CachedNetworkImageProvider(profileImage),
                     backgroundColor: colors.surfaceTransparent,
+                    child: CachedNetworkImage(
+                      imageUrl: profileImage,
+                      imageBuilder: (context, imageProvider) {
+                        return Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            image: DecorationImage(
+                              image: imageProvider,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        );
+                      },
+                      placeholder: (context, url) => Image.asset('assets/egg.png', width: 22, height: 22),
+                      errorWidget: (context, url, error) => Image.asset('assets/egg.png', width: 22, height: 22),
+                    ),
                   )
                 : CircleAvatar(
                     radius: 11,
-                    backgroundColor: colors.avatarBackground,
-                    child: Icon(Icons.person, size: 13, color: colors.iconPrimary),
+                    backgroundColor: colors.surfaceTransparent,
+                    child: Image.asset('assets/egg.png', width: 22, height: 22),
                   ),
             const SizedBox(width: 6),
             Expanded(
@@ -323,11 +338,25 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                         children: [
                           CircleAvatar(
                             radius: 21,
-                            backgroundImage:
-                                (authorUser?.profileImage ?? '').isNotEmpty ? CachedNetworkImageProvider(authorUser!.profileImage) : null,
-                            backgroundColor: (authorUser?.profileImage ?? '').isEmpty ? colors.avatarBackground : colors.surfaceTransparent,
-                            child:
-                                (authorUser?.profileImage ?? '').isEmpty ? Icon(Icons.person, size: 23, color: colors.iconPrimary) : null,
+                            backgroundColor: colors.surfaceTransparent,
+                            child: (authorUser?.profileImage ?? '').isNotEmpty
+                                ? CachedNetworkImage(
+                                    imageUrl: authorUser!.profileImage,
+                                    imageBuilder: (context, imageProvider) {
+                                      return Container(
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          image: DecorationImage(
+                                            image: imageProvider,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    placeholder: (context, url) => Image.asset('assets/egg.png', width: 42, height: 42),
+                                    errorWidget: (context, url, error) => Image.asset('assets/egg.png', width: 42, height: 42),
+                                  )
+                                : Image.asset('assets/egg.png', width: 42, height: 42),
                           ),
                           if (widget.note.isReply)
                             Positioned(
