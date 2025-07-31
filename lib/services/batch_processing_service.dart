@@ -128,7 +128,7 @@ class BatchProcessingService {
     }
   }
 
-  Future<void> processUserReactionInstantly(String targetEventId, String reactionContent, String privateKey) async {
+  Future<void> processUserReaction(String targetEventId, String reactionContent, String privateKey) async {
     if (_isClosed) return;
 
     try {
@@ -136,11 +136,11 @@ class BatchProcessingService {
       final request = NostrService.serializeRequest(NostrService.createRequest(reactionFilter));
       await _networkService.broadcastRequest(request);
     } catch (e) {
-      print('[BatchProcessingService] Error processing instant reaction: $e');
+      print('[BatchProcessingService] Error processing reaction: $e');
     }
   }
 
-  Future<void> processUserReplyInstantly(String parentEventId, String replyContent, String privateKey) async {
+  Future<void> processUserReply(String parentEventId, String replyContent, String privateKey) async {
     if (_isClosed) return;
 
     try {
@@ -148,11 +148,11 @@ class BatchProcessingService {
       final request = NostrService.serializeRequest(NostrService.createRequest(replyFilter));
       await _networkService.broadcastRequest(request);
     } catch (e) {
-      print('[BatchProcessingService] Error processing instant reply: $e');
+      print('[BatchProcessingService] Error processing reply: $e');
     }
   }
 
-  Future<void> processUserRepostInstantly(String noteId, String noteAuthor, String privateKey) async {
+  Future<void> processUserRepost(String noteId, String noteAuthor, String privateKey) async {
     if (_isClosed) return;
 
     try {
@@ -160,17 +160,17 @@ class BatchProcessingService {
       final request = NostrService.serializeRequest(NostrService.createRequest(repostFilter));
       await _networkService.broadcastRequest(request);
     } catch (e) {
-      print('[BatchProcessingService] Error processing instant repost: $e');
+      print('[BatchProcessingService] Error processing repost: $e');
     }
   }
 
-  Future<void> processUserNoteInstantly(String noteContent, String privateKey) async {
+  Future<void> processUserNote(String noteContent, String privateKey) async {
     if (_isClosed) return;
 
     try {
-      print('[BatchProcessingService] User note processed instantly');
+      print('[BatchProcessingService] User note processed');
     } catch (e) {
-      print('[BatchProcessingService] Error processing instant note: $e');
+      print('[BatchProcessingService] Error processing note: $e');
     }
   }
 
@@ -207,9 +207,9 @@ class BatchProcessingService {
         await Future.wait(futures);
       }
 
-      print('[BatchProcessingService] User $interactionType processed instantly for ${eventIds.length} events');
+      print('[BatchProcessingService] User $interactionType processed for ${eventIds.length} events');
     } catch (e) {
-      print('[BatchProcessingService] Error processing instant user interaction: $e');
+      print('[BatchProcessingService] Error processing user interaction: $e');
     }
   }
 

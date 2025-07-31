@@ -87,6 +87,13 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   bool _hasReplied() => (widget.dataService.repliesMap[widget.note.id] ?? []).any((e) => e.author == widget.currentUserNpub);
   bool _hasReposted() => (widget.dataService.repostsMap[widget.note.id] ?? []).any((e) => e.repostedBy == widget.currentUserNpub);
 
+  // Get real-time interaction counts from DataService
+  int _getCurrentReactionCount() => widget.dataService.reactionsMap[widget.note.id]?.length ?? widget.note.reactionCount;
+  int _getCurrentReplyCount() => widget.dataService.repliesMap[widget.note.id]?.length ?? widget.note.replyCount;
+  int _getCurrentRepostCount() => widget.dataService.repostsMap[widget.note.id]?.length ?? widget.note.repostCount;
+  int _getCurrentZapAmount() =>
+      widget.dataService.zapsMap[widget.note.id]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? widget.note.zapAmount;
+
   void _handleReactionTap() async {
     if (_hasReacted()) return;
     setState(() => _isReactionGlowing = true);
@@ -385,10 +392,10 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                           children: [
                             Expanded(
                               child: InteractionBar(
-                                reactionCount: widget.reactionCount,
-                                replyCount: widget.replyCount,
-                                repostCount: widget.repostCount,
-                                zapAmount: widget.note.zapAmount,
+                                reactionCount: _getCurrentReactionCount(),
+                                replyCount: _getCurrentReplyCount(),
+                                repostCount: _getCurrentRepostCount(),
+                                zapAmount: _getCurrentZapAmount(),
                                 isReactionGlowing: _isReactionGlowing,
                                 isReplyGlowing: _isReplyGlowing,
                                 isRepostGlowing: _isRepostGlowing,

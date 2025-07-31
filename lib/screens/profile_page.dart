@@ -7,10 +7,45 @@ import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/widgets/profile_info_widget.dart';
 import '../theme/theme_manager.dart';
 
-class ProfilePage extends StatelessWidget {
+class ProfilePage extends StatefulWidget {
   final UserModel user;
 
   const ProfilePage({super.key, required this.user});
+
+  @override
+  State<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends State<ProfilePage> {
+  late DataService dataService;
+  late ScrollController _scrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    dataService = DataService(npub: widget.user.npub, dataType: DataType.profile);
+    _scrollController = ScrollController()..addListener(_scrollListener);
+
+    // Initialize DataService
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      dataService.initialize();
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    dataService.closeConnections();
+    super.dispose();
+  }
+
+  void _scrollListener() {
+    // Infinite scroll support
+    dataService.onScrollPositionChanged(
+      _scrollController.position.pixels,
+      _scrollController.position.maxScrollExtent,
+    );
+  }
 
   Widget _buildFloatingBackButton(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
@@ -55,20 +90,26 @@ class ProfilePage extends StatelessWidget {
       backgroundColor: context.colors.background,
       body: Stack(
         children: [
-          CustomScrollView(
-            physics: const AlwaysScrollableScrollPhysics(
-              parent: BouncingScrollPhysics(),
+          RefreshIndicator(
+            onRefresh: () async {
+              await dataService.refreshNotes();
+            },
+            child: CustomScrollView(
+              controller: _scrollController,
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+              cacheExtent: 1500,
+              slivers: [
+                SliverToBoxAdapter(
+                  child: ProfileInfoWidget(user: widget.user),
+                ),
+                NoteListWidget(
+                  npub: widget.user.npub,
+                  dataType: DataType.profile,
+                ),
+              ],
             ),
-            cacheExtent: 1500,
-            slivers: [
-              SliverToBoxAdapter(
-                child: ProfileInfoWidget(user: user),
-              ),
-              NoteListWidget(
-                npub: user.npub,
-                dataType: DataType.profile,
-              ),
-            ],
           ),
           _buildFloatingBackButton(context),
         ],

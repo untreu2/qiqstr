@@ -51,6 +51,12 @@ class _FeedPageState extends State<FeedPage> {
         _showAppBar = true;
       });
     }
+
+    // Infinite scroll support
+    dataService.onScrollPositionChanged(
+      _scrollController.position.pixels,
+      _scrollController.position.maxScrollExtent,
+    );
   }
 
   @override
@@ -87,10 +93,9 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
-
   Widget _buildHeaderWithFilters(BuildContext context, double topPadding) {
     final colors = context.colors;
-    
+
     return ClipRRect(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
@@ -113,11 +118,8 @@ class _FeedPageState extends State<FeedPage> {
                           child: CircleAvatar(
                             radius: 16,
                             backgroundColor: colors.avatarPlaceholder,
-                            backgroundImage:
-                                user?.profileImage != null ? CachedNetworkImageProvider(user!.profileImage) : null,
-                            child: user?.profileImage == null
-                                ? Icon(Icons.person, color: colors.iconPrimary, size: 18)
-                                : null,
+                            backgroundImage: user?.profileImage != null ? CachedNetworkImageProvider(user!.profileImage) : null,
+                            child: user?.profileImage == null ? Icon(Icons.person, color: colors.iconPrimary, size: 18) : null,
                           ),
                         ),
                       ),
@@ -161,6 +163,22 @@ class _FeedPageState extends State<FeedPage> {
                   ],
                 ),
               ),
+              // Loading indicator below filter buttons
+              ValueListenableBuilder<bool>(
+                valueListenable: dataService.isRefreshingNotifier,
+                builder: (context, isRefreshing, child) {
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    height: isRefreshing ? 3 : 0,
+                    child: isRefreshing
+                        ? LinearProgressIndicator(
+                            backgroundColor: colors.borderLight,
+                            valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
+                          )
+                        : const SizedBox.shrink(),
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -171,7 +189,7 @@ class _FeedPageState extends State<FeedPage> {
   Widget _buildFilterButton(BuildContext context, NoteListFilterType filterType, String label) {
     final bool isSelected = _selectedFilterType == filterType;
     final colors = context.colors;
-    
+
     return TextButton(
       onPressed: () {
         if (_selectedFilterType != filterType) {
@@ -203,7 +221,7 @@ class _FeedPageState extends State<FeedPage> {
   @override
   Widget build(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
-    final double headerHeight = topPadding + 108;
+    final double headerHeight = topPadding + 111; // +3 for loading indicator
     final colors = context.colors;
 
     return Scaffold(
@@ -218,31 +236,36 @@ class _FeedPageState extends State<FeedPage> {
                     style: TextStyle(color: colors.textSecondary),
                   ),
                 )
-              : CustomScrollView(
-                  controller: _scrollController,
-                  physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                  cacheExtent: 1500,
-                  slivers: [
-                    SliverPersistentHeader(
-                      floating: true,
-                      delegate: _PinnedHeaderDelegate(
-                        height: headerHeight,
-                        child: AnimatedOpacity(
-                          opacity: _showAppBar ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 300),
-                          child: _buildHeaderWithFilters(context, topPadding),
+              : RefreshIndicator(
+                  onRefresh: () async {
+                    await dataService.refreshNotes();
+                  },
+                  child: CustomScrollView(
+                    controller: _scrollController,
+                    physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                    cacheExtent: 1500,
+                    slivers: [
+                      SliverPersistentHeader(
+                        floating: true,
+                        delegate: _PinnedHeaderDelegate(
+                          height: headerHeight,
+                          child: AnimatedOpacity(
+                            opacity: _showAppBar ? 1.0 : 0.0,
+                            duration: const Duration(milliseconds: 300),
+                            child: _buildHeaderWithFilters(context, topPadding),
+                          ),
                         ),
                       ),
-                    ),
-                    const SliverToBoxAdapter(
-                      child: SizedBox(height: 8),
-                    ),
-                    NoteListWidget(
-                      npub: widget.npub,
-                      dataType: DataType.feed,
-                      filterType: _selectedFilterType,
-                    ),
-                  ],
+                      const SliverToBoxAdapter(
+                        child: SizedBox(height: 8),
+                      ),
+                      NoteListWidget(
+                        npub: widget.npub,
+                        dataType: DataType.feed,
+                        filterType: _selectedFilterType,
+                      ),
+                    ],
+                  ),
                 ),
     );
   }
@@ -265,6 +288,5 @@ class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
   double get minExtent => height;
 
   @override
-  bool shouldRebuild(covariant _PinnedHeaderDelegate oldDelegate) =>
-      height != oldDelegate.height || child != oldDelegate.child;
+  bool shouldRebuild(covariant _PinnedHeaderDelegate oldDelegate) => height != oldDelegate.height || child != oldDelegate.child;
 }

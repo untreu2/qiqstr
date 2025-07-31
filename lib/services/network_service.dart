@@ -131,7 +131,7 @@ class NetworkService {
 
   // INSTANT BROADCASTING FOR USER INTERACTIONS
   // Bypass all queuing and delays for user-initiated actions
-  Future<void> instantBroadcast(String message) async {
+  Future<void> immediateBroadcast(String message) async {
     final stopwatch = Stopwatch()..start();
     _totalRequests++;
 
@@ -156,7 +156,7 @@ class NetworkService {
     }
   }
 
-  Future<void> instantBroadcastUserReaction(String targetEventId, String reactionContent) async {
+  Future<void> broadcastUserReaction(String targetEventId, String reactionContent) async {
     if (_isClosed) return;
 
     try {
@@ -171,16 +171,16 @@ class NetworkService {
         privateKey: privateKey,
       );
 
-      // Use instant broadcast instead of regular broadcast
-      await instantBroadcast(NostrService.serializeEvent(event));
+      // Use immediate broadcast instead of regular broadcast
+      await immediateBroadcast(NostrService.serializeEvent(event));
     } catch (e) {
-      print('[NetworkService ERROR] Error sending instant reaction: $e');
+      print('[NetworkService ERROR] Error sending reaction: $e');
       rethrow;
     }
   }
 
-  // Instant broadcast for user replies
-  Future<void> instantBroadcastUserReply(String parentEventId, String replyContent, String parentAuthor) async {
+  // Immediate broadcast for user replies
+  Future<void> broadcastUserReply(String parentEventId, String replyContent, String parentAuthor) async {
     if (_isClosed) return;
 
     try {
@@ -201,16 +201,16 @@ class NetworkService {
         tags: tags,
       );
 
-      // Use instant broadcast instead of regular broadcast
-      await instantBroadcast(NostrService.serializeEvent(event));
+      // Use immediate broadcast instead of regular broadcast
+      await immediateBroadcast(NostrService.serializeEvent(event));
     } catch (e) {
-      print('[NetworkService ERROR] Error sending instant reply: $e');
+      print('[NetworkService ERROR] Error sending reply: $e');
       rethrow;
     }
   }
 
-  // Instant broadcast for user reposts
-  Future<void> instantBroadcastUserRepost(String noteId, String noteAuthor, String? rawContent) async {
+  // Immediate broadcast for user reposts
+  Future<void> broadcastUserRepost(String noteId, String noteAuthor, String? rawContent) async {
     if (_isClosed) return;
 
     try {
@@ -234,16 +234,16 @@ class NetworkService {
         privateKey: privateKey,
       );
 
-      // Use instant broadcast instead of regular broadcast
-      await instantBroadcast(NostrService.serializeEvent(event));
+      // Use immediate broadcast instead of regular broadcast
+      await immediateBroadcast(NostrService.serializeEvent(event));
     } catch (e) {
-      print('[NetworkService ERROR] Error sending instant repost: $e');
+      print('[NetworkService ERROR] Error sending repost: $e');
       rethrow;
     }
   }
 
-  // Instant broadcast for user notes
-  Future<void> instantBroadcastUserNote(String noteContent) async {
+  // Immediate broadcast for user notes
+  Future<void> broadcastUserNote(String noteContent) async {
     if (_isClosed) return;
 
     try {
@@ -257,10 +257,10 @@ class NetworkService {
         privateKey: privateKey,
       );
 
-      // Use instant broadcast instead of regular broadcast
-      await instantBroadcast(NostrService.serializeEvent(event));
+      // Use immediate broadcast instead of regular broadcast
+      await immediateBroadcast(NostrService.serializeEvent(event));
     } catch (e) {
-      print('[NetworkService ERROR] Error sending instant note: $e');
+      print('[NetworkService ERROR] Error sending note: $e');
       rethrow;
     }
   }

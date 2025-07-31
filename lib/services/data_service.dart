@@ -182,58 +182,86 @@ class DataService {
     final stopwatch = Stopwatch()..start();
 
     try {
-      // Initialize optimized services first
-      await _initializeOptimizedServices();
-
-      // Initialize isolates and boxes in parallel
-      final isolateInitFutures = [
-        _initializeEventProcessorIsolate(),
-        _initializeFetchProcessorIsolate(),
-        _initializeIsolate(),
-      ];
-
-      final boxInitFutures = [
-        _openHiveBox<NoteModel>('notes'),
-        _openHiveBox<UserModel>('users'),
-        _openHiveBox<ReactionModel>('reactions'),
-        _openHiveBox<ReplyModel>('replies'),
-        _openHiveBox<RepostModel>('reposts'),
-        _openHiveBox<ZapModel>('zaps'),
-        _openHiveBox<FollowingModel>('followingBox'),
-        _openHiveBox<NotificationModel>('notifications_$npub'),
-      ];
-
-      final results = await Future.wait([
-        Future.wait(isolateInitFutures),
-        Future.wait(boxInitFutures),
-      ]);
-
-      final boxes = results[1] as List<Box>;
-      notesBox = boxes[0] as Box<NoteModel>;
-      usersBox = boxes[1] as Box<UserModel>;
-      reactionsBox = boxes[2] as Box<ReactionModel>;
-      repliesBox = boxes[3] as Box<ReplyModel>;
-      repostsBox = boxes[4] as Box<RepostModel>;
-      zapsBox = boxes[5] as Box<ZapModel>;
-      followingBox = boxes[6] as Box<FollowingModel>;
-      notificationsBox = boxes[7] as Box<NotificationModel>;
-
-      // Configure optimized services with boxes
-      await _configureOptimizedServices();
-
-      // Load cache data in background to avoid blocking initialization
-      _loadCacheDataInBackground();
-
-      // Load notes cache asynchronously
-      Future.microtask(() => loadNotesFromCache((loadedNotes) {}));
-
+      // Fast initialization - only critical components first
       _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
       _isInitialized = true;
 
-      _startOptimizedTimers();
+      // Initialize services in parallel with reduced blocking
+      final criticalFutures = [
+        _initializeOptimizedServices(),
+        _openHiveBox<NoteModel>('notes'),
+        _openHiveBox<UserModel>('users'),
+      ];
+
+      final criticalResults = await Future.wait(criticalFutures);
+      notesBox = criticalResults[1] as Box<NoteModel>;
+      usersBox = criticalResults[2] as Box<UserModel>;
+
+      // Configure critical services immediately
+      _cacheService = CacheService();
+      _cacheService.notesBox = notesBox;
+
+      _profileService = ProfileService();
+      await _profileService.initialize();
+      if (usersBox != null) {
+        _profileService.setUsersBox(usersBox!);
+      }
+
+      // Load notes cache immediately for faster UI
+      await loadNotesFromCache((loadedNotes) {});
+
+      // Start preloading for load more
+      Future.microtask(() => _preloadNextBatch());
+
+      // Enable preemptive loading for smooth infinite scroll
+      Future.microtask(() => enablePreemptiveLoading());
+
+      // Initialize remaining components in background
+      Future.microtask(() async {
+        try {
+          // Initialize isolates in background
+          await Future.wait([
+            _initializeEventProcessorIsolate(),
+            _initializeFetchProcessorIsolate(),
+            _initializeIsolate(),
+          ]);
+
+          // Open remaining boxes in background
+          final remainingBoxes = await Future.wait([
+            _openHiveBox<ReactionModel>('reactions'),
+            _openHiveBox<ReplyModel>('replies'),
+            _openHiveBox<RepostModel>('reposts'),
+            _openHiveBox<ZapModel>('zaps'),
+            _openHiveBox<FollowingModel>('followingBox'),
+            _openHiveBox<NotificationModel>('notifications_$npub'),
+          ]);
+
+          reactionsBox = remainingBoxes[0] as Box<ReactionModel>;
+          repliesBox = remainingBoxes[1] as Box<ReplyModel>;
+          repostsBox = remainingBoxes[2] as Box<RepostModel>;
+          zapsBox = remainingBoxes[3] as Box<ZapModel>;
+          followingBox = remainingBoxes[4] as Box<FollowingModel>;
+          notificationsBox = remainingBoxes[5] as Box<NotificationModel>;
+
+          // Configure remaining services
+          _cacheService.reactionsBox = reactionsBox;
+          _cacheService.repliesBox = repliesBox;
+          _cacheService.repostsBox = repostsBox;
+          _cacheService.zapsBox = zapsBox;
+
+          // Load cache data in background
+          await _loadCacheDataInBackground();
+
+          _startOptimizedTimers();
+
+          print('[DataService] Background initialization completed');
+        } catch (e) {
+          print('[DataService] Background initialization error: $e');
+        }
+      });
 
       _metrics.recordOperation('initialize', stopwatch.elapsedMilliseconds);
-      print('[DataService] Initialization completed in ${stopwatch.elapsedMilliseconds}ms');
+      print('[DataService] Fast initialization completed in ${stopwatch.elapsedMilliseconds}ms');
     } catch (e) {
       print('[DataService] Initialization error: $e');
       rethrow;
@@ -248,28 +276,21 @@ class DataService {
     await _profileService.initialize();
   }
 
-  Future<void> _configureOptimizedServices() async {
-    // Configure cache service with boxes
-    _cacheService.notesBox = notesBox;
-    _cacheService.reactionsBox = reactionsBox;
-    _cacheService.repliesBox = repliesBox;
-    _cacheService.repostsBox = repostsBox;
-    _cacheService.zapsBox = zapsBox;
-
-    // Configure profile service
-    if (usersBox != null) {
-      _profileService.setUsersBox(usersBox!);
-    }
-  }
-
   Future<void> _loadCacheDataInBackground() async {
-    await Future.wait([
-      loadReactionsFromCache(),
-      loadRepliesFromCache(),
-      loadRepostsFromCache(),
-      loadZapsFromCache(),
-      _loadNotificationsFromCache(),
-    ]);
+    // Load all cache data in parallel
+    try {
+      await Future.wait([
+        loadReactionsFromCache(),
+        loadRepliesFromCache(),
+        loadRepostsFromCache(),
+        loadZapsFromCache(),
+        _loadNotificationsFromCache(),
+      ]);
+
+      print('[DataService] Background cache loading completed');
+    } catch (e) {
+      print('[DataService] Error in background cache loading: $e');
+    }
   }
 
   void _startOptimizedTimers() {
@@ -282,22 +303,45 @@ class DataService {
 
 // Helper function for fire-and-forget operations
 
+  // Optimized interaction count reloading with batch updates
   Future<void> reloadInteractionCounts() async {
     var hasChanges = false;
-    for (var note in notes) {
-      final newReactionCount = reactionsMap[note.id]?.length ?? 0;
-      final newReplyCount = repliesMap[note.id]?.length ?? 0;
-      final newRepostCount = repostsMap[note.id]?.length ?? 0;
+    final updatedNotes = <NoteModel>[];
 
-      if (note.reactionCount != newReactionCount || note.replyCount != newReplyCount || note.repostCount != newRepostCount) {
-        note.reactionCount = newReactionCount;
-        note.replyCount = newReplyCount;
-        note.repostCount = newRepostCount;
-        hasChanges = true;
+    // Process in batches to avoid blocking UI
+    const batchSize = 50;
+    for (int i = 0; i < notes.length; i += batchSize) {
+      final batch = notes.skip(i).take(batchSize);
+
+      for (var note in batch) {
+        final newReactionCount = reactionsMap[note.id]?.length ?? 0;
+        final newReplyCount = repliesMap[note.id]?.length ?? 0;
+        final newRepostCount = repostsMap[note.id]?.length ?? 0;
+        final newZapAmount = zapsMap[note.id]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
+
+        if (note.reactionCount != newReactionCount ||
+            note.replyCount != newReplyCount ||
+            note.repostCount != newRepostCount ||
+            note.zapAmount != newZapAmount) {
+          note.reactionCount = newReactionCount;
+          note.replyCount = newReplyCount;
+          note.repostCount = newRepostCount;
+          note.zapAmount = newZapAmount;
+          updatedNotes.add(note);
+          hasChanges = true;
+        }
+      }
+
+      // Yield control periodically
+      if (i % (batchSize * 4) == 0) {
+        await Future.delayed(Duration.zero);
       }
     }
+
     if (hasChanges) {
+      _invalidateFilterCache();
       notesNotifier.value = _getFilteredNotesList();
+      print('[DataService] Updated interaction counts for ${updatedNotes.length} notes');
     }
   }
 
@@ -630,7 +674,12 @@ class DataService {
       onDisconnected: (relayUrl) => _socketManager.reconnectRelay(relayUrl, targetNpubs),
     );
 
-    await fetchNotes(targetNpubs, initialLoad: true);
+    // Fetch profile notes directly for profiles
+    if (dataType == DataType.profile) {
+      await _fetchProfileNotesDirectly(npub);
+    } else {
+      await fetchNotes(targetNpubs, initialLoad: true);
+    }
 
     await Future.wait([
       loadReactionsFromCache(),
@@ -653,6 +702,26 @@ class DataService {
     }
 
     await getCachedUserProfile(npub);
+  }
+
+  Future<void> _fetchProfileNotesDirectly(String userNpub, {int? limit, DateTime? until}) async {
+    if (_isClosed) return;
+
+    final noteLimit = limit ?? currentLimit;
+    print('[DataService] Fetching profile notes directly for $userNpub with limit: $noteLimit, until: $until');
+
+    // Create optimized filter for profile notes only
+    final filter = NostrService.createNotesFilter(
+      authors: [userNpub],
+      kinds: [1, 6],
+      limit: noteLimit,
+      until: until != null ? until.millisecondsSinceEpoch ~/ 1000 : null,
+    );
+
+    final request = NostrService.serializeRequest(NostrService.createRequest(filter));
+    await _safeBroadcast(request);
+
+    print('[DataService] Optimized profile notes request sent for $userNpub (until: $until)');
   }
 
   Future<void> _broadcastRequest(String serializedRequest) async => await _safeBroadcast(serializedRequest);
@@ -682,96 +751,110 @@ class DataService {
     print('[DataService] Fetched notes with filter: $filter');
   }
 
+  // Optimized profile fetching with smart caching and batching
+  final Map<String, Future<void>> _pendingProfileFetches = {};
+
   Future<void> fetchProfilesBatch(List<String> npubs) async {
     if (_isClosed || npubs.isEmpty) return;
 
-    final primal = PrimalCacheClient();
     final now = DateTime.now();
     final uniqueNpubs = npubs.toSet().toList();
-    final List<String> remainingForRelay = [];
+    final List<String> needsFetching = [];
 
-    // Process profiles in batches to avoid blocking
-    const batchSize = 10;
-    for (int i = 0; i < uniqueNpubs.length; i += batchSize) {
-      final batch = uniqueNpubs.skip(i).take(batchSize);
+    // Fast cache check - avoid expensive operations
+    for (final pub in uniqueNpubs) {
+      // Skip if already being fetched
+      if (_pendingProfileFetches.containsKey(pub)) continue;
 
-      for (final pub in batch) {
-        // Check cache first
-        if (profileCache.containsKey(pub)) {
-          if (now.difference(profileCache[pub]!.fetchedAt) < profileCacheTTL) {
-            continue;
-          } else {
-            profileCache.remove(pub);
-          }
-        }
-
-        // Check local storage
-        final user = usersBox?.get(pub);
-        if (user != null) {
-          final data = {
-            'name': user.name,
-            'profileImage': user.profileImage,
-            'about': user.about,
-            'nip05': user.nip05,
-            'banner': user.banner,
-            'lud16': user.lud16,
-            'website': user.website,
-          };
-          profileCache[pub] = CachedProfile(data, user.updatedAt);
+      // Check memory cache first
+      if (profileCache.containsKey(pub)) {
+        if (now.difference(profileCache[pub]!.fetchedAt) < profileCacheTTL) {
           continue;
+        } else {
+          profileCache.remove(pub);
         }
-
-        remainingForRelay.add(pub);
       }
 
-      // Yield control periodically
-      if (i % (batchSize * 3) == 0) {
-        await Future.delayed(Duration.zero);
-      }
-    }
-
-    // Fetch from Primal in background for remaining profiles
-    if (remainingForRelay.isNotEmpty) {
-      Future.microtask(() async {
-        final primalFutures = remainingForRelay.take(5).map((pub) async {
-          try {
-            final primalProfile = await primal.fetchUserProfile(pub);
-            if (primalProfile != null) {
-              profileCache[pub] = CachedProfile(primalProfile, now);
-              if (usersBox != null && usersBox!.isOpen) {
-                final userModel = UserModel.fromCachedProfile(pub, primalProfile);
-                await usersBox!.put(pub, userModel);
-              }
-              return pub;
-            }
-          } catch (e) {
-            print('[DataService] Error fetching profile for $pub: $e');
-          }
-          return null;
-        });
-
-        final results = await Future.wait(primalFutures);
-        final fetchedFromPrimal = results.whereType<String>().toSet();
-        final stillRemaining = remainingForRelay.where((pub) => !fetchedFromPrimal.contains(pub)).toList();
-
-        // Fallback to relay for remaining profiles
-        if (stillRemaining.isNotEmpty) {
-          final filter = NostrService.createProfileFilter(
-            authors: stillRemaining,
-            limit: stillRemaining.length,
-          );
-          await _broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter)));
-          print('[DataService] Relay profile fetch fallback for ${stillRemaining.length} npubs.');
-        }
-
-        // Update notifier
-        profilesNotifier.value = {
-          for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
+      // Quick local storage check
+      final user = usersBox?.get(pub);
+      if (user != null && now.difference(user.updatedAt) < profileCacheTTL) {
+        final data = {
+          'name': user.name,
+          'profileImage': user.profileImage,
+          'about': user.about,
+          'nip05': user.nip05,
+          'banner': user.banner,
+          'lud16': user.lud16,
+          'website': user.website,
         };
-      });
+        profileCache[pub] = CachedProfile(data, user.updatedAt);
+        continue;
+      }
+
+      needsFetching.add(pub);
     }
 
-    // Update notifier immediately with cached profiles
+    if (needsFetching.isEmpty) {
+      // Update notifier with cached profiles
+      profilesNotifier.value = {
+        for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
+      };
+      return;
+    }
+
+    // Batch fetch remaining profiles
+    final fetchFuture = _batchFetchProfiles(needsFetching);
+    for (final pub in needsFetching) {
+      _pendingProfileFetches[pub] = fetchFuture;
+    }
+
+    try {
+      await fetchFuture;
+    } finally {
+      // Clean up pending fetches
+      for (final pub in needsFetching) {
+        _pendingProfileFetches.remove(pub);
+      }
+    }
+  }
+
+  Future<void> _batchFetchProfiles(List<String> npubs) async {
+    final primal = PrimalCacheClient();
+    final now = DateTime.now();
+
+    // Fetch from Primal with larger batch size
+    final primalFutures = npubs.take(10).map((pub) async {
+      try {
+        final primalProfile = await primal.fetchUserProfile(pub);
+        if (primalProfile != null) {
+          profileCache[pub] = CachedProfile(primalProfile, now);
+          if (usersBox != null && usersBox!.isOpen) {
+            final userModel = UserModel.fromCachedProfile(pub, primalProfile);
+            await usersBox!.put(pub, userModel);
+          }
+          return pub;
+        }
+      } catch (e) {
+        print('[DataService] Error fetching profile for $pub: $e');
+      }
+      return null;
+    });
+
+    final results = await Future.wait(primalFutures);
+    final fetchedFromPrimal = results.whereType<String>().toSet();
+    final stillRemaining = npubs.where((pub) => !fetchedFromPrimal.contains(pub)).toList();
+
+    // Fallback to relay for remaining profiles in single request
+    if (stillRemaining.isNotEmpty) {
+      final filter = NostrService.createProfileFilter(
+        authors: stillRemaining,
+        limit: stillRemaining.length,
+      );
+      await _broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter)));
+      print('[DataService] Relay profile fetch fallback for ${stillRemaining.length} npubs.');
+    }
+
+    // Update notifier once at the end
     profilesNotifier.value = {for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)};
   }
 
@@ -786,11 +869,11 @@ class DataService {
         'priority': 1,
       });
 
-      // Increased batch size and reduced timer for better performance
-      if (_pendingEvents.length >= 20) {
+      // Optimized batch processing - larger batches, faster processing
+      if (_pendingEvents.length >= 50) {
         _flushPendingEvents();
       } else {
-        _batchTimer ??= Timer(const Duration(milliseconds: 50), _flushPendingEvents);
+        _batchTimer ??= Timer(const Duration(milliseconds: 25), _flushPendingEvents);
       }
     } catch (e) {}
   }
@@ -854,6 +937,7 @@ class DataService {
           note.reactionCount = reactionsMap[targetEventId]!.length;
         }
 
+        _invalidateFilterCache();
         notesNotifier.value = _getFilteredNotesList();
         await fetchProfilesBatch([reaction.author]);
       }
@@ -888,6 +972,7 @@ class DataService {
           note.repostCount = repostsMap[originalNoteId]!.length;
         }
 
+        _invalidateFilterCache();
         notesNotifier.value = _getFilteredNotesList();
         await fetchProfilesBatch([repost.repostedBy]);
       }
@@ -955,6 +1040,7 @@ class DataService {
           }
         }
 
+        _invalidateFilterCache();
         notesNotifier.value = _getFilteredNotesList();
         await fetchProfilesBatch([reply.author]);
       }
@@ -1272,39 +1358,498 @@ class DataService {
     return followers;
   }
 
+  // Load more with infinite scroll support
+  bool _isLoadingMore = false;
+  final Map<String, List<NoteModel>> _preloadedNotes = {};
+
+  // Infinite scroll auto-loading
+  bool _infiniteScrollEnabled = true;
+  Timer? _scrollDebounceTimer;
+  final ValueNotifier<bool> isLoadingNotifier = ValueNotifier(false);
+
   Future<void> loadMoreNotes() async {
-    if (_isClosed) return;
+    if (_isClosed || _isLoadingMore) return;
 
-    List<String> targetNpubs;
-    if (dataType == DataType.feed) {
-      final following = await getFollowingList(npub);
-      following.add(npub);
-      targetNpubs = following.toSet().toList();
-    } else {
-      targetNpubs = [npub];
+    _isLoadingMore = true;
+    final stopwatch = Stopwatch()..start();
+
+    try {
+      // 1. INSTANT: Check if we have preloaded notes
+      final cacheKey = '${dataType.toString()}_$npub';
+      if (_preloadedNotes.containsKey(cacheKey) && _preloadedNotes[cacheKey]!.isNotEmpty) {
+        final preloaded = _preloadedNotes[cacheKey]!.take(25).toList();
+        _preloadedNotes[cacheKey]!.removeRange(0, preloaded.length.clamp(0, _preloadedNotes[cacheKey]!.length));
+
+        // Add preloaded notes
+        for (final note in preloaded) {
+          if (!eventIds.contains(note.id)) {
+            notes.add(note);
+            eventIds.add(note.id);
+            addNote(note);
+          }
+        }
+
+        print('[DataService] INSTANT: Added ${preloaded.length} preloaded notes in ${stopwatch.elapsedMilliseconds}ms');
+
+        // Start background preloading for next time
+        _preloadNextBatch();
+        return;
+      }
+
+      // 2. FAST: Get target npubs quickly
+      List<String> targetNpubs;
+      if (dataType == DataType.feed) {
+        final following = await getFollowingList(npub);
+        following.add(npub);
+        targetNpubs = following.toSet().toList();
+      } else {
+        targetNpubs = [npub];
+      }
+
+      // 3. AGGRESSIVE: Parallel fetch from multiple sources
+      final until = _getOldestNoteTimestamp();
+      final increment = 75; // Increased batch size for faster loading
+
+      print('[DataService] FAST: Loading $increment notes, until=$until');
+
+      // Start parallel fetching immediately
+      final fetchFutures = <Future>[];
+
+      if (dataType == DataType.profile) {
+        // Profile: Direct fetch + cache check
+        fetchFutures.add(_fetchProfileNotesDirectly(npub, limit: increment, until: until));
+        fetchFutures.add(_checkCacheForOlderNotes(npub, until));
+      } else {
+        // Feed: Parallel relay requests
+        fetchFutures.add(_parallelFeedFetch(targetNpubs, increment, until));
+        fetchFutures.add(_checkCacheForOlderNotes(null, until));
+      }
+
+      // Wait for fastest response
+      await Future.wait(fetchFutures, eagerError: false);
+
+      // 4. BACKGROUND: Preload next batch
+      _preloadNextBatch();
+
+      print('[DataService] FAST: Load more completed in ${stopwatch.elapsedMilliseconds}ms');
+
+      // Memory management
+      if (notes.length > 500) {
+        Future.microtask(() => _performMemoryPressureRelief());
+      }
+    } finally {
+      _isLoadingMore = false;
     }
+  }
 
-    // Increase the limit progressively
-    final previousLimit = currentLimit;
-    currentLimit += 50;
+  DateTime? _getOldestNoteTimestamp() {
+    if (notes.isEmpty) return null;
+    final sortedNotes = notes.toList()..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    return sortedNotes.first.timestamp;
+  }
 
-    print('[DataService] Loading more notes with increased limit: $previousLimit -> $currentLimit');
-
+  Future<void> _parallelFeedFetch(List<String> targetNpubs, int limit, DateTime? until) async {
     final filter = NostrService.createNotesFilter(
       authors: targetNpubs,
       kinds: [1, 6],
-      limit: currentLimit,
+      limit: limit,
+      until: until != null ? until.millisecondsSinceEpoch ~/ 1000 : null,
     );
 
-    await _broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter)));
+    // Send to all active relays simultaneously
+    final request = NostrService.serializeRequest(NostrService.createRequest(filter));
+    final activeSockets = _socketManager.activeSockets;
 
-    // Also refresh interactions for any new notes that might come in
-    Future.delayed(const Duration(seconds: 2), () {
-      if (!_isClosed && notes.isNotEmpty) {
-        final newNoteIds = notes.map((note) => note.id).toList();
-        _subscribeToInteractionsForNewNotes(newNoteIds);
+    final futures = activeSockets.map((ws) {
+      if (ws.readyState == WebSocket.open) {
+        ws.add(request);
+      }
+      return Future.value();
+    }).toList();
+
+    await Future.wait(futures, eagerError: false);
+  }
+
+  Future<void> _checkCacheForOlderNotes(String? specificNpub, DateTime? until) async {
+    if (notesBox == null || !notesBox!.isOpen) return;
+
+    try {
+      final cachedNotes = notesBox!.values.where((note) {
+        // Filter by timestamp
+        if (until != null && note.timestamp.isAfter(until)) return false;
+
+        // Filter by data type
+        if (dataType == DataType.profile && specificNpub != null) {
+          return note.author == specificNpub || (note.isRepost && note.repostedBy == specificNpub);
+        }
+
+        return true;
+      }).toList();
+
+      // Sort and take recent ones
+      cachedNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      final relevantCached = cachedNotes.take(25).toList();
+
+      for (final note in relevantCached) {
+        if (!eventIds.contains(note.id)) {
+          parseContentForNote(note);
+          notes.add(note);
+          eventIds.add(note.id);
+          addNote(note);
+        }
+      }
+
+      if (relevantCached.isNotEmpty) {
+        print('[DataService] CACHE: Added ${relevantCached.length} cached notes');
+      }
+    } catch (e) {
+      print('[DataService] Cache check error: $e');
+    }
+  }
+
+  void _preloadNextBatch() {
+    if (_isClosed) return;
+
+    Future.microtask(() async {
+      try {
+        final cacheKey = '${dataType.toString()}_$npub';
+        if (_preloadedNotes[cacheKey]?.isNotEmpty == true) return; // Already have preloaded
+
+        final until = _getOldestNoteTimestamp();
+        if (until == null) return;
+
+        // Preload from cache first
+        if (notesBox != null && notesBox!.isOpen) {
+          final preloadCandidates = notesBox!.values.where((note) {
+            if (note.timestamp.isAfter(until)) return false;
+            if (eventIds.contains(note.id)) return false; // Already loaded
+
+            if (dataType == DataType.profile) {
+              return note.author == npub || (note.isRepost && note.repostedBy == npub);
+            }
+            return true;
+          }).toList();
+
+          preloadCandidates.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+          _preloadedNotes[cacheKey] = preloadCandidates.take(50).toList();
+
+          if (_preloadedNotes[cacheKey]!.isNotEmpty) {
+            print('[DataService] PRELOAD: Prepared ${_preloadedNotes[cacheKey]!.length} notes for next load');
+          }
+        }
+      } catch (e) {
+        print('[DataService] Preload error: $e');
       }
     });
+  }
+
+  // Infinite scroll methods
+  void onScrollPositionChanged(double scrollPosition, double maxScrollExtent) {
+    if (!_infiniteScrollEnabled || _isClosed) return;
+
+    // Cancel previous timer
+    _scrollDebounceTimer?.cancel();
+
+    // Debounce scroll events (100ms)
+    _scrollDebounceTimer = Timer(const Duration(milliseconds: 100), () {
+      _checkScrollThreshold(scrollPosition, maxScrollExtent);
+    });
+  }
+
+  void _checkScrollThreshold(double scrollPosition, double maxScrollExtent) {
+    if (_isClosed || _isLoadingMore) return;
+
+    // Trigger load more when 80% scrolled
+    final threshold = maxScrollExtent * 0.8;
+
+    if (scrollPosition >= threshold && scrollPosition > 0) {
+      print('[DataService] INFINITE SCROLL: Triggered at ${(scrollPosition / maxScrollExtent * 100).toInt()}%');
+      _triggerAutoLoad();
+    }
+  }
+
+  void _triggerAutoLoad() {
+    if (_isLoadingMore || _isClosed) return;
+
+    isLoadingNotifier.value = true;
+
+    loadMoreNotes().then((_) {
+      isLoadingNotifier.value = false;
+    }).catchError((e) {
+      isLoadingNotifier.value = false;
+      print('[DataService] Auto-load error: $e');
+    });
+  }
+
+  // Preemptive loading - start loading before user reaches bottom
+  void enablePreemptiveLoading() {
+    if (_isClosed) return;
+
+    Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (_isClosed) {
+        timer.cancel();
+        return;
+      }
+
+      // If we have less than 20 notes ahead, preload more
+      final cacheKey = '${dataType.toString()}_$npub';
+      final preloadedCount = _preloadedNotes[cacheKey]?.length ?? 0;
+
+      if (preloadedCount < 20 && !_isLoadingMore) {
+        _preloadNextBatch();
+      }
+    });
+  }
+
+  // Smart scroll prediction
+
+  // Control infinite scroll
+  void enableInfiniteScroll() => _infiniteScrollEnabled = true;
+  void disableInfiniteScroll() => _infiniteScrollEnabled = false;
+  bool get isInfiniteScrollEnabled => _infiniteScrollEnabled;
+
+  // Pull to refresh functionality
+  bool _isRefreshing = false;
+  final ValueNotifier<bool> isRefreshingNotifier = ValueNotifier(false);
+  DateTime? _lastRefreshTime;
+  final Duration _refreshCooldown = const Duration(seconds: 2);
+
+  Future<void> refreshNotes() async {
+    if (_isClosed || _isRefreshing) return;
+
+    // Cooldown check - prevent spam refresh
+    if (_lastRefreshTime != null) {
+      final timeSinceLastRefresh = DateTime.now().difference(_lastRefreshTime!);
+      if (timeSinceLastRefresh < _refreshCooldown) {
+        print('[DataService] REFRESH: Cooldown active, skipping refresh');
+        return;
+      }
+    }
+
+    _isRefreshing = true;
+    isRefreshingNotifier.value = true;
+    _lastRefreshTime = DateTime.now();
+
+    final stopwatch = Stopwatch()..start();
+
+    try {
+      print('[DataService] REFRESH: Starting pull to refresh');
+
+      // 1. Clear preloaded cache for fresh data
+      _preloadedNotes.clear();
+
+      // 2. Get target npubs
+      List<String> targetNpubs;
+      if (dataType == DataType.feed) {
+        final following = await getFollowingList(npub);
+        following.add(npub);
+        targetNpubs = following.toSet().toList();
+      } else {
+        targetNpubs = [npub];
+      }
+
+      // 3. Fetch fresh notes (newer than current newest)
+      DateTime? since;
+      if (notes.isNotEmpty) {
+        // Get the newest note timestamp
+        final sortedNotes = notes.toList()..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        since = sortedNotes.first.timestamp;
+      }
+
+      // 4. Parallel refresh from multiple sources
+      final refreshFutures = <Future>[];
+
+      if (dataType == DataType.profile) {
+        // Profile refresh
+        refreshFutures.add(_refreshProfileNotes(npub, since));
+      } else {
+        // Feed refresh
+        refreshFutures.add(_refreshFeedNotes(targetNpubs, since));
+      }
+
+      // 5. Also refresh interactions for existing notes
+      refreshFutures.add(_refreshInteractionsForCurrentNotes());
+
+      // 6. Refresh profiles for any new authors
+      refreshFutures.add(_refreshProfilesInBackground());
+
+      // Wait for all refresh operations
+      await Future.wait(refreshFutures, eagerError: false);
+
+      // 7. Restart preloading for next infinite scroll
+      Future.microtask(() => _preloadNextBatch());
+
+      print('[DataService] REFRESH: Completed in ${stopwatch.elapsedMilliseconds}ms');
+    } catch (e) {
+      print('[DataService] REFRESH: Error during refresh: $e');
+    } finally {
+      _isRefreshing = false;
+      isRefreshingNotifier.value = false;
+    }
+  }
+
+  Future<void> _refreshProfileNotes(String userNpub, DateTime? since) async {
+    final filter = NostrService.createNotesFilter(
+      authors: [userNpub],
+      kinds: [1, 6],
+      limit: 50, // Get latest 50 notes
+      since: since != null ? since.millisecondsSinceEpoch ~/ 1000 : null,
+    );
+
+    // Send to all active relays for faster response
+    final request = NostrService.serializeRequest(NostrService.createRequest(filter));
+    final activeSockets = _socketManager.activeSockets;
+
+    final futures = activeSockets.map((ws) {
+      if (ws.readyState == WebSocket.open) {
+        ws.add(request);
+      }
+      return Future.value();
+    }).toList();
+
+    await Future.wait(futures, eagerError: false);
+    print('[DataService] REFRESH: Profile notes request sent to ${activeSockets.length} relays');
+  }
+
+  Future<void> _refreshFeedNotes(List<String> targetNpubs, DateTime? since) async {
+    final filter = NostrService.createNotesFilter(
+      authors: targetNpubs,
+      kinds: [1, 6],
+      limit: 100, // Get more notes for feed
+      since: since != null ? since.millisecondsSinceEpoch ~/ 1000 : null,
+    );
+
+    // Parallel requests to all relays
+    final request = NostrService.serializeRequest(NostrService.createRequest(filter));
+    final activeSockets = _socketManager.activeSockets;
+
+    final futures = activeSockets.map((ws) {
+      if (ws.readyState == WebSocket.open) {
+        ws.add(request);
+      }
+      return Future.value();
+    }).toList();
+
+    await Future.wait(futures, eagerError: false);
+    print('[DataService] REFRESH: Feed notes request sent to ${activeSockets.length} relays');
+  }
+
+  Future<void> _refreshInteractionsForCurrentNotes() async {
+    if (notes.isEmpty) return;
+
+    // Get recent note IDs (last 24 hours)
+    final recentNotes = notes.where((note) {
+      return DateTime.now().difference(note.timestamp).inHours < 24;
+    }).toList();
+
+    if (recentNotes.isEmpty) return;
+
+    final noteIds = recentNotes.map((note) => note.id).toList();
+
+    // Refresh reactions, replies, reposts, and zaps
+    final interactionFutures = [
+      _refreshReactionsForNotes(noteIds),
+      _refreshRepliesForNotes(noteIds),
+      _refreshRepostsForNotes(noteIds),
+      _refreshZapsForNotes(noteIds),
+    ];
+
+    await Future.wait(interactionFutures, eagerError: false);
+    print('[DataService] REFRESH: Interactions refreshed for ${noteIds.length} recent notes');
+  }
+
+  Future<void> _refreshReactionsForNotes(List<String> noteIds) async {
+    final filter = NostrService.createReactionFilter(eventIds: noteIds, limit: 500);
+    await _broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter)));
+  }
+
+  Future<void> _refreshRepliesForNotes(List<String> noteIds) async {
+    final filter = NostrService.createReplyFilter(eventIds: noteIds, limit: 500);
+    await _broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter)));
+  }
+
+  Future<void> _refreshRepostsForNotes(List<String> noteIds) async {
+    final filter = NostrService.createRepostFilter(eventIds: noteIds, limit: 500);
+    await _broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter)));
+  }
+
+  Future<void> _refreshZapsForNotes(List<String> noteIds) async {
+    final filter = NostrService.createZapFilter(eventIds: noteIds, limit: 500);
+    await _broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter)));
+  }
+
+  Future<void> _refreshProfilesInBackground() async {
+    // Get unique authors from recent notes
+    final recentAuthors =
+        notes.where((note) => DateTime.now().difference(note.timestamp).inHours < 6).map((note) => note.author).toSet().toList();
+
+    if (recentAuthors.isNotEmpty) {
+      await fetchProfilesBatch(recentAuthors);
+      print('[DataService] REFRESH: Profiles refreshed for ${recentAuthors.length} authors');
+    }
+  }
+
+  // Force refresh - ignores cooldown
+  Future<void> forceRefresh() async {
+    _lastRefreshTime = null;
+    await refreshNotes();
+  }
+
+  // Check if refresh is available (not in cooldown)
+  bool get canRefresh {
+    if (_lastRefreshTime == null) return true;
+    final timeSinceLastRefresh = DateTime.now().difference(_lastRefreshTime!);
+    return timeSinceLastRefresh >= _refreshCooldown;
+  }
+
+  // Get time until next refresh is available
+  Duration? get timeUntilNextRefresh {
+    if (_lastRefreshTime == null) return null;
+    final timeSinceLastRefresh = DateTime.now().difference(_lastRefreshTime!);
+    if (timeSinceLastRefresh >= _refreshCooldown) return null;
+    return _refreshCooldown - timeSinceLastRefresh;
+  }
+
+  // Memory pressure relief - keep only recent notes
+  Future<void> _performMemoryPressureRelief() async {
+    if (notes.length <= 300) return;
+
+    print('[DataService] Performing memory pressure relief: ${notes.length} notes');
+
+    // Sort notes by timestamp (newest first)
+    final sortedNotes = notes.toList()
+      ..sort((a, b) {
+        final aTime = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
+        final bTime = b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
+        return bTime.compareTo(aTime);
+      });
+
+    // Keep only the 300 most recent notes
+    final notesToKeep = sortedNotes.take(300).toList();
+    final notesToRemove = sortedNotes.skip(300).toList();
+
+    // Update notes list and eventIds
+    notes.clear();
+    eventIds.clear();
+    _itemsTree.clear();
+
+    for (final note in notesToKeep) {
+      notes.add(note);
+      eventIds.add(note.id);
+      _itemsTree.add(note);
+    }
+
+    // Clean up interaction maps for removed notes
+    final removedIds = notesToRemove.map((n) => n.id).toSet();
+    reactionsMap.removeWhere((key, value) => removedIds.contains(key));
+    repliesMap.removeWhere((key, value) => removedIds.contains(key));
+    repostsMap.removeWhere((key, value) => removedIds.contains(key));
+    zapsMap.removeWhere((key, value) => removedIds.contains(key));
+
+    _invalidateFilterCache();
+    notesNotifier.value = _getFilteredNotesList();
+
+    print('[DataService] Memory relief completed: ${notes.length} notes remaining');
   }
 
   final SplayTreeSet<NoteModel> _itemsTree = SplayTreeSet(_compareNotes);
@@ -1321,17 +1866,42 @@ class DataService {
   }
 
   void addNote(NoteModel note) {
+    // For profile, only add relevant notes to tree
+    if (dataType == DataType.profile) {
+      if (note.author != npub && !(note.isRepost && note.repostedBy == npub)) {
+        return; // Skip irrelevant notes for profile
+      }
+    }
+
     _itemsTree.add(note);
+    _invalidateFilterCache();
     notesNotifier.value = _getFilteredNotesList();
   }
 
+  // Optimize profile filtering - cache filtered results
+  List<NoteModel>? _cachedFilteredNotes;
+  bool _filterCacheValid = false;
+
   List<NoteModel> _getFilteredNotesList() {
-    final allNotes = _itemsTree.toList();
-    if (dataType == DataType.profile) {
-      // For profile, only show notes authored by the profile owner or reposted by the profile owner
-      return allNotes.where((note) => note.author == npub || (note.isRepost && note.repostedBy == npub)).toList();
+    if (dataType != DataType.profile) {
+      return _itemsTree.toList();
     }
-    return allNotes;
+
+    // For profile, use cached filtered results if valid
+    if (_filterCacheValid && _cachedFilteredNotes != null) {
+      return _cachedFilteredNotes!;
+    }
+
+    // Rebuild filtered cache for profile
+    final allNotes = _itemsTree.toList();
+    _cachedFilteredNotes = allNotes.where((note) => note.author == npub || (note.isRepost && note.repostedBy == npub)).toList();
+    _filterCacheValid = true;
+
+    return _cachedFilteredNotes!;
+  }
+
+  void _invalidateFilterCache() {
+    _filterCacheValid = false;
   }
 
   Future<void> _subscribeToAllZaps() async {
@@ -1960,6 +2530,8 @@ class DataService {
       }
 
       onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
+      _invalidateFilterCache();
+      _invalidateFilterCache();
       notesNotifier.value = _getFilteredNotesList();
     } catch (e) {
       print('[DataService ERROR] Error sending reaction: $e');
@@ -2008,9 +2580,9 @@ class DataService {
       onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
       notesNotifier.value = _getFilteredNotesList();
 
-      print('[DataService] Reaction broadcasted instantly to ${activeSockets.length} relays');
+      print('[DataService] Reaction broadcasted to ${activeSockets.length} relays');
     } catch (e) {
-      print('[DataService ERROR] Error sending instant reaction: $e');
+      print('[DataService ERROR] Error sending reaction: $e');
       throw e;
     }
   }
@@ -2118,11 +2690,13 @@ class DataService {
 
       onRepliesUpdated?.call(parentEventId, repliesMap[parentEventId]!);
       onNewNote?.call(replyNoteModel);
+      _invalidateFilterCache();
+      _invalidateFilterCache();
       notesNotifier.value = _getFilteredNotesList();
 
-      print('[DataService] Reply broadcasted instantly to ${activeSockets.length} relays');
+      print('[DataService] Reply broadcasted to ${activeSockets.length} relays');
     } catch (e) {
-      print('[DataService ERROR] Error sending instant reply: $e');
+      print('[DataService ERROR] Error sending reply: $e');
       throw e;
     }
   }
@@ -2179,9 +2753,9 @@ class DataService {
       onRepostsUpdated?.call(note.id, repostsMap[note.id]!);
       notesNotifier.value = _getFilteredNotesList();
 
-      print('[DataService] Repost broadcasted instantly to ${activeSockets.length} relays');
+      print('[DataService] Repost broadcasted to ${activeSockets.length} relays');
     } catch (e) {
-      print('[DataService ERROR] Error sending instant repost: $e');
+      print('[DataService ERROR] Error sending repost: $e');
       throw e;
     }
   }
@@ -2232,9 +2806,9 @@ class DataService {
       addNote(newNote);
       onNewNote?.call(newNote);
 
-      print('[DataService] Note broadcasted instantly to ${activeSockets.length} relays');
+      print('[DataService] Note broadcasted to ${activeSockets.length} relays');
     } catch (e) {
-      print('[DataService ERROR] Error sharing instant note: $e');
+      print('[DataService ERROR] Error sharing note: $e');
       throw e;
     }
   }
@@ -2327,6 +2901,8 @@ class DataService {
 
       onRepliesUpdated?.call(parentEventId, repliesMap[parentEventId]!);
       onNewNote?.call(replyNoteModel);
+      _invalidateFilterCache();
+      _invalidateFilterCache();
       notesNotifier.value = _getFilteredNotesList();
 
       print('[DataService] Reply sent and added to local notes: ${reply.id}');
@@ -2452,6 +3028,7 @@ class DataService {
       }
 
       if (newNotes.isNotEmpty) {
+        _invalidateFilterCache();
         notesNotifier.value = _getFilteredNotesList();
         onLoad(newNotes);
 
@@ -2509,6 +3086,7 @@ class DataService {
       final note = notes.firstWhereOrNull((n) => n.id == key);
       if (note != null) {
         note.zapAmount = zapsMap[key]!.fold(0, (sum, z) => sum + z.amount);
+        _invalidateFilterCache();
         notesNotifier.value = _getFilteredNotesList();
       }
     } catch (e) {
@@ -2813,22 +3391,20 @@ class DataService {
 
       for (var note in data) {
         if (!eventIds.contains(note.id)) {
-          // Filter notes based on dataType before adding
-          bool shouldAdd = true;
+          // Early filter for profile to avoid unnecessary processing
           if (dataType == DataType.profile) {
-            // For profile, only add notes authored by this user or reposted by this user
-            shouldAdd = note.author == npub || (note.isRepost && note.repostedBy == npub);
+            if (note.author != npub && !(note.isRepost && note.repostedBy == npub)) {
+              continue; // Skip irrelevant notes immediately
+            }
           }
 
-          if (shouldAdd) {
-            parseContentForNote(note);
-            notes.add(note);
-            eventIds.add(note.id);
-            newNoteIds.add(note.id);
+          parseContentForNote(note);
+          notes.add(note);
+          eventIds.add(note.id);
+          newNoteIds.add(note.id);
 
-            await notesBox?.put(note.id, note);
-            addNote(note);
-          }
+          await notesBox?.put(note.id, note);
+          addNote(note);
         }
       }
 
@@ -2900,6 +3476,18 @@ class DataService {
         return;
       }
       final String eventAuthor = eventAuthorNullable;
+
+      // Early exit for profile if event is not relevant
+      if (dataType == DataType.profile && kind == 1) {
+        if (eventAuthor != npub) {
+          return; // Skip notes not authored by profile user
+        }
+      }
+      if (dataType == DataType.profile && kind == 6) {
+        if (eventAuthor != npub) {
+          return; // Skip reposts not made by profile user
+        }
+      }
 
       if (eventAuthor != npub) {
         final List<dynamic> eventTags = List<dynamic>.from(eventData['tags'] ?? []);
@@ -3343,6 +3931,15 @@ class DataService {
   Future<void> closeConnections() async {
     if (_isClosed) return;
     _isClosed = true;
+
+    // Clear preloaded notes and infinite scroll
+    _preloadedNotes.clear();
+    _scrollDebounceTimer?.cancel();
+    isLoadingNotifier.value = false;
+
+    // Clear refresh state
+    _isRefreshing = false;
+    isRefreshingNotifier.value = false;
 
     _cacheCleanupTimer?.cancel();
     _interactionRefreshTimer?.cancel();
