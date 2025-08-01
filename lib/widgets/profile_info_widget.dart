@@ -7,7 +7,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/edit_profile.dart';
-import 'package:qiqstr/screens/following_page.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:hive/hive.dart';
 import 'package:qiqstr/models/following_model.dart';
@@ -36,28 +35,64 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   late Box<FollowingModel> _followingBox;
   DataService? _dataService;
 
-  int? _followingCount;
-  bool _isLoadingFollowing = true;
-  bool _followsYou = false;
-
   UserModel? _liveUser;
   Timer? _userRefreshTimer;
   bool _copiedToClipboard = false;
+  bool _isInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    _startUserRefreshTimer();
 
-    // Use shared DataService if available, otherwise create our own
+    // Use shared DataService if available
     if (widget.sharedDataService != null) {
       _dataService = widget.sharedDataService;
     }
 
-    // Defer heavy operations until after widget is built
+    // Start with basic user data immediately
+    _liveUser = widget.user;
+
+    // Defer all heavy operations with progressive loading
+    _startProgressiveInitialization();
+  }
+
+  @override
+  void didUpdateWidget(ProfileInfoWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // Update DataService if it becomes available
+    if (widget.sharedDataService != null && _dataService == null) {
+      _dataService = widget.sharedDataService;
+    }
+  }
+
+  void _startProgressiveInitialization() {
+    // Phase 1: Basic setup (immediate)
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initFollowStatusAsync();
-      _loadFollowingCountAsync();
+      if (mounted) {
+        _initBasicData();
+      }
+    });
+
+    // Phase 2: Follow status (after 100ms)
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) {
+        _initFollowStatusAsync();
+      }
+    });
+
+    // Phase 4: User refresh timer (after 500ms)
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        _startOptimizedUserRefreshTimer();
+      }
+    });
+  }
+
+  void _initBasicData() {
+    // Set up basic state without heavy operations
+    setState(() {
+      _isInitialized = true;
     });
   }
 
@@ -82,80 +117,33 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         });
       }
 
-      // Initialize DataService in background without blocking UI (only if not using shared)
+      // Don't create new DataService - only use shared one from profile page
       if (_dataService == null) {
-        Future.microtask(() async {
-          try {
-            _dataService = DataService(npub: _currentUserNpub!, dataType: DataType.profile);
-            await _dataService!.initializeLightweight();
-
-            // Heavy operations in background
-            Future.delayed(const Duration(milliseconds: 200), () {
-              if (mounted && _dataService != null) {
-                _dataService!.initializeHeavyOperations().catchError((e) {
-                  print('[ProfileInfoWidget] DataService heavy init error: $e');
-                });
-              }
-            });
-          } catch (e) {
-            print('[ProfileInfoWidget] DataService init error: $e');
-          }
-        });
+        print('[ProfileInfoWidget] No shared DataService available for follow status operations');
       }
     } catch (e) {
       print('[ProfileInfoWidget] Follow status init error: $e');
     }
   }
 
-  void _startUserRefreshTimer() {
+  void _startOptimizedUserRefreshTimer() {
     final npub = widget.user.npub;
-    _userRefreshTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
-      final usersBox = await Hive.openBox<UserModel>('users');
-      final latestUser = usersBox.get(npub);
-      if (latestUser != null && mounted) {
-        setState(() {
-          _liveUser = latestUser;
-        });
-      }
-    });
-  }
-
-  Future<void> _loadFollowingCountAsync() async {
-    // Run in background to avoid blocking UI
-    Future.microtask(() async {
+    // Reduced frequency from 1 second to 5 seconds for better performance
+    _userRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
       try {
-        // Create temporary service for following list (same approach as FollowingListPage)
-        final dataService = DataService(npub: widget.user.npub, dataType: DataType.profile);
+        if (!mounted) return;
 
-        // Use the same initialization method as FollowingListPage
-        await dataService.initialize();
+        final usersBox = await Hive.openBox<UserModel>('users');
+        final latestUser = usersBox.get(npub);
 
-        // Get following list in background
-        final followingList = await dataService.getFollowingList(widget.user.npub);
-        final currentNpub = await _secureStorage.read(key: 'npub');
-        final followsYou = currentNpub != null && widget.user.npub != currentNpub && followingList.contains(currentNpub);
-
-        print('[ProfileInfoWidget] Following list loaded: ${followingList.length} items');
-
-        if (mounted) {
+        // Only update if there's actually a change
+        if (latestUser != null && mounted && latestUser != _liveUser) {
           setState(() {
-            _followingCount = followingList.length;
-            _isLoadingFollowing = false;
-            _followsYou = followsYou;
-            _currentUserNpub = currentNpub;
+            _liveUser = latestUser;
           });
         }
-
-        // Clean up temporary service
-        dataService.closeConnections();
       } catch (e) {
-        print('[ProfileInfoWidget] Following count load error: $e');
-        if (mounted) {
-          setState(() {
-            _followingCount = 0; // Set to 0 instead of leaving null
-            _isLoadingFollowing = false;
-          });
-        }
+        print('[ProfileInfoWidget] User refresh error: $e');
       }
     });
   }
@@ -194,175 +182,45 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          GestureDetector(
-            onTap: () {
-              if (user.banner.isNotEmpty) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => PhotoViewerWidget(imageUrls: [user.banner]),
-                  ),
-                );
-              }
-            },
-            child: CachedNetworkImage(
-              imageUrl: user.banner,
-              width: screenWidth,
-              height: 130,
-              fit: BoxFit.cover,
-              placeholder: (_, __) => Container(
-                height: 130,
-                width: screenWidth,
-                color: context.colors.grey700,
-              ),
-              errorWidget: (_, __, ___) => Container(
-                height: 130,
-                width: screenWidth,
-                color: context.colors.background,
-              ),
-            ),
-          ),
+          // Optimized banner loading
+          _buildOptimizedBanner(context, user, screenWidth),
+          // Main profile content
           Container(
             transform: Matrix4.translationValues(0, -30, 0),
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        if (user.profileImage.isNotEmpty) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => PhotoViewerWidget(imageUrls: [user.profileImage]),
-                            ),
-                          );
-                        }
-                      },
-                      child: _buildAvatar(user),
-                    ),
-                    const Spacer(),
-                    if (_currentUserNpub != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 35.0),
-                        child: (widget.user.npub == _currentUserNpub)
-                            ? GestureDetector(
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => const EditOwnProfilePage(),
-                                    ),
-                                  );
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                                  height: 34,
-                                  alignment: Alignment.center,
-                                  decoration: BoxDecoration(
-                                    color: context.colors.overlayLight,
-                                    borderRadius: BorderRadius.circular(24),
-                                    border: Border.all(color: context.colors.borderAccent),
-                                  ),
-                                  child: Text(
-                                    'Edit profile',
-                                    style: TextStyle(
-                                      color: context.colors.textPrimary,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              )
-                            : (_isFollowing != null)
-                                ? GestureDetector(
-                                    onTap: _toggleFollow,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                                      height: 34,
-                                      alignment: Alignment.center,
-                                      decoration: BoxDecoration(
-                                        color: context.colors.overlayLight,
-                                        borderRadius: BorderRadius.circular(24),
-                                        border: Border.all(color: context.colors.borderAccent),
-                                      ),
-                                      child: Text(
-                                        _isFollowing! ? 'Following' : 'Follow',
-                                        style: TextStyle(
-                                          color: context.colors.textPrimary,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                : const SizedBox.shrink(),
-                      ),
-                  ],
-                ),
+                // Avatar and action buttons row
+                _buildAvatarAndActionsRow(context, user),
                 const SizedBox(height: 12),
+
+                // Name and verification
                 _buildNameRow(context, user),
+                const SizedBox(height: 12),
+
+                // NPUB copy button
+                _buildNpubCopyButton(context, npubBech32),
                 const SizedBox(height: 6),
-                const SizedBox(height: 6),
-                GestureDetector(
-                  onTap: () async {
-                    await Clipboard.setData(ClipboardData(text: npubBech32));
-                    setState(() => _copiedToClipboard = true);
-                    await Future.delayed(const Duration(seconds: 1));
-                    if (mounted) setState(() => _copiedToClipboard = false);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    height: 34,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: context.colors.overlayLight,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: context.colors.borderAccent),
-                    ),
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
-                      transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
-                      child: Row(
-                        key: ValueKey(_copiedToClipboard),
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.copy, size: 14, color: context.colors.textTertiary),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              _copiedToClipboard ? 'Copied to clipboard' : npubBech32,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: context.colors.textPrimary,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
+
+                // Lightning address
                 if (user.lud16.isNotEmpty) Text(user.lud16, style: TextStyle(fontSize: 13, color: context.colors.accent)),
+
+                // About section
                 if (user.about.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8.0),
                     child: Text(user.about, style: TextStyle(fontSize: 14, color: context.colors.secondary)),
                   ),
-                if (user.website.isNotEmpty)
+
+                // Website preview (only load if initialized to avoid blocking)
+                if (user.website.isNotEmpty && _isInitialized)
                   Padding(
                     padding: const EdgeInsets.only(top: 12.0),
                     child: MiniLinkPreviewWidget(url: websiteUrl),
                   ),
+
                 const SizedBox(height: 16),
-                _buildFollowingCount(),
               ],
             ),
           ),
@@ -434,52 +292,171 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     );
   }
 
-  Widget _buildFollowingCount() {
+  Widget _buildOptimizedBanner(BuildContext context, UserModel user, double screenWidth) {
+    return GestureDetector(
+      onTap: () {
+        if (user.banner.isNotEmpty) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PhotoViewerWidget(imageUrls: [user.banner]),
+            ),
+          );
+        }
+      },
+      child: user.banner.isNotEmpty
+          ? CachedNetworkImage(
+              imageUrl: user.banner,
+              width: screenWidth,
+              height: 130,
+              fit: BoxFit.cover,
+              placeholder: (_, __) => Container(
+                height: 130,
+                width: screenWidth,
+                color: context.colors.grey700,
+              ),
+              errorWidget: (_, __, ___) => Container(
+                height: 130,
+                width: screenWidth,
+                color: context.colors.background,
+              ),
+            )
+          : Container(
+              height: 130,
+              width: screenWidth,
+              color: context.colors.background,
+            ),
+    );
+  }
+
+  Widget _buildAvatarAndActionsRow(BuildContext context, UserModel user) {
     return Row(
       children: [
-        Text('Following: ', style: TextStyle(color: context.colors.textSecondary, fontSize: 14)),
         GestureDetector(
           onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => FollowingListPage(
-                  display_name: (_liveUser ?? widget.user).name.isNotEmpty
-                      ? (_liveUser ?? widget.user).name
-                      : (_liveUser ?? widget.user).nip05.split('@').first,
-                  npub: (_liveUser ?? widget.user).npub,
+            if (user.profileImage.isNotEmpty) {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => PhotoViewerWidget(imageUrls: [user.profileImage]),
                 ),
-              ),
-            );
+              );
+            }
           },
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 500),
-            transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
-            child: _isLoadingFollowing
-                ? Text(
-                    '...',
-                    key: const ValueKey('loading'),
-                    style: TextStyle(color: context.colors.textTertiary, fontSize: 14, decoration: TextDecoration.underline),
-                  )
-                : Text(
-                    '${_followingCount ?? 0}',
-                    key: ValueKey('count-${_followingCount ?? 0}'),
-                    style: TextStyle(color: context.colors.textPrimary, fontSize: 14, decoration: TextDecoration.underline),
-                  ),
+          child: _buildAvatar(user),
+        ),
+        const Spacer(),
+        if (_currentUserNpub != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 35.0),
+            child: (widget.user.npub == _currentUserNpub)
+                ? _buildEditProfileButton(context)
+                : (_isFollowing != null)
+                    ? _buildFollowButton(context)
+                    : const SizedBox.shrink(),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildEditProfileButton(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const EditOwnProfilePage(),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        height: 34,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: context.colors.overlayLight,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: context.colors.borderAccent),
+        ),
+        child: Text(
+          'Edit profile',
+          style: TextStyle(
+            color: context.colors.textPrimary,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
           ),
         ),
-        if (_followsYou) ...[
-          const SizedBox(width: 8),
-          Text(
-            '• Follows you',
-            style: TextStyle(
-              color: context.colors.success,
-              fontSize: 13,
-              fontWeight: FontWeight.w400,
-            ),
+      ),
+    );
+  }
+
+  Widget _buildFollowButton(BuildContext context) {
+    return GestureDetector(
+      onTap: _toggleFollow,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        height: 34,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: context.colors.overlayLight,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: context.colors.borderAccent),
+        ),
+        child: Text(
+          _isFollowing! ? 'Following' : 'Follow',
+          style: TextStyle(
+            color: context.colors.textPrimary,
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
           ),
-        ],
-      ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNpubCopyButton(BuildContext context, String npubBech32) {
+    return GestureDetector(
+      onTap: () async {
+        await Clipboard.setData(ClipboardData(text: npubBech32));
+        setState(() => _copiedToClipboard = true);
+        await Future.delayed(const Duration(seconds: 1));
+        if (mounted) setState(() => _copiedToClipboard = false);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        height: 34,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: context.colors.overlayLight,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: context.colors.borderAccent),
+        ),
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
+          child: Row(
+            key: ValueKey(_copiedToClipboard),
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.copy, size: 14, color: context.colors.textTertiary),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  _copiedToClipboard ? 'Copied to clipboard' : npubBech32,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: context.colors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

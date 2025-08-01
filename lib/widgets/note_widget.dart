@@ -141,7 +141,10 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     );
   }
 
-  void _navigateToProfile(String npub) => widget.dataService.openUserProfile(context, npub);
+  void _navigateToProfile(String npub) {
+    // Immediate navigation with optimized profile loading
+    widget.dataService.openUserProfile(context, npub);
+  }
 
   void _navigateToThreadPage(NoteModel note) {
     final String rootIdToShow = (note.isReply && note.rootId != null && note.rootId!.isNotEmpty) ? note.rootId! : note.id;

@@ -548,16 +548,55 @@ class DataService {
 
       if (pubHex == null) return;
 
-      final data = await getCachedUserProfile(pubHex);
-      final user = UserModel.fromCachedProfile(pubHex, data);
+      // Get the best available user data immediately
+      UserModel user;
+      if (profileCache.containsKey(pubHex)) {
+        user = UserModel.fromCachedProfile(pubHex, profileCache[pubHex]!.data);
+      } else if (usersBox?.get(pubHex) != null) {
+        user = usersBox!.get(pubHex)!;
+      } else {
+        // Create minimal user for immediate navigation
+        user = UserModel(
+          npub: pubHex,
+          name: 'Loading...',
+          about: '',
+          profileImage: '',
+          nip05: '',
+          banner: '',
+          lud16: '',
+          website: '',
+          updatedAt: DateTime.now(),
+        );
+      }
 
       if (!context.mounted) return;
 
+      // Navigate with standard page transition
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => ProfilePage(user: user)),
       );
-    } catch (e) {}
+
+      // Fetch fresh profile data in background if needed
+      if (!profileCache.containsKey(pubHex) || DateTime.now().difference(profileCache[pubHex]!.fetchedAt) > profileCacheTTL) {
+        Future.microtask(() async {
+          try {
+            final data = await getCachedUserProfile(pubHex!);
+            final fullUser = UserModel.fromCachedProfile(pubHex, data);
+
+            profileCache[pubHex] = CachedProfile(data, DateTime.now());
+            profilesNotifier.value = {
+              ...profilesNotifier.value,
+              pubHex: fullUser,
+            };
+          } catch (e) {
+            print('[DataService] Background profile fetch error: $e');
+          }
+        });
+      }
+    } catch (e) {
+      print('[DataService] Error in openUserProfile: $e');
+    }
   }
 
   void parseContentForNote(NoteModel note) {

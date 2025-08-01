@@ -19,22 +19,54 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   DataService? dataService;
   late ScrollController _scrollController;
-  bool _isInitializing = true;
+  bool _showFakeLoading = true;
+  bool _showProfileInfo = false;
+  bool _profileInfoLoaded = false;
+  bool _notesLoading = false;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController()..addListener(_scrollListener);
 
-    // Defer all initialization until after page transition
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeDataServiceProgressively();
+    // Staged loading: Profile info first, then notes
+    _startStagedLoading();
+  }
+
+  void _startStagedLoading() {
+    // Create DataService immediately during fake loading so ProfileInfoWidget can use it
+    _createDataServiceEarly();
+
+    // Phase 1: Show fake loading for 200ms
+    Future.delayed(const Duration(milliseconds: 200), () {
+      if (mounted) {
+        setState(() {
+          _showFakeLoading = false;
+          _showProfileInfo = true;
+        });
+
+        // Phase 2: Wait for profile info to settle, then start notes loading
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) {
+            setState(() {
+              _profileInfoLoaded = true;
+            });
+
+            // Phase 3: Add additional 200ms delay before fetching notes
+            Future.delayed(const Duration(milliseconds: 200), () {
+              if (mounted) {
+                _startNotesLoading();
+              }
+            });
+          }
+        });
+      }
     });
   }
 
-  Future<void> _initializeDataServiceProgressively() async {
+  Future<void> _createDataServiceEarly() async {
     try {
-      // Create DataService instance asynchronously
+      // Create DataService early so ProfileInfoWidget can use it
       dataService = DataService(
         npub: widget.user.npub,
         dataType: DataType.profile,
@@ -47,37 +79,69 @@ class _ProfilePageState extends State<ProfilePage> {
         onRepostCountUpdated: (_, __) {},
       );
 
-      // Phase 1: Immediate lightweight setup (no blocking operations)
+      // Do lightweight initialization immediately
       await dataService!.initializeLightweight();
 
       if (mounted) {
         setState(() {
-          _isInitializing = false;
+          // Trigger rebuild so ProfileInfoWidget gets the DataService
+        });
+      }
+    } catch (e) {
+      print('[ProfilePage] Early DataService creation error: $e');
+    }
+  }
+
+  Future<void> _startNotesLoading() async {
+    if (mounted) {
+      setState(() {
+        _notesLoading = true;
+      });
+    }
+
+    try {
+      // DataService should already exist from _createDataServiceEarly()
+      if (dataService == null) {
+        print('[ProfilePage] DataService not found, creating new one');
+        dataService = DataService(
+          npub: widget.user.npub,
+          dataType: DataType.profile,
+          onNewNote: (_) {},
+          onReactionsUpdated: (_, __) {},
+          onRepliesUpdated: (_, __) {},
+          onRepostsUpdated: (_, __) {},
+          onReactionCountUpdated: (_, __) {},
+          onReplyCountUpdated: (_, __) {},
+          onRepostCountUpdated: (_, __) {},
+        );
+        await dataService!.initializeLightweight();
+      }
+
+      if (mounted) {
+        setState(() {
+          _notesLoading = false;
         });
       }
 
-      // Phase 2: Heavy operations in background after UI is responsive
-      Future.delayed(const Duration(milliseconds: 50), () {
+      // Start heavy operations in background
+      Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted && dataService != null) {
           dataService!.initializeHeavyOperations().then((_) {
             if (mounted && dataService != null) {
-              // Initialize connections to start loading notes
               dataService!.initializeConnections();
             }
           }).catchError((e) {
             print('[ProfilePage] Heavy operations error: $e');
-            // Don't show error to user, just log it
           });
         }
       });
     } catch (e) {
-      print('[ProfilePage] Lightweight initialization error: $e');
+      print('[ProfilePage] Notes loading error: $e');
       if (mounted) {
         setState(() {
-          _isInitializing = false;
+          _notesLoading = false;
         });
       }
-      // Continue anyway - the UI should still work with basic functionality
     }
   }
 
@@ -136,87 +200,106 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: context.colors.background,
+      backgroundColor: _showFakeLoading ? Colors.black : context.colors.background,
       body: Stack(
         children: [
-          if (_isInitializing)
-            _buildLoadingState(context)
-          else
-            RefreshIndicator(
-              onRefresh: () async {
-                if (dataService != null) {
-                  await dataService!.refreshNotes();
-                }
-              },
-              child: CustomScrollView(
-                controller: _scrollController,
-                physics: const AlwaysScrollableScrollPhysics(
-                  parent: BouncingScrollPhysics(),
-                ),
-                cacheExtent: 1500,
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: ProfileInfoWidget(
-                      user: widget.user,
-                      sharedDataService: dataService,
-                    ),
-                  ),
-                  NoteListWidget(
-                    npub: widget.user.npub,
-                    dataType: DataType.profile,
-                    sharedDataService: dataService,
-                  ),
-                ],
-              ),
-            ),
-          _buildFloatingBackButton(context),
+          if (_showFakeLoading) _buildFakeLoadingScreen(context) else _buildStagedContent(context),
+          if (!_showFakeLoading) _buildFloatingBackButton(context),
         ],
       ),
     );
   }
 
-  Widget _buildLoadingState(BuildContext context) {
-    return CustomScrollView(
-      physics: const AlwaysScrollableScrollPhysics(
-        parent: BouncingScrollPhysics(),
-      ),
-      slivers: [
-        SliverToBoxAdapter(
-          child: ProfileInfoWidget(
-            user: widget.user,
-            sharedDataService: dataService,
-          ),
+  Widget _buildStagedContent(BuildContext context) {
+    return RefreshIndicator(
+      onRefresh: () async {
+        if (dataService != null) {
+          await dataService!.refreshNotes();
+        }
+      },
+      child: CustomScrollView(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
         ),
-        SliverToBoxAdapter(
-          child: Container(
-            padding: const EdgeInsets.all(32),
-            child: Center(
-              child: Column(
-                children: [
-                  SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        context.colors.accent,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Loading notes...',
-                    style: TextStyle(
-                      color: context.colors.textSecondary,
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
+        cacheExtent: 1500,
+        slivers: [
+          // Phase 1: Always show profile info first
+          if (_showProfileInfo)
+            SliverToBoxAdapter(
+              child: ProfileInfoWidget(
+                user: widget.user,
+                sharedDataService: dataService,
               ),
+            ),
+
+          // Phase 2: Show notes section only after profile info is loaded
+          if (_profileInfoLoaded) ...[
+            if (_notesLoading)
+              SliverToBoxAdapter(
+                child: _buildNotesLoadingIndicator(context),
+              )
+            else if (dataService != null)
+              NoteListWidget(
+                npub: widget.user.npub,
+                dataType: DataType.profile,
+                sharedDataService: dataService,
+              )
+            else
+              SliverToBoxAdapter(
+                child: _buildNotesLoadingIndicator(context),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNotesLoadingIndicator(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(32),
+      child: Center(
+        child: Column(
+          children: [
+            SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  context.colors.accent,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Loading notes...',
+              style: TextStyle(
+                color: context.colors.textSecondary,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFakeLoadingScreen(BuildContext context) {
+    return Container(
+      color: Colors.black,
+      child: Center(
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              Colors.white,
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 }
