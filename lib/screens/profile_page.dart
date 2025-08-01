@@ -17,31 +17,80 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  late DataService dataService;
+  DataService? dataService;
   late ScrollController _scrollController;
+  bool _isInitializing = true;
 
   @override
   void initState() {
     super.initState();
-    dataService = DataService(npub: widget.user.npub, dataType: DataType.profile);
     _scrollController = ScrollController()..addListener(_scrollListener);
 
-    // Initialize DataService
+    // Defer all initialization until after page transition
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      dataService.initialize();
+      _initializeDataServiceProgressively();
     });
+  }
+
+  Future<void> _initializeDataServiceProgressively() async {
+    try {
+      // Create DataService instance asynchronously
+      dataService = DataService(
+        npub: widget.user.npub,
+        dataType: DataType.profile,
+        onNewNote: (_) {},
+        onReactionsUpdated: (_, __) {},
+        onRepliesUpdated: (_, __) {},
+        onRepostsUpdated: (_, __) {},
+        onReactionCountUpdated: (_, __) {},
+        onReplyCountUpdated: (_, __) {},
+        onRepostCountUpdated: (_, __) {},
+      );
+
+      // Phase 1: Immediate lightweight setup (no blocking operations)
+      await dataService!.initializeLightweight();
+
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+        });
+      }
+
+      // Phase 2: Heavy operations in background after UI is responsive
+      Future.delayed(const Duration(milliseconds: 50), () {
+        if (mounted && dataService != null) {
+          dataService!.initializeHeavyOperations().then((_) {
+            if (mounted && dataService != null) {
+              // Initialize connections to start loading notes
+              dataService!.initializeConnections();
+            }
+          }).catchError((e) {
+            print('[ProfilePage] Heavy operations error: $e');
+            // Don't show error to user, just log it
+          });
+        }
+      });
+    } catch (e) {
+      print('[ProfilePage] Lightweight initialization error: $e');
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+        });
+      }
+      // Continue anyway - the UI should still work with basic functionality
+    }
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
-    dataService.closeConnections();
+    dataService?.closeConnections();
     super.dispose();
   }
 
   void _scrollListener() {
     // Infinite scroll support
-    dataService.onScrollPositionChanged(
+    dataService?.onScrollPositionChanged(
       _scrollController.position.pixels,
       _scrollController.position.maxScrollExtent,
     );
@@ -90,30 +139,84 @@ class _ProfilePageState extends State<ProfilePage> {
       backgroundColor: context.colors.background,
       body: Stack(
         children: [
-          RefreshIndicator(
-            onRefresh: () async {
-              await dataService.refreshNotes();
-            },
-            child: CustomScrollView(
-              controller: _scrollController,
-              physics: const AlwaysScrollableScrollPhysics(
-                parent: BouncingScrollPhysics(),
+          if (_isInitializing)
+            _buildLoadingState(context)
+          else
+            RefreshIndicator(
+              onRefresh: () async {
+                if (dataService != null) {
+                  await dataService!.refreshNotes();
+                }
+              },
+              child: CustomScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: BouncingScrollPhysics(),
+                ),
+                cacheExtent: 1500,
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: ProfileInfoWidget(
+                      user: widget.user,
+                      sharedDataService: dataService,
+                    ),
+                  ),
+                  NoteListWidget(
+                    npub: widget.user.npub,
+                    dataType: DataType.profile,
+                    sharedDataService: dataService,
+                  ),
+                ],
               ),
-              cacheExtent: 1500,
-              slivers: [
-                SliverToBoxAdapter(
-                  child: ProfileInfoWidget(user: widget.user),
-                ),
-                NoteListWidget(
-                  npub: widget.user.npub,
-                  dataType: DataType.profile,
-                ),
-              ],
             ),
-          ),
           _buildFloatingBackButton(context),
         ],
       ),
+    );
+  }
+
+  Widget _buildLoadingState(BuildContext context) {
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
+      slivers: [
+        SliverToBoxAdapter(
+          child: ProfileInfoWidget(
+            user: widget.user,
+            sharedDataService: dataService,
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Container(
+            padding: const EdgeInsets.all(32),
+            child: Center(
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        context.colors.accent,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Loading notes...',
+                    style: TextStyle(
+                      color: context.colors.textSecondary,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -15,12 +15,14 @@ class NoteListWidget extends StatefulWidget {
   final String npub;
   final DataType dataType;
   final NoteListFilterType filterType;
+  final DataService? sharedDataService;
 
   const NoteListWidget({
     super.key,
     required this.npub,
     required this.dataType,
     this.filterType = NoteListFilterType.latest,
+    this.sharedDataService,
   });
 
   @override
@@ -46,7 +48,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     super.initState();
     _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initialize();
+      _initializeAsync();
     });
   }
 
@@ -63,7 +65,11 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _dataService.notesNotifier.removeListener(_onNotesChanged);
-    _dataService.closeConnections();
+
+    // Only close connections if we created our own DataService
+    if (widget.sharedDataService == null) {
+      _dataService.closeConnections();
+    }
     super.dispose();
   }
 
@@ -73,18 +79,79 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     }
   }
 
-  Future<void> _initialize() async {
-    _currentUserNpub = await _secureStorage.read(key: 'npub');
-    if (!mounted) return;
+  Future<void> _initializeAsync() async {
+    try {
+      _currentUserNpub = await _secureStorage.read(key: 'npub');
+      if (!mounted) return;
 
-    _dataService = _createDataService();
-    _dataService.notesNotifier.addListener(_onNotesChanged);
-    await _dataService.initialize();
-    _dataService.initializeConnections();
+      // Use shared DataService if available, otherwise create our own
+      if (widget.sharedDataService != null) {
+        _dataService = widget.sharedDataService!;
 
-    setState(() {
-      _isInitializing = false;
-    });
+        // For shared DataService, ensure it's configured for our npub and dataType
+        if (_dataService.npub != widget.npub || _dataService.dataType != widget.dataType) {
+          // Create our own DataService if the shared one doesn't match our requirements
+          _dataService = _createDataService();
+          await _dataService.initializeLightweight();
+
+          // Heavy operations in background
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted) {
+              _dataService.initializeHeavyOperations().then((_) {
+                if (mounted) {
+                  _dataService.initializeConnections();
+                }
+              }).catchError((e) {
+                print('[NoteListWidget] Heavy initialization error: $e');
+              });
+            }
+          });
+        } else {
+          // Shared DataService matches, trigger initial load if needed
+          Future.delayed(const Duration(milliseconds: 50), () {
+            if (mounted && _dataService.notesNotifier.value.isEmpty) {
+              _dataService.initializeConnections();
+            }
+          });
+        }
+      } else {
+        _dataService = _createDataService();
+
+        // Lightweight initialization first
+        await _dataService.initializeLightweight();
+
+        // Heavy operations in background
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) {
+            _dataService.initializeHeavyOperations().then((_) {
+              if (mounted) {
+                _dataService.initializeConnections();
+              }
+            }).catchError((e) {
+              print('[NoteListWidget] Heavy initialization error: $e');
+            });
+          }
+        });
+      }
+
+      _dataService.notesNotifier.addListener(_onNotesChanged);
+
+      // Trigger initial update with existing notes
+      _updateFilteredNotes(_dataService.notesNotifier.value);
+
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+        });
+      }
+    } catch (e) {
+      print('[NoteListWidget] Initialization error: $e');
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+        });
+      }
+    }
   }
 
   DataService _createDataService() {

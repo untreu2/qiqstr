@@ -17,8 +17,13 @@ import 'package:nostr_nip19/nostr_nip19.dart';
 
 class ProfileInfoWidget extends StatefulWidget {
   final UserModel user;
+  final DataService? sharedDataService;
 
-  const ProfileInfoWidget({super.key, required this.user});
+  const ProfileInfoWidget({
+    super.key,
+    required this.user,
+    this.sharedDataService,
+  });
 
   @override
   State<ProfileInfoWidget> createState() => _ProfileInfoWidgetState();
@@ -42,9 +47,18 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   @override
   void initState() {
     super.initState();
-    _initFollowStatus();
-    _loadFollowingCount();
     _startUserRefreshTimer();
+
+    // Use shared DataService if available, otherwise create our own
+    if (widget.sharedDataService != null) {
+      _dataService = widget.sharedDataService;
+    }
+
+    // Defer heavy operations until after widget is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initFollowStatusAsync();
+      _loadFollowingCountAsync();
+    });
   }
 
   @override
@@ -53,19 +67,44 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     super.dispose();
   }
 
-  Future<void> _initFollowStatus() async {
-    _currentUserNpub = await _secureStorage.read(key: 'npub');
-    if (_currentUserNpub == null || _currentUserNpub == widget.user.npub) return;
+  Future<void> _initFollowStatusAsync() async {
+    try {
+      _currentUserNpub = await _secureStorage.read(key: 'npub');
+      if (_currentUserNpub == null || _currentUserNpub == widget.user.npub) return;
 
-    _followingBox = await Hive.openBox<FollowingModel>('followingBox');
-    final model = _followingBox.get('following_$_currentUserNpub');
-    final isFollowing = model?.pubkeys.contains(widget.user.npub) ?? false;
-    setState(() {
-      _isFollowing = isFollowing;
-    });
+      _followingBox = await Hive.openBox<FollowingModel>('followingBox');
+      final model = _followingBox.get('following_$_currentUserNpub');
+      final isFollowing = model?.pubkeys.contains(widget.user.npub) ?? false;
 
-    _dataService = DataService(npub: _currentUserNpub!, dataType: DataType.profile);
-    await _dataService!.initialize();
+      if (mounted) {
+        setState(() {
+          _isFollowing = isFollowing;
+        });
+      }
+
+      // Initialize DataService in background without blocking UI (only if not using shared)
+      if (_dataService == null) {
+        Future.microtask(() async {
+          try {
+            _dataService = DataService(npub: _currentUserNpub!, dataType: DataType.profile);
+            await _dataService!.initializeLightweight();
+
+            // Heavy operations in background
+            Future.delayed(const Duration(milliseconds: 200), () {
+              if (mounted && _dataService != null) {
+                _dataService!.initializeHeavyOperations().catchError((e) {
+                  print('[ProfileInfoWidget] DataService heavy init error: $e');
+                });
+              }
+            });
+          } catch (e) {
+            print('[ProfileInfoWidget] DataService init error: $e');
+          }
+        });
+      }
+    } catch (e) {
+      print('[ProfileInfoWidget] Follow status init error: $e');
+    }
   }
 
   void _startUserRefreshTimer() {
@@ -81,26 +120,44 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     });
   }
 
-  Future<void> _loadFollowingCount() async {
-    try {
-      final dataService = DataService(npub: widget.user.npub, dataType: DataType.profile);
-      await dataService.initialize();
-      final followingList = await dataService.getFollowingList(widget.user.npub);
+  Future<void> _loadFollowingCountAsync() async {
+    // Run in background to avoid blocking UI
+    Future.microtask(() async {
+      try {
+        // Create temporary service for following list (same approach as FollowingListPage)
+        final dataService = DataService(npub: widget.user.npub, dataType: DataType.profile);
 
-      final currentNpub = await _secureStorage.read(key: 'npub');
-      final followsYou = currentNpub != null && widget.user.npub != currentNpub && followingList.contains(currentNpub);
+        // Use the same initialization method as FollowingListPage
+        await dataService.initialize();
 
-      setState(() {
-        _followingCount = followingList.length;
-        _isLoadingFollowing = false;
-        _followsYou = followsYou;
-        _currentUserNpub = currentNpub;
-      });
-    } catch (e) {
-      setState(() {
-        _isLoadingFollowing = false;
-      });
-    }
+        // Get following list in background
+        final followingList = await dataService.getFollowingList(widget.user.npub);
+        final currentNpub = await _secureStorage.read(key: 'npub');
+        final followsYou = currentNpub != null && widget.user.npub != currentNpub && followingList.contains(currentNpub);
+
+        print('[ProfileInfoWidget] Following list loaded: ${followingList.length} items');
+
+        if (mounted) {
+          setState(() {
+            _followingCount = followingList.length;
+            _isLoadingFollowing = false;
+            _followsYou = followsYou;
+            _currentUserNpub = currentNpub;
+          });
+        }
+
+        // Clean up temporary service
+        dataService.closeConnections();
+      } catch (e) {
+        print('[ProfileInfoWidget] Following count load error: $e');
+        if (mounted) {
+          setState(() {
+            _followingCount = 0; // Set to 0 instead of leaving null
+            _isLoadingFollowing = false;
+          });
+        }
+      }
+    });
   }
 
   Future<void> _toggleFollow() async {
@@ -405,8 +462,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                     style: TextStyle(color: context.colors.textTertiary, fontSize: 14, decoration: TextDecoration.underline),
                   )
                 : Text(
-                    '$_followingCount',
-                    key: const ValueKey('count'),
+                    '${_followingCount ?? 0}',
+                    key: ValueKey('count-${_followingCount ?? 0}'),
                     style: TextStyle(color: context.colors.textPrimary, fontSize: 14, decoration: TextDecoration.underline),
                   ),
           ),

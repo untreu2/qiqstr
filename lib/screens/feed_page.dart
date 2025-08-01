@@ -22,6 +22,7 @@ class _FeedPageState extends State<FeedPage> {
   UserModel? user;
   late DataService dataService;
   bool isLoading = true;
+  bool _isInitializingDataService = true;
   String? errorMessage;
   bool isFirstOpen = false;
   NoteListFilterType _selectedFilterType = NoteListFilterType.latest;
@@ -35,9 +36,40 @@ class _FeedPageState extends State<FeedPage> {
     dataService = DataService(npub: widget.npub, dataType: DataType.feed);
     _scrollController = ScrollController()..addListener(_scrollListener);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadUserProfile();
+      _initializeProgressively();
       _checkFirstOpen();
     });
+  }
+
+  Future<void> _initializeProgressively() async {
+    try {
+      // Phase 1: Load user profile and lightweight DataService init
+      await Future.wait([
+        _loadUserProfile(),
+        dataService.initializeLightweight(),
+      ]);
+
+      if (mounted) {
+        setState(() {
+          _isInitializingDataService = false;
+        });
+      }
+
+      // Phase 2: Heavy operations in background
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          dataService.initializeHeavyOperations();
+        }
+      });
+    } catch (e) {
+      print('[FeedPage] Progressive initialization error: $e');
+      if (mounted) {
+        setState(() {
+          _isInitializingDataService = false;
+          errorMessage = 'Failed to initialize feed';
+        });
+      }
+    }
   }
 
   void _scrollListener() {
@@ -76,16 +108,28 @@ class _FeedPageState extends State<FeedPage> {
 
   Future<void> _loadUserProfile() async {
     try {
-      await dataService.initialize();
+      // Use lightweight profile loading without full DataService initialization
       final profileData = await dataService.getCachedUserProfile(widget.npub);
       if (!mounted) return;
       setState(() {
         user = UserModel.fromCachedProfile(widget.npub, profileData);
       });
-    } catch (_) {
+    } catch (e) {
+      print('[FeedPage] Error loading profile: $e');
       if (mounted) {
+        // Create a default user instead of showing error
         setState(() {
-          errorMessage = 'An error occurred while loading profile.';
+          user = UserModel(
+            npub: widget.npub,
+            name: 'Anonymous',
+            about: '',
+            nip05: '',
+            banner: '',
+            profileImage: '',
+            lud16: '',
+            website: '',
+            updatedAt: DateTime.now(),
+          );
         });
       }
     } finally {
@@ -231,6 +275,38 @@ class _FeedPageState extends State<FeedPage> {
     );
   }
 
+  Widget _buildInitializingState(BuildContext context) {
+    return SliverToBoxAdapter(
+      child: Container(
+        padding: const EdgeInsets.all(32),
+        child: Center(
+          child: Column(
+            children: [
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    context.colors.accent,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Loading feed...',
+                style: TextStyle(
+                  color: context.colors.textSecondary,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
@@ -272,12 +348,14 @@ class _FeedPageState extends State<FeedPage> {
                       const SliverToBoxAdapter(
                         child: SizedBox(height: 8),
                       ),
-                      NoteListWidget(
-                        key: ValueKey(_selectedFilterType),
-                        npub: widget.npub,
-                        dataType: DataType.feed,
-                        filterType: _selectedFilterType,
-                      ),
+                      _isInitializingDataService
+                          ? _buildInitializingState(context)
+                          : NoteListWidget(
+                              key: ValueKey(_selectedFilterType),
+                              npub: widget.npub,
+                              dataType: DataType.feed,
+                              filterType: _selectedFilterType,
+                            ),
                     ],
                   ),
                 ),

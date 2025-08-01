@@ -179,36 +179,96 @@ class DataService {
   int get currentNotesLimit => currentLimit;
 
   Future<void> initialize() async {
+    await initializeLightweight();
+    await initializeHeavyOperations();
+  }
+
+  // Phase 1: Lightweight initialization for immediate UI responsiveness
+  Future<void> initializeLightweight() async {
     final stopwatch = Stopwatch()..start();
 
     try {
-      // Fast initialization - only critical components first
-      _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
+      // Only essential components for immediate UI
       _isInitialized = true;
 
-      // Initialize services in parallel with reduced blocking
-      final criticalFutures = [
-        _initializeOptimizedServices(),
-        _openHiveBox<NoteModel>('notes'),
-        _openHiveBox<UserModel>('users'),
-      ];
-
-      final criticalResults = await Future.wait(criticalFutures);
-      notesBox = criticalResults[1] as Box<NoteModel>;
-      usersBox = criticalResults[2] as Box<UserModel>;
-
-      // Configure critical services immediately
+      // Initialize critical services without heavy operations
       _cacheService = CacheService();
-      _cacheService.notesBox = notesBox;
-
       _profileService = ProfileService();
-      await _profileService.initialize();
+
+      // Open only essential boxes synchronously
+      notesBox = await _openHiveBox<NoteModel>('notes');
+      usersBox = await _openHiveBox<UserModel>('users');
+
+      // Configure essential services
+      _cacheService.notesBox = notesBox;
       if (usersBox != null) {
         _profileService.setUsersBox(usersBox!);
       }
 
-      // Load notes cache immediately for faster UI
+      // Load cached notes immediately for UI (lightweight operation)
       await loadNotesFromCache((loadedNotes) {});
+
+      _metrics.recordOperation('lightweight_init', stopwatch.elapsedMilliseconds);
+      print('[DataService] Lightweight initialization completed in ${stopwatch.elapsedMilliseconds}ms');
+    } catch (e) {
+      print('[DataService] Lightweight initialization error: $e');
+      rethrow;
+    }
+  }
+
+  // Phase 2: Heavy operations in background after UI is responsive
+  Future<void> initializeHeavyOperations() async {
+    final stopwatch = Stopwatch()..start();
+
+    try {
+      // Initialize WebSocket manager
+      _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
+
+      // Initialize profile service properly
+      await _profileService.initialize();
+
+      // Open remaining boxes in background
+      final remainingBoxes = await Future.wait([
+        _openHiveBox<ReactionModel>('reactions'),
+        _openHiveBox<ReplyModel>('replies'),
+        _openHiveBox<RepostModel>('reposts'),
+        _openHiveBox<ZapModel>('zaps'),
+        _openHiveBox<FollowingModel>('followingBox'),
+        _openHiveBox<NotificationModel>('notifications_$npub'),
+      ]);
+
+      reactionsBox = remainingBoxes[0] as Box<ReactionModel>;
+      repliesBox = remainingBoxes[1] as Box<ReplyModel>;
+      repostsBox = remainingBoxes[2] as Box<RepostModel>;
+      zapsBox = remainingBoxes[3] as Box<ZapModel>;
+      followingBox = remainingBoxes[4] as Box<FollowingModel>;
+      notificationsBox = remainingBoxes[5] as Box<NotificationModel>;
+
+      // Configure remaining services
+      _cacheService.reactionsBox = reactionsBox;
+      _cacheService.repliesBox = repliesBox;
+      _cacheService.repostsBox = repostsBox;
+      _cacheService.zapsBox = zapsBox;
+
+      // Initialize isolates in background (non-blocking)
+      Future.microtask(() async {
+        try {
+          await Future.wait([
+            _initializeEventProcessorIsolate(),
+            _initializeFetchProcessorIsolate(),
+            _initializeIsolate(),
+          ]);
+          print('[DataService] Isolates initialized');
+        } catch (e) {
+          print('[DataService] Isolate initialization error: $e');
+        }
+      });
+
+      // Load cache data in background
+      Future.microtask(() => _loadCacheDataInBackground());
+
+      // Start optimized timers
+      _startOptimizedTimers();
 
       // Start preloading for load more
       Future.microtask(() => _preloadNextBatch());
@@ -216,64 +276,12 @@ class DataService {
       // Enable preemptive loading for smooth infinite scroll
       Future.microtask(() => enablePreemptiveLoading());
 
-      // Initialize remaining components in background
-      Future.microtask(() async {
-        try {
-          // Initialize isolates in background
-          await Future.wait([
-            _initializeEventProcessorIsolate(),
-            _initializeFetchProcessorIsolate(),
-            _initializeIsolate(),
-          ]);
-
-          // Open remaining boxes in background
-          final remainingBoxes = await Future.wait([
-            _openHiveBox<ReactionModel>('reactions'),
-            _openHiveBox<ReplyModel>('replies'),
-            _openHiveBox<RepostModel>('reposts'),
-            _openHiveBox<ZapModel>('zaps'),
-            _openHiveBox<FollowingModel>('followingBox'),
-            _openHiveBox<NotificationModel>('notifications_$npub'),
-          ]);
-
-          reactionsBox = remainingBoxes[0] as Box<ReactionModel>;
-          repliesBox = remainingBoxes[1] as Box<ReplyModel>;
-          repostsBox = remainingBoxes[2] as Box<RepostModel>;
-          zapsBox = remainingBoxes[3] as Box<ZapModel>;
-          followingBox = remainingBoxes[4] as Box<FollowingModel>;
-          notificationsBox = remainingBoxes[5] as Box<NotificationModel>;
-
-          // Configure remaining services
-          _cacheService.reactionsBox = reactionsBox;
-          _cacheService.repliesBox = repliesBox;
-          _cacheService.repostsBox = repostsBox;
-          _cacheService.zapsBox = zapsBox;
-
-          // Load cache data in background
-          await _loadCacheDataInBackground();
-
-          _startOptimizedTimers();
-
-          print('[DataService] Background initialization completed');
-        } catch (e) {
-          print('[DataService] Background initialization error: $e');
-        }
-      });
-
-      _metrics.recordOperation('initialize', stopwatch.elapsedMilliseconds);
-      print('[DataService] Fast initialization completed in ${stopwatch.elapsedMilliseconds}ms');
+      _metrics.recordOperation('heavy_init', stopwatch.elapsedMilliseconds);
+      print('[DataService] Heavy initialization completed in ${stopwatch.elapsedMilliseconds}ms');
     } catch (e) {
-      print('[DataService] Initialization error: $e');
-      rethrow;
+      print('[DataService] Heavy initialization error: $e');
+      // Don't rethrow here - UI should still work with lightweight init
     }
-  }
-
-  Future<void> _initializeOptimizedServices() async {
-    _cacheService = CacheService();
-    // CacheService doesn't need initialization
-
-    _profileService = ProfileService();
-    await _profileService.initialize();
   }
 
   Future<void> _loadCacheDataInBackground() async {
@@ -1127,40 +1135,94 @@ class DataService {
   }
 
   Future<Map<String, String>> getCachedUserProfile(String npub) async {
-    if (_isClosed) return {'name': 'Anonymous', 'profileImage': '', 'about': '', 'nip05': '', 'banner': '', 'lud16': '', 'website': ''};
+    if (_isClosed) return _getDefaultProfile();
 
-    final now = DateTime.now();
-    if (profileCache.containsKey(npub)) {
-      final cached = profileCache[npub]!;
-      if (now.difference(cached.fetchedAt) < profileCacheTTL) {
-        return cached.data;
-      } else {
-        profileCache.remove(npub);
+    try {
+      // Use ProfileService if available and properly initialized
+      try {
+        return await _profileService.getCachedUserProfile(npub);
+      } catch (e) {
+        print('[DataService] ProfileService error, using fallback: $e');
+        // Continue to fallback implementation
       }
-    }
 
-    final primal = PrimalCacheClient();
-    final primalProfile = await primal.fetchUserProfile(npub);
-    if (primalProfile != null) {
-      final cached = CachedProfile(primalProfile, DateTime.now());
-      profileCache[npub] = cached;
+      // Fallback implementation for when ProfileService isn't initialized yet
+      final now = DateTime.now();
 
+      // Check memory cache first
+      if (profileCache.containsKey(npub)) {
+        final cached = profileCache[npub]!;
+        if (now.difference(cached.fetchedAt) < profileCacheTTL) {
+          return cached.data;
+        } else {
+          profileCache.remove(npub);
+        }
+      }
+
+      // Check usersBox if available
       if (usersBox != null && usersBox!.isOpen) {
-        final userModel = UserModel.fromCachedProfile(npub, primalProfile);
-        await usersBox!.put(npub, userModel);
+        try {
+          final user = usersBox!.get(npub);
+          if (user != null && now.difference(user.updatedAt) < profileCacheTTL) {
+            final data = {
+              'name': user.name,
+              'profileImage': user.profileImage,
+              'about': user.about,
+              'nip05': user.nip05,
+              'banner': user.banner,
+              'lud16': user.lud16,
+              'website': user.website,
+            };
+            profileCache[npub] = CachedProfile(data, user.updatedAt);
+            return data;
+          }
+        } catch (e) {
+          print('[DataService] Error reading from usersBox: $e');
+        }
       }
 
-      return primalProfile;
-    }
+      // Try Primal cache as fallback
+      try {
+        final primal = PrimalCacheClient();
+        final primalProfile = await primal.fetchUserProfile(npub);
+        if (primalProfile != null) {
+          final cached = CachedProfile(primalProfile, DateTime.now());
+          profileCache[npub] = cached;
 
-    final fetched = await fetchUserProfileIndependently(npub);
-    if (fetched != null) {
-      profileCache[npub] = CachedProfile(fetched, DateTime.now());
-      await usersBox?.put(npub, UserModel.fromCachedProfile(npub, fetched));
-      return fetched;
-    }
+          // Save to usersBox if available
+          if (usersBox != null && usersBox!.isOpen) {
+            try {
+              final userModel = UserModel.fromCachedProfile(npub, primalProfile);
+              await usersBox!.put(npub, userModel);
+            } catch (e) {
+              print('[DataService] Error saving to usersBox: $e');
+            }
+          }
 
-    return {'name': 'Anonymous', 'profileImage': '', 'about': '', 'nip05': '', 'banner': '', 'lud16': '', 'website': ''};
+          return primalProfile;
+        }
+      } catch (e) {
+        print('[DataService] Error fetching profile from Primal: $e');
+      }
+
+      // Return default profile if all else fails
+      return _getDefaultProfile();
+    } catch (e) {
+      print('[DataService] Error in getCachedUserProfile: $e');
+      return _getDefaultProfile();
+    }
+  }
+
+  Map<String, String> _getDefaultProfile() {
+    return {
+      'name': 'Anonymous',
+      'profileImage': '',
+      'about': '',
+      'nip05': '',
+      'banner': '',
+      'lud16': '',
+      'website': '',
+    };
   }
 
   Future<NoteModel?> getCachedNote(String eventIdHex) async {
