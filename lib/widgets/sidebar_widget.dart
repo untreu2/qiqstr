@@ -20,6 +20,7 @@ class SidebarWidget extends StatefulWidget {
 
 class _SidebarWidgetState extends State<SidebarWidget> {
   String? npub;
+  UserModel? _fallbackUser;
 
   @override
   void initState() {
@@ -32,7 +33,28 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     final storedNpub = await storage.read(key: 'npub');
     if (mounted) {
       setState(() => npub = storedNpub);
+
+      // If we have npub but no user, create a fallback user
+      if (storedNpub != null && widget.user == null) {
+        _createFallbackUser(storedNpub);
+      }
     }
+  }
+
+  void _createFallbackUser(String userNpub) {
+    setState(() {
+      _fallbackUser = UserModel(
+        npub: userNpub,
+        name: 'Loading...',
+        about: '',
+        nip05: '',
+        banner: '',
+        profileImage: '',
+        lud16: '',
+        website: '',
+        updatedAt: DateTime.now(),
+      );
+    });
   }
 
   @override
@@ -40,12 +62,28 @@ class _SidebarWidgetState extends State<SidebarWidget> {
     return Consumer<ThemeManager>(
       builder: (context, themeManager, child) {
         final colors = themeManager.colors;
+        final currentUser = widget.user ?? _fallbackUser;
 
         return Drawer(
           child: Container(
             color: colors.background,
-            child: widget.user == null || npub == null
-                ? Center(child: CircularProgressIndicator(color: colors.loading))
+            child: currentUser == null || npub == null
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(color: colors.accent),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Loading profile...',
+                          style: TextStyle(
+                            color: colors.textSecondary,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
                 : Column(
                     children: [
                       const SizedBox(height: 70),
@@ -55,14 +93,15 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                           children: [
                             CircleAvatar(
                               radius: 32,
-                              backgroundImage: widget.user!.profileImage.isNotEmpty
-                                  ? CachedNetworkImageProvider(widget.user!.profileImage)
-                                  : const AssetImage('assets/default_profile.png') as ImageProvider,
+                              backgroundColor: colors.avatarPlaceholder,
+                              backgroundImage:
+                                  currentUser.profileImage.isNotEmpty ? CachedNetworkImageProvider(currentUser.profileImage) : null,
+                              child: currentUser.profileImage.isEmpty ? Icon(Icons.person, color: colors.iconPrimary, size: 32) : null,
                             ),
                             const SizedBox(width: 16),
                             Expanded(
                               child: Text(
-                                widget.user!.name,
+                                currentUser.name.isNotEmpty ? currentUser.name : 'Anonymous',
                                 style: TextStyle(
                                   color: colors.textPrimary,
                                   fontSize: 20,
@@ -85,7 +124,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => ProfilePage(user: widget.user!),
+                                  builder: (context) => ProfilePage(user: currentUser),
                                 ),
                               ),
                             ),
