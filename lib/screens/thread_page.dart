@@ -101,6 +101,9 @@ class _ThreadPageState extends State<ThreadPage> {
     if (hasRelevantChanges) {
       // Use a debounced approach to prevent rapid successive reloads
       _debounceReload();
+
+      // Also fetch profiles for any new users in the thread
+      Future.microtask(() => _fetchAllThreadUserProfiles());
     }
   }
 
@@ -141,6 +144,9 @@ class _ThreadPageState extends State<ThreadPage> {
       await _fetchThreadReplies(_rootNote!.id);
     }
 
+    // Fetch profiles for all users in the thread
+    await _fetchAllThreadUserProfiles();
+
     if (mounted) {
       setState(() => _isLoading = false);
       if (widget.focusedNoteId != null && (_focusedNote != null || _rootNote?.id == widget.focusedNoteId)) {
@@ -148,6 +154,46 @@ class _ThreadPageState extends State<ThreadPage> {
           _scrollToFocusedNote();
         });
       }
+    }
+  }
+
+  Future<void> _fetchAllThreadUserProfiles() async {
+    if (_rootNote == null) return;
+
+    final Set<String> allUserNpubs = {};
+
+    // Add root note author
+    allUserNpubs.add(_rootNote!.author);
+
+    // Add focused note author if exists
+    if (_focusedNote != null) {
+      allUserNpubs.add(_focusedNote!.author);
+    }
+
+    // Add reposted by user if it's a repost
+    if (_rootNote!.isRepost && _rootNote!.repostedBy != null) {
+      allUserNpubs.add(_rootNote!.repostedBy!);
+    }
+    if (_focusedNote != null && _focusedNote!.isRepost && _focusedNote!.repostedBy != null) {
+      allUserNpubs.add(_focusedNote!.repostedBy!);
+    }
+
+    // Get all replies in the thread hierarchy
+    final threadHierarchy = widget.dataService.buildThreadHierarchy(_rootNote!.id);
+    for (final replies in threadHierarchy.values) {
+      for (final reply in replies) {
+        allUserNpubs.add(reply.author);
+        // Add reposted by user if reply is a repost
+        if (reply.isRepost && reply.repostedBy != null) {
+          allUserNpubs.add(reply.repostedBy!);
+        }
+      }
+    }
+
+    // Fetch profiles for all users in the thread
+    if (allUserNpubs.isNotEmpty) {
+      print('[ThreadPage] Fetching profiles for ${allUserNpubs.length} thread users');
+      await widget.dataService.fetchProfilesBatch(allUserNpubs.toList());
     }
   }
 
