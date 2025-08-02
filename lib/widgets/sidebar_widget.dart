@@ -142,7 +142,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                             _buildThemeToggle(colors),
                             _buildSidebarItem(
                               colors: colors,
-                              svgAsset: 'assets/Logout_button.svg',
+                              svgAsset: 'assets/signout_button.svg',
                               label: 'Logout',
                               iconColor: colors.error,
                               textColor: colors.error,

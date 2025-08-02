@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:bounce/bounce.dart';
+import 'package:like_button/like_button.dart';
 import '../theme/theme_manager.dart';
 
 class InteractionBar extends StatelessWidget {
@@ -61,7 +62,7 @@ class InteractionBar extends StatelessWidget {
     final double iconSize = isLarge ? 16 : 14;
     final double fontSize = isLarge ? 15 : 14;
     final double spacing = isLarge ? 6 : 5;
-    
+
     return Stack(
       alignment: Alignment.center,
       children: [
@@ -98,47 +99,87 @@ class InteractionBar extends StatelessWidget {
     );
   }
 
+  Widget _buildReactionButton(BuildContext context) {
+    final textScaleFactor = MediaQuery.of(context).textScaleFactor;
+    final colors = context.colors;
+    final double iconSize = isLarge ? 16 : 14;
+    final double fontSize = isLarge ? 15 : 14;
+    final double spacing = isLarge ? 6 : 5;
+
+    return Row(
+      children: [
+        LikeButton(
+          size: iconSize * textScaleFactor,
+          isLiked: hasReacted,
+          likeCount: reactionCount,
+          animationDuration: const Duration(milliseconds: 1000),
+          likeBuilder: (bool isLiked) {
+            return SvgPicture.asset(
+              'assets/reaction_button.svg',
+              width: iconSize * textScaleFactor,
+              height: iconSize * textScaleFactor,
+              colorFilter: ColorFilter.mode(
+                (isReactionGlowing || isLiked) ? colors.reaction : colors.secondary,
+                BlendMode.srcIn,
+              ),
+            );
+          },
+          countBuilder: (int? count, bool isLiked, String text) {
+            return Padding(
+              padding: EdgeInsets.only(left: spacing),
+              child: Opacity(
+                opacity: (count ?? 0) > 0 ? 1.0 : 0.0,
+                child: Text(
+                  text,
+                  style: TextStyle(fontSize: fontSize, color: colors.secondary),
+                ),
+              ),
+            );
+          },
+          onTap: (bool isLiked) async {
+            onReactionTap();
+            return !isLiked;
+          },
+          circleColor: CircleColor(
+            start: colors.reaction.withOpacity(0.3),
+            end: colors.reaction,
+          ),
+          bubblesColor: BubblesColor(
+            dotPrimaryColor: colors.reaction,
+            dotSecondaryColor: colors.reaction.withOpacity(0.7),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final double statsIconSize = isLarge ? 22 : 19;
-    
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        _buildAction(
-          context: context,
-          svg: 'assets/reaction_button.svg',
-          color: isReactionGlowing || hasReacted
-              ? colors.reaction
-              : colors.secondary,
-          count: reactionCount,
-          onTap: onReactionTap,
-        ),
+        _buildReactionButton(context),
         _buildAction(
           context: context,
           svg: 'assets/reply_button.svg',
-          color: isReplyGlowing || hasReplied
-              ? colors.reply
-              : colors.secondary,
+          color: isReplyGlowing || hasReplied ? colors.reply : colors.secondary,
           count: replyCount,
           onTap: onReplyTap,
         ),
         _buildAction(
           context: context,
           svg: 'assets/repost_button.svg',
-          color: isRepostGlowing || hasReposted
-              ? colors.repost
-              : colors.secondary,
+          color: isRepostGlowing || hasReposted ? colors.repost : colors.secondary,
           count: repostCount,
           onTap: onRepostTap,
         ),
         _buildAction(
           context: context,
           svg: 'assets/zap_button.svg',
-          color: isZapGlowing || hasZapped
-              ? colors.zap
-              : colors.secondary,
+          color: isZapGlowing || hasZapped ? colors.zap : colors.secondary,
           count: zapAmount,
           onTap: onZapTap,
         ),
