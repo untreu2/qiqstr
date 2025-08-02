@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:nostr/nostr.dart';
 import '../theme/theme_manager.dart';
 import '../constants/relays.dart';
 import '../services/data_service.dart';
+import '../services/nostr_service.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
@@ -81,42 +83,54 @@ class _RelayPageState extends State<RelayPage> {
     });
 
     try {
+      // Get the private key for signing
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null) {
+        _showSnackBar('Private key not found. Please set up your profile first', isError: true);
+        return;
+      }
+
+      // Get npub for DataService initialization
       final npub = await _secureStorage.read(key: 'npub');
       if (npub == null) {
         _showSnackBar('Please set up your profile first', isError: true);
         return;
       }
 
-      // Initialize DataService
+      // Initialize DataService for broadcasting
       final dataService = DataService(npub: npub, dataType: DataType.profile);
       await dataService.initialize();
+      await dataService.initializeConnections();
 
       // Prepare relay list for kind 10002 event
       List<List<String>> relayTags = [];
 
-      // Add relays (read & write)
+      // Add relays (read & write by default)
       for (String relay in _relays) {
         relayTags.add(['r', relay]);
       }
 
-      // Create kind 10002 event
-      final event = {
-        'kind': 10002,
-        'created_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        'tags': relayTags,
-        'content': '',
-        'pubkey': npub,
-      };
+      // Create and sign the kind 10002 event using NostrService
+      final event = Event.from(
+        kind: 10002,
+        tags: relayTags,
+        content: '',
+        privkey: privateKey,
+      );
 
-      // For now, we'll simulate publishing by saving to local storage
-      // In a real implementation, you would sign and publish the event to relays
+      // Serialize the event for broadcasting
+      final serializedEvent = NostrService.serializeEvent(event);
+
+      // Broadcast the event directly to relays using WebSocket connections
+      await _broadcastRelayListEvent(serializedEvent);
+
+      // Also save to local storage for backup
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('published_relay_list', jsonEncode(event));
+      await prefs.setString('published_relay_list', jsonEncode(NostrService.eventToJson(event)));
 
-      _showSnackBar('Relay list prepared for publishing (${relayTags.length} relays)');
+      _showSnackBar('Relay list published successfully (${relayTags.length} relays in list)');
 
-      // TODO: Implement actual event signing and publishing when crypto functions are available
-      print('Event to publish: ${jsonEncode(event)}');
+      print('Relay list event published: ${event.id}');
 
       await dataService.closeConnections();
     } catch (e) {
@@ -128,6 +142,43 @@ class _RelayPageState extends State<RelayPage> {
           _isPublishingRelays = false;
         });
       }
+    }
+  }
+
+  Future<void> _broadcastRelayListEvent(String serializedEvent) async {
+    final List<Future<bool>> broadcastFutures = [];
+
+    for (final relayUrl in _relays) {
+      broadcastFutures.add(_sendToRelay(relayUrl, serializedEvent));
+    }
+
+    try {
+      final results = await Future.wait(broadcastFutures, eagerError: false);
+      final successfulBroadcasts = results.where((success) => success).length;
+
+      print('Relay list event broadcasted to $successfulBroadcasts/${_relays.length} relays');
+    } catch (e) {
+      print('Error during relay list broadcast: $e');
+    }
+  }
+
+  Future<bool> _sendToRelay(String relayUrl, String serializedEvent) async {
+    WebSocket? ws;
+    try {
+      ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
+
+      if (ws.readyState == WebSocket.open) {
+        ws.add(serializedEvent);
+        await ws.close();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Failed to send relay list event to $relayUrl: $e');
+      try {
+        await ws?.close();
+      } catch (_) {}
+      return false;
     }
   }
 
