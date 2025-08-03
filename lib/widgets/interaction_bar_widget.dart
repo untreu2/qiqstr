@@ -48,6 +48,17 @@ class InteractionBar extends StatelessWidget {
     this.isLarge = false,
   });
 
+  String _formatCount(int count) {
+    if (count >= 1000) {
+      final String formatted = (count / 1000).toStringAsFixed(1);
+      if (formatted.endsWith('.0')) {
+        return '${formatted.substring(0, formatted.length - 2)}K';
+      }
+      return '${formatted}K';
+    }
+    return count.toString();
+  }
+
   Widget _buildReactionButton(BuildContext context) {
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     final colors = context.colors;
@@ -89,7 +100,7 @@ class InteractionBar extends StatelessWidget {
         Opacity(
           opacity: reactionCount > 0 ? 1.0 : 0.0,
           child: Text(
-            '$reactionCount',
+            _formatCount(reactionCount),
             style: TextStyle(fontSize: fontSize, color: colors.secondary),
           ),
         ),
@@ -138,7 +149,7 @@ class InteractionBar extends StatelessWidget {
         Opacity(
           opacity: replyCount > 0 ? 1.0 : 0.0,
           child: Text(
-            '$replyCount',
+            _formatCount(replyCount),
             style: TextStyle(fontSize: fontSize, color: colors.secondary),
           ),
         ),
@@ -187,7 +198,7 @@ class InteractionBar extends StatelessWidget {
         Opacity(
           opacity: repostCount > 0 ? 1.0 : 0.0,
           child: Text(
-            '$repostCount',
+            _formatCount(repostCount),
             style: TextStyle(fontSize: fontSize, color: colors.secondary),
           ),
         ),
@@ -236,7 +247,7 @@ class InteractionBar extends StatelessWidget {
         Opacity(
           opacity: zapAmount > 0 ? 1.0 : 0.0,
           child: Text(
-            '$zapAmount',
+            _formatCount(zapAmount),
             style: TextStyle(fontSize: fontSize, color: colors.secondary),
           ),
         ),

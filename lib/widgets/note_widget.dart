@@ -238,7 +238,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   Widget _buildRepostInfo(String npub, DateTime? ts) {
     final user = widget.profiles[npub];
     final name = user?.name ?? 'Unknown';
-    final profileImage = user?.profileImage;
 
     return Builder(builder: (context) {
       final colors = context.colors;
@@ -248,33 +247,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Icon(Icons.repeat, size: 14, color: colors.secondary),
-            const SizedBox(width: 6),
-            profileImage != null && profileImage.isNotEmpty
-                ? CircleAvatar(
-                    radius: 11,
-                    backgroundColor: colors.surfaceTransparent,
-                    child: CachedNetworkImage(
-                      imageUrl: profileImage,
-                      imageBuilder: (context, imageProvider) {
-                        return Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            image: DecorationImage(
-                              image: imageProvider,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        );
-                      },
-                      placeholder: (context, url) => Image.asset('assets/egg.png', width: 22, height: 22),
-                      errorWidget: (context, url, error) => Image.asset('assets/egg.png', width: 22, height: 22),
-                    ),
-                  )
-                : CircleAvatar(
-                    radius: 11,
-                    backgroundColor: colors.surfaceTransparent,
-                    child: Image.asset('assets/egg.png', width: 22, height: 22),
-                  ),
             const SizedBox(width: 6),
             Expanded(
               child: Row(

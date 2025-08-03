@@ -10,6 +10,7 @@ import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/widgets/link_preview_widget.dart';
 import 'package:qiqstr/widgets/media_preview_widget.dart';
+import 'package:qiqstr/widgets/note_content_widget.dart';
 
 class QuoteWidget extends StatelessWidget {
   final String bech32;
@@ -34,95 +35,90 @@ class QuoteWidget extends StatelessWidget {
     if (await canLaunchUrl(url)) await launchUrl(url);
   }
 
-  Future<Map<String, String>> _fetchAllMentions(
-      List<Map<String, dynamic>> mentionParts) async {
-    final Map<String, String> results = {};
-    for (final part in mentionParts) {
-      final id = part['id'] as String;
-      try {
-        String? pubHex;
-        if (id.startsWith('npub1')) {
-          pubHex = decodeBasicBech32(id, 'npub');
-        } else if (id.startsWith('nprofile1')) {
-          pubHex = decodeTlvBech32Full(id, 'nprofile')['type_0_main'];
-        }
-        if (pubHex != null) {
-          final data = await dataService.getCachedUserProfile(pubHex);
-          final user = UserModel.fromCachedProfile(pubHex, data);
-          if (user.name.isNotEmpty) {
-            results[id] = user.name;
+  void _navigateToMentionProfile(BuildContext context, String id) =>
+      dataService.openUserProfile(context, id);
+
+  Map<String, dynamic> _createTruncatedParsedContentWithShowMore(
+      Map<String, dynamic> originalParsed, int characterLimit, NoteModel note) {
+    final textParts =
+        (originalParsed['textParts'] as List<dynamic>?)
+            ?.cast<Map<String, dynamic>>() ??
+        [];
+    final truncatedParts = <Map<String, dynamic>>[];
+    int currentLength = 0;
+
+    for (var part in textParts) {
+      if (part['type'] == 'text') {
+        final text = part['text'] as String;
+        if (currentLength + text.length <= characterLimit) {
+          truncatedParts.add(part);
+          currentLength += text.length;
+        } else {
+          final remainingChars = characterLimit - currentLength;
+          if (remainingChars > 0) {
+            truncatedParts.add({
+              'type': 'text',
+              'text': text.substring(0, remainingChars) + '... ',
+            });
           }
+          break;
         }
-      } catch (_) {}
+      } else if (part['type'] == 'mention') {
+        if (currentLength + 8 <= characterLimit) {
+          truncatedParts.add(part);
+          currentLength += 8;
+        } else {
+          break;
+        }
+      }
     }
-    return results;
+
+    truncatedParts.add({
+      'type': 'show_more',
+      'text': 'Show more...',
+      'noteId': note.id,
+    });
+
+    return {
+      'textParts': truncatedParts,
+      'mediaUrls': originalParsed['mediaUrls'] ?? [],
+      'linkUrls': originalParsed['linkUrls'] ?? [],
+      'quoteIds': originalParsed['quoteIds'] ?? [],
+    };
   }
 
-  Widget _contentText(BuildContext context, Map<String, dynamic> parsed) {
-    final parts = parsed['textParts'] as List<Map<String, dynamic>>;
-    final colors = context.colors;
+  Widget _buildNoteContent(
+      BuildContext context, Map<String, dynamic> parsed, NoteModel note) {
+    final textParts =
+        (parsed['textParts'] as List<dynamic>?)
+            ?.cast<Map<String, dynamic>>() ??
+        [];
+    String fullText = '';
 
-    return FutureBuilder<Map<String, String>>(
-      future: _fetchAllMentions(
-          parts.where((p) => p['type'] == 'mention').toList()),
-      builder: (context, snapshot) {
-        final resolvedMentions = snapshot.data ?? {};
-        List<InlineSpan> spans = [];
+    for (var part in textParts) {
+      if (part['type'] == 'text') {
+        fullText += part['text'] as String;
+      } else if (part['type'] == 'mention') {
+        fullText += '@mention ';
+      }
+    }
 
-        for (var p in parts) {
-          if (p['type'] == 'text') {
-            final text = p['text'] as String;
-            final regex = RegExp(r'(https?:\/\/[^\s]+)');
-            final matches = regex.allMatches(text);
+    const int characterLimit = 140;
 
-            int lastMatchEnd = 0;
-            for (final match in matches) {
-              if (match.start > lastMatchEnd) {
-                spans.add(TextSpan(
-                  text: text.substring(lastMatchEnd, match.start),
-                  style: TextStyle(color: colors.textPrimary),
-                ));
-              }
-              final url = text.substring(match.start, match.end);
-              spans.add(
-                TextSpan(
-                  text: url,
-                  style: TextStyle(
-                    color: colors.accent,
-                    fontStyle: FontStyle.normal,
-                  ),
-                  recognizer: TapGestureRecognizer()
-                    ..onTap = () => _onOpen(LinkableElement(url, url)),
-                ),
-              );
-              lastMatchEnd = match.end;
-            }
+    if (fullText.length <= characterLimit) {
+      return NoteContentWidget(
+        parsedContent: parsed,
+        dataService: dataService,
+        onNavigateToMentionProfile: (id) => _navigateToMentionProfile(context, id),
+      );
+    }
 
-            if (lastMatchEnd < text.length) {
-              spans.add(TextSpan(
-                text: text.substring(lastMatchEnd),
-                style: TextStyle(color: colors.textPrimary),
-              ));
-            }
-          } else if (p['type'] == 'mention') {
-            final mentionId = p['id'] as String;
-            final display_name = resolvedMentions[mentionId] ?? '${mentionId.substring(0, 8)}…';
-            spans.add(
-              TextSpan(
-                text: '@$display_name',
-                style: TextStyle(
-                  color: colors.accent,
-                  fontStyle: FontStyle.normal,
-                  fontWeight: FontWeight.w500,
-                ),
-                recognizer: TapGestureRecognizer()..onTap = () => dataService.openUserProfile(context, mentionId),
-              ),
-            );
-          }
-        }
-
-        return RichText(text: TextSpan(children: spans));
-      },
+    return NoteContentWidget(
+      parsedContent: _createTruncatedParsedContentWithShowMore(
+          parsed, characterLimit, note),
+      dataService: dataService,
+      onNavigateToMentionProfile: (id) => _navigateToMentionProfile(context, id),
+      onShowMoreTap: (noteId) => dataService.openThreadPage(context, noteId),
     );
   }
 
@@ -153,9 +149,14 @@ class QuoteWidget extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 14,
-                backgroundImage: img.isNotEmpty ? CachedNetworkImageProvider(img) : null,
-                backgroundColor: img.isEmpty ? context.colors.secondary : context.colors.surfaceTransparent,
-                child: img.isEmpty ? Icon(Icons.person, size: 14, color: context.colors.textPrimary) : null,
+                backgroundImage:
+                    img.isNotEmpty ? CachedNetworkImageProvider(img) : null,
+                backgroundColor: img.isEmpty
+                    ? context.colors.secondary
+                    : context.colors.surfaceTransparent,
+                child: img.isEmpty
+                    ? Icon(Icons.person, size: 14, color: context.colors.textPrimary)
+                    : null,
               ),
               const SizedBox(width: 8),
               Text(
@@ -235,8 +236,9 @@ class QuoteWidget extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: DefaultTextStyle(
-                    style: TextStyle(fontSize: 15, color: context.colors.textPrimary),
-                    child: _contentText(context, parsed),
+                    style: TextStyle(
+                        fontSize: 15, color: context.colors.textPrimary),
+                    child: _buildNoteContent(context, parsed, n),
                   ),
                 ),
               if ((parsed['mediaUrls'] as List).isNotEmpty)

@@ -5,7 +5,6 @@ import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:palette_generator/palette_generator.dart';
 
 import '../models/link_preview_model.dart';
 
@@ -43,7 +42,6 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
   String? _title;
   String? _imageUrl;
   bool _isLoading = true;
-  Color? _dominantColor;
 
   late final Box<LinkPreviewModel> _cacheBox;
 
@@ -62,7 +60,6 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
         _imageUrl = cached.imageUrl;
         _isLoading = false;
       });
-      _updateDominantColor();
     } else {
       _fetchPreviewData();
     }
@@ -81,7 +78,6 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
           _imageUrl = model.imageUrl;
           _isLoading = false;
         });
-        _updateDominantColor();
       } else {
         setState(() => _isLoading = false);
       }
@@ -89,28 +85,6 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
       if (!mounted) return;
       setState(() => _isLoading = false);
     }
-  }
-
-  Future<void> _updateDominantColor() async {
-    if (_imageUrl == null) return;
-    try {
-      final PaletteGenerator palette = await PaletteGenerator.fromImageProvider(
-        NetworkImage(_imageUrl!),
-        size: const Size(200, 100),
-      );
-      if (!mounted) return;
-
-      final dominant = palette.dominantColor?.color ?? context.colors.background;
-
-      final darkened = HSLColor.fromColor(dominant)
-          .withLightness(
-              (HSLColor.fromColor(dominant).lightness * 0.5).clamp(0.0, 1.0))
-          .toColor();
-
-      setState(() {
-        _dominantColor = darkened;
-      });
-    } catch (_) {}
   }
 
   @override
@@ -163,7 +137,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
                 width: double.infinity,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                color: _dominantColor ?? context.colors.overlayDark,
+                color: context.colors.overlayDark,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
