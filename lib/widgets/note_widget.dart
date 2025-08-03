@@ -9,6 +9,7 @@ import 'package:qiqstr/widgets/interaction_bar_widget.dart';
 import 'package:qiqstr/widgets/note_content_widget.dart';
 import 'package:qiqstr/widgets/dialogs/repost_dialog.dart';
 import 'package:qiqstr/widgets/dialogs/zap_dialog.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../models/note_model.dart';
 import '../services/data_service.dart';
@@ -309,49 +310,27 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                     onTap: () => _navigateToProfile(widget.note.author),
                     child: Padding(
                       padding: const EdgeInsets.only(top: 8),
-                      child: Stack(
-                        children: [
-                          CircleAvatar(
-                            radius: 21,
-                            backgroundColor: colors.surfaceTransparent,
-                            child: (authorUser?.profileImage ?? '').isNotEmpty
-                                ? CachedNetworkImage(
-                                    imageUrl: authorUser!.profileImage,
-                                    imageBuilder: (context, imageProvider) {
-                                      return Container(
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          image: DecorationImage(
-                                            image: imageProvider,
-                                            fit: BoxFit.cover,
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                    placeholder: (context, url) => Image.asset('assets/egg.png', width: 42, height: 42),
-                                    errorWidget: (context, url, error) => Image.asset('assets/egg.png', width: 42, height: 42),
-                                  )
-                                : Image.asset('assets/egg.png', width: 42, height: 42),
-                          ),
-                          if (widget.note.isReply)
-                            Positioned(
-                              top: 0,
-                              left: 0,
-                              child: Container(
-                                width: 14,
-                                height: 14,
-                                decoration: BoxDecoration(
-                                  color: colors.secondary,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.reply,
-                                  size: 10,
-                                  color: colors.iconPrimary,
-                                ),
-                              ),
-                            ),
-                        ],
+                      child: CircleAvatar(
+                        radius: 21,
+                        backgroundColor: colors.surfaceTransparent,
+                        child: (authorUser?.profileImage ?? '').isNotEmpty
+                            ? CachedNetworkImage(
+                                imageUrl: authorUser!.profileImage,
+                                imageBuilder: (context, imageProvider) {
+                                  return Container(
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      image: DecorationImage(
+                                        image: imageProvider,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                placeholder: (context, url) => Image.asset('assets/egg.png', width: 42, height: 42),
+                                errorWidget: (context, url, error) => Image.asset('assets/egg.png', width: 42, height: 42),
+                              )
+                            : Image.asset('assets/egg.png', width: 42, height: 42),
                       ),
                     ),
                   ),
@@ -367,6 +346,19 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
+                                  if (widget.note.isReply)
+                                    Padding(
+                                      padding: const EdgeInsets.only(right: 6),
+                                      child: SvgPicture.asset(
+                                        'assets/reply_button.svg',
+                                        width: 14,
+                                        height: 14,
+                                        colorFilter: ColorFilter.mode(
+                                          colors.textPrimary,
+                                          BlendMode.srcIn,
+                                        ),
+                                      ),
+                                    ),
                                   Flexible(
                                     child: Text(
                                       (authorUser?.name ?? 'Unknown').length > 25
