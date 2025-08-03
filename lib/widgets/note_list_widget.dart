@@ -40,9 +40,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   List<NoteModel> _filteredNotes = [];
 
-  static const int _itemsPerPage = 50;
-  int _currentPage = 0;
-
   @override
   void initState() {
     super.initState();
@@ -89,7 +86,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         _dataService = widget.sharedDataService!;
 
         // For shared DataService, ensure it's configured for our npub and dataType
-        if (_dataService.npub != widget.npub || _dataService.dataType != widget.dataType) {
+        if (_dataService.npub != widget.npub ||
+            _dataService.dataType != widget.dataType) {
           // Create our own DataService if the shared one doesn't match our requirements
           _dataService = _createDataService();
           await _dataService.initializeLightweight();
@@ -169,15 +167,10 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   }
 
   void _onScroll() {
-    if (!_isLoadingMore && _scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.9) {
-      final allAvailableNotes = _filteredNotes.length;
-      final currentlyVisibleNotes = (_currentPage + 1) * _itemsPerPage;
-
-      if (currentlyVisibleNotes >= allAvailableNotes) {
-        _loadMoreItemsFromNetwork();
-      } else {
-        _showMoreFromCache();
-      }
+    if (!_isLoadingMore &&
+        _scrollController.position.pixels >=
+            _scrollController.position.maxScrollExtent * 0.9) {
+      _loadMoreItemsFromNetwork();
     }
   }
 
@@ -193,18 +186,13 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     });
   }
 
-  void _showMoreFromCache() {
-    if (_isLoadingMore) return;
-    setState(() {
-      _currentPage++;
-    });
-  }
-
   Future<void> _updateFilteredNotes(List<NoteModel> notes) async {
     List<NoteModel> filtered;
     switch (widget.filterType) {
       case NoteListFilterType.media:
-        filtered = notes.where((n) => n.hasMedia && (!n.isReply || n.isRepost)).toList();
+        filtered = notes
+            .where((n) => n.hasMedia && (!n.isReply || n.isRepost))
+            .toList();
         break;
       case NoteListFilterType.latest:
         filtered = notes.where((n) => !n.isReply || n.isRepost).toList();
@@ -214,7 +202,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     if (mounted) {
       setState(() {
         _filteredNotes = filtered;
-        _currentPage = 0;
       });
     }
   }
@@ -223,19 +210,22 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   Widget build(BuildContext context) {
     if (_isInitializing || _currentUserNpub == null) {
       return const SliverToBoxAdapter(
-        child: Center(child: Padding(padding: EdgeInsets.all(40.0), child: Text("Loading..."))),
+        child: Center(
+            child: Padding(
+                padding: EdgeInsets.all(40.0), child: Text("Loading..."))),
       );
     }
 
     if (_filteredNotes.isEmpty) {
       return const SliverToBoxAdapter(
-        child: Center(child: Padding(padding: EdgeInsets.all(24.0), child: Text('No notes found.'))),
+        child: Center(
+            child: Padding(
+                padding: EdgeInsets.all(24.0),
+                child: Text('No notes found.'))),
       );
     }
 
-    final totalItems = _filteredNotes.length;
-    final visibleItems = (_currentPage + 1) * _itemsPerPage;
-    final itemsToShow = visibleItems > totalItems ? totalItems : visibleItems;
+    final itemsToShow = _filteredNotes.length;
 
     return SliverList.separated(
       itemCount: itemsToShow + (_isLoadingMore ? 1 : 0),
@@ -249,7 +239,10 @@ class _NoteListWidgetState extends State<NoteListWidget> {
           return const Center(
             child: Padding(
               padding: EdgeInsets.all(16.0),
-              child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+              child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2)),
             ),
           );
         }

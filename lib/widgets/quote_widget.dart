@@ -1,11 +1,9 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import '../theme/theme_manager.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:qiqstr/models/note_model.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:qiqstr/screens/thread_page.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/widgets/link_preview_widget.dart';
@@ -30,11 +28,6 @@ class QuoteWidget extends StatelessWidget {
     return '${(d.inDays / 7).floor()}w';
   }
 
-  Future<void> _onOpen(LinkableElement link) async {
-    final url = Uri.parse(link.url);
-    if (await canLaunchUrl(url)) await launchUrl(url);
-  }
-
   void _navigateToMentionProfile(BuildContext context, String id) =>
       dataService.openUserProfile(context, id);
 
@@ -42,8 +35,8 @@ class QuoteWidget extends StatelessWidget {
       Map<String, dynamic> originalParsed, int characterLimit, NoteModel note) {
     final textParts =
         (originalParsed['textParts'] as List<dynamic>?)
-            ?.cast<Map<String, dynamic>>() ??
-        [];
+                ?.cast<Map<String, dynamic>>() ??
+            [];
     final truncatedParts = <Map<String, dynamic>>[];
     int currentLength = 0;
 
@@ -91,8 +84,8 @@ class QuoteWidget extends StatelessWidget {
       BuildContext context, Map<String, dynamic> parsed, NoteModel note) {
     final textParts =
         (parsed['textParts'] as List<dynamic>?)
-            ?.cast<Map<String, dynamic>>() ??
-        [];
+                ?.cast<Map<String, dynamic>>() ??
+            [];
     String fullText = '';
 
     for (var part in textParts) {
@@ -114,11 +107,19 @@ class QuoteWidget extends StatelessWidget {
     }
 
     return NoteContentWidget(
-      parsedContent: _createTruncatedParsedContentWithShowMore(
-          parsed, characterLimit, note),
+      parsedContent:
+          _createTruncatedParsedContentWithShowMore(parsed, characterLimit, note),
       dataService: dataService,
       onNavigateToMentionProfile: (id) => _navigateToMentionProfile(context, id),
-      onShowMoreTap: (noteId) => dataService.openThreadPage(context, noteId),
+      onShowMoreTap: (noteId) => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ThreadPage(
+            rootNoteId: noteId,
+            dataService: dataService,
+          ),
+        ),
+      ),
     );
   }
 

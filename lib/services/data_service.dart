@@ -1913,7 +1913,7 @@ class DataService {
 
   // Memory pressure relief - keep only recent notes
   Future<void> _performMemoryPressureRelief() async {
-    if (notes.length <= 300) return;
+    if (notes.length <= 1000) return;
 
     print('[DataService] Performing memory pressure relief: ${notes.length} notes');
 
@@ -1925,9 +1925,9 @@ class DataService {
         return bTime.compareTo(aTime);
       });
 
-    // Keep only the 300 most recent notes
-    final notesToKeep = sortedNotes.take(300).toList();
-    final notesToRemove = sortedNotes.skip(300).toList();
+    // Keep only the 500 most recent notes
+    final notesToKeep = sortedNotes.take(500).toList();
+    final notesToRemove = sortedNotes.skip(500).toList();
 
     // Update notes list and eventIds
     notes.clear();
