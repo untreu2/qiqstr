@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:bounce/bounce.dart';
 import 'package:like_button/like_button.dart';
 import '../theme/theme_manager.dart';
 
@@ -48,56 +47,6 @@ class InteractionBar extends StatelessWidget {
     required this.onStatisticsTap,
     this.isLarge = false,
   });
-
-  Widget _buildAction({
-    required BuildContext context,
-    required String svg,
-    required Color color,
-    required int count,
-    required VoidCallback onTap,
-  }) {
-    final textScaleFactor = MediaQuery.of(context).textScaleFactor;
-    final colors = context.colors;
-
-    final double iconSize = isLarge ? 16 : 14;
-    final double fontSize = isLarge ? 15 : 14;
-    final double spacing = isLarge ? 6 : 5;
-
-    return Stack(
-      alignment: Alignment.center,
-      children: [
-        const Positioned(
-          top: -10,
-          child: SizedBox(
-            width: 40,
-            height: 40,
-          ),
-        ),
-        Bounce(
-          scaleFactor: 0.95,
-          onTap: onTap,
-          child: Row(
-            children: [
-              SvgPicture.asset(
-                svg,
-                width: iconSize * textScaleFactor,
-                height: iconSize * textScaleFactor,
-                colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-              ),
-              SizedBox(width: spacing),
-              Opacity(
-                opacity: count > 0 ? 1.0 : 0.0,
-                child: Text(
-                  '$count',
-                  style: TextStyle(fontSize: fontSize, color: colors.secondary),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
 
   Widget _buildReactionButton(BuildContext context) {
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;

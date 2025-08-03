@@ -247,7 +247,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(Icons.repeat, size: 16, color: colors.secondary),
+            Icon(Icons.repeat, size: 14, color: colors.secondary),
             const SizedBox(width: 6),
             profileImage != null && profileImage.isNotEmpty
                 ? CircleAvatar(

@@ -239,11 +239,10 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
     return SliverList.separated(
       itemCount: itemsToShow + (_isLoadingMore ? 1 : 0),
-      separatorBuilder: (context, index) => Container(
-        margin: const EdgeInsets.symmetric(vertical: 10),
-        height: 1,
-        width: double.infinity,
-        color: context.colors.surfaceTransparent,
+      separatorBuilder: (context, index) => Divider(
+        height: 12,
+        thickness: 1,
+        color: context.colors.border,
       ),
       itemBuilder: (context, index) {
         if (index >= itemsToShow) {
