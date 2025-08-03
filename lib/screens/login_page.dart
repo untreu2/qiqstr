@@ -1,10 +1,12 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:nostr/nostr.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/screens/home_navigator.dart';
-import '../theme/theme_manager.dart';
+
+import 'package:qiqstr/theme/theme_manager.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -28,17 +30,40 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  Future<void> _saveNsecAndNpub(String nsecBech32) async {
-    setState(() {
-      _isLoading = true;
-    });
-
+  Future<void> _loginWithNsecInput() async {
+    if (_nsecController.text.trim().isEmpty) return;
+    setState(() => _isLoading = true);
     try {
-      final nsecHex = Nip19.decodePrivkey(nsecBech32);
-      if (nsecHex.isEmpty) {
-        throw Exception('Invalid nsec format.');
+      final nsecHex = Nip19.decodePrivkey(_nsecController.text.trim());
+      if (nsecHex.isEmpty) throw Exception('Invalid nsec format.');
+      await _login(nsecHex);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _message = 'Error: Invalid nsec input.';
+          _isLoading = false;
+        });
       }
+    }
+  }
 
+  Future<void> _createNewAccount() async {
+    setState(() => _isLoading = true);
+    try {
+      final keychain = Keychain.generate();
+      await _login(keychain.private);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _message = 'Error: Could not create a new account.';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _login(String nsecHex) async {
+    try {
       final keychain = Keychain(nsecHex);
       final npubHex = keychain.public;
 
@@ -49,7 +74,6 @@ class _LoginPageState extends State<LoginPage> {
       await dataService.initialize();
 
       if (mounted) {
-        setState(() => _isLoading = false);
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -63,7 +87,7 @@ class _LoginPageState extends State<LoginPage> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _message = 'Error: Invalid nsec input.';
+          _message = 'Error: Login failed.';
           _isLoading = false;
         });
       }
@@ -74,27 +98,31 @@ class _LoginPageState extends State<LoginPage> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          SvgPicture.asset(
+            'assets/main_icon_white.svg',
+            height: 100,
+            width: 100,
+            color: context.colors.textPrimary,
+          ),
+          const SizedBox(height: 40),
           Text(
             'Welcome to Qiqstr!',
             style: TextStyle(
-              fontSize: 36,
-              fontWeight: FontWeight.w700,
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
               color: context.colors.textPrimary,
-              letterSpacing: -1,
             ),
-            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           Text(
-            'Login securely with your private key.',
+            'Login securely with your private key or create a new account.',
+            textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 16,
               color: context.colors.textSecondary,
-              height: 1.5,
             ),
-            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 40),
           TextField(
@@ -105,42 +133,62 @@ class _LoginPageState extends State<LoginPage> {
               labelStyle: TextStyle(color: context.colors.textSecondary),
               filled: true,
               fillColor: context.colors.inputFill,
-              enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: context.colors.inputBorder),
+              border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(color: context.colors.inputFocused),
-                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
               ),
             ),
             obscureText: true,
           ),
           const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                backgroundColor: context.colors.buttonPrimary,
-                foregroundColor: context.colors.background,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+          GestureDetector(
+            onTap: _loginWithNsecInput,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: context.colors.buttonPrimary,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: context.colors.borderAccent),
+              ),
+              child: Text(
+                'Login',
+                style: TextStyle(
+                  color: context.colors.background,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-              onPressed: () {
-                if (_nsecController.text.trim().isNotEmpty) {
-                  _saveNsecAndNpub(_nsecController.text.trim());
-                }
-              },
-              child: const Text('LOGIN', style: TextStyle(fontSize: 16)),
+            ),
+          ),
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: _createNewAccount,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: context.colors.overlayLight,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: context.colors.borderAccent),
+              ),
+              child: Text(
+                'Create a New Account',
+                style: TextStyle(
+                  color: context.colors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 20),
           if (_message.isNotEmpty)
             Text(
               _message,
-              style: TextStyle(color: context.colors.error),
+              style: TextStyle(color: context.colors.error, fontWeight: FontWeight.bold),
             ),
         ],
       ),
@@ -167,9 +215,7 @@ class _LoginPageState extends State<LoginPage> {
       backgroundColor: context.colors.background,
       body: SafeArea(
         child: Center(
-          child: _isLoading
-              ? _buildLoadingScreen()
-              : SingleChildScrollView(child: _buildLoginForm()),
+          child: _isLoading ? _buildLoadingScreen() : SingleChildScrollView(child: _buildLoginForm()),
         ),
       ),
     );

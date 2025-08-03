@@ -8,6 +8,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/theme_manager.dart';
+import 'package:qiqstr/screens/keys_page.dart';
 
 class SidebarWidget extends StatefulWidget {
   final UserModel? user;
@@ -139,6 +140,17 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                                 ),
                               ),
                             ),
+                            _buildSidebarItem(
+                              colors: colors,
+                              icon: Icons.vpn_key_rounded,
+                              label: 'Keys',
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const KeysPage(),
+                                ),
+                              ),
+                            ),
                             _buildThemeToggle(colors),
                             _buildSidebarItem(
                               colors: colors,
@@ -161,19 +173,26 @@ class _SidebarWidgetState extends State<SidebarWidget> {
 
   Widget _buildSidebarItem({
     required AppThemeColors colors,
-    required String svgAsset,
+    String? svgAsset,
+    IconData? icon,
     required String label,
     required VoidCallback onTap,
     Color? iconColor,
     Color? textColor,
   }) {
     return ListTile(
-      leading: SvgPicture.asset(
-        svgAsset,
-        width: 20,
-        height: 20,
-        color: iconColor ?? colors.iconPrimary,
-      ),
+      leading: icon != null
+          ? Icon(
+              icon,
+              size: 20,
+              color: iconColor ?? colors.iconPrimary,
+            )
+          : SvgPicture.asset(
+              svgAsset!,
+              width: 20,
+              height: 20,
+              color: iconColor ?? colors.iconPrimary,
+            ),
       title: Text(
         label,
         style: TextStyle(color: textColor ?? colors.textPrimary, fontSize: 18),
