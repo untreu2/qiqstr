@@ -375,7 +375,11 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                                   ),
                                   Padding(
                                     padding: const EdgeInsets.only(left: 6),
-                                    child: Text('• $_formattedTimestamp', style: TextStyle(fontSize: 12, color: colors.secondary)),
+                                    child: Text(
+                                        (authorUser?.nip05 != null && authorUser!.nip05.isNotEmpty)
+                                            ? '• ${authorUser.nip05} • $_formattedTimestamp'
+                                            : '• $_formattedTimestamp',
+                                        style: TextStyle(fontSize: 12, color: colors.secondary)),
                                   ),
                                 ],
                               ),
