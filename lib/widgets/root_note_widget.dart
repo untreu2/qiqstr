@@ -100,11 +100,12 @@ class RootNoteWidget extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 4),
             NoteContentWidget(
               parsedContent: parsedContent,
               dataService: dataService,
               onNavigateToMentionProfile: onNavigateToMentionProfile,
+              type: NoteContentType.big,
             ),
             const SizedBox(height: 12),
             InteractionBar(

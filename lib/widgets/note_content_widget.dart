@@ -8,13 +8,23 @@ import 'package:qiqstr/widgets/quote_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/theme_manager.dart';
 
+enum NoteContentType { small, big }
+
 class NoteContentWidget extends StatelessWidget {
   final Map<String, dynamic> parsedContent;
   final DataService dataService;
   final void Function(String mentionId) onNavigateToMentionProfile;
   final void Function(String noteId)? onShowMoreTap;
+  final NoteContentType type;
 
-  static const double _fontSize = 15.0;
+  double get _fontSize {
+    switch (type) {
+      case NoteContentType.small:
+        return 15.0;
+      case NoteContentType.big:
+        return 20.0;
+    }
+  }
 
   const NoteContentWidget({
     Key? key,
@@ -22,6 +32,7 @@ class NoteContentWidget extends StatelessWidget {
     required this.dataService,
     required this.onNavigateToMentionProfile,
     this.onShowMoreTap,
+    this.type = NoteContentType.small,
   }) : super(key: key);
 
   Future<void> _onOpenLink(BuildContext context, LinkableElement link) async {
@@ -75,15 +86,13 @@ class NoteContentWidget extends StatelessWidget {
             spans.add(TextSpan(
               text: urlMatch,
               style: TextStyle(color: colors.accent, fontSize: currentFontSize),
-              recognizer: TapGestureRecognizer()
-                ..onTap = () => _onOpenLink(context, LinkableElement(urlMatch, urlMatch)),
+              recognizer: TapGestureRecognizer()..onTap = () => _onOpenLink(context, LinkableElement(urlMatch, urlMatch)),
             ));
           } else if (hashtagMatch != null) {
             spans.add(TextSpan(
               text: hashtagMatch,
               style: TextStyle(color: colors.accent, fontSize: currentFontSize),
-              recognizer: TapGestureRecognizer()
-                ..onTap = () => _onHashtagTap(context, hashtagMatch),
+              recognizer: TapGestureRecognizer()..onTap = () => _onHashtagTap(context, hashtagMatch),
             ));
           }
           last = m.end;
@@ -99,10 +108,8 @@ class NoteContentWidget extends StatelessWidget {
         final display_name = mentions[p['id']] ?? '${(p['id'] as String).substring(0, 8)}...';
         spans.add(TextSpan(
           text: '@$display_name',
-          style: TextStyle(color: colors.accent, fontSize: currentFontSize,
-              fontWeight: FontWeight.w500),
-          recognizer: TapGestureRecognizer()
-            ..onTap = () => onNavigateToMentionProfile(p['id'] as String),
+          style: TextStyle(color: colors.accent, fontSize: currentFontSize, fontWeight: FontWeight.w500),
+          recognizer: TapGestureRecognizer()..onTap = () => onNavigateToMentionProfile(p['id'] as String),
         ));
       } else if (p['type'] == 'show_more') {
         spans.add(TextSpan(
@@ -112,8 +119,7 @@ class NoteContentWidget extends StatelessWidget {
             fontSize: currentFontSize,
             fontWeight: FontWeight.w500,
           ),
-          recognizer: TapGestureRecognizer()
-            ..onTap = () => onShowMoreTap?.call(p['noteId'] as String),
+          recognizer: TapGestureRecognizer()..onTap = () => onShowMoreTap?.call(p['noteId'] as String),
         ));
       }
     }
@@ -138,10 +144,7 @@ class NoteContentWidget extends StatelessWidget {
     final linkUrls = (parsedContent['linkUrls'] as List<dynamic>?)?.cast<String>() ?? [];
     final quoteIds = (parsedContent['quoteIds'] as List<dynamic>?)?.cast<String>() ?? [];
 
-    final mentionIds = textParts
-        .where((p) => p['type'] == 'mention')
-        .map((p) => p['id'] as String)
-        .toList();
+    final mentionIds = textParts.where((p) => p['type'] == 'mention').map((p) => p['id'] as String).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
