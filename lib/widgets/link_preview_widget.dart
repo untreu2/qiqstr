@@ -17,8 +17,7 @@ Future<LinkPreviewModel?> _fetchAndParseLink(String url) async {
       final metaTitle = document.querySelector('title');
       final metaOgImage = document.querySelector('meta[property="og:image"]');
 
-      final String parsedTitle =
-          metaOgTitle?.attributes['content'] ?? metaTitle?.text ?? url;
+      final String parsedTitle = metaOgTitle?.attributes['content'] ?? metaTitle?.text ?? url;
       final String? parsedImage = metaOgImage?.attributes['content'];
 
       return LinkPreviewModel(title: parsedTitle, imageUrl: parsedImage);
@@ -112,8 +111,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ClipRRect(
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(16)),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
                 child: AspectRatio(
                   aspectRatio: 16 / 9,
                   child: Image.network(
@@ -135,8 +133,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
               ),
               Container(
                 width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 color: context.colors.overlayDark,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -145,18 +142,18 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
                       _title!,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: Colors.white,
+                        color: context.colors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       Uri.parse(widget.url).host.replaceFirst('www.', ''),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
-                        color: Colors.white70,
+                        color: context.colors.textSecondary,
                       ),
                     ),
                   ],

@@ -2,52 +2,44 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:like_button/like_button.dart';
 import '../theme/theme_manager.dart';
+import '../providers/interactions_provider.dart';
+import '../services/data_service.dart';
+import '../screens/share_note.dart';
+import '../screens/note_statistics_page.dart';
+import '../widgets/dialogs/repost_dialog.dart';
+import '../widgets/dialogs/zap_dialog.dart';
+import '../models/note_model.dart';
 
-class InteractionBar extends StatelessWidget {
-  final int reactionCount;
-  final int replyCount;
-  final int repostCount;
-  final int zapAmount;
+class InteractionBar extends StatefulWidget {
+  final String noteId;
+  final String currentUserNpub;
+  final DataService? dataService;
+  final NoteModel? note;
 
   final bool isReactionGlowing;
   final bool isReplyGlowing;
   final bool isRepostGlowing;
   final bool isZapGlowing;
-
-  final bool hasReacted;
-  final bool hasReplied;
-  final bool hasReposted;
-  final bool hasZapped;
-
-  final VoidCallback onReactionTap;
-  final VoidCallback onReplyTap;
-  final VoidCallback onRepostTap;
-  final VoidCallback onZapTap;
-  final VoidCallback onStatisticsTap;
   final bool isLarge;
 
   const InteractionBar({
     super.key,
-    required this.reactionCount,
-    required this.replyCount,
-    required this.repostCount,
-    required this.zapAmount,
-    required this.isReactionGlowing,
-    required this.isReplyGlowing,
-    required this.isRepostGlowing,
-    required this.isZapGlowing,
-    required this.hasReacted,
-    required this.hasReplied,
-    required this.hasReposted,
-    required this.hasZapped,
-    required this.onReactionTap,
-    required this.onReplyTap,
-    required this.onRepostTap,
-    required this.onZapTap,
-    required this.onStatisticsTap,
+    required this.noteId,
+    required this.currentUserNpub,
+    this.dataService,
+    this.note,
+    this.isReactionGlowing = false,
+    this.isReplyGlowing = false,
+    this.isRepostGlowing = false,
+    this.isZapGlowing = false,
     this.isLarge = false,
   });
 
+  @override
+  State<InteractionBar> createState() => _InteractionBarState();
+}
+
+class _InteractionBarState extends State<InteractionBar> {
   String _formatCount(int count) {
     if (count >= 1000) {
       final String formatted = (count / 1000).toStringAsFixed(1);
@@ -59,12 +51,78 @@ class InteractionBar extends StatelessWidget {
     return count.toString();
   }
 
-  Widget _buildReactionButton(BuildContext context) {
+  void _handleReactionTap() async {
+    if (widget.dataService == null) return;
+
+    final hasReacted = InteractionsProvider.instance.hasUserReacted(widget.currentUserNpub, widget.noteId);
+    if (hasReacted) return;
+
+    try {
+      // Send reaction to network
+      await widget.dataService!.sendReactionInstantly(widget.noteId, '+');
+    } catch (e) {
+      print('Error sending reaction: $e');
+    }
+  }
+
+  void _handleReplyTap() {
+    if (widget.dataService == null) return;
+
+    // Navigate to reply page
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ShareNotePage(
+          dataService: widget.dataService!,
+          replyToNoteId: widget.noteId,
+        ),
+      ),
+    );
+  }
+
+  void _handleRepostTap() {
+    if (widget.dataService == null || widget.note == null) return;
+
+    final hasReposted = InteractionsProvider.instance.hasUserReposted(widget.currentUserNpub, widget.noteId);
+    if (hasReposted) return;
+
+    showRepostDialog(
+      context: context,
+      dataService: widget.dataService!,
+      note: widget.note!,
+    );
+  }
+
+  void _handleZapTap() {
+    if (widget.dataService == null || widget.note == null) return;
+
+    showZapDialog(
+      context: context,
+      dataService: widget.dataService!,
+      note: widget.note!,
+    );
+  }
+
+  void _handleStatisticsTap() {
+    if (widget.dataService == null || widget.note == null) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => NoteStatisticsPage(
+          note: widget.note!,
+          dataService: widget.dataService!,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReactionButton(BuildContext context, int reactionCount, bool hasReacted) {
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     final colors = context.colors;
-    final double iconSize = isLarge ? 16 : 15;
-    final double fontSize = isLarge ? 15 : 14.5;
-    final double spacing = isLarge ? 6 : 5.5;
+    final double iconSize = widget.isLarge ? 16 : 15;
+    final double fontSize = widget.isLarge ? 15 : 14.5;
+    final double spacing = widget.isLarge ? 6 : 5.5;
 
     return Row(
       children: [
@@ -78,14 +136,17 @@ class InteractionBar extends StatelessWidget {
               width: iconSize * textScaleFactor,
               height: iconSize * textScaleFactor,
               colorFilter: ColorFilter.mode(
-                (isReactionGlowing || isLiked) ? colors.reaction : colors.secondary,
+                (widget.isReactionGlowing || isLiked) ? colors.reaction : colors.secondary,
                 BlendMode.srcIn,
               ),
             );
           },
           onTap: (bool isLiked) async {
-            onReactionTap();
-            return !isLiked;
+            if (!isLiked) {
+              _handleReactionTap();
+              return true;
+            }
+            return false;
           },
           circleColor: CircleColor(
             start: colors.reaction.withOpacity(0.3),
@@ -108,12 +169,12 @@ class InteractionBar extends StatelessWidget {
     );
   }
 
-  Widget _buildReplyButton(BuildContext context) {
+  Widget _buildReplyButton(BuildContext context, int replyCount, bool hasReplied) {
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     final colors = context.colors;
-    final double iconSize = isLarge ? 16 : 15;
-    final double fontSize = isLarge ? 15 : 14.5;
-    final double spacing = isLarge ? 6 : 5.5;
+    final double iconSize = widget.isLarge ? 16 : 15;
+    final double fontSize = widget.isLarge ? 15 : 14.5;
+    final double spacing = widget.isLarge ? 6 : 5.5;
 
     return Row(
       children: [
@@ -127,14 +188,14 @@ class InteractionBar extends StatelessWidget {
               width: iconSize * textScaleFactor,
               height: iconSize * textScaleFactor,
               colorFilter: ColorFilter.mode(
-                (isReplyGlowing || isLiked) ? colors.reply : colors.secondary,
+                (widget.isReplyGlowing || isLiked) ? colors.reply : colors.secondary,
                 BlendMode.srcIn,
               ),
             );
           },
           onTap: (bool isLiked) async {
-            onReplyTap();
-            return !isLiked;
+            _handleReplyTap();
+            return false; // Reply doesn't toggle state
           },
           circleColor: CircleColor(
             start: colors.reply.withOpacity(0.3),
@@ -157,12 +218,12 @@ class InteractionBar extends StatelessWidget {
     );
   }
 
-  Widget _buildRepostButton(BuildContext context) {
+  Widget _buildRepostButton(BuildContext context, int repostCount, bool hasReposted) {
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     final colors = context.colors;
-    final double iconSize = isLarge ? 16 : 15;
-    final double fontSize = isLarge ? 15 : 14.5;
-    final double spacing = isLarge ? 6 : 5.5;
+    final double iconSize = widget.isLarge ? 16 : 15;
+    final double fontSize = widget.isLarge ? 15 : 14.5;
+    final double spacing = widget.isLarge ? 6 : 5.5;
 
     return Row(
       children: [
@@ -176,13 +237,15 @@ class InteractionBar extends StatelessWidget {
               width: iconSize * textScaleFactor,
               height: iconSize * textScaleFactor,
               colorFilter: ColorFilter.mode(
-                (isRepostGlowing || isLiked) ? colors.repost : colors.secondary,
+                (widget.isRepostGlowing || isLiked) ? colors.repost : colors.secondary,
                 BlendMode.srcIn,
               ),
             );
           },
           onTap: (bool isLiked) async {
-            onRepostTap();
+            if (!isLiked) {
+              _handleRepostTap();
+            }
             return !isLiked;
           },
           circleColor: CircleColor(
@@ -206,12 +269,12 @@ class InteractionBar extends StatelessWidget {
     );
   }
 
-  Widget _buildZapButton(BuildContext context) {
+  Widget _buildZapButton(BuildContext context, int zapAmount, bool hasZapped) {
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     final colors = context.colors;
-    final double iconSize = isLarge ? 16 : 15;
-    final double fontSize = isLarge ? 15 : 14.5;
-    final double spacing = isLarge ? 6 : 5.5;
+    final double iconSize = widget.isLarge ? 16 : 15;
+    final double fontSize = widget.isLarge ? 15 : 14.5;
+    final double spacing = widget.isLarge ? 6 : 5.5;
 
     return Row(
       children: [
@@ -225,13 +288,13 @@ class InteractionBar extends StatelessWidget {
               width: iconSize * textScaleFactor,
               height: iconSize * textScaleFactor,
               colorFilter: ColorFilter.mode(
-                (isZapGlowing || isLiked) ? colors.zap : colors.secondary,
+                (widget.isZapGlowing || isLiked) ? colors.zap : colors.secondary,
                 BlendMode.srcIn,
               ),
             );
           },
           onTap: (bool isLiked) async {
-            onZapTap();
+            _handleZapTap();
             return !isLiked;
           },
           circleColor: CircleColor(
@@ -257,24 +320,40 @@ class InteractionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
-    final double statsIconSize = isLarge ? 22 : 21;
+    return ListenableBuilder(
+      listenable: InteractionsProvider.instance,
+      builder: (context, _) {
+        final colors = context.colors;
+        final double statsIconSize = widget.isLarge ? 22 : 21;
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        _buildReactionButton(context),
-        _buildReplyButton(context),
-        _buildRepostButton(context),
-        _buildZapButton(context),
-        GestureDetector(
-          onTap: onStatisticsTap,
-          child: Padding(
-            padding: const EdgeInsets.only(left: 6),
-            child: Icon(Icons.bar_chart, size: statsIconSize, color: colors.secondary),
-          ),
-        ),
-      ],
+        // Get real-time data from InteractionsProvider
+        final reactionCount = InteractionsProvider.instance.getReactionCount(widget.noteId);
+        final replyCount = InteractionsProvider.instance.getReplyCount(widget.noteId);
+        final repostCount = InteractionsProvider.instance.getRepostCount(widget.noteId);
+        final zapAmount = InteractionsProvider.instance.getZapAmount(widget.noteId);
+
+        final hasReacted = InteractionsProvider.instance.hasUserReacted(widget.currentUserNpub, widget.noteId);
+        final hasReplied = InteractionsProvider.instance.hasUserReplied(widget.currentUserNpub, widget.noteId);
+        final hasReposted = InteractionsProvider.instance.hasUserReposted(widget.currentUserNpub, widget.noteId);
+        final hasZapped = InteractionsProvider.instance.hasUserZapped(widget.currentUserNpub, widget.noteId);
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _buildReactionButton(context, reactionCount, hasReacted),
+            _buildReplyButton(context, replyCount, hasReplied),
+            _buildRepostButton(context, repostCount, hasReposted),
+            _buildZapButton(context, zapAmount, hasZapped),
+            GestureDetector(
+              onTap: _handleStatisticsTap,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 6),
+                child: Icon(Icons.bar_chart, size: statsIconSize, color: colors.secondary),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

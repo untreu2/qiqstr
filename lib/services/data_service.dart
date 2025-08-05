@@ -28,6 +28,7 @@ import 'package:crypto/crypto.dart';
 import 'nostr_service.dart';
 import 'cache_service.dart';
 import 'profile_service.dart';
+import '../providers/interactions_provider.dart';
 
 enum DataType { feed, profile, note }
 
@@ -977,6 +978,9 @@ class DataService {
         reactionsMap[targetEventId]!.add(reaction);
         await reactionsBox?.put(reaction.id, reaction);
 
+        // Update InteractionsProvider
+        InteractionsProvider.instance.updateReactions(targetEventId, reactionsMap[targetEventId]!);
+
         onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
 
         final note = notes.firstWhereOrNull((n) => n.id == targetEventId);
@@ -1012,6 +1016,9 @@ class DataService {
         repostsMap[originalNoteId]!.add(repost);
         await repostsBox?.put(repost.id, repost);
 
+        // Update InteractionsProvider
+        InteractionsProvider.instance.updateReposts(originalNoteId, repostsMap[originalNoteId]!);
+
         onRepostsUpdated?.call(originalNoteId, repostsMap[originalNoteId]!);
 
         final note = notes.firstWhereOrNull((n) => n.id == originalNoteId);
@@ -1037,6 +1044,9 @@ class DataService {
       if (!repliesMap[parentEventId]!.any((r) => r.id == reply.id)) {
         repliesMap[parentEventId]!.add(reply);
         await repliesBox?.put(reply.id, reply);
+
+        // Update InteractionsProvider
+        InteractionsProvider.instance.updateReplies(parentEventId, repliesMap[parentEventId]!);
 
         onRepliesUpdated?.call(parentEventId, repliesMap[parentEventId]!);
 
@@ -3161,6 +3171,11 @@ class DataService {
           zapsMap[zap.targetEventId]!.add(zap);
         }
       }
+
+      // Update InteractionsProvider with all loaded zaps
+      for (final entry in zapsMap.entries) {
+        InteractionsProvider.instance.updateZaps(entry.key, entry.value);
+      }
     } catch (e) {
       print('[DataService ERROR] Error loading zaps from cache: $e');
     }
@@ -3183,6 +3198,9 @@ class DataService {
 
       zapsMap[key]!.add(zap);
       await zapsBox?.put(zap.id, zap);
+
+      // Update InteractionsProvider
+      InteractionsProvider.instance.updateZaps(key, zapsMap[key]!);
 
       final note = notes.firstWhereOrNull((n) => n.id == key);
       if (note != null) {
@@ -3278,6 +3296,8 @@ class DataService {
             reactionsMap[entry.key]!.add(reaction);
           }
         }
+        // Update InteractionsProvider
+        InteractionsProvider.instance.updateReactions(entry.key, reactionsMap[entry.key]!);
         onReactionsUpdated?.call(entry.key, reactionsMap[entry.key]!);
       }
 
@@ -3342,6 +3362,8 @@ class DataService {
             repliesMap[entry.key]!.add(reply);
           }
         }
+        // Update InteractionsProvider
+        InteractionsProvider.instance.updateReplies(entry.key, repliesMap[entry.key]!);
       }
 
       print('[DataService] Replies cache loaded with ${allReplies.length} replies, ${replyNotes.length} added as notes.');
@@ -3389,6 +3411,8 @@ class DataService {
             repostsMap[entry.key]!.add(repost);
           }
         }
+        // Update InteractionsProvider
+        InteractionsProvider.instance.updateReposts(entry.key, repostsMap[entry.key]!);
         onRepostsUpdated?.call(entry.key, repostsMap[entry.key]!);
       }
 

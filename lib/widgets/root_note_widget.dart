@@ -1,136 +1,127 @@
 import 'package:flutter/material.dart';
-import 'package:qiqstr/models/note_model.dart';
-import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/services/data_service.dart';
-import 'package:qiqstr/widgets/note_content_widget.dart';
-import 'package:qiqstr/widgets/interaction_bar_widget.dart';
+import '../models/note_model.dart';
+import '../services/data_service.dart';
+import '../providers/user_provider.dart';
 import '../theme/theme_manager.dart';
+import 'note_content_widget.dart';
+import 'interaction_bar_widget.dart';
 
 class RootNoteWidget extends StatelessWidget {
   final NoteModel note;
   final DataService dataService;
+  final String currentUserNpub;
   final void Function(String) onNavigateToMentionProfile;
-
-  const RootNoteWidget({
-    required this.note,
-    required this.dataService,
-    required this.onNavigateToMentionProfile,
-    required this.isReactionGlowing,
-    required this.isReplyGlowing,
-    required this.isRepostGlowing,
-    required this.isZapGlowing,
-    required this.hasReacted,
-    required this.hasReplied,
-    required this.hasReposted,
-    required this.hasZapped,
-    required this.onReactionTap,
-    required this.onReplyTap,
-    required this.onRepostTap,
-    required this.onZapTap,
-    required this.onStatisticsTap,
-    Key? key,
-  }) : super(key: key);
 
   final bool isReactionGlowing;
   final bool isReplyGlowing;
   final bool isRepostGlowing;
   final bool isZapGlowing;
-  final bool hasReacted;
-  final bool hasReplied;
-  final bool hasReposted;
-  final bool hasZapped;
-  final VoidCallback onReactionTap;
-  final VoidCallback onReplyTap;
-  final VoidCallback onRepostTap;
-  final VoidCallback onZapTap;
-  final VoidCallback onStatisticsTap;
+
+  const RootNoteWidget({
+    Key? key,
+    required this.note,
+    required this.dataService,
+    required this.currentUserNpub,
+    required this.onNavigateToMentionProfile,
+    this.isReactionGlowing = false,
+    this.isReplyGlowing = false,
+    this.isRepostGlowing = false,
+    this.isZapGlowing = false,
+  }) : super(key: key);
   @override
   Widget build(BuildContext context) {
     final parsedContent = dataService.parseContent(note.content);
-    final UserModel? authorProfile = dataService.profilesNotifier.value[note.author];
-    final String authorName = authorProfile?.name.isNotEmpty ?? false ? authorProfile!.name : note.author.substring(0, 8);
 
-    return Card(
-      margin: EdgeInsets.zero,
-      color: context.colors.background,
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            GestureDetector(
-              onTap: () => dataService.openUserProfile(context, note.author),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  CircleAvatar(
-                    radius: 21,
-                    backgroundImage: (authorProfile?.profileImage.isNotEmpty ?? false) ? NetworkImage(authorProfile!.profileImage) : null,
-                    backgroundColor: context.colors.surfaceTransparent,
-                    onBackgroundImageError: (exception, stackTrace) {},
-                    child: (authorProfile?.profileImage.isEmpty ?? true) ? Image.asset('assets/egg.png', width: 42, height: 42) : null,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          authorName,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: context.colors.textPrimary,
-                            fontWeight: FontWeight.w500,
-                            height: 1.2,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+    return ListenableBuilder(
+      listenable: UserProvider.instance,
+      builder: (context, _) {
+        final authorProfile = UserProvider.instance.getUserOrDefault(note.author);
+
+        // Load user if not cached
+        if (UserProvider.instance.getUser(note.author) == null) {
+          UserProvider.instance.loadUser(note.author);
+        }
+
+        return Card(
+          margin: EdgeInsets.zero,
+          color: context.colors.background,
+          elevation: 0,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                GestureDetector(
+                  onTap: () => dataService.openUserProfile(context, note.author),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      CircleAvatar(
+                        radius: 21,
+                        backgroundImage: authorProfile.profileImage.isNotEmpty ? NetworkImage(authorProfile.profileImage) : null,
+                        backgroundColor: context.colors.surfaceTransparent,
+                        onBackgroundImageError: (exception, stackTrace) {},
+                        child: authorProfile.profileImage.isEmpty
+                            ? Icon(
+                                Icons.person,
+                                size: 24,
+                                color: context.colors.textSecondary,
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              authorProfile.name.isNotEmpty ? authorProfile.name : note.author.substring(0, 8),
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: context.colors.textPrimary,
+                                fontWeight: FontWeight.w500,
+                                height: 1.2,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (authorProfile.nip05.isNotEmpty)
+                              Text(
+                                authorProfile.nip05,
+                                style: TextStyle(fontSize: 13, color: context.colors.secondary),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
                         ),
-                        if (authorProfile?.nip05.isNotEmpty == true)
-                          Text(
-                            authorProfile!.nip05,
-                            style: TextStyle(fontSize: 13, color: context.colors.secondary),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 4),
+                NoteContentWidget(
+                  parsedContent: parsedContent,
+                  dataService: dataService,
+                  onNavigateToMentionProfile: onNavigateToMentionProfile,
+                  type: NoteContentType.big,
+                ),
+                const SizedBox(height: 12),
+                InteractionBar(
+                  noteId: note.id,
+                  currentUserNpub: currentUserNpub,
+                  dataService: dataService,
+                  note: note,
+                  isReactionGlowing: isReactionGlowing,
+                  isReplyGlowing: isReplyGlowing,
+                  isRepostGlowing: isRepostGlowing,
+                  isZapGlowing: isZapGlowing,
+                  isLarge: true,
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
-            NoteContentWidget(
-              parsedContent: parsedContent,
-              dataService: dataService,
-              onNavigateToMentionProfile: onNavigateToMentionProfile,
-              type: NoteContentType.big,
-            ),
-            const SizedBox(height: 12),
-            InteractionBar(
-              reactionCount: note.reactionCount,
-              replyCount: note.replyCount,
-              repostCount: note.repostCount,
-              zapAmount: note.zapAmount,
-              isReactionGlowing: isReactionGlowing,
-              isReplyGlowing: isReplyGlowing,
-              isRepostGlowing: isRepostGlowing,
-              isZapGlowing: isZapGlowing,
-              hasReacted: hasReacted,
-              hasReplied: hasReplied,
-              hasReposted: hasReposted,
-              hasZapped: hasZapped,
-              onReactionTap: onReactionTap,
-              onReplyTap: onReplyTap,
-              onRepostTap: onRepostTap,
-              onZapTap: onZapTap,
-              onStatisticsTap: onStatisticsTap,
-              isLarge: true,
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

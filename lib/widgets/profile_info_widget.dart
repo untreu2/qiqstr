@@ -1,18 +1,19 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../theme/theme_manager.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/screens/edit_profile.dart';
-import 'package:qiqstr/services/data_service.dart';
 import 'package:hive/hive.dart';
-import 'package:qiqstr/models/following_model.dart';
-import 'package:qiqstr/widgets/mini_link_preview_widget.dart';
-import 'package:qiqstr/widgets/photo_viewer_widget.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
+import '../theme/theme_manager.dart';
+import '../models/user_model.dart';
+import '../models/following_model.dart';
+import '../screens/edit_profile.dart';
+import '../services/data_service.dart';
+import '../providers/user_provider.dart';
+import 'mini_link_preview_widget.dart';
+import 'photo_viewer_widget.dart';
 
 class ProfileInfoWidget extends StatefulWidget {
   final UserModel user;
@@ -35,8 +36,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   late Box<FollowingModel> _followingBox;
   DataService? _dataService;
 
-  UserModel? _liveUser;
-  Timer? _userRefreshTimer;
   bool _copiedToClipboard = false;
   bool _isInitialized = false;
 
@@ -48,9 +47,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     if (widget.sharedDataService != null) {
       _dataService = widget.sharedDataService;
     }
-
-    // Start with basic user data immediately
-    _liveUser = widget.user;
 
     // Defer all heavy operations with progressive loading
     _startProgressiveInitialization();
@@ -81,10 +77,10 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       }
     });
 
-    // Phase 4: User refresh timer (after 500ms)
-    Future.delayed(const Duration(milliseconds: 500), () {
+    // Phase 3: Load user into UserProvider (after 200ms)
+    Future.delayed(const Duration(milliseconds: 200), () {
       if (mounted) {
-        _startOptimizedUserRefreshTimer();
+        UserProvider.instance.loadUser(widget.user.npub);
       }
     });
   }
@@ -98,7 +94,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   @override
   void dispose() {
-    _userRefreshTimer?.cancel();
     super.dispose();
   }
 
@@ -126,28 +121,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     }
   }
 
-  void _startOptimizedUserRefreshTimer() {
-    final npub = widget.user.npub;
-    // Reduced frequency from 1 second to 5 seconds for better performance
-    _userRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
-      try {
-        if (!mounted) return;
-
-        final usersBox = await Hive.openBox<UserModel>('users');
-        final latestUser = usersBox.get(npub);
-
-        // Only update if there's actually a change
-        if (latestUser != null && mounted && latestUser != _liveUser) {
-          setState(() {
-            _liveUser = latestUser;
-          });
-        }
-      } catch (e) {
-        print('[ProfileInfoWidget] User refresh error: $e');
-      }
-    });
-  }
-
   Future<void> _toggleFollow() async {
     if (_currentUserNpub == null || _dataService == null) return;
 
@@ -170,62 +143,68 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final user = _liveUser ?? widget.user;
-    final npubBech32 = encodeBasicBech32(user.npub, "npub");
-    final screenWidth = MediaQuery.of(context).size.width;
-    final websiteUrl = user.website.isNotEmpty && !(user.website.startsWith("http://") || user.website.startsWith("https://"))
-        ? "https://${user.website}"
-        : user.website;
+    return ListenableBuilder(
+      listenable: UserProvider.instance,
+      builder: (context, _) {
+        // Get user from UserProvider, fallback to widget.user
+        final user = UserProvider.instance.getUser(widget.user.npub) ?? widget.user;
+        final npubBech32 = encodeBasicBech32(user.npub, "npub");
+        final screenWidth = MediaQuery.of(context).size.width;
+        final websiteUrl = user.website.isNotEmpty && !(user.website.startsWith("http://") || user.website.startsWith("https://"))
+            ? "https://${user.website}"
+            : user.website;
 
-    return Container(
-      color: context.colors.background,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Optimized banner loading
-          _buildOptimizedBanner(context, user, screenWidth),
-          // Main profile content
-          Container(
-            transform: Matrix4.translationValues(0, -30, 0),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Avatar and action buttons row
-                _buildAvatarAndActionsRow(context, user),
-                const SizedBox(height: 12),
+        return Container(
+          color: context.colors.background,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Optimized banner loading
+              _buildOptimizedBanner(context, user, screenWidth),
+              // Main profile content
+              Container(
+                transform: Matrix4.translationValues(0, -30, 0),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Avatar and action buttons row
+                    _buildAvatarAndActionsRow(context, user),
+                    const SizedBox(height: 12),
 
-                // Name and verification
-                _buildNameRow(context, user),
-                const SizedBox(height: 12),
+                    // Name and verification
+                    _buildNameRow(context, user),
+                    const SizedBox(height: 12),
 
-                // NPUB copy button
-                _buildNpubCopyButton(context, npubBech32),
-                const SizedBox(height: 6),
+                    // NPUB copy button
+                    _buildNpubCopyButton(context, npubBech32),
+                    const SizedBox(height: 6),
 
-                // Lightning address
-                if (user.lud16.isNotEmpty) Text(user.lud16, style: TextStyle(fontSize: 13, color: context.colors.accent)),
+                    // Lightning address
+                    if (user.lud16.isNotEmpty) Text(user.lud16, style: TextStyle(fontSize: 13, color: context.colors.accent)),
 
-                // About section
-                if (user.about.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Text(user.about, style: TextStyle(fontSize: 14, color: context.colors.secondary)),
-                  ),
+                    // About section
+                    if (user.about.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Text(user.about, style: TextStyle(fontSize: 14, color: context.colors.secondary)),
+                      ),
 
-                // Website preview (only load if initialized to avoid blocking)
-                if (user.website.isNotEmpty && _isInitialized)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12.0),
-                    child: MiniLinkPreviewWidget(url: websiteUrl),
-                  ),
+                    // Website preview (only load if initialized to avoid blocking)
+                    if (user.website.isNotEmpty && _isInitialized)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12.0),
+                        child: MiniLinkPreviewWidget(url: websiteUrl),
+                      ),
 
-                const SizedBox(height: 16),
-              ],
-            ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -252,10 +231,22 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                     ),
                   );
                 },
-                placeholder: (context, url) => Image.asset('assets/egg.png', width: 80, height: 80),
-                errorWidget: (context, url, error) => Image.asset('assets/egg.png', width: 80, height: 80),
+                placeholder: (context, url) => Icon(
+                  Icons.person,
+                  size: 48,
+                  color: context.colors.textSecondary,
+                ),
+                errorWidget: (context, url, error) => Icon(
+                  Icons.person,
+                  size: 48,
+                  color: context.colors.textSecondary,
+                ),
               )
-            : Image.asset('assets/egg.png', width: 80, height: 80),
+            : Icon(
+                Icons.person,
+                size: 48,
+                color: context.colors.textSecondary,
+              ),
       ),
     );
   }

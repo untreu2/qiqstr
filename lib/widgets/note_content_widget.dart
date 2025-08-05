@@ -22,7 +22,7 @@ class NoteContentWidget extends StatelessWidget {
       case NoteContentType.small:
         return 15.0;
       case NoteContentType.big:
-        return 20.0;
+        return 17.0;
     }
   }
 

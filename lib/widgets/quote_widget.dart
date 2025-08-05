@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
-import '../theme/theme_manager.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
-import 'package:qiqstr/models/note_model.dart';
-import 'package:qiqstr/screens/thread_page.dart';
-import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/services/data_service.dart';
-import 'package:qiqstr/widgets/link_preview_widget.dart';
-import 'package:qiqstr/widgets/media_preview_widget.dart';
-import 'package:qiqstr/widgets/note_content_widget.dart';
+import '../theme/theme_manager.dart';
+import '../models/note_model.dart';
+import '../screens/thread_page.dart';
+import '../services/data_service.dart';
+import '../providers/user_provider.dart';
+import 'note_content_widget.dart';
 
 class QuoteWidget extends StatelessWidget {
   final String bech32;
@@ -28,15 +26,10 @@ class QuoteWidget extends StatelessWidget {
     return '${(d.inDays / 7).floor()}w';
   }
 
-  void _navigateToMentionProfile(BuildContext context, String id) =>
-      dataService.openUserProfile(context, id);
+  void _navigateToMentionProfile(BuildContext context, String id) => dataService.openUserProfile(context, id);
 
-  Map<String, dynamic> _createTruncatedParsedContentWithShowMore(
-      Map<String, dynamic> originalParsed, int characterLimit, NoteModel note) {
-    final textParts =
-        (originalParsed['textParts'] as List<dynamic>?)
-                ?.cast<Map<String, dynamic>>() ??
-            [];
+  Map<String, dynamic> _createTruncatedParsedContentWithShowMore(Map<String, dynamic> originalParsed, int characterLimit, NoteModel note) {
+    final textParts = (originalParsed['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
     final truncatedParts = <Map<String, dynamic>>[];
     int currentLength = 0;
 
@@ -80,12 +73,8 @@ class QuoteWidget extends StatelessWidget {
     };
   }
 
-  Widget _buildNoteContent(
-      BuildContext context, Map<String, dynamic> parsed, NoteModel note) {
-    final textParts =
-        (parsed['textParts'] as List<dynamic>?)
-                ?.cast<Map<String, dynamic>>() ??
-            [];
+  Widget _buildNoteContent(BuildContext context, Map<String, dynamic> parsed, NoteModel note) {
+    final textParts = (parsed['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
     String fullText = '';
 
     for (var part in textParts) {
@@ -97,29 +86,23 @@ class QuoteWidget extends StatelessWidget {
     }
 
     const int characterLimit = 140;
-
-    if (fullText.length <= characterLimit) {
-      return NoteContentWidget(
-        parsedContent: parsed,
-        dataService: dataService,
-        onNavigateToMentionProfile: (id) => _navigateToMentionProfile(context, id),
-      );
-    }
+    final shouldTruncate = fullText.length > characterLimit;
 
     return NoteContentWidget(
-      parsedContent:
-          _createTruncatedParsedContentWithShowMore(parsed, characterLimit, note),
+      parsedContent: shouldTruncate ? _createTruncatedParsedContentWithShowMore(parsed, characterLimit, note) : parsed,
       dataService: dataService,
       onNavigateToMentionProfile: (id) => _navigateToMentionProfile(context, id),
-      onShowMoreTap: (noteId) => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ThreadPage(
-            rootNoteId: noteId,
-            dataService: dataService,
-          ),
-        ),
-      ),
+      onShowMoreTap: shouldTruncate
+          ? (noteId) => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ThreadPage(
+                    rootNoteId: noteId,
+                    dataService: dataService,
+                  ),
+                ),
+              )
+          : null,
     );
   }
 
@@ -135,33 +118,29 @@ class QuoteWidget extends StatelessWidget {
   }
 
   Widget _authorInfo(BuildContext context, String npub) {
-    return FutureBuilder<Map<String, String>>(
-      future: dataService.getCachedUserProfile(npub),
-      builder: (_, snap) {
-        String name = 'Anonymous', img = '';
-        if (snap.hasData) {
-          final u = UserModel.fromCachedProfile(npub, snap.data!);
-          name = u.name;
-          img = u.profileImage;
+    return ListenableBuilder(
+      listenable: UserProvider.instance,
+      builder: (context, _) {
+        final user = UserProvider.instance.getUserOrDefault(npub);
+
+        // Load user if not cached
+        if (UserProvider.instance.getUser(npub) == null) {
+          UserProvider.instance.loadUser(npub);
         }
+
         return GestureDetector(
           onTap: () => dataService.openUserProfile(context, npub),
           child: Row(
             children: [
               CircleAvatar(
                 radius: 14,
-                backgroundImage:
-                    img.isNotEmpty ? CachedNetworkImageProvider(img) : null,
-                backgroundColor: img.isEmpty
-                    ? context.colors.secondary
-                    : context.colors.surfaceTransparent,
-                child: img.isEmpty
-                    ? Icon(Icons.person, size: 14, color: context.colors.textPrimary)
-                    : null,
+                backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
+                backgroundColor: user.profileImage.isEmpty ? context.colors.secondary : context.colors.surfaceTransparent,
+                child: user.profileImage.isEmpty ? Icon(Icons.person, size: 14, color: context.colors.textPrimary) : null,
               ),
               const SizedBox(width: 8),
               Text(
-                name,
+                user.name,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -187,7 +166,7 @@ class QuoteWidget extends StatelessWidget {
             decoration: BoxDecoration(
               color: context.colors.background,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: context.colors.textPrimary, width: 0.8),
+              border: Border.all(color: context.colors.border, width: 0.8),
             ),
             child: Center(
               child: Text(
@@ -229,18 +208,10 @@ class QuoteWidget extends StatelessWidget {
                   ),
                 ],
               ),
-              if ((parsed['textParts'] as List)
-                  .where((p) =>
-                      p['type'] == 'text' &&
-                      (p['text'] as String).trim().isNotEmpty)
-                  .isNotEmpty)
+              if ((parsed['textParts'] as List).where((p) => p['type'] == 'text' && (p['text'] as String).trim().isNotEmpty).isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 10),
-                  child: DefaultTextStyle(
-                    style: TextStyle(
-                        fontSize: 15, color: context.colors.textPrimary),
-                    child: _buildNoteContent(context, parsed, n),
-                  ),
+                  child: _buildNoteContent(context, parsed, n),
                 ),
             ],
           ),

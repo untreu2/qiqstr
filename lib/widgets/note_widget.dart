@@ -1,19 +1,16 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:qiqstr/screens/note_statistics_page.dart';
-import 'package:qiqstr/screens/thread_page.dart';
-import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/screens/share_note.dart';
-import 'package:qiqstr/widgets/interaction_bar_widget.dart';
-import 'package:qiqstr/widgets/note_content_widget.dart';
-import 'package:qiqstr/widgets/dialogs/repost_dialog.dart';
-import 'package:qiqstr/widgets/dialogs/zap_dialog.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-
 import '../models/note_model.dart';
+import '../models/user_model.dart';
 import '../services/data_service.dart';
 import '../theme/theme_manager.dart';
+import '../screens/thread_page.dart';
+import '../providers/user_provider.dart';
+import '../providers/interactions_provider.dart';
+import 'interaction_bar_widget.dart';
+import 'note_content_widget.dart';
 
 class NoteWidget extends StatefulWidget {
   final NoteModel note;
@@ -76,24 +73,9 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
 
   void _navigateToMentionProfile(String id) => widget.dataService.openUserProfile(context, id);
 
-  void _navigateToStatisticsPage() => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => NoteStatisticsPage(note: widget.note, dataService: widget.dataService),
-        ),
-      );
+  bool _hasReacted() => InteractionsProvider.instance.hasUserReacted(widget.currentUserNpub, widget.note.id);
 
-  bool _hasZapped() => (widget.dataService.zapsMap[widget.note.id] ?? []).any((z) => z.sender == widget.currentUserNpub);
-  bool _hasReacted() => (widget.dataService.reactionsMap[widget.note.id] ?? []).any((e) => e.author == widget.currentUserNpub);
-  bool _hasReplied() => (widget.dataService.repliesMap[widget.note.id] ?? []).any((e) => e.author == widget.currentUserNpub);
-  bool _hasReposted() => (widget.dataService.repostsMap[widget.note.id] ?? []).any((e) => e.repostedBy == widget.currentUserNpub);
-
-  // Get real-time interaction counts from DataService
-  int _getCurrentReactionCount() => widget.dataService.reactionsMap[widget.note.id]?.length ?? widget.note.reactionCount;
-  int _getCurrentReplyCount() => widget.dataService.repliesMap[widget.note.id]?.length ?? widget.note.replyCount;
-  int _getCurrentRepostCount() => widget.dataService.repostsMap[widget.note.id]?.length ?? widget.note.repostCount;
-  int _getCurrentZapAmount() =>
-      widget.dataService.zapsMap[widget.note.id]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? widget.note.zapAmount;
+  // Get real-time interaction counts from InteractionsProvider
 
   void _handleReactionTap() async {
     if (_hasReacted()) return;
@@ -102,44 +84,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     try {
       await widget.dataService.sendReactionInstantly(widget.note.id, '+');
     } catch (_) {}
-  }
-
-  void _handleReplyTap() {
-    setState(() => _isReplyGlowing = true);
-    Future.delayed(const Duration(milliseconds: 400), () => mounted ? setState(() => _isReplyGlowing = false) : null);
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ShareNotePage(
-          dataService: widget.dataService,
-          replyToNoteId: widget.note.id,
-        ),
-      ),
-    );
-  }
-
-  void _handleRepostTap() {
-    setState(() => _isRepostGlowing = true);
-    Future.delayed(const Duration(milliseconds: 400), () {
-      if (mounted) setState(() => _isRepostGlowing = false);
-    });
-
-    showRepostDialog(
-      context: context,
-      dataService: widget.dataService,
-      note: widget.note,
-    );
-  }
-
-  void _handleZapTap() {
-    setState(() => _isZapGlowing = true);
-    Future.delayed(const Duration(milliseconds: 400), () => mounted ? setState(() => _isZapGlowing = false) : null);
-
-    showZapDialog(
-      context: context,
-      dataService: widget.dataService,
-      note: widget.note,
-    );
   }
 
   void _navigateToProfile(String npub) {
@@ -174,20 +118,13 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     }
 
     const int characterLimit = 280;
-
-    if (fullText.length <= characterLimit) {
-      return NoteContentWidget(
-        parsedContent: parsed,
-        dataService: widget.dataService,
-        onNavigateToMentionProfile: _navigateToMentionProfile,
-      );
-    }
+    final shouldTruncate = fullText.length > characterLimit;
 
     return NoteContentWidget(
-      parsedContent: _createTruncatedParsedContentWithShowMore(parsed, characterLimit, note),
+      parsedContent: shouldTruncate ? _createTruncatedParsedContentWithShowMore(parsed, characterLimit, note) : parsed,
       dataService: widget.dataService,
       onNavigateToMentionProfile: _navigateToMentionProfile,
-      onShowMoreTap: (noteId) => _navigateToThreadPage(note),
+      onShowMoreTap: shouldTruncate ? (noteId) => _navigateToThreadPage(note) : null,
     );
   }
 
@@ -237,43 +174,50 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   }
 
   Widget _buildRepostInfo(String npub, DateTime? ts) {
-    final user = widget.profiles[npub];
-    final name = user?.name ?? 'Unknown';
+    return ListenableBuilder(
+      listenable: UserProvider.instance,
+      builder: (context, _) {
+        final user = UserProvider.instance.getUserOrDefault(npub);
 
-    return Builder(builder: (context) {
-      final colors = context.colors;
-      return GestureDetector(
-        onTap: () => _navigateToProfile(npub),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Icon(Icons.repeat, size: 14, color: colors.secondary),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Flexible(
-                    child: Text(
-                      'Reposted by $name',
-                      style: TextStyle(fontSize: 12, color: colors.secondary),
-                      overflow: TextOverflow.ellipsis,
+        // Load user if not cached
+        if (UserProvider.instance.getUser(npub) == null) {
+          UserProvider.instance.loadUser(npub);
+        }
+
+        final colors = context.colors;
+        return GestureDetector(
+          onTap: () => _navigateToProfile(npub),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(Icons.repeat, size: 14, color: colors.secondary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'Reposted by ${user.name}',
+                        style: TextStyle(fontSize: 12, color: colors.secondary),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                  if (ts != null) ...[
-                    const SizedBox(width: 6),
-                    Text(
-                      '• ${_formatTimestamp(ts)}',
-                      style: TextStyle(fontSize: 12, color: colors.secondary),
-                    ),
+                    if (ts != null) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        '• ${_formatTimestamp(ts)}',
+                        style: TextStyle(fontSize: 12, color: colors.secondary),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
-        ),
-      );
-    });
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -283,144 +227,164 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
 
     widget.dataService.parseContentForNote(widget.note);
     final parsed = widget.note.parsedContent!;
-    final authorUser = widget.profiles[widget.note.author];
 
-    return GestureDetector(
-      onDoubleTapDown: (_) => _handleReactionTap(),
-      onTap: () => _navigateToThreadPage(widget.note),
-      child: Container(
-        color: widget.containerColor ?? colors.background,
-        padding: const EdgeInsets.only(bottom: 2),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (widget.note.isRepost && widget.note.repostedBy != null) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: _buildRepostInfo(widget.note.repostedBy!, widget.note.repostTimestamp),
-              ),
-              const SizedBox(height: 4),
-            ],
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  GestureDetector(
-                    onTap: () => _navigateToProfile(widget.note.author),
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: CircleAvatar(
-                        radius: 22,
-                        backgroundColor: colors.surfaceTransparent,
-                        child: (authorUser?.profileImage ?? '').isNotEmpty
-                            ? CachedNetworkImage(
-                                imageUrl: authorUser!.profileImage,
-                                imageBuilder: (context, imageProvider) {
-                                  return Container(
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      image: DecorationImage(
-                                        image: imageProvider,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                  );
-                                },
-                                placeholder: (context, url) => Image.asset('assets/egg.png', width: 42, height: 42),
-                                errorWidget: (context, url, error) => Image.asset('assets/egg.png', width: 42, height: 42),
-                              )
-                            : Image.asset('assets/egg.png', width: 42, height: 42),
-                      ),
-                    ),
+    return ListenableBuilder(
+      listenable: Listenable.merge([
+        UserProvider.instance,
+        InteractionsProvider.instance,
+      ]),
+      builder: (context, _) {
+        final authorUser = UserProvider.instance.getUserOrDefault(widget.note.author);
+
+        // Load user if not cached
+        if (UserProvider.instance.getUser(widget.note.author) == null) {
+          UserProvider.instance.loadUser(widget.note.author);
+        }
+
+        return GestureDetector(
+          onDoubleTapDown: (_) => _handleReactionTap(),
+          onTap: () => _navigateToThreadPage(widget.note),
+          child: Container(
+            color: widget.containerColor ?? colors.background,
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (widget.note.isRepost && widget.note.repostedBy != null) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: _buildRepostInfo(widget.note.repostedBy!, widget.note.repostTimestamp),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+                  const SizedBox(height: 4),
+                ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      GestureDetector(
+                        onTap: () => _navigateToProfile(widget.note.author),
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: CircleAvatar(
+                            radius: 22,
+                            backgroundColor: colors.surfaceTransparent,
+                            child: authorUser.profileImage.isNotEmpty
+                                ? CachedNetworkImage(
+                                    imageUrl: authorUser.profileImage,
+                                    imageBuilder: (context, imageProvider) {
+                                      return Container(
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          image: DecorationImage(
+                                            image: imageProvider,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    placeholder: (context, url) => Icon(
+                                      Icons.person,
+                                      size: 24,
+                                      color: colors.textSecondary,
+                                    ),
+                                    errorWidget: (context, url, error) => Icon(
+                                      Icons.person,
+                                      size: 24,
+                                      color: colors.textSecondary,
+                                    ),
+                                  )
+                                : Icon(
+                                    Icons.person,
+                                    size: 24,
+                                    color: colors.textSecondary,
+                                  ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  if (widget.note.isReply)
-                                    Padding(
-                                      padding: const EdgeInsets.only(right: 6),
-                                      child: SvgPicture.asset(
-                                        'assets/reply_button.svg',
-                                        width: 14,
-                                        height: 14,
-                                        colorFilter: ColorFilter.mode(
-                                          colors.textPrimary,
-                                          BlendMode.srcIn,
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      if (widget.note.isReply)
+                                        Padding(
+                                          padding: const EdgeInsets.only(right: 6),
+                                          child: SvgPicture.asset(
+                                            'assets/reply_button.svg',
+                                            width: 14,
+                                            height: 14,
+                                            colorFilter: ColorFilter.mode(
+                                              colors.textPrimary,
+                                              BlendMode.srcIn,
+                                            ),
+                                          ),
+                                        ),
+                                      Flexible(
+                                        child: Text(
+                                          authorUser.name.length > 25 ? authorUser.name.substring(0, 25) : authorUser.name,
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w600,
+                                            color: colors.textPrimary,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
-                                    ),
-                                  Flexible(
-                                    child: Text(
-                                      (authorUser?.name ?? 'Unknown').length > 25
-                                          ? (authorUser?.name ?? 'Unknown').substring(0, 25)
-                                          : (authorUser?.name ?? 'Unknown'),
-                                      style: TextStyle(
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.w600,
-                                        color: colors.textPrimary,
+                                      if (authorUser.nip05.isNotEmpty) ...[
+                                        Flexible(
+                                          child: Padding(
+                                            padding: const EdgeInsets.only(left: 6),
+                                            child: Text('• ${authorUser.nip05}',
+                                                style: TextStyle(fontSize: 12.5, color: colors.secondary), overflow: TextOverflow.ellipsis),
+                                          ),
+                                        ),
+                                      ],
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 6),
+                                        child: Text('• $_formattedTimestamp', style: TextStyle(fontSize: 12.5, color: colors.secondary)),
                                       ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
+                                    ],
                                   ),
-                                  Padding(
-                                    padding: const EdgeInsets.only(left: 6),
-                                    child: Text(
-                                        (authorUser?.nip05 != null && authorUser!.nip05.isNotEmpty)
-                                            ? '• ${authorUser.nip05} • $_formattedTimestamp'
-                                            : '• $_formattedTimestamp',
-                                        style: TextStyle(fontSize: 12.5, color: colors.secondary)),
+                                ),
+                              ],
+                            ),
+                            _buildNoteContent(context, parsed, widget.note),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: InteractionBar(
+                                    noteId: widget.note.id,
+                                    currentUserNpub: widget.currentUserNpub,
+                                    dataService: widget.dataService,
+                                    note: widget.note,
+                                    isReactionGlowing: _isReactionGlowing,
+                                    isReplyGlowing: _isReplyGlowing,
+                                    isRepostGlowing: _isRepostGlowing,
+                                    isZapGlowing: _isZapGlowing,
                                   ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                        _buildNoteContent(context, parsed, widget.note),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: InteractionBar(
-                                reactionCount: _getCurrentReactionCount(),
-                                replyCount: _getCurrentReplyCount(),
-                                repostCount: _getCurrentRepostCount(),
-                                zapAmount: _getCurrentZapAmount(),
-                                isReactionGlowing: _isReactionGlowing,
-                                isReplyGlowing: _isReplyGlowing,
-                                isRepostGlowing: _isRepostGlowing,
-                                isZapGlowing: _isZapGlowing,
-                                hasReacted: _hasReacted(),
-                                hasReplied: _hasReplied(),
-                                hasReposted: _hasReposted(),
-                                hasZapped: _hasZapped(),
-                                onReactionTap: _handleReactionTap,
-                                onReplyTap: _handleReplyTap,
-                                onRepostTap: _handleRepostTap,
-                                onZapTap: _handleZapTap,
-                                onStatisticsTap: _navigateToStatisticsPage,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 }

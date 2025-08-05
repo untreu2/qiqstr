@@ -21,12 +21,15 @@ import 'models/notification_model.dart';
 import 'screens/login_page.dart';
 import 'screens/home_navigator.dart';
 import 'services/data_service.dart';
+import 'providers/user_provider.dart';
+import 'providers/notes_provider.dart';
+import 'providers/interactions_provider.dart';
 
 Future<void> main() async {
   // Set up global error handling for unhandled exceptions
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
-    
+
     // Set up Flutter error handling
     FlutterError.onError = (FlutterErrorDetails details) {
       // Handle Flutter framework errors
@@ -64,13 +67,21 @@ Future<void> main() async {
         secureStorage.read(key: 'privateKey'),
         secureStorage.read(key: 'npub'),
       ]);
-      
+
       final privateKey = credentials[0];
       final npub = credentials[1];
 
       if (privateKey != null && npub != null) {
         // Open boxes in parallel for faster startup
         await _openHiveBoxesParallel(npub);
+
+        // Initialize all providers
+        final usersBox = Hive.box<UserModel>('users');
+        UserProvider.instance.setUsersBox(usersBox);
+        await UserProvider.instance.initialize();
+
+        await NotesProvider.instance.initialize(npub);
+        await InteractionsProvider.instance.initialize(npub);
 
         // Initialize DataService asynchronously
         // Initialize DataService and connections BEFORE showing the app
@@ -80,8 +91,13 @@ Future<void> main() async {
 
         // Show app after initialization is complete
         runApp(
-          provider.ChangeNotifierProvider(
-            create: (context) => theme.ThemeManager(),
+          provider.MultiProvider(
+            providers: [
+              provider.ChangeNotifierProvider(create: (context) => theme.ThemeManager()),
+              provider.ChangeNotifierProvider.value(value: UserProvider.instance),
+              provider.ChangeNotifierProvider.value(value: NotesProvider.instance),
+              provider.ChangeNotifierProvider.value(value: InteractionsProvider.instance),
+            ],
             child: ProviderScope(
               child: QiqstrApp(
                 home: HomeNavigator(
@@ -94,8 +110,11 @@ Future<void> main() async {
         );
       } else {
         runApp(
-          provider.ChangeNotifierProvider(
-            create: (context) => theme.ThemeManager(),
+          provider.MultiProvider(
+            providers: [
+              provider.ChangeNotifierProvider(create: (context) => theme.ThemeManager()),
+              provider.ChangeNotifierProvider.value(value: UserProvider.instance),
+            ],
             child: const ProviderScope(child: QiqstrApp(home: LoginPage())),
           ),
         );
@@ -167,8 +186,13 @@ Future<void> _handleInitializationError(dynamic error) async {
     print('Hive data deleted. Navigating to login page...');
     // Navigate to LoginPage as a safe fallback instead of recursively calling main()
     runApp(
-      provider.ChangeNotifierProvider(
-        create: (context) => theme.ThemeManager(),
+      provider.MultiProvider(
+        providers: [
+          provider.ChangeNotifierProvider(create: (context) => theme.ThemeManager()),
+          provider.ChangeNotifierProvider.value(value: UserProvider.instance),
+          provider.ChangeNotifierProvider.value(value: NotesProvider.instance),
+          provider.ChangeNotifierProvider.value(value: InteractionsProvider.instance),
+        ],
         child: const ProviderScope(child: QiqstrApp(home: LoginPage())),
       ),
     );
@@ -188,7 +212,7 @@ class QiqstrApp extends ConsumerWidget {
       builder: (context, themeManager, child) {
         final colors = themeManager.colors;
         final isDark = themeManager.isDarkMode;
-        
+
         return MaterialApp(
           title: 'Qiqstr',
           theme: ThemeData(
@@ -209,26 +233,26 @@ class QiqstrApp extends ConsumerWidget {
                   titleSmall: TextStyle(height: 2.1, color: colors.textPrimary),
                 ),
             colorScheme: isDark
-              ? ColorScheme.dark(
-                  primary: colors.primary,
-                  secondary: colors.secondary,
-                  surface: colors.surface,
-                  error: colors.error,
-                  onPrimary: colors.background,
-                  onSecondary: colors.textPrimary,
-                  onSurface: colors.textPrimary,
-                  onError: colors.background,
-                )
-              : ColorScheme.light(
-                  primary: colors.primary,
-                  secondary: colors.secondary,
-                  surface: colors.surface,
-                  error: colors.error,
-                  onPrimary: colors.background,
-                  onSecondary: colors.textPrimary,
-                  onSurface: colors.textPrimary,
-                  onError: colors.background,
-                ),
+                ? ColorScheme.dark(
+                    primary: colors.primary,
+                    secondary: colors.secondary,
+                    surface: colors.surface,
+                    error: colors.error,
+                    onPrimary: colors.background,
+                    onSecondary: colors.textPrimary,
+                    onSurface: colors.textPrimary,
+                    onError: colors.background,
+                  )
+                : ColorScheme.light(
+                    primary: colors.primary,
+                    secondary: colors.secondary,
+                    surface: colors.surface,
+                    error: colors.error,
+                    onPrimary: colors.background,
+                    onSecondary: colors.textPrimary,
+                    onSurface: colors.textPrimary,
+                    onError: colors.background,
+                  ),
             appBarTheme: AppBarTheme(
               backgroundColor: colors.background,
               elevation: 0,

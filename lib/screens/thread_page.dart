@@ -7,10 +7,6 @@ import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/widgets/root_note_widget.dart';
 import 'package:qiqstr/widgets/note_widget.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:qiqstr/screens/note_statistics_page.dart';
-import 'package:qiqstr/widgets/dialogs/repost_dialog.dart';
-import 'package:qiqstr/widgets/dialogs/zap_dialog.dart';
-import 'package:qiqstr/screens/share_note.dart';
 import 'package:collection/collection.dart';
 import '../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
@@ -315,87 +311,8 @@ class _ThreadPageState extends State<ThreadPage> {
     Future.delayed(const Duration(seconds: 2), () => {if (mounted) setState(() => _highlightedNoteId = null)});
   }
 
-  bool _hasReacted(NoteModel note) {
-    if (_currentUserNpub == null) return false;
-    return (widget.dataService.reactionsMap[note.id] ?? []).any((e) => e.author == _currentUserNpub);
-  }
-
-  bool _hasReplied(NoteModel note) {
-    if (_currentUserNpub == null) return false;
-    return (widget.dataService.repliesMap[note.id] ?? []).any((e) => e.author == _currentUserNpub);
-  }
-
-  bool _hasReposted(NoteModel note) {
-    if (_currentUserNpub == null) return false;
-    return (widget.dataService.repostsMap[note.id] ?? []).any((e) => e.repostedBy == _currentUserNpub);
-  }
-
-  bool _hasZapped(NoteModel note) {
-    if (_currentUserNpub == null) return false;
-    return (widget.dataService.zapsMap[note.id] ?? []).any((z) => z.sender == _currentUserNpub);
-  }
-
   void _navigateToProfile(String npub) {
     widget.dataService.openUserProfile(context, npub);
-  }
-
-  void _handleReactionTap(NoteModel note) async {
-    if (_hasReacted(note)) return;
-    setState(() => _isReactionGlowing = true);
-    Future.delayed(const Duration(milliseconds: 400), () {
-      if (mounted) setState(() => _isReactionGlowing = false);
-    });
-    try {
-      await widget.dataService.sendReactionInstantly(note.id, '+');
-    } catch (_) {}
-  }
-
-  void _handleReplyTap(NoteModel note) {
-    setState(() => _isReplyGlowing = true);
-    Future.delayed(const Duration(milliseconds: 400), () {
-      if (mounted) setState(() => _isReplyGlowing = false);
-    });
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ShareNotePage(
-          dataService: widget.dataService,
-          replyToNoteId: note.id,
-        ),
-      ),
-    );
-  }
-
-  void _handleRepostTap(NoteModel note) {
-    setState(() => _isRepostGlowing = true);
-    Future.delayed(const Duration(milliseconds: 400), () {
-      if (mounted) setState(() => _isRepostGlowing = false);
-    });
-
-    showRepostDialog(
-      context: context,
-      dataService: widget.dataService,
-      note: note,
-    );
-  }
-
-  void _handleZapTap(NoteModel note) {
-    setState(() => _isZapGlowing = true);
-    Future.delayed(const Duration(milliseconds: 400), () {
-      if (mounted) setState(() => _isZapGlowing = false);
-    });
-
-    showZapDialog(context: context, dataService: widget.dataService, note: note);
-  }
-
-  void _handleStatisticsTap(NoteModel note) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => NoteStatisticsPage(note: note, dataService: widget.dataService),
-      ),
-    );
   }
 
   Widget _buildFloatingBackButton(BuildContext context) {
@@ -611,20 +528,12 @@ class _ThreadPageState extends State<ThreadPage> {
                                   key: _focusedNote != null ? _focusedNoteKey : null,
                                   note: displayRoot,
                                   dataService: widget.dataService,
+                                  currentUserNpub: _currentUserNpub!,
                                   onNavigateToMentionProfile: _navigateToProfile,
                                   isReactionGlowing: _isReactionGlowing,
                                   isReplyGlowing: _isReplyGlowing,
                                   isRepostGlowing: _isRepostGlowing,
                                   isZapGlowing: _isZapGlowing,
-                                  hasReacted: _hasReacted(displayRoot),
-                                  hasReplied: _hasReplied(displayRoot),
-                                  hasReposted: _hasReposted(displayRoot),
-                                  hasZapped: _hasZapped(displayRoot),
-                                  onReactionTap: () => _handleReactionTap(displayRoot),
-                                  onReplyTap: () => _handleReplyTap(displayRoot),
-                                  onRepostTap: () => _handleRepostTap(displayRoot),
-                                  onZapTap: () => _handleZapTap(displayRoot),
-                                  onStatisticsTap: () => _handleStatisticsTap(displayRoot),
                                 ),
                               ),
                               _buildThreadReplies(displayRoot),

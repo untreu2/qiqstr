@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import '../theme/theme_manager.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:qiqstr/models/note_model.dart';
-import 'package:qiqstr/services/data_service.dart';
-import 'package:qiqstr/widgets/note_widget.dart';
+import '../theme/theme_manager.dart';
+import '../models/note_model.dart';
+import '../services/data_service.dart';
+import '../providers/user_provider.dart';
+import '../providers/notes_provider.dart';
+import '../providers/interactions_provider.dart';
+import 'note_widget.dart';
 
 enum NoteListFilterType {
   latest,
@@ -30,7 +32,7 @@ class NoteListWidget extends StatefulWidget {
 }
 
 class _NoteListWidgetState extends State<NoteListWidget> {
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
   final ScrollController _scrollController = ScrollController();
   late DataService _dataService;
 
@@ -62,6 +64,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _dataService.notesNotifier.removeListener(_onNotesChanged);
+    NotesProvider.instance.removeListener(_onProviderNotesChanged);
 
     // Only close connections if we created our own DataService
     if (widget.sharedDataService == null) {
@@ -76,65 +79,30 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     }
   }
 
+  void _onProviderNotesChanged() {
+    if (mounted) {
+      // Sync notes from provider to DataService if needed
+      final providerNotes = NotesProvider.instance.getFeedNotes();
+      _updateFilteredNotes(providerNotes);
+    }
+  }
+
   Future<void> _initializeAsync() async {
     try {
       _currentUserNpub = await _secureStorage.read(key: 'npub');
       if (!mounted) return;
 
-      // Use shared DataService if available, otherwise create our own
-      if (widget.sharedDataService != null) {
-        _dataService = widget.sharedDataService!;
+      // Initialize all providers
+      await UserProvider.instance.initialize();
+      await NotesProvider.instance.initialize(_currentUserNpub ?? '');
+      await InteractionsProvider.instance.initialize(_currentUserNpub ?? '');
 
-        // For shared DataService, ensure it's configured for our npub and dataType
-        if (_dataService.npub != widget.npub ||
-            _dataService.dataType != widget.dataType) {
-          // Create our own DataService if the shared one doesn't match our requirements
-          _dataService = _createDataService();
-          await _dataService.initializeLightweight();
-
-          // Heavy operations in background
-          Future.delayed(const Duration(milliseconds: 100), () {
-            if (mounted) {
-              _dataService.initializeHeavyOperations().then((_) {
-                if (mounted) {
-                  _dataService.initializeConnections();
-                }
-              }).catchError((e) {
-                print('[NoteListWidget] Heavy initialization error: $e');
-              });
-            }
-          });
-        } else {
-          // Shared DataService matches, trigger initial load if needed
-          Future.delayed(const Duration(milliseconds: 50), () {
-            if (mounted && _dataService.notesNotifier.value.isEmpty) {
-              _dataService.initializeConnections();
-            }
-          });
-        }
-      } else {
-        _dataService = _createDataService();
-
-        // Lightweight initialization first
-        await _dataService.initializeLightweight();
-
-        // Heavy operations in background
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (mounted) {
-            _dataService.initializeHeavyOperations().then((_) {
-              if (mounted) {
-                _dataService.initializeConnections();
-              }
-            }).catchError((e) {
-              print('[NoteListWidget] Heavy initialization error: $e');
-            });
-          }
-        });
-      }
-
+      await _setupDataService();
       _dataService.notesNotifier.addListener(_onNotesChanged);
 
-      // Trigger initial update with existing notes
+      // Listen to NotesProvider changes as well
+      NotesProvider.instance.addListener(_onProviderNotesChanged);
+
       _updateFilteredNotes(_dataService.notesNotifier.value);
 
       if (mounted) {
@@ -143,13 +111,58 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         });
       }
     } catch (e) {
-      print('[NoteListWidget] Initialization error: $e');
+      debugPrint('[NoteListWidget] Initialization error: $e');
       if (mounted) {
         setState(() {
           _isInitializing = false;
         });
       }
     }
+  }
+
+  Future<void> _setupDataService() async {
+    if (widget.sharedDataService != null) {
+      _dataService = widget.sharedDataService!;
+
+      // Check if shared DataService matches our requirements
+      if (_dataService.npub != widget.npub || _dataService.dataType != widget.dataType) {
+        _dataService = _createDataService();
+        await _initializeDataService();
+      } else {
+        // Trigger initial load if needed for shared DataService
+        _scheduleConnectionInitialization(50);
+      }
+    } else {
+      _dataService = _createDataService();
+      await _initializeDataService();
+    }
+  }
+
+  Future<void> _initializeDataService() async {
+    await _dataService.initializeLightweight();
+    _scheduleHeavyOperations();
+  }
+
+  void _scheduleHeavyOperations() {
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (mounted) {
+        _dataService.initializeHeavyOperations().then((_) {
+          if (mounted) {
+            _dataService.initializeConnections();
+          }
+        }).catchError((e) {
+          debugPrint('[NoteListWidget] Heavy initialization error: $e');
+        });
+      }
+    });
+  }
+
+  void _scheduleConnectionInitialization(int delayMs) {
+    Future.delayed(Duration(milliseconds: delayMs), () {
+      if (mounted && _dataService.notesNotifier.value.isEmpty) {
+        _dataService.initializeConnections();
+      }
+    });
   }
 
   DataService _createDataService() {
@@ -167,9 +180,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   }
 
   void _onScroll() {
-    if (!_isLoadingMore &&
-        _scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent * 0.9) {
+    if (!_isLoadingMore && _scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.9) {
       _loadMoreItemsFromNetwork();
     }
   }
@@ -186,17 +197,21 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     });
   }
 
-  Future<void> _updateFilteredNotes(List<NoteModel> notes) async {
-    List<NoteModel> filtered;
-    switch (widget.filterType) {
-      case NoteListFilterType.media:
-        filtered = notes
-            .where((n) => n.hasMedia && (!n.isReply || n.isRepost))
-            .toList();
-        break;
-      case NoteListFilterType.latest:
-        filtered = notes.where((n) => !n.isReply || n.isRepost).toList();
-        break;
+  void _updateFilteredNotes(List<NoteModel> notes) {
+    final filtered = _filterNotes(notes);
+
+    // Preload user profiles for visible notes
+    final userNpubs = <String>{};
+    for (final note in filtered.take(20)) {
+      // Preload first 20 notes
+      userNpubs.add(note.author);
+      if (note.repostedBy != null) {
+        userNpubs.add(note.repostedBy!);
+      }
+    }
+
+    if (userNpubs.isNotEmpty) {
+      UserProvider.instance.loadUsers(userNpubs.toList());
     }
 
     if (mounted) {
@@ -206,25 +221,51 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     }
   }
 
+  List<NoteModel> _filterNotes(List<NoteModel> notes) {
+    switch (widget.filterType) {
+      case NoteListFilterType.media:
+        return notes.where((n) => n.hasMedia && (!n.isReply || n.isRepost)).toList();
+      case NoteListFilterType.latest:
+        return notes.where((n) => !n.isReply || n.isRepost).toList();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isInitializing || _currentUserNpub == null) {
-      return const SliverToBoxAdapter(
-        child: Center(
-            child: Padding(
-                padding: EdgeInsets.all(40.0), child: Text("Loading..."))),
-      );
+      return _buildLoadingState();
     }
 
     if (_filteredNotes.isEmpty) {
-      return const SliverToBoxAdapter(
-        child: Center(
-            child: Padding(
-                padding: EdgeInsets.all(24.0),
-                child: Text('No notes found.'))),
-      );
+      return _buildEmptyState();
     }
 
+    return _buildNotesList();
+  }
+
+  Widget _buildLoadingState() {
+    return const SliverToBoxAdapter(
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(40.0),
+          child: Text("Loading..."),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return const SliverToBoxAdapter(
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(24.0),
+          child: Text('No notes found.'),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotesList() {
     final itemsToShow = _filteredNotes.length;
 
     return SliverList.separated(
@@ -236,31 +277,40 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       ),
       itemBuilder: (context, index) {
         if (index >= itemsToShow) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(16.0),
-              child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2)),
-            ),
-          );
+          return _buildLoadingIndicator();
         }
 
-        final note = _filteredNotes[index];
-        return NoteWidget(
-          key: ValueKey(note.id),
-          note: note,
-          reactionCount: note.reactionCount,
-          replyCount: note.replyCount,
-          repostCount: note.repostCount,
-          dataService: _dataService,
-          currentUserNpub: _currentUserNpub!,
-          notesNotifier: _dataService.notesNotifier,
-          profiles: _dataService.profilesNotifier.value,
-          isSmallView: true,
-        );
+        return _buildNoteItem(index);
       },
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(16.0),
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNoteItem(int index) {
+    final note = _filteredNotes[index];
+    return NoteWidget(
+      key: ValueKey(note.id),
+      note: note,
+      reactionCount: note.reactionCount,
+      replyCount: note.replyCount,
+      repostCount: note.repostCount,
+      dataService: _dataService,
+      currentUserNpub: _currentUserNpub!,
+      notesNotifier: _dataService.notesNotifier,
+      profiles: {}, // Empty since we're using UserProvider now
+      isSmallView: true,
     );
   }
 }

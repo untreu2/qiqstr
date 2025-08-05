@@ -200,7 +200,7 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _showFakeLoading ? Colors.black : context.colors.background,
+      backgroundColor: _showFakeLoading ? context.colors.background : context.colors.background,
       body: Stack(
         children: [
           if (_showFakeLoading) _buildFakeLoadingScreen(context) else _buildStagedContent(context),
@@ -287,7 +287,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildFakeLoadingScreen(BuildContext context) {
     return Container(
-      color: Colors.black,
+      color: context.colors.background,
       child: Center(
         child: SizedBox(
           width: 24,
@@ -295,7 +295,7 @@ class _ProfilePageState extends State<ProfilePage> {
           child: CircularProgressIndicator(
             strokeWidth: 2,
             valueColor: AlwaysStoppedAnimation<Color>(
-              Colors.white,
+              context.colors.accent,
             ),
           ),
         ),
