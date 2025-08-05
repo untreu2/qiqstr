@@ -9,6 +9,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/theme_manager.dart';
 import 'package:qiqstr/screens/keys_page.dart';
+import 'package:carbon_icons/carbon_icons.dart';
 
 class SidebarWidget extends StatefulWidget {
   final UserModel? user;
@@ -88,32 +89,86 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                 : Column(
                     children: [
                       const SizedBox(height: 70),
-                      Padding(
+                      // Enhanced user profile section
+                      Container(
                         padding: const EdgeInsets.all(16),
-                        child: Row(
+                        margin: const EdgeInsets.symmetric(horizontal: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            CircleAvatar(
-                              radius: 32,
-                              backgroundColor: colors.avatarPlaceholder,
-                              backgroundImage:
-                                  currentUser.profileImage.isNotEmpty ? CachedNetworkImageProvider(currentUser.profileImage) : null,
-                              child: currentUser.profileImage.isEmpty ? Icon(Icons.person, color: colors.iconPrimary, size: 32) : null,
+                            // Avatar and name row
+                            Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 32,
+                                  backgroundColor: colors.avatarPlaceholder,
+                                  backgroundImage:
+                                      currentUser.profileImage.isNotEmpty ? CachedNetworkImageProvider(currentUser.profileImage) : null,
+                                  child: currentUser.profileImage.isEmpty ? Icon(Icons.person, color: colors.iconPrimary, size: 32) : null,
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        currentUser.name.isNotEmpty ? currentUser.name : 'Anonymous',
+                                        style: TextStyle(
+                                          color: colors.textPrimary,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          height: 1.1,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      if (currentUser.nip05.isNotEmpty && currentUser.nip05.contains('@'))
+                                        Text(
+                                          '@${currentUser.nip05.split('@').last}',
+                                          style: TextStyle(
+                                            color: colors.accent,
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Text(
-                                currentUser.name.isNotEmpty ? currentUser.name : 'Anonymous',
+
+                            // About section
+                            if (currentUser.about.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              Text(
+                                currentUser.about,
                                 style: TextStyle(
-                                  color: colors.textPrimary,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
+                                  color: colors.textSecondary,
+                                  fontSize: 13,
+                                  height: 1.3,
+                                ),
+                                maxLines: 3,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+
+                            // Lightning address
+                            if (currentUser.lud16.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                currentUser.lud16,
+                                style: TextStyle(
+                                  color: colors.accent,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
-                            ),
+                            ],
                           ],
                         ),
                       ),
+                      const SizedBox(height: 16),
                       Expanded(
                         child: ListView(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -142,7 +197,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                             ),
                             _buildSidebarItem(
                               colors: colors,
-                              icon: Icons.vpn_key_rounded,
+                              icon: CarbonIcons.password,
                               label: 'Keys',
                               onTap: () => Navigator.push(
                                 context,
@@ -208,7 +263,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
       builder: (context, themeManager, child) {
         return ListTile(
           leading: Icon(
-            themeManager.isDarkMode ? Icons.dark_mode : Icons.light_mode,
+            themeManager.isDarkMode ? CarbonIcons.asleep : CarbonIcons.light,
             color: colors.iconPrimary,
             size: 20,
           ),

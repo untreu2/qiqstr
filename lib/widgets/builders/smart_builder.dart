@@ -86,8 +86,8 @@ class UserBuilder extends StatelessWidget {
       listenable: UserProvider.instance,
       selector: (previous, current) {
         // Only rebuild if this specific user's data changed
-        final prevUser = (previous as UserProvider).getUser(userId);
-        final currUser = (current as UserProvider).getUser(userId);
+        final prevUser = (previous).getUser(userId);
+        final currUser = (current).getUser(userId);
         return prevUser != currUser;
       },
       builder: builder,
@@ -115,8 +115,8 @@ class InteractionBuilder extends StatelessWidget {
       listenable: InteractionsProvider.instance,
       selector: (previous, current) {
         // Only rebuild if this specific note's interactions changed
-        final prev = previous as InteractionsProvider;
-        final curr = current as InteractionsProvider;
+        final prev = previous;
+        final curr = current;
         return prev.getReactionCount(noteId) != curr.getReactionCount(noteId) ||
             prev.getReplyCount(noteId) != curr.getReplyCount(noteId) ||
             prev.getRepostCount(noteId) != curr.getRepostCount(noteId) ||
