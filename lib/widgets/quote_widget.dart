@@ -242,15 +242,6 @@ class QuoteWidget extends StatelessWidget {
                     child: _buildNoteContent(context, parsed, n),
                   ),
                 ),
-              if ((parsed['linkUrls'] as List).isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: Column(
-                    children: (parsed['linkUrls'] as List<String>)
-                        .map((u) => LinkPreviewWidget(url: u))
-                        .toList(),
-                  ),
-                ),
             ],
           ),
         );
