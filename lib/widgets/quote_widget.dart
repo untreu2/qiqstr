@@ -242,13 +242,6 @@ class QuoteWidget extends StatelessWidget {
                     child: _buildNoteContent(context, parsed, n),
                   ),
                 ),
-              if ((parsed['mediaUrls'] as List).isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 12),
-                  child: MediaPreviewWidget(
-                    mediaUrls: parsed['mediaUrls'] as List<String>,
-                  ),
-                ),
               if ((parsed['linkUrls'] as List).isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 12),

@@ -62,9 +62,9 @@ class InteractionBar extends StatelessWidget {
   Widget _buildReactionButton(BuildContext context) {
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     final colors = context.colors;
-    final double iconSize = isLarge ? 16 : 14;
-    final double fontSize = isLarge ? 15 : 14;
-    final double spacing = isLarge ? 6 : 5;
+    final double iconSize = isLarge ? 16 : 15;
+    final double fontSize = isLarge ? 15 : 14.5;
+    final double spacing = isLarge ? 6 : 5.5;
 
     return Row(
       children: [
@@ -111,9 +111,9 @@ class InteractionBar extends StatelessWidget {
   Widget _buildReplyButton(BuildContext context) {
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     final colors = context.colors;
-    final double iconSize = isLarge ? 16 : 14;
-    final double fontSize = isLarge ? 15 : 14;
-    final double spacing = isLarge ? 6 : 5;
+    final double iconSize = isLarge ? 16 : 15;
+    final double fontSize = isLarge ? 15 : 14.5;
+    final double spacing = isLarge ? 6 : 5.5;
 
     return Row(
       children: [
@@ -160,9 +160,9 @@ class InteractionBar extends StatelessWidget {
   Widget _buildRepostButton(BuildContext context) {
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     final colors = context.colors;
-    final double iconSize = isLarge ? 16 : 14;
-    final double fontSize = isLarge ? 15 : 14;
-    final double spacing = isLarge ? 6 : 5;
+    final double iconSize = isLarge ? 16 : 15;
+    final double fontSize = isLarge ? 15 : 14.5;
+    final double spacing = isLarge ? 6 : 5.5;
 
     return Row(
       children: [
@@ -209,9 +209,9 @@ class InteractionBar extends StatelessWidget {
   Widget _buildZapButton(BuildContext context) {
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     final colors = context.colors;
-    final double iconSize = isLarge ? 16 : 14;
-    final double fontSize = isLarge ? 15 : 14;
-    final double spacing = isLarge ? 6 : 5;
+    final double iconSize = isLarge ? 16 : 15;
+    final double fontSize = isLarge ? 15 : 14.5;
+    final double spacing = isLarge ? 6 : 5.5;
 
     return Row(
       children: [
@@ -258,7 +258,7 @@ class InteractionBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final double statsIconSize = isLarge ? 22 : 19;
+    final double statsIconSize = isLarge ? 22 : 21;
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,

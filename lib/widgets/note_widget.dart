@@ -299,7 +299,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: _buildRepostInfo(widget.note.repostedBy!, widget.note.repostTimestamp),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
             ],
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -311,7 +311,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                     child: Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: CircleAvatar(
-                        radius: 21,
+                        radius: 22,
                         backgroundColor: colors.surfaceTransparent,
                         child: (authorUser?.profileImage ?? '').isNotEmpty
                             ? CachedNetworkImage(
@@ -365,10 +365,9 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                                           ? (authorUser?.name ?? 'Unknown').substring(0, 25)
                                           : (authorUser?.name ?? 'Unknown'),
                                       style: TextStyle(
-                                        fontSize: 14.5,
+                                        fontSize: 15,
                                         fontWeight: FontWeight.w600,
                                         color: colors.textPrimary,
-                                        height: 0.1,
                                       ),
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -379,7 +378,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                                         (authorUser?.nip05 != null && authorUser!.nip05.isNotEmpty)
                                             ? '• ${authorUser.nip05} • $_formattedTimestamp'
                                             : '• $_formattedTimestamp',
-                                        style: TextStyle(fontSize: 12, color: colors.secondary)),
+                                        style: TextStyle(fontSize: 12.5, color: colors.secondary)),
                                   ),
                                 ],
                               ),
