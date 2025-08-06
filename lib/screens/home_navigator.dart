@@ -53,136 +53,161 @@ class _HomeNavigatorState extends State<HomeNavigator> {
       child: Row(
         children: [
           Expanded(
-            child: Container(
-              height: 70,
-              decoration: BoxDecoration(
-                color: context.colors.surface,
-                border: Border.all(
-                  color: context.colors.borderLight,
-                  width: 1.5,
-                ),
-                borderRadius: BorderRadius.circular(35.0),
-              ),
-              child: Row(
-                children: items.map((item) {
-                  final bool isSelected = _currentIndex == item['index'];
-                  final index = item['index'];
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(35.0),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                child: Container(
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: context.colors.surface.withOpacity(0.6),
+                    border: Border.all(
+                      color: context.colors.borderLight,
+                      width: 1.5,
+                    ),
+                    borderRadius: BorderRadius.circular(35.0),
+                  ),
+                  child: Row(
+                    children: items.map((item) {
+                      final bool isSelected = _currentIndex == item['index'];
+                      final index = item['index'];
 
-                  return Expanded(
-                    child: Bounce(
-                      scaleFactor: 0.85,
-                      onTap: () {
-                        if (index == 2) {
-                          _handleAction("Designing: DMs");
-                        } else if (index == 3) {
-                          widget.dataService.markAllUserNotificationsAsRead().then((_) {
-                            if (mounted) setState(() => _currentIndex = index);
-                          });
-                        } else {
-                          if (mounted) {
-                            setState(() {
-                              _currentIndex = index;
-                            });
-                          }
-                        }
-                      },
-                      behavior: HitTestBehavior.opaque,
-                      child: SizedBox.expand(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            if (index == 3)
-                              Stack(
-                                clipBehavior: Clip.none,
-                                children: [
+                      return Expanded(
+                        child: Bounce(
+                          scaleFactor: 0.85,
+                          onTap: () {
+                            if (index == 2) {
+                              _handleAction("Designing: DMs");
+                            } else if (index == 3) {
+                              widget.dataService
+                                  .markAllUserNotificationsAsRead()
+                                  .then((_) {
+                                if (mounted)
+                                  setState(() => _currentIndex = index);
+                              });
+                            } else {
+                              if (mounted) {
+                                setState(() {
+                                  _currentIndex = index;
+                                });
+                              }
+                            }
+                          },
+                          behavior: HitTestBehavior.opaque,
+                          child: SizedBox.expand(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (index == 3)
+                                  Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      SvgPicture.asset(
+                                        item['icon'],
+                                        width: 20,
+                                        height: 20,
+                                        color: isSelected
+                                            ? context.colors.accent
+                                            : context.colors.textPrimary,
+                                      ),
+                                      ValueListenableBuilder<int>(
+                                        valueListenable: widget.dataService
+                                            .unreadNotificationsCountNotifier,
+                                        builder: (context, count, child) {
+                                          if (count == 0) {
+                                            return const SizedBox.shrink();
+                                          }
+                                          return Positioned(
+                                            top: -4,
+                                            right: -5,
+                                            child: Container(
+                                              padding: const EdgeInsets.all(1),
+                                              decoration: BoxDecoration(
+                                                color: context.colors.surface,
+                                                shape: BoxShape.circle,
+                                                border: Border.all(
+                                                    color: context
+                                                        .colors.textPrimary,
+                                                    width: 0.5),
+                                              ),
+                                              constraints: const BoxConstraints(
+                                                minWidth: 14,
+                                                minHeight: 14,
+                                              ),
+                                              child: Text('$count',
+                                                  style: TextStyle(
+                                                    color: context
+                                                        .colors.textPrimary,
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                  textAlign: TextAlign.center),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ],
+                                  )
+                                else
                                   SvgPicture.asset(
                                     item['icon'],
                                     width: 20,
                                     height: 20,
-                                    color: isSelected ? context.colors.accent : context.colors.textPrimary,
+                                    color: isSelected
+                                        ? context.colors.accent
+                                        : context.colors.textPrimary,
                                   ),
-                                  ValueListenableBuilder<int>(
-                                    valueListenable: widget.dataService.unreadNotificationsCountNotifier,
-                                    builder: (context, count, child) {
-                                      if (count == 0) {
-                                        return const SizedBox.shrink();
-                                      }
-                                      return Positioned(
-                                        top: -4,
-                                        right: -5,
-                                        child: Container(
-                                          padding: const EdgeInsets.all(1),
-                                          decoration: BoxDecoration(
-                                            color: context.colors.surface,
-                                            shape: BoxShape.circle,
-                                            border: Border.all(color: context.colors.textPrimary, width: 0.5),
-                                          ),
-                                          constraints: const BoxConstraints(
-                                            minWidth: 14,
-                                            minHeight: 14,
-                                          ),
-                                          child: Text('$count',
-                                              style: TextStyle(
-                                                color: context.colors.textPrimary,
-                                                fontSize: 9,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                              textAlign: TextAlign.center),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ],
-                              )
-                            else
-                              SvgPicture.asset(
-                                item['icon'],
-                                width: 20,
-                                height: 20,
-                                color: isSelected ? context.colors.accent : context.colors.textPrimary,
-                              ),
-                          ],
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                  );
-                }).toList(),
+                      );
+                    }).toList(),
+                  ),
+                ),
               ),
             ),
           ),
           const SizedBox(width: 8),
-          Container(
-            width: 70,
-            height: 70,
-            decoration: BoxDecoration(
-              color: context.colors.surface,
-              border: Border.all(
-                color: context.colors.borderLight,
-                width: 1.5,
-              ),
-              borderRadius: BorderRadius.circular(35.0),
-            ),
-            child: Bounce(
-              scaleFactor: 0.85,
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => ShareNotePage(dataService: widget.dataService),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(35.0),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+              child: Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  color: context.colors.surface.withOpacity(0.6),
+                  border: Border.all(
+                    color: context.colors.borderLight,
+                    width: 1.5,
                   ),
-                );
-              },
-              behavior: HitTestBehavior.opaque,
-              child: SizedBox.expand(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    SvgPicture.asset(
-                      'assets/new_post_button.svg',
-                      width: 24,
-                      height: 24,
-                      color: context.colors.textPrimary,
+                  borderRadius: BorderRadius.circular(35.0),
+                ),
+                child: Bounce(
+                  scaleFactor: 0.85,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            ShareNotePage(dataService: widget.dataService),
+                      ),
+                    );
+                  },
+                  behavior: HitTestBehavior.opaque,
+                  child: SizedBox.expand(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SvgPicture.asset(
+                          'assets/new_post_button.svg',
+                          width: 24,
+                          height: 24,
+                          color: context.colors.textPrimary,
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),

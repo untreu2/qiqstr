@@ -140,132 +140,161 @@ class _FeedPageState extends State<FeedPage> {
   Widget _buildHeaderWithFilters(BuildContext context, double topPadding) {
     final colors = context.colors;
 
-    return Container(
-      width: double.infinity,
-      color: colors.background,
-      padding: EdgeInsets.fromLTRB(16, topPadding + 4, 16, 8),
-      child: Column(
-        children: [
-          SizedBox(
-            height: 40,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Builder(
-                    builder: (context) => GestureDetector(
-                      onTap: () => Scaffold.of(context).openDrawer(),
-                      child: CircleAvatar(
-                        radius: 16,
-                        backgroundColor: colors.avatarPlaceholder,
-                        backgroundImage: user?.profileImage != null ? CachedNetworkImageProvider(user!.profileImage) : null,
-                        child: user?.profileImage == null ? Icon(Icons.person, color: colors.iconPrimary, size: 18) : null,
-                      ),
-                    ),
-                  ),
-                ),
-                Center(
-                  child: GestureDetector(
-                    onTap: () {
-                      _scrollController.animateTo(
-                        0,
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeOut,
-                      );
-                    },
-                    child: SvgPicture.asset(
-                      'assets/main_icon_white.svg',
-                      width: 30,
-                      height: 30,
-                      color: colors.iconPrimary,
-                    ),
-                  ),
-                ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: PopupMenuButton<NoteListFilterType>(
-                    icon: Icon(
-                      Icons.filter_list,
-                      color: colors.iconPrimary,
-                      size: 24,
-                    ),
-                    onSelected: (NoteListFilterType filterType) {
-                      setState(() {
-                        _selectedFilterType = filterType;
-                      });
-                    },
-                    itemBuilder: (BuildContext context) => [
-                      PopupMenuItem<NoteListFilterType>(
-                        value: NoteListFilterType.latest,
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.access_time,
-                              color: _selectedFilterType == NoteListFilterType.latest ? colors.accent : colors.iconSecondary,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              'Latest',
-                              style: TextStyle(
-                                color: _selectedFilterType == NoteListFilterType.latest ? colors.accent : colors.textPrimary,
-                                fontWeight: _selectedFilterType == NoteListFilterType.latest ? FontWeight.w600 : FontWeight.normal,
-                              ),
-                            ),
-                          ],
+    return ClipRRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+        child: Container(
+          width: double.infinity,
+          color: colors.background.withOpacity(0.6),
+          padding: EdgeInsets.fromLTRB(16, topPadding + 4, 16, 8),
+          child: Column(
+            children: [
+              SizedBox(
+                height: 40,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Builder(
+                        builder: (context) => GestureDetector(
+                          onTap: () => Scaffold.of(context).openDrawer(),
+                          child: CircleAvatar(
+                            radius: 16,
+                            backgroundColor: colors.avatarPlaceholder,
+                            backgroundImage: user?.profileImage != null
+                                ? CachedNetworkImageProvider(user!.profileImage)
+                                : null,
+                            child: user?.profileImage == null
+                                ? Icon(Icons.person,
+                                    color: colors.iconPrimary, size: 18)
+                                : null,
+                          ),
                         ),
                       ),
-                      PopupMenuItem<NoteListFilterType>(
-                        value: NoteListFilterType.media,
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.photo_library,
-                              color: _selectedFilterType == NoteListFilterType.media ? colors.accent : colors.iconSecondary,
-                              size: 20,
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              'Media',
-                              style: TextStyle(
-                                color: _selectedFilterType == NoteListFilterType.media ? colors.accent : colors.textPrimary,
-                                fontWeight: _selectedFilterType == NoteListFilterType.media ? FontWeight.w600 : FontWeight.normal,
-                              ),
-                            ),
-                          ],
+                    ),
+                    Center(
+                      child: GestureDetector(
+                        onTap: () {
+                          _scrollController.animateTo(
+                            0,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOut,
+                          );
+                        },
+                        child: SvgPicture.asset(
+                          'assets/main_icon_white.svg',
+                          width: 30,
+                          height: 30,
+                          color: colors.iconPrimary,
                         ),
                       ),
-                    ],
-                    color: colors.surface,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: colors.borderLight),
                     ),
-                    elevation: 8,
-                    offset: const Offset(0, 8),
-                  ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: PopupMenuButton<NoteListFilterType>(
+                        icon: Icon(
+                          Icons.filter_list,
+                          color: colors.iconPrimary,
+                          size: 24,
+                        ),
+                        onSelected: (NoteListFilterType filterType) {
+                          setState(() {
+                            _selectedFilterType = filterType;
+                          });
+                        },
+                        itemBuilder: (BuildContext context) => [
+                          PopupMenuItem<NoteListFilterType>(
+                            value: NoteListFilterType.latest,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.access_time,
+                                  color: _selectedFilterType ==
+                                          NoteListFilterType.latest
+                                      ? colors.accent
+                                      : colors.iconSecondary,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  'Latest',
+                                  style: TextStyle(
+                                    color: _selectedFilterType ==
+                                            NoteListFilterType.latest
+                                        ? colors.accent
+                                        : colors.textPrimary,
+                                    fontWeight: _selectedFilterType ==
+                                            NoteListFilterType.latest
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem<NoteListFilterType>(
+                            value: NoteListFilterType.media,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.photo_library,
+                                  color: _selectedFilterType ==
+                                          NoteListFilterType.media
+                                      ? colors.accent
+                                      : colors.iconSecondary,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  'Media',
+                                  style: TextStyle(
+                                    color: _selectedFilterType ==
+                                            NoteListFilterType.media
+                                        ? colors.accent
+                                        : colors.textPrimary,
+                                    fontWeight: _selectedFilterType ==
+                                            NoteListFilterType.media
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        color: colors.surface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: colors.borderLight),
+                        ),
+                        elevation: 8,
+                        offset: const Offset(0, 8),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              // Loading indicator
+              ValueListenableBuilder<bool>(
+                valueListenable: dataService.isRefreshingNotifier,
+                builder: (context, isRefreshing, child) {
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    height: isRefreshing ? 3 : 0,
+                    child: isRefreshing
+                        ? LinearProgressIndicator(
+                            backgroundColor: colors.borderLight,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(colors.accent),
+                          )
+                        : const SizedBox.shrink(),
+                  );
+                },
+              ),
+            ],
           ),
-          // Loading indicator
-          ValueListenableBuilder<bool>(
-            valueListenable: dataService.isRefreshingNotifier,
-            builder: (context, isRefreshing, child) {
-              return AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                height: isRefreshing ? 3 : 0,
-                child: isRefreshing
-                    ? LinearProgressIndicator(
-                        backgroundColor: colors.borderLight,
-                        valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
-                      )
-                    : const SizedBox.shrink(),
-              );
-            },
-          ),
-        ],
+        ),
       ),
     );
   }
