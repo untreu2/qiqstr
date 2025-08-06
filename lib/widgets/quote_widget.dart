@@ -183,6 +183,8 @@ class QuoteWidget extends StatelessWidget {
         final n = snap.data!;
         dataService.parseContentForNote(n);
         final parsed = n.parsedContent!;
+        final hasText = (parsed['textParts'] as List).any((p) => p['type'] == 'text' && (p['text'] as String).trim().isNotEmpty);
+        final hasMedia = (parsed['mediaUrls'] as List?)?.isNotEmpty ?? false;
 
         return Container(
           padding: const EdgeInsets.all(16),
@@ -208,7 +210,7 @@ class QuoteWidget extends StatelessWidget {
                   ),
                 ],
               ),
-              if ((parsed['textParts'] as List).where((p) => p['type'] == 'text' && (p['text'] as String).trim().isNotEmpty).isNotEmpty)
+              if (hasText || hasMedia)
                 Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: _buildNoteContent(context, parsed, n),
