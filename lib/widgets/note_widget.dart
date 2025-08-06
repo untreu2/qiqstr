@@ -242,7 +242,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
         }
 
         return GestureDetector(
-          onDoubleTap: _handleReactionTap,
           onTap: () => _navigateToThreadPage(widget.note),
           child: Container(
             color: widget.containerColor ?? colors.background,
