@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -73,18 +72,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
 
   void _navigateToMentionProfile(String id) => widget.dataService.openUserProfile(context, id);
 
-  bool _hasReacted() => InteractionsProvider.instance.hasUserReacted(widget.currentUserNpub, widget.note.id);
-
   // Get real-time interaction counts from InteractionsProvider
-
-  void _handleReactionTap() async {
-    if (_hasReacted()) return;
-    setState(() => _isReactionGlowing = true);
-    Future.delayed(const Duration(milliseconds: 400), () => mounted ? setState(() => _isReactionGlowing = false) : null);
-    try {
-      await widget.dataService.sendReactionInstantly(widget.note.id, '+');
-    } catch (_) {}
-  }
 
   void _navigateToProfile(String npub) {
     // Immediate navigation with optimized profile loading
