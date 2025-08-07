@@ -373,9 +373,9 @@ class _InteractionBarState extends State<InteractionBar> {
         return Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            _buildReactionButton(context, reactionCount, hasReacted),
             _buildReplyButton(context, replyCount, hasReplied),
             _buildRepostButton(context, repostCount, hasReposted),
+            _buildReactionButton(context, reactionCount, hasReacted),
             _buildZapButton(context, zapAmount, hasZapped),
             GestureDetector(
               onTap: _handleStatisticsTap,
