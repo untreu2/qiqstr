@@ -190,7 +190,7 @@ class QuoteWidget extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: context.colors.surface,
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(color: context.colors.border, width: 1),
           ),
           child: Column(
