@@ -20,9 +20,9 @@ class NoteContentWidget extends StatelessWidget {
   double get _fontSize {
     switch (type) {
       case NoteContentType.small:
-        return 15.0;
+        return 16.0;
       case NoteContentType.big:
-        return 17.0;
+        return 18.0;
     }
   }
 

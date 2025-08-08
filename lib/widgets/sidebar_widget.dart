@@ -111,14 +111,10 @@ class _UserProfileHeader extends StatelessWidget {
       child: Row(
         children: [
           CircleAvatar(
-            radius: 24,
+            radius: 32,
             backgroundColor: colors.avatarPlaceholder,
-            backgroundImage: user.profileImage.isNotEmpty
-                ? CachedNetworkImageProvider(user.profileImage)
-                : null,
-            child: user.profileImage.isEmpty
-                ? Icon(Icons.person, color: colors.iconPrimary, size: 24)
-                : null,
+            backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
+            child: user.profileImage.isEmpty ? Icon(Icons.person, color: colors.iconPrimary, size: 32) : null,
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -126,7 +122,7 @@ class _UserProfileHeader extends StatelessWidget {
               user.name.isNotEmpty ? user.name : 'Anonymous',
               style: TextStyle(
                 color: colors.textPrimary,
-                fontSize: 18,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
               overflow: TextOverflow.ellipsis,
@@ -152,21 +148,6 @@ class _SidebarContent extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (user.about.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Text(
-                  user.about,
-                  style: TextStyle(
-                    color: colors.textSecondary,
-                    fontSize: 13,
-                    height: 1.3,
-                  ),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
             if (user.nip05.isNotEmpty && user.nip05.contains('@')) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
@@ -174,7 +155,7 @@ class _SidebarContent extends StatelessWidget {
                   user.nip05,
                   style: TextStyle(
                     color: colors.accent,
-                    fontSize: 12,
+                    fontSize: 15,
                     fontWeight: FontWeight.w500,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -188,7 +169,7 @@ class _SidebarContent extends StatelessWidget {
                   user.lud16,
                   style: TextStyle(
                     color: colors.accent,
-                    fontSize: 12,
+                    fontSize: 15,
                     fontWeight: FontWeight.w500,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -197,7 +178,6 @@ class _SidebarContent extends StatelessWidget {
             ],
             Divider(color: colors.border, indent: 16, endIndent: 16),
             Expanded(
-
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
