@@ -26,8 +26,7 @@ class _NotificationPageState extends State<NotificationPage> {
   @override
   void initState() {
     super.initState();
-    
-    
+
     _updateDisplayData(widget.dataService.notificationsNotifier.value, isInitialLoad: true);
     widget.dataService.notificationsNotifier.addListener(_handleNotificationsUpdate);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -43,30 +42,22 @@ class _NotificationPageState extends State<NotificationPage> {
     super.dispose();
   }
 
-  
   void _handleNotificationsUpdate() {
     if (mounted) {
-      
       _updateDisplayData(widget.dataService.notificationsNotifier.value);
     }
   }
 
-  
-  Future<void> _updateDisplayData(List<NotificationModel> notificationsFromNotifier,
-      {bool isInitialLoad = false}) async {
+  Future<void> _updateDisplayData(List<NotificationModel> notificationsFromNotifier, {bool isInitialLoad = false}) async {
     if (!mounted) return;
 
-    final all = notificationsFromNotifier
-        .where((n) => ['mention', 'reaction', 'repost', 'zap'].contains(n.type))
-        .toList()
+    final all = notificationsFromNotifier.where((n) => ['mention', 'reaction', 'repost', 'zap'].contains(n.type)).toList()
       ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
     final limited = all.take(100).toList();
 
-    
     final npubs = limited.map((n) => n.author).toSet();
     final loadedProfiles = <String, UserModel?>{};
     await Future.wait(npubs.map((npub) async {
-      
       if (!userProfiles.containsKey(npub) || isInitialLoad) {
         try {
           final profile = await widget.dataService.getCachedUserProfile(npub);
@@ -79,7 +70,6 @@ class _NotificationPageState extends State<NotificationPage> {
       }
     }));
 
-    
     final grouped = <String, _NotificationGroup>{};
     final flatMentions = <_NotificationGroup>[];
     final individualZaps = <NotificationModel>[];
@@ -104,9 +94,7 @@ class _NotificationPageState extends State<NotificationPage> {
           ),
         )
           ..notifications.add(n)
-          ..latest = n.timestamp.isAfter(grouped[key]!.latest)
-              ? n.timestamp
-              : grouped[key]!.latest;
+          ..latest = n.timestamp.isAfter(grouped[key]!.latest) ? n.timestamp : grouped[key]!.latest;
       }
     }
 
@@ -131,10 +119,13 @@ class _NotificationPageState extends State<NotificationPage> {
 
   String _buildGroupTitle(_NotificationGroup group) {
     final first = group.notifications.first;
-    final names = group.notifications.map((n) {
-      final profile = userProfiles[n.author];
-      return profile?.name.isNotEmpty == true ? profile!.name : 'Anonymous';
-    }).toSet().toList();
+    final names = group.notifications
+        .map((n) {
+          final profile = userProfiles[n.author];
+          return profile?.name.isNotEmpty == true ? profile!.name : 'Anonymous';
+        })
+        .toSet()
+        .toList();
 
     if (names.isEmpty) return 'Someone interacted';
     final mainName = names.first;
@@ -144,13 +135,9 @@ class _NotificationPageState extends State<NotificationPage> {
       case 'mention':
         return '$mainName mentioned you';
       case 'reaction':
-        return othersCount > 0
-            ? '$mainName and $othersCount others reacted to your post'
-            : '$mainName reacted to your post';
+        return othersCount > 0 ? '$mainName and $othersCount others reacted to your post' : '$mainName reacted to your post';
       case 'repost':
-        return othersCount > 0
-            ? '$mainName and $othersCount others reposted your post'
-            : '$mainName reposted your post';
+        return othersCount > 0 ? '$mainName and $othersCount others reposted your post' : '$mainName reposted your post';
       default:
         return '$mainName interacted with your post';
     }
@@ -178,8 +165,8 @@ class _NotificationPageState extends State<NotificationPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              horizontalTitleGap: 8,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                horizontalTitleGap: 8,
                 leading: GestureDetector(
                   onTap: () => _navigateToAuthorProfile(first.author),
                   child: CircleAvatar(
@@ -206,8 +193,7 @@ class _NotificationPageState extends State<NotificationPage> {
                       return Text(titleText, style: titleStyle);
                     }
                   },
-                )
-            ),
+                )),
             if (first.type == 'mention' && first.content.trim().isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -239,8 +225,8 @@ class _NotificationPageState extends State<NotificationPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              horizontalTitleGap: 8,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                horizontalTitleGap: 8,
                 leading: GestureDetector(
                   onTap: () => _navigateToAuthorProfile(item.author),
                   child: CircleAvatar(
@@ -260,8 +246,7 @@ class _NotificationPageState extends State<NotificationPage> {
                       color: context.colors.textPrimary,
                     ),
                   ),
-                )
-            ),
+                )),
             if (item.content.trim().isNotEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -297,19 +282,19 @@ class _NotificationPageState extends State<NotificationPage> {
               slivers: [
                 SliverToBoxAdapter(
                   child: Container(
-                    padding: EdgeInsets.only(top: topPadding + 12, bottom: 12),
-                    alignment: Alignment.center,
+                    padding: EdgeInsets.only(top: topPadding + 12, bottom: 8, left: 20),
+                    alignment: Alignment.centerLeft,
                     child: Text(
                       'Notifications',
                       style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 25,
+                        fontWeight: FontWeight.bold,
                         color: context.colors.textPrimary,
                       ),
                     ),
                   ),
                 ),
-                if (displayNotifications.isEmpty && !isLoading) 
+                if (displayNotifications.isEmpty && !isLoading)
                   SliverFillRemaining(
                     hasScrollBody: false,
                     child: Center(
