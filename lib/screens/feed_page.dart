@@ -25,7 +25,6 @@ class _FeedPageState extends State<FeedPage> {
   bool _isInitializingDataService = true;
   String? errorMessage;
   bool isFirstOpen = false;
-  NoteListFilterType _selectedFilterType = NoteListFilterType.latest;
 
   late ScrollController _scrollController;
   bool _showAppBar = true;
@@ -137,7 +136,7 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
-  Widget _buildHeaderWithFilters(BuildContext context, double topPadding) {
+  Widget _buildHeader(BuildContext context, double topPadding) {
     final colors = context.colors;
 
     return ClipRRect(
@@ -162,13 +161,8 @@ class _FeedPageState extends State<FeedPage> {
                           child: CircleAvatar(
                             radius: 16,
                             backgroundColor: colors.avatarPlaceholder,
-                            backgroundImage: user?.profileImage != null
-                                ? CachedNetworkImageProvider(user!.profileImage)
-                                : null,
-                            child: user?.profileImage == null
-                                ? Icon(Icons.person,
-                                    color: colors.iconPrimary, size: 18)
-                                : null,
+                            backgroundImage: user?.profileImage != null ? CachedNetworkImageProvider(user!.profileImage) : null,
+                            child: user?.profileImage == null ? Icon(Icons.person, color: colors.iconPrimary, size: 18) : null,
                           ),
                         ),
                       ),
@@ -190,88 +184,6 @@ class _FeedPageState extends State<FeedPage> {
                         ),
                       ),
                     ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: PopupMenuButton<NoteListFilterType>(
-                        icon: Icon(
-                          Icons.filter_list,
-                          color: colors.iconPrimary,
-                          size: 24,
-                        ),
-                        onSelected: (NoteListFilterType filterType) {
-                          setState(() {
-                            _selectedFilterType = filterType;
-                          });
-                        },
-                        itemBuilder: (BuildContext context) => [
-                          PopupMenuItem<NoteListFilterType>(
-                            value: NoteListFilterType.latest,
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.access_time,
-                                  color: _selectedFilterType ==
-                                          NoteListFilterType.latest
-                                      ? colors.accent
-                                      : colors.iconSecondary,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  'Latest',
-                                  style: TextStyle(
-                                    color: _selectedFilterType ==
-                                            NoteListFilterType.latest
-                                        ? colors.accent
-                                        : colors.textPrimary,
-                                    fontWeight: _selectedFilterType ==
-                                            NoteListFilterType.latest
-                                        ? FontWeight.w600
-                                        : FontWeight.normal,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          PopupMenuItem<NoteListFilterType>(
-                            value: NoteListFilterType.media,
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.photo_library,
-                                  color: _selectedFilterType ==
-                                          NoteListFilterType.media
-                                      ? colors.accent
-                                      : colors.iconSecondary,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 12),
-                                Text(
-                                  'Media',
-                                  style: TextStyle(
-                                    color: _selectedFilterType ==
-                                            NoteListFilterType.media
-                                        ? colors.accent
-                                        : colors.textPrimary,
-                                    fontWeight: _selectedFilterType ==
-                                            NoteListFilterType.media
-                                        ? FontWeight.w600
-                                        : FontWeight.normal,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                        color: colors.surface,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(color: colors.borderLight),
-                        ),
-                        elevation: 8,
-                        offset: const Offset(0, 8),
-                      ),
-                    ),
                   ],
                 ),
               ),
@@ -285,8 +197,7 @@ class _FeedPageState extends State<FeedPage> {
                     child: isRefreshing
                         ? LinearProgressIndicator(
                             backgroundColor: colors.borderLight,
-                            valueColor:
-                                AlwaysStoppedAnimation<Color>(colors.accent),
+                            valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
                           )
                         : const SizedBox.shrink(),
                   );
@@ -365,7 +276,7 @@ class _FeedPageState extends State<FeedPage> {
                           child: AnimatedOpacity(
                             opacity: _showAppBar ? 1.0 : 0.0,
                             duration: const Duration(milliseconds: 300),
-                            child: _buildHeaderWithFilters(context, topPadding),
+                            child: _buildHeader(context, topPadding),
                           ),
                         ),
                       ),
@@ -375,10 +286,8 @@ class _FeedPageState extends State<FeedPage> {
                       _isInitializingDataService
                           ? _buildInitializingState(context)
                           : NoteListWidget(
-                              key: ValueKey(_selectedFilterType),
                               npub: widget.npub,
                               dataType: DataType.feed,
-                              filterType: _selectedFilterType,
                             ),
                     ],
                   ),

@@ -8,22 +8,15 @@ import '../providers/notes_provider.dart';
 import '../providers/interactions_provider.dart';
 import 'note_widget.dart';
 
-enum NoteListFilterType {
-  latest,
-  media,
-}
-
 class NoteListWidget extends StatefulWidget {
   final String npub;
   final DataType dataType;
-  final NoteListFilterType filterType;
   final DataService? sharedDataService;
 
   const NoteListWidget({
     super.key,
     required this.npub,
     required this.dataType,
-    this.filterType = NoteListFilterType.latest,
     this.sharedDataService,
   });
 
@@ -49,14 +42,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeAsync();
     });
-  }
-
-  @override
-  void didUpdateWidget(NoteListWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.filterType != widget.filterType) {
-      _updateFilteredNotes(_dataService.notesNotifier.value);
-    }
   }
 
   @override
@@ -198,7 +183,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   }
 
   void _updateFilteredNotes(List<NoteModel> notes) {
-    final filtered = _filterNotes(notes);
+    final filtered = notes.where((n) => !n.isReply || n.isRepost).toList();
 
     // Preload user profiles for visible notes
     final userNpubs = <String>{};
@@ -218,15 +203,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       setState(() {
         _filteredNotes = filtered;
       });
-    }
-  }
-
-  List<NoteModel> _filterNotes(List<NoteModel> notes) {
-    switch (widget.filterType) {
-      case NoteListFilterType.media:
-        return notes.where((n) => n.hasMedia && (!n.isReply || n.isRepost)).toList();
-      case NoteListFilterType.latest:
-        return notes.where((n) => !n.isReply || n.isRepost).toList();
     }
   }
 
