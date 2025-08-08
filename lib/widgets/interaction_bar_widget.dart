@@ -125,9 +125,9 @@ class _InteractionBarState extends State<InteractionBar> {
   Widget _buildReactionButton(BuildContext context, int reactionCount, bool hasReacted) {
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     final colors = context.colors;
-    final double iconSize = widget.isLarge ? 16 : 15;
-    final double fontSize = widget.isLarge ? 15 : 14.5;
-    final double spacing = widget.isLarge ? 6 : 5.5;
+    final double iconSize = widget.isLarge ? 16.5 : 15.5;
+    final double fontSize = widget.isLarge ? 15.5 : 15;
+    final double spacing = widget.isLarge ? 7 : 6.5;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
