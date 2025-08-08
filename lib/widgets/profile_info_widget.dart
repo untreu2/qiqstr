@@ -6,6 +6,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive/hive.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
+import 'package:qiqstr/models/note_model.dart';
+import 'package:qiqstr/widgets/note_content_widget.dart';
 import '../theme/theme_manager.dart';
 import '../models/user_model.dart';
 import '../models/following_model.dart';
@@ -38,6 +40,41 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   bool _copiedToClipboard = false;
   bool _isInitialized = false;
+
+  void _navigateToProfile(String npub) {
+    if (_dataService != null) {
+      _dataService!.openUserProfile(context, npub);
+    }
+  }
+
+  Widget _buildBioContent(UserModel user) {
+    if (_dataService == null || user.about.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final tempNote = NoteModel(
+      id: 'bio_${user.npub}',
+      author: user.npub,
+      content: user.about,
+      timestamp: DateTime.now(),
+      isReply: false,
+      isRepost: false,
+    );
+
+    _dataService!.parseContentForNote(tempNote);
+
+    final parsedBioContent = tempNote.parsedContent ?? {};
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8.0),
+      child: NoteContentWidget(
+        parsedContent: parsedBioContent,
+        dataService: _dataService!,
+        onNavigateToMentionProfile: _navigateToProfile,
+        type: NoteContentType.small,
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -184,11 +221,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                     if (user.lud16.isNotEmpty) Text(user.lud16, style: TextStyle(fontSize: 13, color: context.colors.accent)),
 
                     // About section
-                    if (user.about.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8.0),
-                        child: Text(user.about, style: TextStyle(fontSize: 14, color: context.colors.secondary)),
-                      ),
+                    if (user.about.isNotEmpty) _buildBioContent(user),
 
                     // Website preview (only load if initialized to avoid blocking)
                     if (user.website.isNotEmpty && _isInitialized)
