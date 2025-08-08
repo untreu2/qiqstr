@@ -27,13 +27,13 @@ class NoteContentWidget extends StatelessWidget {
   }
 
   const NoteContentWidget({
-    Key? key,
+    super.key,
     required this.parsedContent,
     required this.dataService,
     required this.onNavigateToMentionProfile,
     this.onShowMoreTap,
     this.type = NoteContentType.small,
-  }) : super(key: key);
+  });
 
   Future<void> _onOpenLink(BuildContext context, LinkableElement link) async {
     final url = Uri.parse(link.url);
@@ -128,11 +128,6 @@ class NoteContentWidget extends StatelessWidget {
       textHeightBehavior: const TextHeightBehavior(
         applyHeightToFirstAscent: false,
         applyHeightToLastDescent: false,
-      ),
-      strutStyle: StrutStyle(
-        fontSize: currentFontSize,
-        height: 1.4,
-        forceStrutHeight: true,
       ),
     );
   }
