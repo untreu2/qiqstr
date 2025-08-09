@@ -8,9 +8,9 @@ class AppColors {
   static const Color accent = Color(0xFFECB200); // Golden yellow for links, hashtags, etc.
 
   // Background colors
-  static const Color background = Color.fromARGB(255, 20, 20, 20);
-  static const Color surface = Color.fromARGB(255, 20, 20, 20);
-  static const Color surfaceVariant = Color.fromARGB(255, 20, 20, 20);
+  static const Color background = Color.fromARGB(255, 15, 15, 15);
+  static const Color surface = Color.fromARGB(255, 15, 15, 15);
+  static const Color surfaceVariant = Color.fromARGB(255, 15, 15, 15);
 
   // Text colors
   static const Color textPrimary = Colors.white;
