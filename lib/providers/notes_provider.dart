@@ -27,12 +27,18 @@ class NotesProvider extends ChangeNotifier {
     if (_isInitialized) return;
 
     try {
-      // Open Hive boxes
-      _feedNotesBox = await Hive.openBox<NoteModel>('notes_Feed_$npub');
-      _profileNotesBox = await Hive.openBox<NoteModel>('notes_Profile_$npub');
+      // Open Hive boxes in parallel for faster initialization
+      final boxFutures = [
+        Hive.openBox<NoteModel>('notes_Feed_$npub'),
+        Hive.openBox<NoteModel>('notes_Profile_$npub'),
+      ];
 
-      // Load existing notes from Hive
-      await _loadNotesFromHive();
+      final boxes = await Future.wait(boxFutures);
+      _feedNotesBox = boxes[0] as Box<NoteModel>;
+      _profileNotesBox = boxes[1] as Box<NoteModel>;
+
+      // Load existing notes from Hive in parallel
+      await _loadNotesFromHiveOptimized();
 
       _isInitialized = true;
       notifyListeners();
@@ -41,20 +47,31 @@ class NotesProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _loadNotesFromHive() async {
-    // Load from feed box
+  Future<void> _loadNotesFromHiveOptimized() async {
+    final loadingFutures = <Future>[];
+
+    // Load from feed box in background
     if (_feedNotesBox != null) {
-      for (final note in _feedNotesBox!.values) {
-        _addNoteToCache(note);
-      }
+      loadingFutures.add(Future.microtask(() {
+        final notes = _feedNotesBox!.values.toList();
+        for (final note in notes) {
+          _addNoteToCache(note);
+        }
+      }));
     }
 
-    // Load from profile box
+    // Load from profile box in background
     if (_profileNotesBox != null) {
-      for (final note in _profileNotesBox!.values) {
-        _addNoteToCache(note);
-      }
+      loadingFutures.add(Future.microtask(() {
+        final notes = _profileNotesBox!.values.toList();
+        for (final note in notes) {
+          _addNoteToCache(note);
+        }
+      }));
     }
+
+    // Wait for all loading operations to complete
+    await Future.wait(loadingFutures);
   }
 
   void _addNoteToCache(NoteModel note) {

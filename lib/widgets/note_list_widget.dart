@@ -3,6 +3,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../theme/theme_manager.dart';
 import '../models/note_model.dart';
 import '../services/data_service.dart';
+import '../services/initialization_service.dart';
 import '../providers/user_provider.dart';
 import '../providers/notes_provider.dart';
 import '../providers/interactions_provider.dart';
@@ -77,10 +78,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       _currentUserNpub = await _secureStorage.read(key: 'npub');
       if (!mounted) return;
 
-      // Initialize all providers
-      await UserProvider.instance.initialize();
-      await NotesProvider.instance.initialize(_currentUserNpub ?? '');
-      await InteractionsProvider.instance.initialize(_currentUserNpub ?? '');
+      // Use optimized initialization service for faster startup
+      await InitializationService.instance.initializeApp(_currentUserNpub ?? '');
 
       await _setupDataService();
       _dataService.notesNotifier.addListener(_onNotesChanged);
@@ -90,6 +89,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
       _updateFilteredNotes(_dataService.notesNotifier.value);
 
+      // Show UI immediately after optimized initialization
       if (mounted) {
         setState(() {
           _isInitializing = false;
@@ -185,14 +185,20 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   void _updateFilteredNotes(List<NoteModel> notes) {
     final filtered = notes.where((n) => !n.isReply || n.isRepost).toList();
 
-    // Preload user profiles for visible notes
+    // Preload user profiles and interactions for visible notes immediately
     final userNpubs = <String>{};
+    final interactionsProvider = InteractionsProvider.instance;
+    final notesProvider = NotesProvider.instance;
+
     for (final note in filtered.take(20)) {
       // Preload first 20 notes
       userNpubs.add(note.author);
       if (note.repostedBy != null) {
         userNpubs.add(note.repostedBy!);
       }
+
+      // Load all interactions for visible notes immediately
+      _loadNoteInteractionsImmediately(note.id, interactionsProvider, notesProvider);
     }
 
     if (userNpubs.isNotEmpty) {
@@ -204,6 +210,26 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         _filteredNotes = filtered;
       });
     }
+  }
+
+  /// Load all interactions for a note immediately
+  void _loadNoteInteractionsImmediately(String noteId, InteractionsProvider interactionsProvider, NotesProvider notesProvider) {
+    // Trigger immediate loading of all interaction types
+    Future.microtask(() {
+      final reactions = interactionsProvider.getReactionsForNote(noteId);
+      final replies = interactionsProvider.getRepliesForNote(noteId);
+      final reposts = interactionsProvider.getRepostsForNote(noteId);
+      final zaps = interactionsProvider.getZapsForNote(noteId);
+
+      // Update note interaction counts immediately if available
+      notesProvider.updateNoteInteractionCounts(
+        noteId,
+        reactionCount: reactions.length,
+        replyCount: replies.length,
+        repostCount: reposts.length,
+        zapAmount: zaps.fold<int>(0, (sum, zap) => sum + zap.amount),
+      );
+    });
   }
 
   @override
