@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
-import 'package:bounce/bounce.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/models/notification_model.dart';
 import 'package:qiqstr/models/user_model.dart';
@@ -15,7 +13,7 @@ import 'package:nostr_nip19/nostr_nip19.dart';
 class NotificationPage extends StatefulWidget {
   final DataService dataService;
 
-  const NotificationPage({Key? key, required this.dataService}) : super(key: key);
+  const NotificationPage({super.key, required this.dataService});
 
   @override
   State<NotificationPage> createState() => _NotificationPageState();

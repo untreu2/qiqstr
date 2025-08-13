@@ -53,9 +53,9 @@ class QuoteWidget extends StatelessWidget {
         if (currentLength + 8 <= characterLimit) {
           truncatedParts.add(part);
           currentLength += 8;
-        } else {
-          break;
         }
+      } else {
+        break;
       }
     }
 
@@ -140,12 +140,15 @@ class QuoteWidget extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                user.name,
+                user.name.length > 25
+                    ? user.name.substring(0, 25)
+                    : user.name,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                   color: context.colors.textPrimary,
                 ),
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),

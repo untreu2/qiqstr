@@ -31,6 +31,19 @@ class RootNoteWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final parsedContent = dataService.parseContent(note.content);
+    String formatTimestamp(DateTime timestamp) {
+      final d = DateTime.now().difference(timestamp);
+      if (d.inSeconds < 5) return 'now';
+      if (d.inSeconds < 60) return '${d.inSeconds}s';
+      if (d.inMinutes < 60) return '${d.inMinutes}m';
+      if (d.inHours < 24) return '${d.inHours}h';
+      if (d.inDays < 7) return '${d.inDays}d';
+      if (d.inDays < 30) return '${(d.inDays / 7).floor()}w';
+      if (d.inDays < 365) return '${(d.inDays / 30).floor()}mo';
+      return '${(d.inDays / 365).floor()}y';
+    }
+
+    final formattedTimestamp = formatTimestamp(note.timestamp);
 
     return ListenableBuilder(
       listenable: UserProvider.instance,
@@ -72,33 +85,45 @@ class RootNoteWidget extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Text(
-                              authorProfile.name.isNotEmpty ? authorProfile.name : note.author.substring(0, 8),
-                              style: TextStyle(
-                                fontSize: 16,
-                                color: context.colors.textPrimary,
-                                fontWeight: FontWeight.w500,
-                                height: 1.2,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            if (authorProfile.nip05.isNotEmpty)
-                              Text(
-                                authorProfile.nip05,
-                                style: TextStyle(fontSize: 13, color: context.colors.secondary),
+                            Flexible(
+                              child: Text(
+                                authorProfile.name.isNotEmpty ? authorProfile.name : note.author.substring(0, 8),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: context.colors.textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                ),
                                 overflow: TextOverflow.ellipsis,
                               ),
+                            ),
+                            if (authorProfile.nip05.isNotEmpty)
+                              Flexible(
+                                child: Padding(
+                                  padding: const EdgeInsets.only(left: 6),
+                                  child: Text(
+                                    '• ${authorProfile.nip05}',
+                                    style: TextStyle(fontSize: 13, color: context.colors.secondary),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                            Padding(
+                              padding: const EdgeInsets.only(left: 6),
+                              child: Text('• $formattedTimestamp',
+                                  style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: context.colors.secondary)),
+                            ),
                           ],
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 12),
                 NoteContentWidget(
                   parsedContent: parsedContent,
                   dataService: dataService,

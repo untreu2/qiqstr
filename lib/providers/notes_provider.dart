@@ -34,8 +34,8 @@ class NotesProvider extends ChangeNotifier {
       ];
 
       final boxes = await Future.wait(boxFutures);
-      _feedNotesBox = boxes[0] as Box<NoteModel>;
-      _profileNotesBox = boxes[1] as Box<NoteModel>;
+      _feedNotesBox = boxes[0];
+      _profileNotesBox = boxes[1];
 
       // Load existing notes from Hive in parallel
       await _loadNotesFromHiveOptimized();

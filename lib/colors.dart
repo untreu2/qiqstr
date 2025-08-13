@@ -5,7 +5,7 @@ class AppColors {
   // Primary colors
   static const Color primary = Colors.white;
   static const Color secondary = Colors.grey;
-  static const Color accent = Color(0xFFECB200); // Golden yellow for links, hashtags, etc.
+  static const Color accent = Color.fromARGB(255, 195, 60, 150);
 
   // Background colors
   static const Color background = Color.fromARGB(255, 15, 15, 15);
