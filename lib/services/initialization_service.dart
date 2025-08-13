@@ -1,17 +1,9 @@
 import 'dart:async';
-import 'dart:isolate';
 import 'package:flutter/foundation.dart';
-import 'package:hive/hive.dart';
-import '../models/note_model.dart';
-import '../models/reaction_model.dart';
-import '../models/reply_model.dart';
-import '../models/repost_model.dart';
-import '../models/zap_model.dart';
 import '../providers/user_provider.dart';
 import '../providers/notes_provider.dart';
 import '../providers/interactions_provider.dart';
 import 'base/service_base.dart';
-import 'base/isolate_types.dart';
 
 /// Optimized initialization service for faster app startup
 class InitializationService extends LifecycleService with PerformanceMonitoringMixin {
@@ -211,7 +203,7 @@ class CacheProcessingIsolate {
 
   static Future<void> _processNotesInIsolate(List<Map<String, dynamic>> notesData) async {
     // Process notes data in isolate
-    for (final noteData in notesData) {
+    for (final _ in notesData) {
       // Perform heavy processing operations
       await Future.delayed(const Duration(microseconds: 100));
     }
@@ -219,7 +211,7 @@ class CacheProcessingIsolate {
 
   static Future<void> _processInteractionsInIsolate(List<Map<String, dynamic>> interactionsData) async {
     // Process interactions data in isolate
-    for (final interactionData in interactionsData) {
+    for (final _ in interactionsData) {
       // Perform heavy processing operations
       await Future.delayed(const Duration(microseconds: 50));
     }
@@ -227,7 +219,7 @@ class CacheProcessingIsolate {
 
   static Future<void> _processUserProfilesInIsolate(List<Map<String, dynamic>> profilesData) async {
     // Process user profiles data in isolate
-    for (final profileData in profilesData) {
+    for (final _ in profilesData) {
       // Perform heavy processing operations
       await Future.delayed(const Duration(microseconds: 75));
     }

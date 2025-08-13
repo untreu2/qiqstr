@@ -148,34 +148,6 @@ class _SidebarContent extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (user.nip05.isNotEmpty && user.nip05.contains('@')) ...[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-                child: Text(
-                  user.nip05,
-                  style: TextStyle(
-                    color: colors.accent,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-            if (user.lud16.isNotEmpty) ...[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: Text(
-                  user.lud16,
-                  style: TextStyle(
-                    color: colors.accent,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
             Divider(color: colors.border, indent: 16, endIndent: 16),
             Expanded(
               child: ListView(

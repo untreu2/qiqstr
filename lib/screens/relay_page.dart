@@ -8,7 +8,9 @@ import '../services/data_service.dart';
 import '../services/nostr_service.dart';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui';
 import 'dart:async';
+import 'package:bounce/bounce.dart';
 
 class RelayPage extends StatefulWidget {
   const RelayPage({super.key});
@@ -26,7 +28,11 @@ class _RelayPageState extends State<RelayPage> {
   bool _isAddingRelay = false;
   bool _isFetchingUserRelays = false;
   bool _isPublishingRelays = false;
-  bool _isUsingUserRelays = false;
+  bool _disposed = false;
+
+  // Track active connections for cleanup
+  final List<WebSocket> _activeConnections = [];
+  final List<StreamSubscription> _activeSubscriptions = [];
 
   @override
   void initState() {
@@ -36,6 +42,24 @@ class _RelayPageState extends State<RelayPage> {
 
   @override
   void dispose() {
+    _disposed = true;
+
+    // Cancel all active subscriptions
+    for (final subscription in _activeSubscriptions) {
+      try {
+        subscription.cancel();
+      } catch (_) {}
+    }
+    _activeSubscriptions.clear();
+
+    // Close all active WebSocket connections
+    for (final ws in _activeConnections) {
+      try {
+        ws.close();
+      } catch (_) {}
+    }
+    _activeConnections.clear();
+
     _addRelayController.dispose();
     super.dispose();
   }
@@ -47,7 +71,6 @@ class _RelayPageState extends State<RelayPage> {
       final prefs = await SharedPreferences.getInstance();
 
       // Check if user is using their own relays
-      _isUsingUserRelays = prefs.getBool('using_user_relays') ?? false;
 
       // Load custom main relays or use defaults
       final customMainRelays = prefs.getStringList('custom_main_relays');
@@ -252,8 +275,17 @@ class _RelayPageState extends State<RelayPage> {
       // Create a WebSocket connection to fetch kind 10002 events
       for (final relayUrl in relaySetMainSockets) {
         WebSocket? ws;
+        StreamSubscription? sub;
         try {
+          // Check if disposed before creating connection
+          if (_disposed) return relayList;
+
           ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
+
+          // Track the connection for cleanup
+          if (!_disposed) {
+            _activeConnections.add(ws);
+          }
 
           final subscriptionId = DateTime.now().millisecondsSinceEpoch.toString();
           final request = jsonEncode([
@@ -267,11 +299,10 @@ class _RelayPageState extends State<RelayPage> {
           ]);
 
           final completer = Completer<Map<String, dynamic>?>();
-          late StreamSubscription sub;
 
           sub = ws.listen((event) {
             try {
-              if (completer.isCompleted) return;
+              if (_disposed || completer.isCompleted) return;
               final decoded = jsonDecode(event);
               if (decoded is List && decoded.length >= 2) {
                 if (decoded[0] == 'EVENT' && decoded[1] == subscriptionId) {
@@ -289,14 +320,27 @@ class _RelayPageState extends State<RelayPage> {
             if (!completer.isCompleted) completer.complete(null);
           });
 
-          if (ws.readyState == WebSocket.open) {
+          // Track the subscription for cleanup
+          if (!_disposed) {
+            _activeSubscriptions.add(sub);
+          }
+
+          if (!_disposed && ws.readyState == WebSocket.open) {
             ws.add(request);
           }
 
           final eventData = await completer.future.timeout(const Duration(seconds: 5), onTimeout: () => null);
 
-          await sub.cancel();
-          await ws.close();
+          // Cleanup
+          try {
+            await sub.cancel();
+            _activeSubscriptions.remove(sub);
+          } catch (_) {}
+
+          try {
+            await ws.close();
+            _activeConnections.remove(ws);
+          } catch (_) {}
 
           if (eventData != null) {
             final tags = eventData['tags'] as List<dynamic>? ?? [];
@@ -329,8 +373,14 @@ class _RelayPageState extends State<RelayPage> {
           }
         } catch (e) {
           print('Error fetching from relay $relayUrl: $e');
+          // Ensure cleanup on error
+          try {
+            await sub?.cancel();
+            if (sub != null) _activeSubscriptions.remove(sub);
+          } catch (_) {}
           try {
             await ws?.close();
+            if (ws != null) _activeConnections.remove(ws);
           } catch (_) {}
         }
       }
@@ -358,7 +408,6 @@ class _RelayPageState extends State<RelayPage> {
 
       setState(() {
         _relays = writeRelays.isNotEmpty ? writeRelays : _userRelays.map((relay) => relay['url'] as String).take(4).toList();
-        _isUsingUserRelays = true;
       });
 
       await _saveRelays();
@@ -377,24 +426,6 @@ class _RelayPageState extends State<RelayPage> {
           SnackBar(content: Text('Error applying user relays: ${e.toString()}')),
         );
       }
-    }
-  }
-
-  Future<void> _stopUsingUserRelays() async {
-    setState(() {
-      _relays = List.from(relaySetMainSockets);
-      _isUsingUserRelays = false;
-    });
-
-    await _saveRelays();
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('using_user_relays', false);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Switched back to default relays')),
-      );
     }
   }
 
@@ -524,7 +555,6 @@ class _RelayPageState extends State<RelayPage> {
               Navigator.pop(context);
               setState(() {
                 _relays = List.from(relaySetMainSockets);
-                _isUsingUserRelays = false;
               });
               await _saveRelays();
               if (mounted) {
@@ -634,33 +664,39 @@ class _RelayPageState extends State<RelayPage> {
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 60, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              IconButton(
-                icon: Icon(Icons.arrow_back, color: context.colors.textPrimary),
-                onPressed: () => Navigator.pop(context),
+  Widget _buildFloatingBackButton(BuildContext context) {
+    final double topPadding = MediaQuery.of(context).padding.top;
+
+    return Positioned(
+      top: topPadding + 8,
+      left: 16,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(25.0),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: context.colors.backgroundTransparent,
+              border: Border.all(
+                color: context.colors.borderLight,
+                width: 1.5,
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Relay Management',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    color: context.colors.textPrimary,
-                    letterSpacing: -0.5,
-                  ),
-                ),
+              borderRadius: BorderRadius.circular(25.0),
+            ),
+            child: Bounce(
+              scaleFactor: 0.85,
+              onTap: () => Navigator.pop(context),
+              behavior: HitTestBehavior.opaque,
+              child: Icon(
+                Icons.arrow_back,
+                color: context.colors.textSecondary,
+                size: 20,
               ),
-            ],
+            ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -670,202 +706,64 @@ class _RelayPageState extends State<RelayPage> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         children: [
-          // User Relays Section
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: context.colors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: context.colors.border),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.cloud_sync, color: context.colors.accent, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Sync Relays',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: context.colors.textPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Sync relays from your Nostr profile',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: context.colors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: _isFetchingUserRelays ? null : _fetchUserRelays,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: context.colors.surfaceTransparent,
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(color: context.colors.borderLight),
+          // Fetch and Publish buttons
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _isFetchingUserRelays ? null : _fetchUserRelays,
+                  icon: _isFetchingUserRelays
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
                           ),
-                          child: _isFetchingUserRelays
-                              ? Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Fetching...',
-                                      style: TextStyle(
-                                        color: context.colors.textPrimary,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.download, size: 16, color: context.colors.textPrimary),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Fetch & Use',
-                                      style: TextStyle(
-                                        color: context.colors.textPrimary,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                        ),
-                      ),
+                        )
+                      : const Icon(Icons.download, size: 18),
+                  label: Text(_isFetchingUserRelays ? 'Fetching...' : 'Fetch'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: context.colors.surface,
+                    foregroundColor: context.colors.textPrimary,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: context.colors.border),
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: _isPublishingRelays ? null : _publishRelays,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: context.colors.surfaceTransparent,
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(color: context.colors.borderLight),
-                          ),
-                          child: _isPublishingRelays
-                              ? Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    SizedBox(
-                                      width: 16,
-                                      height: 16,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Publishing...',
-                                      style: TextStyle(
-                                        color: context.colors.textPrimary,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(Icons.upload, size: 16, color: context.colors.textPrimary),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Publish',
-                                      style: TextStyle(
-                                        color: context.colors.textPrimary,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-                if (_isUsingUserRelays) ...[
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _stopUsingUserRelays,
-                      icon: const Icon(Icons.refresh, size: 18),
-                      label: const Text('Use Default Relays'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: context.colors.surface,
-                        foregroundColor: context.colors.textPrimary,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          side: BorderSide(color: context.colors.border),
-                        ),
-                      ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _isPublishingRelays ? null : _publishRelays,
+                  icon: _isPublishingRelays
+                      ? SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
+                          ),
+                        )
+                      : const Icon(Icons.upload, size: 18),
+                  label: Text(_isPublishingRelays ? 'Publishing...' : 'Publish'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: context.colors.surface,
+                    foregroundColor: context.colors.textPrimary,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(color: context.colors.border),
                     ),
                   ),
-                ],
-                if (_userRelays.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    '${_userRelays.length} relays found in your profile',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: context.colors.textTertiary,
-                    ),
-                  ),
-                ],
-                if (_isUsingUserRelays) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: context.colors.accent.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'Currently using your personal relays',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: context.colors.accent,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          // Regular Action Buttons
+          const SizedBox(height: 12),
+          // Add and Reset buttons
           Row(
             children: [
               Expanded(
@@ -1070,21 +968,26 @@ class _RelayPageState extends State<RelayPage> {
 
     return Scaffold(
       backgroundColor: context.colors.background,
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      body: Stack(
         children: [
-          _buildHeader(context),
-          _buildActionButtons(context),
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                children: [
-                  _buildRelaySection('Relays', _relays, true),
-                  const SizedBox(height: 24),
-                ],
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(height: MediaQuery.of(context).padding.top + 60), // Space for floating back button
+              _buildActionButtons(context),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      _buildRelaySection('Relays', _relays, true),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
+          _buildFloatingBackButton(context),
         ],
       ),
     );

@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../theme/theme_manager.dart';
+import 'package:provider/provider.dart';
+import 'package:bounce/bounce.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/models/notification_model.dart';
 import 'package:qiqstr/models/user_model.dart';
@@ -270,49 +273,89 @@ class _NotificationPageState extends State<NotificationPage> {
     return const SizedBox.shrink();
   }
 
+  Widget _buildHeader(BuildContext context) {
+    final now = DateTime.now();
+    final last24Hours = now.subtract(const Duration(hours: 24));
+
+    int notificationsLast24Hours = 0;
+    for (final item in displayNotifications) {
+      if (item is _NotificationGroup) {
+        if (item.latest.isAfter(last24Hours)) {
+          notificationsLast24Hours++;
+        }
+      } else if (item is NotificationModel) {
+        if (item.timestamp.isAfter(last24Hours)) {
+          notificationsLast24Hours++;
+        }
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 60, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'Notifications',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                  color: context.colors.textPrimary,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "You have $notificationsLast24Hours ${notificationsLast24Hours == 1 ? 'notification' : 'notifications'} in the last 24 hours.",
+            style: TextStyle(
+              fontSize: 14,
+              color: context.colors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final topPadding = MediaQuery.of(context).padding.top;
-
-    return Scaffold(
-      backgroundColor: context.colors.background,
-      body: isLoading
-          ? Center(child: CircularProgressIndicator(color: context.colors.textPrimary))
-          : CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Container(
-                    padding: EdgeInsets.only(top: topPadding + 12, bottom: 8, left: 20),
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Notifications',
-                      style: TextStyle(
-                        fontSize: 25,
-                        fontWeight: FontWeight.bold,
-                        color: context.colors.textPrimary,
-                      ),
+    return Consumer<ThemeManager>(
+      builder: (context, themeManager, child) {
+        return Scaffold(
+          backgroundColor: context.colors.background,
+          body: isLoading
+              ? Center(child: CircularProgressIndicator(color: context.colors.textPrimary))
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(context),
+                    Expanded(
+                      child: displayNotifications.isEmpty
+                          ? Center(
+                              child: Text(
+                                'No notifications yet.',
+                                style: TextStyle(color: context.colors.textSecondary),
+                              ),
+                            )
+                          : ListView.separated(
+                              padding: EdgeInsets.zero,
+                              itemCount: displayNotifications.length,
+                              itemBuilder: (context, index) => _buildNotificationTile(displayNotifications[index]),
+                              separatorBuilder: (_, __) => Divider(
+                                color: context.colors.border,
+                                height: 1,
+                              ),
+                            ),
                     ),
-                  ),
+                  ],
                 ),
-                if (displayNotifications.isEmpty && !isLoading)
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Center(
-                      child: Text(
-                        'No notifications yet.',
-                        style: TextStyle(color: context.colors.textTertiary),
-                      ),
-                    ),
-                  )
-                else
-                  SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) => _buildNotificationTile(displayNotifications[index]),
-                      childCount: displayNotifications.length,
-                    ),
-                  ),
-              ],
-            ),
+        );
+      },
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:nostr/nostr.dart';
 import 'package:qiqstr/theme/theme_manager.dart';
 import 'package:provider/provider.dart';
+import 'package:bounce/bounce.dart';
 
 class KeysPage extends StatefulWidget {
   const KeysPage({super.key});
@@ -17,7 +18,7 @@ class _KeysPageState extends State<KeysPage> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   String _nsecBech32 = 'Loading...';
   String _npubBech32 = 'Loading...';
-  String _copyMessage = '';
+  String? _copiedKeyType;
 
   @override
   void initState() {
@@ -52,127 +53,116 @@ class _KeysPageState extends State<KeysPage> {
 
   Future<void> _copyToClipboard(String text, String keyType) async {
     await Clipboard.setData(ClipboardData(text: text));
-    setState(() {
-      _copyMessage = '\$keyType copied to clipboard!';
-    });
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${keyType.toUpperCase()} copied to clipboard!'),
+        backgroundColor: context.colors.success.withOpacity(0.9),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+
+    setState(() => _copiedKeyType = keyType);
+
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
-        setState(() {
-          _copyMessage = '';
-        });
+        setState(() => _copiedKeyType = null);
       }
     });
   }
 
-  Widget _buildKeyTile(BuildContext context, String title, String value, String keyType) {
-    final displayValue = keyType == 'nsec' ? '****************************************************************' : value;
-    return ListTile(
-      title: Text(title, style: TextStyle(color: context.colors.textPrimary)),
-      subtitle: SelectableText(
-        displayValue,
-        maxLines: 1,
-        style: TextStyle(color: context.colors.textSecondary),
-      ),
-      trailing: IconButton(
-        icon: Icon(Icons.copy, color: context.colors.iconPrimary),
-        onPressed: () => _copyToClipboard(value, keyType),
-        tooltip: 'Copy to clipboard',
+  Widget _buildFloatingBackButton(BuildContext context) {
+    final double topPadding = MediaQuery.of(context).padding.top;
+
+    return Positioned(
+      top: topPadding + 8,
+      left: 16,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(25.0),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: context.colors.backgroundTransparent,
+              border: Border.all(
+                color: context.colors.borderLight,
+                width: 1.5,
+              ),
+              borderRadius: BorderRadius.circular(25.0),
+            ),
+            child: Bounce(
+              scaleFactor: 0.85,
+              onTap: () => Navigator.pop(context),
+              behavior: HitTestBehavior.opaque,
+              child: Icon(
+                Icons.arrow_back,
+                color: context.colors.textSecondary,
+                size: 20,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
-    return Padding(
+  Widget _buildKeyDisplayCard(BuildContext context, String title, String value, String keyType, bool isCopied) {
+    final displayValue = keyType == 'nsec' ? '****************************************************************' : value;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
       padding: const EdgeInsets.all(16.0),
-      child: Row(
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        borderRadius: BorderRadius.circular(12.0),
+        border: Border.all(color: context.colors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          IconButton(
-            icon: Icon(Icons.arrow_back, color: context.colors.iconPrimary),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          const SizedBox(width: 8.0),
-          Text(
-            'Your Keys',
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: context.colors.textPrimary,
-            ),
+          Text(title, style: TextStyle(color: context.colors.textSecondary, fontSize: 14)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: SelectableText(
+                  displayValue,
+                  maxLines: 1,
+                  style: TextStyle(
+                    color: context.colors.textPrimary,
+                    fontSize: 15,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 16),
+              IconButton(
+                icon: isCopied
+                    ? Icon(Icons.check, color: context.colors.success)
+                    : Icon(Icons.copy_outlined, color: context.colors.iconPrimary),
+                onPressed: () => _copyToClipboard(value, keyType),
+                tooltip: 'Copy to clipboard',
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<ThemeManager>(
-      builder: (context, themeManager, child) {
-        return Scaffold(
-          backgroundColor: context.colors.background,
-          body: Stack(
-            children: [
-              SafeArea(
-                bottom: false,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(context),
-                    _buildDisclaimer(context),
-                    Expanded(
-                      child: ListView.separated(
-                        padding: EdgeInsets.zero,
-                        itemCount: 2, // For nsec and npub
-                        itemBuilder: (context, index) {
-                          if (index == 0) {
-                            return _buildKeyTile(
-                              context,
-                              'Private Key (nsec):',
-                              _nsecBech32,
-                              'nsec',
-                            );
-                          } else {
-                            return _buildKeyTile(
-                              context,
-                              'Public Key (npub):',
-                              _npubBech32,
-                              'npub',
-                            );
-                          }
-                        },
-                        separatorBuilder: (_, __) => Divider(
-                          color: context.colors.border,
-                          height: 1,
-                        ),
-                      ),
-                    ),
-                    if (_copyMessage.isNotEmpty)
-                      Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Text(
-                            _copyMessage,
-                            style: TextStyle(
-                              color: context.colors.success,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildDisclaimer(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 8.0, top: 0.0),
+  Widget _buildDisclaimerCard(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: context.colors.surface.withOpacity(0.5),
+        borderRadius: BorderRadius.circular(12.0),
+        border: Border.all(color: context.colors.border),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -184,18 +174,86 @@ class _KeysPageState extends State<KeysPage> {
               color: context.colors.textPrimary,
             ),
           ),
-          const SizedBox(height: 8.0),
-          Text(
-            'Your private key (nsec) is like a password. Keep it secret and never share it with anyone. It allows you to sign messages and prove your identity on the Nostr network.',
-            style: TextStyle(color: context.colors.textSecondary),
+          const SizedBox(height: 16.0),
+          _buildDisclaimerRow(
+            context,
+            title: 'Private Key (nsec)',
+            description:
+                'This is your password. Keep it secret and never share it. It allows you to sign messages and control your identity.',
           ),
-          const SizedBox(height: 8.0),
-          Text(
-            'Your public key (npub) is like your username. You can share it with others so they can find you and interact with your profile.',
-            style: TextStyle(color: context.colors.textSecondary),
+          const SizedBox(height: 16.0),
+          _buildDisclaimerRow(
+            context,
+            title: 'Public Key (npub)',
+            description: 'This is your username. Share it with others so they can find you and interact with your profile.',
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDisclaimerRow(BuildContext context, {required String title, required String description}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: context.colors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          description,
+          style: TextStyle(color: context.colors.textSecondary, height: 1.4),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ThemeManager>(
+      builder: (context, themeManager, child) {
+        return Scaffold(
+          backgroundColor: context.colors.background,
+          body: _buildBody(context),
+        );
+      },
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    return Stack(
+      children: [
+        SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(height: MediaQuery.of(context).padding.top + 60),
+              _buildKeyDisplayCard(
+                context,
+                'Private Key (nsec)',
+                _nsecBech32,
+                'nsec',
+                _copiedKeyType == 'nsec',
+              ),
+              _buildKeyDisplayCard(
+                context,
+                'Public Key (npub)',
+                _npubBech32,
+                'npub',
+                _copiedKeyType == 'npub',
+              ),
+              const SizedBox(height: 16),
+              _buildDisclaimerCard(context),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+        _buildFloatingBackButton(context),
+      ],
     );
   }
 }
