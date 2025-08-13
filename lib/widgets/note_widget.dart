@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import '../models/note_model.dart';
 import '../models/user_model.dart';
 import '../services/data_service.dart';
@@ -159,38 +158,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
       'linkUrls': originalParsed['linkUrls'] ?? [],
       'quoteIds': originalParsed['quoteIds'] ?? [],
     };
-  }
-
-  Widget _buildReplyToSection(BuildContext context) {
-    final colors = context.colors;
-
-    // Get the parent note's author using parentId
-    if (widget.note.parentId == null) return const SizedBox.shrink();
-
-    // Try to find the parent note in the current notes list to get the author
-    final parentNote = widget.notesNotifier.value.firstWhere(
-      (note) => note.id == widget.note.parentId,
-      orElse: () => NoteModel(
-        id: '',
-        content: '',
-        author: widget.note.parentId!, // Fallback to parentId as author
-        timestamp: DateTime.now(),
-      ),
-    );
-
-    final parentAuthor = UserProvider.instance.getUserOrDefault(parentNote.author);
-    if (UserProvider.instance.getUser(parentNote.author) == null) {
-      UserProvider.instance.loadUser(parentNote.author);
-    }
-
-    return Text(
-      'Replying to @${parentAuthor.name.isNotEmpty ? parentAuthor.name : 'user'}',
-      style: TextStyle(
-        fontSize: 12,
-        color: colors.textSecondary,
-        fontStyle: FontStyle.italic,
-      ),
-    );
   }
 
   Widget _buildUserInfoWithReply(BuildContext context, UserModel authorUser, dynamic colors) {

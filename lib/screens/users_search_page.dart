@@ -20,6 +20,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
   final TextEditingController _searchController = TextEditingController();
   List<UserModel> _allUsers = [];
   List<UserModel> _filteredUsers = [];
+  List<UserModel> _randomUsers = [];
   bool _isSearchingNpub = false;
   UserModel? _npubSearchResult;
   String? _lastNpubQuery;
@@ -34,9 +35,13 @@ class _UserSearchPageState extends State<UserSearchPage> {
   void _loadUsers() async {
     final box = await Hive.openBox<UserModel>('users');
     final users = box.values.toList();
+
+    final shuffledUsers = users.toList()..shuffle();
+    _randomUsers = shuffledUsers.take(10).toList();
+
     setState(() {
       _allUsers = users;
-      _filteredUsers = users;
+      _filteredUsers = _randomUsers;
     });
   }
 
@@ -44,7 +49,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
     final query = _searchController.text.trim();
     if (query.isEmpty) {
       setState(() {
-        _filteredUsers = _allUsers;
+        _filteredUsers = _randomUsers;
         _isSearchingNpub = false;
         _npubSearchResult = null;
         _lastNpubQuery = null;
@@ -125,15 +130,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
       try {
         pubkeyHex = decodeBasicBech32(npubQuery, 'npub');
       } catch (e) {
-        setState(() {
-          _isSearchingNpub = false;
-          _filteredUsers = [];
-        });
-        _showErrorSnackBar('Invalid npub format');
-        return;
-      }
-
-      if (pubkeyHex == null) {
         setState(() {
           _isSearchingNpub = false;
           _filteredUsers = [];
