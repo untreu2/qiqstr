@@ -140,9 +140,7 @@ class QuoteWidget extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                user.name.length > 25
-                    ? user.name.substring(0, 25)
-                    : user.name,
+                user.name.length > 25 ? user.name.substring(0, 25) : user.name,
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -159,69 +157,84 @@ class QuoteWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<NoteModel?>(
-      future: _fetchNote(),
-      builder: (_, snap) {
-        if (!snap.hasData || snap.data == null) {
-          return Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: context.colors.background,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: context.colors.border, width: 0.8),
-            ),
-            child: Center(
-              child: Text(
-                'Event not found',
-                style: TextStyle(
-                  color: context.colors.textSecondary,
-                  fontSize: 14,
+    return GestureDetector(
+        onTap: () async {
+          final note = await _fetchNote();
+          if (note != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ThreadPage(
+                  rootNoteId: note.id,
+                  dataService: dataService,
                 ),
               ),
-            ),
-          );
-        }
-
-        final n = snap.data!;
-        dataService.parseContentForNote(n);
-        final parsed = n.parsedContent!;
-        final hasText = (parsed['textParts'] as List).any((p) => p['type'] == 'text' && (p['text'] as String).trim().isNotEmpty);
-        final hasMedia = (parsed['mediaUrls'] as List?)?.isNotEmpty ?? false;
-
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: context.colors.surface,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: context.colors.border, width: 1),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  _authorInfo(context, n.author),
-                  const Spacer(),
-                  Text(
-                    _formatTimestamp(n.timestamp),
+            );
+          }
+        },
+        child: FutureBuilder<NoteModel?>(
+          future: _fetchNote(),
+          builder: (_, snap) {
+            if (!snap.hasData || snap.data == null) {
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: context.colors.background,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: context.colors.border, width: 0.8),
+                ),
+                child: Center(
+                  child: Text(
+                    'Event not found',
                     style: TextStyle(
-                      fontSize: 12,
                       color: context.colors.textSecondary,
-                      fontWeight: FontWeight.w400,
+                      fontSize: 14,
                     ),
                   ),
+                ),
+              );
+            }
+
+            final n = snap.data!;
+            dataService.parseContentForNote(n);
+            final parsed = n.parsedContent!;
+            final hasText = (parsed['textParts'] as List).any((p) => p['type'] == 'text' && (p['text'] as String).trim().isNotEmpty);
+            final hasMedia = (parsed['mediaUrls'] as List?)?.isNotEmpty ?? false;
+
+            return Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: context.colors.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: context.colors.border, width: 1),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      _authorInfo(context, n.author),
+                      const Spacer(),
+                      Text(
+                        _formatTimestamp(n.timestamp),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.colors.textSecondary,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (hasText || hasMedia)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: _buildNoteContent(context, parsed, n),
+                    ),
                 ],
               ),
-              if (hasText || hasMedia)
-                Padding(
-                  padding: const EdgeInsets.only(top: 10),
-                  child: _buildNoteContent(context, parsed, n),
-                ),
-            ],
-          ),
-        );
-      },
-    );
+            );
+          },
+        ));
   }
 }
