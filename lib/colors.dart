@@ -8,9 +8,9 @@ class AppColors {
   static const Color accent = Color.fromARGB(255, 195, 60, 150);
 
   // Background colors
-  static const Color background = Color.fromARGB(255, 15, 15, 15);
-  static const Color surface = Color.fromARGB(255, 15, 15, 15);
-  static const Color surfaceVariant = Color.fromARGB(255, 15, 15, 15);
+  static const Color background = Color.fromARGB(255, 25, 25, 25);
+  static const Color surface = Color.fromARGB(255, 25, 25, 25);
+  static const Color surfaceVariant = Color.fromARGB(255, 25, 25, 25);
 
   // Text colors
   static const Color textPrimary = Colors.white;
