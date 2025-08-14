@@ -24,6 +24,12 @@ import 'services/data_service.dart';
 import 'providers/user_provider.dart';
 import 'providers/notes_provider.dart';
 import 'providers/interactions_provider.dart';
+import 'providers/content_cache_provider.dart';
+import 'providers/relay_provider.dart';
+import 'providers/network_provider.dart';
+import 'providers/media_provider.dart';
+import 'providers/notification_provider.dart';
+import 'services/memory_manager.dart';
 
 Future<void> main() async {
   // Set up global error handling for unhandled exceptions
@@ -72,24 +78,9 @@ Future<void> main() async {
       final npub = credentials[1];
 
       if (privateKey != null && npub != null) {
-        // Open boxes in parallel for faster startup
-        await _openHiveBoxesParallel(npub);
-
-        // Initialize all providers
-        final usersBox = Hive.box<UserModel>('users');
-        UserProvider.instance.setUsersBox(usersBox);
-        await UserProvider.instance.initialize();
-
-        await NotesProvider.instance.initialize(npub);
-        await InteractionsProvider.instance.initialize(npub);
-
-        // Initialize DataService asynchronously
-        // Initialize DataService and connections BEFORE showing the app
+        // Show app immediately with loading state
         final dataService = DataService(npub: npub, dataType: DataType.feed);
-        await dataService.initialize();
-        await dataService.initializeConnections();
 
-        // Show app after initialization is complete
         runApp(
           provider.MultiProvider(
             providers: [
@@ -97,6 +88,11 @@ Future<void> main() async {
               provider.ChangeNotifierProvider.value(value: UserProvider.instance),
               provider.ChangeNotifierProvider.value(value: NotesProvider.instance),
               provider.ChangeNotifierProvider.value(value: InteractionsProvider.instance),
+              provider.ChangeNotifierProvider.value(value: ContentCacheProvider.instance),
+              provider.ChangeNotifierProvider.value(value: RelayProvider.instance),
+              provider.ChangeNotifierProvider.value(value: NetworkProvider.instance),
+              provider.ChangeNotifierProvider.value(value: MediaProvider.instance),
+              provider.ChangeNotifierProvider.value(value: NotificationProvider.instance),
             ],
             child: ProviderScope(
               child: QiqstrApp(
@@ -108,12 +104,20 @@ Future<void> main() async {
             ),
           ),
         );
+
+        // Initialize everything in background after UI is shown
+        _initializeAppInBackground(npub, dataService);
       } else {
         runApp(
           provider.MultiProvider(
             providers: [
               provider.ChangeNotifierProvider(create: (context) => theme.ThemeManager()),
               provider.ChangeNotifierProvider.value(value: UserProvider.instance),
+              provider.ChangeNotifierProvider.value(value: ContentCacheProvider.instance),
+              provider.ChangeNotifierProvider.value(value: RelayProvider.instance),
+              provider.ChangeNotifierProvider.value(value: NetworkProvider.instance),
+              provider.ChangeNotifierProvider.value(value: MediaProvider.instance),
+              provider.ChangeNotifierProvider.value(value: NotificationProvider.instance),
             ],
             child: const ProviderScope(child: QiqstrApp(home: LoginPage())),
           ),
@@ -161,25 +165,6 @@ Future<void> _initializeHiveOptimized() async {
   await Hive.openBox<LinkPreviewModel>('link_preview_cache');
 }
 
-Future<void> _openHiveBoxesParallel(String npub) async {
-  final boxFutures = [
-    Hive.openBox<NoteModel>('notes_Feed_$npub'),
-    Hive.openBox<ReactionModel>('reactions_Feed_$npub'),
-    Hive.openBox<ReplyModel>('replies_Feed_$npub'),
-    Hive.openBox<RepostModel>('reposts_Feed_$npub'),
-    Hive.openBox<NoteModel>('notes_Profile_$npub'),
-    Hive.openBox<ReactionModel>('reactions_Profile_$npub'),
-    Hive.openBox<ReplyModel>('replies_Profile_$npub'),
-    Hive.openBox<RepostModel>('reposts_Profile_$npub'),
-    Hive.openBox<UserModel>('users'),
-    Hive.openBox<FollowingModel>('followingBox'),
-    Hive.openBox<ZapModel>('zaps_$npub'),
-    Hive.openBox<NotificationModel>('notifications_$npub'),
-  ];
-
-  await Future.wait(boxFutures);
-}
-
 Future<void> _handleInitializationError(dynamic error) async {
   try {
     await Hive.deleteFromDisk();
@@ -192,6 +177,11 @@ Future<void> _handleInitializationError(dynamic error) async {
           provider.ChangeNotifierProvider.value(value: UserProvider.instance),
           provider.ChangeNotifierProvider.value(value: NotesProvider.instance),
           provider.ChangeNotifierProvider.value(value: InteractionsProvider.instance),
+          provider.ChangeNotifierProvider.value(value: ContentCacheProvider.instance),
+          provider.ChangeNotifierProvider.value(value: RelayProvider.instance),
+          provider.ChangeNotifierProvider.value(value: NetworkProvider.instance),
+          provider.ChangeNotifierProvider.value(value: MediaProvider.instance),
+          provider.ChangeNotifierProvider.value(value: NotificationProvider.instance),
         ],
         child: const ProviderScope(child: QiqstrApp(home: LoginPage())),
       ),
@@ -307,4 +297,102 @@ class HiveErrorApp extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<void> _initializeAppInBackground(String npub, DataService dataService) async {
+  try {
+    // Phase 1: Initialize memory manager first
+    MemoryManager.instance; // Initialize singleton
+
+    // Phase 2: Open critical boxes first
+    await _openCriticalBoxes(npub);
+
+    // Phase 3: Initialize providers in parallel
+    final usersBox = Hive.box<UserModel>('users');
+    UserProvider.instance.setUsersBox(usersBox);
+
+    await Future.wait([
+      UserProvider.instance.initialize(),
+      NotesProvider.instance.initialize(npub),
+      InteractionsProvider.instance.initialize(npub),
+      MediaProvider.instance.initialize(),
+    ]);
+
+    // Phase 4: Initialize network providers after settings are loaded
+    await Future.wait([
+      RelayProvider.instance.initialize(),
+      NetworkProvider.instance.initialize(),
+      NotificationProvider.instance.initialize(npub, dataService: dataService, userProvider: UserProvider.instance),
+    ]);
+
+    // Phase 5: Initialize DataService
+    await dataService.initialize();
+
+    // Phase 6: Open remaining boxes in background
+    _openRemainingBoxes(npub);
+
+    // Phase 7: Initialize connections (non-blocking)
+    Future.microtask(() => dataService.initializeConnections());
+
+    // Phase 8: Setup memory pressure callbacks
+    _setupMemoryPressureHandling();
+  } catch (e) {
+    print('Background initialization error: $e');
+  }
+}
+
+Future<void> _openCriticalBoxes(String npub) async {
+  // Only open boxes needed for immediate UI display
+  await Future.wait([
+    Hive.openBox<UserModel>('users'),
+    Hive.openBox<NoteModel>('notes_Feed_$npub'),
+    Hive.openBox<FollowingModel>('followingBox'),
+  ]);
+}
+
+void _openRemainingBoxes(String npub) {
+  // Open remaining boxes in background without blocking
+  Future.microtask(() async {
+    final remainingBoxFutures = [
+      Hive.openBox<ReactionModel>('reactions_Feed_$npub'),
+      Hive.openBox<ReplyModel>('replies_Feed_$npub'),
+      Hive.openBox<RepostModel>('reposts_Feed_$npub'),
+      Hive.openBox<NoteModel>('notes_Profile_$npub'),
+      Hive.openBox<ReactionModel>('reactions_Profile_$npub'),
+      Hive.openBox<ReplyModel>('replies_Profile_$npub'),
+      Hive.openBox<RepostModel>('reposts_Profile_$npub'),
+      Hive.openBox<ZapModel>('zaps_$npub'),
+      Hive.openBox<NotificationModel>('notifications_$npub'),
+    ];
+
+    await Future.wait(remainingBoxFutures);
+  });
+}
+
+void _setupMemoryPressureHandling() {
+  final memoryManager = MemoryManager.instance;
+
+  // Add memory pressure callback to handle provider cleanup
+  memoryManager.addMemoryPressureCallback(() {
+    // Handle memory pressure in providers
+    try {
+      MediaProvider.instance.handleMemoryPressure();
+
+      // Notify other providers about memory pressure
+      if (memoryManager.currentPressureLevel.index >= 2) {
+        // Critical or emergency
+        // Force cleanup in critical situations
+        Future.microtask(() async {
+          try {
+            NotesProvider.instance.clearCache();
+            InteractionsProvider.instance.clearCache();
+          } catch (e) {
+            print('Provider cleanup error: $e');
+          }
+        });
+      }
+    } catch (e) {
+      print('Memory pressure handling error: $e');
+    }
+  });
 }

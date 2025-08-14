@@ -31,7 +31,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   late DataService _dataService;
 
   String? _currentUserNpub;
-  bool _isInitializing = true;
   bool _isLoadingMore = false;
 
   List<NoteModel> _filteredNotes = [];
@@ -81,6 +80,9 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       // Use optimized initialization service for faster startup
       await InitializationService.instance.initializeApp(_currentUserNpub ?? '');
 
+      // Initialize InteractionsProvider for this specific dataType
+      await _initializeInteractionsProvider();
+
       await _setupDataService();
       _dataService.notesNotifier.addListener(_onNotesChanged);
 
@@ -89,19 +91,20 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
       _updateFilteredNotes(_dataService.notesNotifier.value);
 
-      // Show UI immediately after optimized initialization
-      if (mounted) {
-        setState(() {
-          _isInitializing = false;
-        });
-      }
+      // UI is shown immediately without loading state
     } catch (e) {
       debugPrint('[NoteListWidget] Initialization error: $e');
-      if (mounted) {
-        setState(() {
-          _isInitializing = false;
-        });
-      }
+      // No loading state to update
+    }
+  }
+
+  Future<void> _initializeInteractionsProvider() async {
+    try {
+      // Initialize InteractionsProvider with correct dataType
+      final dataTypeString = widget.dataType.toString().split('.').last;
+      await InteractionsProvider.instance.initialize(_currentUserNpub ?? '', dataType: dataTypeString);
+    } catch (e) {
+      debugPrint('[NoteListWidget] InteractionsProvider initialization error: $e');
     }
   }
 
@@ -185,75 +188,112 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   void _updateFilteredNotes(List<NoteModel> notes) {
     final filtered = notes.where((n) => !n.isReply || n.isRepost).toList();
 
-    // Preload user profiles and interactions for visible notes immediately
-    final userNpubs = <String>{};
-    final interactionsProvider = InteractionsProvider.instance;
-    final notesProvider = NotesProvider.instance;
-
-    for (final note in filtered.take(20)) {
-      // Preload first 20 notes
-      userNpubs.add(note.author);
-      if (note.repostedBy != null) {
-        userNpubs.add(note.repostedBy!);
-      }
-
-      // Load all interactions for visible notes immediately
-      _loadNoteInteractionsImmediately(note.id, interactionsProvider, notesProvider);
-    }
-
-    if (userNpubs.isNotEmpty) {
-      UserProvider.instance.loadUsers(userNpubs.toList());
-    }
-
     if (mounted) {
       setState(() {
         _filteredNotes = filtered;
       });
     }
+
+    // Progressive loading in background - non-blocking
+    _scheduleProgressiveLoading(filtered);
   }
 
-  /// Load all interactions for a note immediately
-  void _loadNoteInteractionsImmediately(String noteId, InteractionsProvider interactionsProvider, NotesProvider notesProvider) {
-    // Trigger immediate loading of all interaction types
-    Future.microtask(() {
-      final reactions = interactionsProvider.getReactionsForNote(noteId);
-      final replies = interactionsProvider.getRepliesForNote(noteId);
-      final reposts = interactionsProvider.getRepostsForNote(noteId);
-      final zaps = interactionsProvider.getZapsForNote(noteId);
+  /// Progressive loading strategy to prevent UI blocking
+  void _scheduleProgressiveLoading(List<NoteModel> notes) {
+    Future.microtask(() async {
+      // Phase 1: Load critical user profiles for first 5 notes only
+      final criticalUserNpubs = <String>{};
+      for (final note in notes.take(5)) {
+        criticalUserNpubs.add(note.author);
+        if (note.repostedBy != null) {
+          criticalUserNpubs.add(note.repostedBy!);
+        }
+      }
 
-      // Update note interaction counts immediately if available
-      notesProvider.updateNoteInteractionCounts(
-        noteId,
-        reactionCount: reactions.length,
-        replyCount: replies.length,
-        repostCount: reposts.length,
-        zapAmount: zaps.fold<int>(0, (sum, zap) => sum + zap.amount),
-      );
+      if (criticalUserNpubs.isNotEmpty) {
+        UserProvider.instance.loadUsers(criticalUserNpubs.toList());
+      }
+
+      // Small delay before loading more
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      // Phase 2: Load remaining user profiles in batches
+      _loadRemainingUsersInBatches(notes);
+
+      // Phase 3: Load interactions progressively
+      _loadInteractionsProgressively(notes);
+    });
+  }
+
+  void _loadRemainingUsersInBatches(List<NoteModel> notes) {
+    Future.microtask(() async {
+      const batchSize = 10;
+      final remainingNotes = notes.skip(5).toList();
+
+      for (int i = 0; i < remainingNotes.length; i += batchSize) {
+        final batch = remainingNotes.skip(i).take(batchSize);
+        final userNpubs = <String>{};
+
+        for (final note in batch) {
+          userNpubs.add(note.author);
+          if (note.repostedBy != null) {
+            userNpubs.add(note.repostedBy!);
+          }
+        }
+
+        if (userNpubs.isNotEmpty) {
+          UserProvider.instance.loadUsers(userNpubs.toList());
+        }
+
+        // Small delay between batches
+        await Future.delayed(const Duration(milliseconds: 25));
+      }
+    });
+  }
+
+  void _loadInteractionsProgressively(List<NoteModel> notes) {
+    Future.microtask(() async {
+      const batchSize = 5;
+      final interactionsProvider = InteractionsProvider.instance;
+      final notesProvider = NotesProvider.instance;
+
+      for (int i = 0; i < notes.length; i += batchSize) {
+        final batch = notes.skip(i).take(batchSize);
+
+        for (final note in batch) {
+          // Load interactions without blocking
+          Future.microtask(() {
+            final reactions = interactionsProvider.getReactionsForNote(note.id);
+            final replies = interactionsProvider.getRepliesForNote(note.id);
+            final reposts = interactionsProvider.getRepostsForNote(note.id);
+            final zaps = interactionsProvider.getZapsForNote(note.id);
+
+            // Update counts if available
+            if (reactions.isNotEmpty || replies.isNotEmpty || reposts.isNotEmpty || zaps.isNotEmpty) {
+              notesProvider.updateNoteInteractionCounts(
+                note.id,
+                reactionCount: reactions.length,
+                replyCount: replies.length,
+                repostCount: reposts.length,
+                zapAmount: zaps.fold<int>(0, (sum, zap) => sum + zap.amount),
+              );
+            }
+          });
+        }
+
+        // Delay between interaction batches
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isInitializing || _currentUserNpub == null) {
-      return _buildLoadingState();
-    }
-
     if (_filteredNotes.isEmpty) {
       return _buildEmptyState();
     }
 
     return _buildNotesList();
-  }
-
-  Widget _buildLoadingState() {
-    return const SliverToBoxAdapter(
-      child: Center(
-        child: Padding(
-          padding: EdgeInsets.all(40.0),
-          child: Text("Loading..."),
-        ),
-      ),
-    );
   }
 
   Widget _buildEmptyState() {

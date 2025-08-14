@@ -25,7 +25,7 @@ class InteractionsProvider extends ChangeNotifier {
 
   bool _isInitialized = false;
 
-  // Hive boxes
+  // Hive boxes - single boxes for all interactions
   Box<ReactionModel>? _reactionsBox;
   Box<ReplyModel>? _repliesBox;
   Box<RepostModel>? _repostsBox;
@@ -34,15 +34,15 @@ class InteractionsProvider extends ChangeNotifier {
   // Getters
   bool get isInitialized => _isInitialized;
 
-  Future<void> initialize(String npub) async {
+  Future<void> initialize(String npub, {String dataType = 'Feed'}) async {
     if (_isInitialized) return;
 
     try {
-      // Open Hive boxes
-      _reactionsBox = await Hive.openBox<ReactionModel>('reactions_Feed_$npub');
-      _repliesBox = await Hive.openBox<ReplyModel>('replies_Feed_$npub');
-      _repostsBox = await Hive.openBox<RepostModel>('reposts_Feed_$npub');
-      _zapsBox = await Hive.openBox<ZapModel>('zaps_$npub');
+      // Open single Hive boxes for all interactions
+      _reactionsBox = await Hive.openBox<ReactionModel>('reactions');
+      _repliesBox = await Hive.openBox<ReplyModel>('replies');
+      _repostsBox = await Hive.openBox<RepostModel>('reposts');
+      _zapsBox = await Hive.openBox<ZapModel>('zaps');
 
       // Load existing data from Hive
       await _loadInteractionsFromHive();

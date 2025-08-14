@@ -6,7 +6,6 @@ import '../services/data_service.dart';
 import '../theme/theme_manager.dart';
 import '../screens/thread_page.dart';
 import '../providers/user_provider.dart';
-import '../providers/interactions_provider.dart';
 import 'interaction_bar_widget.dart';
 import 'note_content_widget.dart';
 
@@ -45,6 +44,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   bool get wantKeepAlive => true;
 
   late final String _formattedTimestamp;
+  late final Map<String, dynamic> _parsedContent;
 
   bool _isReactionGlowing = false;
   bool _isReplyGlowing = false;
@@ -55,6 +55,39 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   void initState() {
     super.initState();
     _formattedTimestamp = _formatTimestamp(widget.note.timestamp);
+
+    // Parse content once during initialization
+    _parsedContent = _parseContentOnce();
+
+    // Schedule user loading in background
+    _scheduleUserLoading();
+  }
+
+  Map<String, dynamic> _parseContentOnce() {
+    if (widget.note.parsedContent != null) {
+      return widget.note.parsedContent!;
+    }
+
+    // Parse content once and cache it
+    widget.dataService.parseContentForNote(widget.note);
+    return widget.note.parsedContent!;
+  }
+
+  void _scheduleUserLoading() {
+    // Load users in background without blocking UI
+    Future.microtask(() {
+      final usersToLoad = <String>[widget.note.author];
+      if (widget.note.repostedBy != null) {
+        usersToLoad.add(widget.note.repostedBy!);
+      }
+
+      // Load parent author if this is a reply
+      if (widget.note.isReply && widget.note.parentId != null) {
+        usersToLoad.add(widget.note.parentId!);
+      }
+
+      UserProvider.instance.loadUsers(usersToLoad);
+    });
   }
 
   String _formatTimestamp(DateTime timestamp) {
@@ -174,11 +207,8 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
         ),
       );
 
+      // Get parent author without triggering load (already scheduled)
       final parentAuthor = UserProvider.instance.getUserOrDefault(parentNote.author);
-      if (UserProvider.instance.getUser(parentNote.author) == null) {
-        UserProvider.instance.loadUser(parentNote.author);
-      }
-
       replyToText = 'Replying to @${parentAuthor.name.isNotEmpty ? parentAuthor.name : 'user'}';
     }
 
@@ -241,26 +271,15 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     super.build(context);
     final colors = context.colors;
 
-    widget.dataService.parseContentForNote(widget.note);
-    final parsed = widget.note.parsedContent!;
-
     return ListenableBuilder(
-      listenable: Listenable.merge([
-        UserProvider.instance,
-        InteractionsProvider.instance,
-      ]),
+      listenable: UserProvider.instance,
       builder: (context, _) {
+        // Get users without triggering loads (already scheduled in initState)
         final authorUser = UserProvider.instance.getUserOrDefault(widget.note.author);
-        if (UserProvider.instance.getUser(widget.note.author) == null) {
-          UserProvider.instance.loadUser(widget.note.author);
-        }
 
         UserModel? reposterUser;
         if (widget.note.isRepost && widget.note.repostedBy != null) {
           reposterUser = UserProvider.instance.getUserOrDefault(widget.note.repostedBy!);
-          if (UserProvider.instance.getUser(widget.note.repostedBy!) == null) {
-            UserProvider.instance.loadUser(widget.note.repostedBy!);
-          }
         }
 
         return GestureDetector(
@@ -351,7 +370,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             _buildUserInfoWithReply(context, authorUser, colors),
-                            _buildNoteContent(context, parsed, widget.note),
+                            _buildNoteContent(context, _parsedContent, widget.note),
                             const SizedBox(height: 10),
                             Row(
                               children: [

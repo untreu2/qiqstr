@@ -185,7 +185,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       builder: (context, _) {
         // Get user from UserProvider, fallback to widget.user
         final user = UserProvider.instance.getUser(widget.user.npub) ?? widget.user;
-        final npubBech32 = encodeBasicBech32(user.npub, "npub");
+        final npubBech32 = _getNpubBech32(user.npub);
         final screenWidth = MediaQuery.of(context).size.width;
         final websiteUrl = user.website.isNotEmpty && !(user.website.startsWith("http://") || user.website.startsWith("https://"))
             ? "https://${user.website}"
@@ -482,5 +482,28 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         ),
       ),
     );
+  }
+
+  // Helper method to safely get npub bech32 format
+  String _getNpubBech32(String identifier) {
+    if (identifier.isEmpty) return '';
+
+    // If already in npub format, return as is
+    if (identifier.startsWith('npub1')) {
+      return identifier;
+    }
+
+    // If hex format, convert to npub
+    if (identifier.length == 64 && RegExp(r'^[0-9a-fA-F]+$').hasMatch(identifier)) {
+      try {
+        return encodeBasicBech32(identifier, "npub");
+      } catch (e) {
+        print('[ProfileInfoWidget] Error converting hex to npub: $e');
+        return identifier; // Return original if conversion fails
+      }
+    }
+
+    // Return original if format is unknown
+    return identifier;
   }
 }

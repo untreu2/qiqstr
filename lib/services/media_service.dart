@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:collection';
-import 'dart:math';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
@@ -18,7 +17,7 @@ class MediaService {
   factory MediaService() => _instance;
 
   MediaService._internal() {
-    _startPerformanceMonitoring();
+    _startMemoryManagement();
   }
 
   final Set<String> _cachedUrls = {};
@@ -26,73 +25,62 @@ class MediaService {
   final Queue<MediaCacheItem> _priorityQueue = Queue();
   final Queue<MediaCacheItem> _normalQueue = Queue();
 
-  // Adaptive configuration
-  int _maxConcurrentTasks = 6;
-  int _maxBatchSize = 20;
+  // Optimized configuration
+  int _maxConcurrentTasks = 4; // Reduced for better memory usage
+  int _maxBatchSize = 15; // Reduced batch size
   bool _isRunning = false;
   Timer? _batchTimer;
-  Timer? _performanceTimer;
   Timer? _cleanupTimer;
 
-  // Enhanced cache statistics
-  int _cacheHits = 0;
-  int _cacheMisses = 0;
-  int _failedAttempts = 0;
-  int _totalRequests = 0;
-  final List<Duration> _processingTimes = [];
+  // Memory management - reduced limits
+  static const int _maxCachedUrls = 2000; // Reduced from 5000
+  static const int _maxFailedUrls = 500; // Reduced from 1000
+  static const int _memoryPressureThreshold = 1500; // New threshold
 
-  // Memory management
-  static const int _maxCachedUrls = 5000;
-  static const int _maxFailedUrls = 1000;
-
-  void _startPerformanceMonitoring() {
-    _performanceTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-      _adjustPerformanceSettings();
-      _cleanupOldEntries();
-    });
-
-    _cleanupTimer = Timer.periodic(const Duration(hours: 1), (_) {
+  void _startMemoryManagement() {
+    // More frequent cleanup for better memory management
+    _cleanupTimer = Timer.periodic(const Duration(minutes: 10), (_) {
       _performMemoryCleanup();
     });
   }
 
-  void _adjustPerformanceSettings() {
-    if (_processingTimes.isNotEmpty) {
-      final avgTime = _processingTimes.fold<int>(0, (sum, d) => sum + d.inMilliseconds) / _processingTimes.length;
+  void _performMemoryCleanup() {
+    final totalUrls = _cachedUrls.length + _failedUrls.length;
 
-      // Adjust concurrent tasks based on performance
-      if (avgTime > 1000) {
-        _maxConcurrentTasks = max(3, _maxConcurrentTasks - 1);
-      } else if (avgTime < 200) {
-        _maxConcurrentTasks = min(10, _maxConcurrentTasks + 1);
-      }
-
-      // Adjust batch size
-      if (avgTime > 500) {
-        _maxBatchSize = max(10, _maxBatchSize - 2);
-      } else if (avgTime < 100) {
-        _maxBatchSize = min(30, _maxBatchSize + 2);
-      }
-    }
-
-    // Keep only recent measurements
-    if (_processingTimes.length > 20) {
-      _processingTimes.removeRange(0, _processingTimes.length - 20);
+    // Aggressive cleanup when approaching limits
+    if (totalUrls > _memoryPressureThreshold) {
+      _aggressiveCleanup();
+    } else {
+      _standardCleanup();
     }
   }
 
-  void _cleanupOldEntries() {
-    // Remove old failed URLs to allow retry
-    if (_failedUrls.length > _maxFailedUrls) {
-      final urlsToRemove = _failedUrls.take(_failedUrls.length - _maxFailedUrls);
+  void _aggressiveCleanup() {
+    // Remove 30% of cached URLs when under memory pressure
+    if (_cachedUrls.length > 100) {
+      final removeCount = (_cachedUrls.length * 0.3).round();
+      final urlsToRemove = _cachedUrls.take(removeCount).toList();
+      _cachedUrls.removeAll(urlsToRemove);
+    }
+
+    // Clear failed URLs more aggressively
+    if (_failedUrls.length > 200) {
+      final removeCount = (_failedUrls.length * 0.5).round();
+      final urlsToRemove = _failedUrls.take(removeCount).toList();
       _failedUrls.removeAll(urlsToRemove);
     }
   }
 
-  void _performMemoryCleanup() {
+  void _standardCleanup() {
+    // Standard cleanup when within normal limits
     if (_cachedUrls.length > _maxCachedUrls) {
       final urlsToRemove = _cachedUrls.take(_cachedUrls.length - _maxCachedUrls);
       _cachedUrls.removeAll(urlsToRemove);
+    }
+
+    if (_failedUrls.length > _maxFailedUrls) {
+      final urlsToRemove = _failedUrls.take(_failedUrls.length - _maxFailedUrls);
+      _failedUrls.removeAll(urlsToRemove);
     }
   }
 
@@ -153,7 +141,6 @@ class MediaService {
   }
 
   Future<void> _processCacheBatch(List<MediaCacheItem> batch) async {
-    final stopwatch = Stopwatch()..start();
     final futures = <Future<void>>[];
 
     for (int i = 0; i < batch.length; i += _maxConcurrentTasks) {
@@ -167,44 +154,35 @@ class MediaService {
         await Future.wait(futures, eagerError: false);
         futures.clear();
 
-        // Adaptive delay based on performance
-        final delay = stopwatch.elapsedMilliseconds > 500 ? 20 : 5;
-        await Future.delayed(Duration(milliseconds: delay));
+        // Fixed small delay for memory management
+        await Future.delayed(const Duration(milliseconds: 10));
       }
     }
 
     if (futures.isNotEmpty) {
       await Future.wait(futures, eagerError: false);
     }
-
-    stopwatch.stop();
-    _processingTimes.add(stopwatch.elapsed);
   }
 
   Future<void> _cacheSingleUrl(String url) async {
-    _totalRequests++;
-
     try {
       if (_cachedUrls.contains(url) || _failedUrls.contains(url)) {
-        _cacheHits++;
         return;
       }
 
       if (!_isValidMediaUrl(url)) {
         _failedUrls.add(url);
-        _failedAttempts++;
         return;
       }
 
       final imageProvider = CachedNetworkImageProvider(url);
       final completer = Completer<void>();
 
-      // Adaptive timeout based on URL type
+      // Shorter timeout for better memory management
       final timeout = _getTimeoutForUrl(url);
       final timeoutTimer = Timer(timeout, () {
         if (!completer.isCompleted) {
           _failedUrls.add(url);
-          _failedAttempts++;
           completer.complete();
         }
       });
@@ -217,7 +195,6 @@ class MediaService {
           timeoutTimer.cancel();
           if (!completer.isCompleted) {
             _cachedUrls.add(url);
-            _cacheHits++;
             completer.complete();
           }
         },
@@ -225,7 +202,6 @@ class MediaService {
           timeoutTimer.cancel();
           if (!completer.isCompleted) {
             _failedUrls.add(url);
-            _failedAttempts++;
             completer.complete();
           }
         },
@@ -237,18 +213,17 @@ class MediaService {
       imageStream.removeListener(listener);
     } catch (e) {
       _failedUrls.add(url);
-      _failedAttempts++;
     }
   }
 
   Duration _getTimeoutForUrl(String url) {
     final lower = url.toLowerCase();
     if (lower.endsWith('.gif')) {
-      return const Duration(seconds: 15); // GIFs can be larger
+      return const Duration(seconds: 8); // Reduced timeout for GIFs
     } else if (lower.endsWith('.svg')) {
-      return const Duration(seconds: 5); // SVGs are usually small
+      return const Duration(seconds: 3); // Reduced timeout for SVGs
     }
-    return const Duration(seconds: 10); // Default timeout
+    return const Duration(seconds: 6); // Reduced default timeout
   }
 
   bool _isValidMediaUrl(String url) {
@@ -284,60 +259,57 @@ class MediaService {
     _failedUrls.clear();
   }
 
-  // Enhanced cache statistics
+  // Simplified cache statistics for memory efficiency
   Map<String, dynamic> getCacheStats() {
-    final hitRate = _totalRequests > 0 ? (_cacheHits / _totalRequests * 100).toStringAsFixed(2) : '0.00';
-
-    final avgProcessingTime =
-        _processingTimes.isNotEmpty ? _processingTimes.fold<int>(0, (sum, d) => sum + d.inMilliseconds) / _processingTimes.length : 0.0;
-
     return {
       'cachedUrls': _cachedUrls.length,
       'failedUrls': _failedUrls.length,
       'queueSize': _priorityQueue.length + _normalQueue.length,
       'priorityQueueSize': _priorityQueue.length,
       'normalQueueSize': _normalQueue.length,
-      'cacheHits': _cacheHits,
-      'cacheMisses': _cacheMisses,
-      'failedAttempts': _failedAttempts,
-      'totalRequests': _totalRequests,
-      'hitRate': '$hitRate%',
       'isProcessing': _isRunning,
       'maxConcurrentTasks': _maxConcurrentTasks,
       'maxBatchSize': _maxBatchSize,
-      'avgProcessingTimeMs': avgProcessingTime.round(),
       'memoryUsage': {
         'cachedUrls': _cachedUrls.length,
         'maxCachedUrls': _maxCachedUrls,
         'failedUrls': _failedUrls.length,
         'maxFailedUrls': _maxFailedUrls,
+        'memoryPressure': (_cachedUrls.length + _failedUrls.length) > _memoryPressureThreshold,
       },
     };
   }
 
-  // Enhanced cache clearing with selective options
-  void clearCache({bool clearFailed = true, bool clearStats = true}) {
+  // Optimized cache clearing
+  void clearCache({bool clearFailed = true}) {
     _cachedUrls.clear();
     if (clearFailed) _failedUrls.clear();
     _priorityQueue.clear();
     _normalQueue.clear();
     _batchTimer?.cancel();
     _isRunning = false;
-
-    if (clearStats) {
-      _cacheHits = 0;
-      _cacheMisses = 0;
-      _failedAttempts = 0;
-      _totalRequests = 0;
-      _processingTimes.clear();
-    }
   }
 
-  // Cleanup method for proper disposal
+  // Memory-optimized disposal
   void dispose() {
-    _performanceTimer?.cancel();
     _cleanupTimer?.cancel();
+    _batchTimer?.cancel();
     clearCache();
+  }
+
+  // Memory pressure handling
+  void handleMemoryPressure() {
+    _aggressiveCleanup();
+  }
+
+  // Get memory usage info
+  Map<String, int> getMemoryUsage() {
+    return {
+      'cachedUrls': _cachedUrls.length,
+      'failedUrls': _failedUrls.length,
+      'totalUrls': _cachedUrls.length + _failedUrls.length,
+      'queueSize': _priorityQueue.length + _normalQueue.length,
+    };
   }
 
   // Force retry failed URLs

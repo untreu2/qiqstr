@@ -5,70 +5,26 @@ import 'package:qiqstr/screens/profile_page.dart';
 import 'package:qiqstr/screens/relay_page.dart';
 import 'package:qiqstr/utils/logout.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/theme_manager.dart';
+import '../providers/user_provider.dart';
 import 'package:qiqstr/screens/keys_page.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 
-class SidebarWidget extends StatefulWidget {
-  final UserModel? user;
-
-  const SidebarWidget({super.key, this.user});
-
-  @override
-  State<SidebarWidget> createState() => _SidebarWidgetState();
-}
-
-class _SidebarWidgetState extends State<SidebarWidget> {
-  String? npub;
-  UserModel? _fallbackUser;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadNpub();
-  }
-
-  Future<void> _loadNpub() async {
-    const storage = FlutterSecureStorage();
-    final storedNpub = await storage.read(key: 'npub');
-    if (mounted) {
-      setState(() => npub = storedNpub);
-
-      if (storedNpub != null && widget.user == null) {
-        _createFallbackUser(storedNpub);
-      }
-    }
-  }
-
-  void _createFallbackUser(String userNpub) {
-    setState(() {
-      _fallbackUser = UserModel(
-        npub: userNpub,
-        name: 'Loading...',
-        about: '',
-        nip05: '',
-        banner: '',
-        profileImage: '',
-        lud16: '',
-        website: '',
-        updatedAt: DateTime.now(),
-      );
-    });
-  }
+class SidebarWidget extends StatelessWidget {
+  const SidebarWidget({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeManager>(
-      builder: (context, themeManager, child) {
+    return Consumer2<ThemeManager, UserProvider>(
+      builder: (context, themeManager, userProvider, child) {
         final colors = themeManager.colors;
-        final currentUser = widget.user ?? _fallbackUser;
+        final currentUser = userProvider.currentUser;
 
         return Drawer(
           child: Container(
             color: colors.background,
-            child: currentUser == null || npub == null
+            child: currentUser == null
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,

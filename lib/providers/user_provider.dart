@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:nostr_nip19/nostr_nip19.dart';
 import '../models/user_model.dart';
 import '../services/profile_service.dart';
 
@@ -13,9 +15,13 @@ class UserProvider extends ChangeNotifier {
   final Map<String, UserModel> _users = {};
   final Set<String> _loadingUsers = {};
   bool _isInitialized = false;
+  String? _currentUserNpub;
+  UserModel? _currentUser;
 
   Map<String, UserModel> get users => Map.unmodifiable(_users);
   bool get isInitialized => _isInitialized;
+  UserModel? get currentUser => _currentUser;
+  String? get currentUserNpub => _currentUserNpub;
 
   void setUsersBox(Box<UserModel> box) {
     _profileService.setUsersBox(box);
@@ -25,97 +31,320 @@ class UserProvider extends ChangeNotifier {
     if (_isInitialized) return;
 
     await _profileService.initialize();
+    await _loadCurrentUser();
     _isInitialized = true;
     notifyListeners();
   }
 
-  UserModel? getUser(String npub) {
-    return _users[npub];
+  Future<void> _loadCurrentUser() async {
+    try {
+      const storage = FlutterSecureStorage();
+      final npub = await storage.read(key: 'npub');
+      if (npub != null) {
+        _currentUserNpub = npub;
+        _currentUser = await loadUser(npub);
+      }
+    } catch (e) {
+      debugPrint('[UserProvider] Error loading current user: $e');
+    }
   }
 
-  UserModel getUserOrDefault(String npub) {
-    return _users[npub] ??
-        UserModel(
-          npub: npub,
-          name: 'Anonymous',
-          about: '',
-          nip05: '',
-          banner: '',
-          profileImage: '',
-          lud16: '',
-          website: '',
-          updatedAt: DateTime.now(),
+  Future<void> setCurrentUser(String npub) async {
+    _currentUserNpub = npub;
+    _currentUser = await loadUser(npub);
+    notifyListeners();
+  }
+
+  UserModel? getUser(String identifier) {
+    if (identifier.isEmpty) return null;
+
+    // Try both npub and hex formats
+    if (_users.containsKey(identifier)) {
+      return _users[identifier];
+    }
+
+    // If identifier is hex, try to find by npub
+    if (!identifier.startsWith('npub1') && _isValidHex(identifier)) {
+      try {
+        final npub = encodeBasicBech32(identifier, 'npub');
+        return _users[npub];
+      } catch (e) {
+        debugPrint('[UserProvider] Error converting hex to npub: $e');
+      }
+    }
+
+    // If identifier is npub, try to find by hex
+    if (identifier.startsWith('npub1')) {
+      try {
+        final hex = decodeBasicBech32(identifier, 'npub');
+        return _users[hex];
+      } catch (e) {
+        debugPrint('[UserProvider] Error converting npub to hex: $e');
+      }
+    }
+
+    return null;
+  }
+
+  UserModel getUserOrDefault(String identifier) {
+    if (identifier.isEmpty) {
+      return _createDefaultUser('');
+    }
+
+    final user = getUser(identifier);
+    if (user != null) return user;
+
+    // Ensure we always have a valid npub
+    String npubForDefault = identifier;
+    if (!identifier.startsWith('npub1') && _isValidHex(identifier)) {
+      try {
+        npubForDefault = encodeBasicBech32(identifier, 'npub');
+      } catch (e) {
+        debugPrint('[UserProvider] Error creating npub for default user: $e');
+        npubForDefault = identifier; // Keep original if conversion fails
+      }
+    }
+
+    return _createDefaultUser(npubForDefault);
+  }
+
+  Future<UserModel> loadUser(String identifier) async {
+    if (identifier.isEmpty) {
+      return _createDefaultUser('');
+    }
+
+    // Convert npub to hex if needed for ProfileService
+    String hexKey = identifier;
+    String npubKey = identifier;
+
+    if (identifier.startsWith('npub1')) {
+      try {
+        hexKey = decodeBasicBech32(identifier, 'npub');
+        npubKey = identifier;
+      } catch (e) {
+        debugPrint('[UserProvider] Invalid npub format: $identifier');
+        return getUserOrDefault(identifier);
+      }
+    } else if (_isValidHex(identifier)) {
+      try {
+        npubKey = encodeBasicBech32(identifier, 'npub');
+        hexKey = identifier;
+      } catch (e) {
+        debugPrint('[UserProvider] Invalid hex format: $identifier');
+        return getUserOrDefault(identifier);
+      }
+    } else {
+      debugPrint('[UserProvider] Invalid identifier format: $identifier');
+      return getUserOrDefault(identifier);
+    }
+
+    // Return cached user if available (check both formats)
+    final cachedUser = getUser(identifier);
+    if (cachedUser != null) {
+      // Ensure the returned user has a valid npub
+      if (cachedUser.npub.isEmpty && npubKey.isNotEmpty) {
+        final updatedUser = UserModel(
+          npub: npubKey,
+          name: cachedUser.name,
+          about: cachedUser.about,
+          nip05: cachedUser.nip05,
+          banner: cachedUser.banner,
+          profileImage: cachedUser.profileImage,
+          lud16: cachedUser.lud16,
+          website: cachedUser.website,
+          updatedAt: cachedUser.updatedAt,
         );
-  }
 
-  Future<UserModel> loadUser(String npub) async {
-    // Return cached user if available
-    if (_users.containsKey(npub)) {
-      return _users[npub]!;
+        // Update cache with corrected user
+        _users[hexKey] = updatedUser;
+        _users[npubKey] = updatedUser;
+        notifyListeners();
+
+        return updatedUser;
+      }
+      return cachedUser;
     }
 
     // Return default if already loading
-    if (_loadingUsers.contains(npub)) {
-      return getUserOrDefault(npub);
+    if (_loadingUsers.contains(hexKey) || _loadingUsers.contains(npubKey)) {
+      return getUserOrDefault(identifier);
     }
 
-    _loadingUsers.add(npub);
+    _loadingUsers.add(hexKey);
 
     try {
-      final profileData = await _profileService.getCachedUserProfile(npub);
-      final user = UserModel.fromCachedProfile(npub, profileData);
+      // ProfileService expects hex format
+      final profileData = await _profileService.getCachedUserProfile(hexKey);
+      final user = UserModel.fromCachedProfile(npubKey, profileData);
 
-      _users[npub] = user;
+      // Cache with both formats for easy lookup
+      _users[hexKey] = user;
+      _users[npubKey] = user;
       notifyListeners();
 
       return user;
     } catch (e) {
-      debugPrint('[UserProvider] Error loading user $npub: $e');
-      return getUserOrDefault(npub);
+      debugPrint('[UserProvider] Error loading user $identifier: $e');
+      final defaultUser = getUserOrDefault(identifier);
+
+      // Ensure default user has npub if possible
+      if (defaultUser.npub.isEmpty && npubKey.isNotEmpty) {
+        final correctedUser = UserModel(
+          npub: npubKey,
+          name: defaultUser.name,
+          about: defaultUser.about,
+          nip05: defaultUser.nip05,
+          banner: defaultUser.banner,
+          profileImage: defaultUser.profileImage,
+          lud16: defaultUser.lud16,
+          website: defaultUser.website,
+          updatedAt: defaultUser.updatedAt,
+        );
+        return correctedUser;
+      }
+
+      return defaultUser;
     } finally {
-      _loadingUsers.remove(npub);
+      _loadingUsers.remove(hexKey);
     }
   }
 
-  Future<void> loadUsers(List<String> npubs) async {
-    final npubsToLoad = npubs.where((npub) => !_users.containsKey(npub) && !_loadingUsers.contains(npub)).toList();
+  Future<void> loadUsers(List<String> identifiers) async {
+    final hexKeysToLoad = <String>[];
+    final npubKeysToLoad = <String>[];
 
-    if (npubsToLoad.isEmpty) return;
+    for (final identifier in identifiers) {
+      if (identifier.isEmpty || getUser(identifier) != null) continue; // Already cached
+
+      String hexKey = identifier;
+      String npubKey = identifier;
+
+      if (identifier.startsWith('npub1')) {
+        try {
+          hexKey = decodeBasicBech32(identifier, 'npub');
+          npubKey = identifier;
+        } catch (e) {
+          debugPrint('[UserProvider] Skipping invalid npub: $identifier');
+          continue; // Skip invalid npub
+        }
+      } else if (_isValidHex(identifier)) {
+        try {
+          npubKey = encodeBasicBech32(identifier, 'npub');
+          hexKey = identifier;
+        } catch (e) {
+          debugPrint('[UserProvider] Skipping invalid hex: $identifier');
+          continue; // Skip invalid hex
+        }
+      } else {
+        debugPrint('[UserProvider] Skipping invalid identifier: $identifier');
+        continue; // Skip invalid format
+      }
+
+      if (!_loadingUsers.contains(hexKey)) {
+        hexKeysToLoad.add(hexKey);
+        npubKeysToLoad.add(npubKey);
+      }
+    }
+
+    if (hexKeysToLoad.isEmpty) return;
 
     // Mark as loading
-    _loadingUsers.addAll(npubsToLoad);
+    _loadingUsers.addAll(hexKeysToLoad);
 
     try {
-      // Use batch fetching from ProfileService
-      await _profileService.batchFetchProfiles(npubsToLoad);
+      // Use batch fetching from ProfileService (expects hex format)
+      await _profileService.batchFetchProfiles(hexKeysToLoad);
 
       // Load individual profiles
-      final futures = npubsToLoad.map((npub) async {
+      final futures = List.generate(hexKeysToLoad.length, (index) async {
+        final hexKey = hexKeysToLoad[index];
+        final npubKey = npubKeysToLoad[index];
+
         try {
-          final profileData = await _profileService.getCachedUserProfile(npub);
-          final user = UserModel.fromCachedProfile(npub, profileData);
-          _users[npub] = user;
+          final profileData = await _profileService.getCachedUserProfile(hexKey);
+          final user = UserModel.fromCachedProfile(npubKey, profileData);
+
+          // Cache with both formats
+          _users[hexKey] = user;
+          _users[npubKey] = user;
         } catch (e) {
-          debugPrint('[UserProvider] Error loading user $npub: $e');
-          _users[npub] = getUserOrDefault(npub);
+          debugPrint('[UserProvider] Error loading user $hexKey: $e');
+          final defaultUser = getUserOrDefault(npubKey);
+          _users[hexKey] = defaultUser;
+          _users[npubKey] = defaultUser;
         }
       });
 
       await Future.wait(futures);
       notifyListeners();
     } finally {
-      _loadingUsers.removeAll(npubsToLoad);
+      _loadingUsers.removeAll(hexKeysToLoad);
     }
   }
 
-  void updateUser(String npub, UserModel user) {
-    _users[npub] = user;
+  void updateUser(String identifier, UserModel user) {
+    if (identifier.isEmpty) return;
+
+    // Update both hex and npub formats if possible
+    _users[identifier] = user;
+
+    try {
+      if (identifier.startsWith('npub1')) {
+        final hexKey = decodeBasicBech32(identifier, 'npub');
+        _users[hexKey] = user;
+      } else if (_isValidHex(identifier)) {
+        final npubKey = encodeBasicBech32(identifier, 'npub');
+        _users[npubKey] = user;
+      }
+    } catch (e) {
+      debugPrint('[UserProvider] Error updating user formats: $e');
+    }
+
+    if (identifier == _currentUserNpub) {
+      _currentUser = user;
+    }
     notifyListeners();
   }
 
-  void removeUser(String npub) {
-    _users.remove(npub);
+  void removeUser(String identifier) {
+    if (identifier.isEmpty) return;
+
+    _users.remove(identifier);
+
+    // Also remove the other format if possible
+    try {
+      if (identifier.startsWith('npub1')) {
+        final hexKey = decodeBasicBech32(identifier, 'npub');
+        _users.remove(hexKey);
+      } else if (_isValidHex(identifier)) {
+        final npubKey = encodeBasicBech32(identifier, 'npub');
+        _users.remove(npubKey);
+      }
+    } catch (e) {
+      debugPrint('[UserProvider] Error removing user formats: $e');
+    }
+
     notifyListeners();
+  }
+
+  // Helper methods
+  bool _isValidHex(String value) {
+    if (value.isEmpty || value.length != 64) return false;
+    return RegExp(r'^[0-9a-fA-F]+$').hasMatch(value);
+  }
+
+  UserModel _createDefaultUser(String identifier) {
+    return UserModel(
+      npub: identifier,
+      name: 'Anonymous',
+      about: '',
+      nip05: '',
+      banner: '',
+      profileImage: '',
+      lud16: '',
+      website: '',
+      updatedAt: DateTime.now(),
+    );
   }
 
   void clearCache() {
@@ -123,15 +352,6 @@ class UserProvider extends ChangeNotifier {
     _loadingUsers.clear();
     _profileService.cleanupCache();
     notifyListeners();
-  }
-
-  Map<String, dynamic> getStats() {
-    return {
-      'cachedUsers': _users.length,
-      'loadingUsers': _loadingUsers.length,
-      'isInitialized': _isInitialized,
-      'profileServiceStats': _profileService.getProfileStats(),
-    };
   }
 
   @override

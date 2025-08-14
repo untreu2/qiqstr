@@ -18,52 +18,59 @@ class InitializationService extends LifecycleService with PerformanceMonitoringM
   @override
   bool get isInitialized => _isInitialized;
 
-  /// Initialize all providers and services with optimized parallel processing
+  /// Initialize app with ultra-fast startup strategy
   Future<void> initializeApp(String userNpub) async {
     if (_isInitialized) return;
 
     _currentUserNpub = userNpub;
 
     await measureOperation('app_initialization', () async {
-      // Phase 1: Critical initialization (blocking)
-      await _initializeCriticalServices();
+      // Phase 1: Minimal critical initialization (ultra-fast)
+      await _initializeMinimalCritical();
 
-      // Phase 2: Progressive cache loading (non-blocking)
-      _scheduleProgressiveCacheLoading();
+      // Phase 2: Progressive initialization (background)
+      _scheduleProgressiveInitialization();
 
       _isInitialized = true;
     });
   }
 
-  /// Initialize critical services that must complete before UI shows
-  Future<void> _initializeCriticalServices() async {
-    await measureOperation('critical_services_init', () async {
-      // Initialize all providers in parallel
-      final providerFutures = [
-        UserProvider.instance.initialize(),
-        NotesProvider.instance.initialize(_currentUserNpub ?? ''),
-        InteractionsProvider.instance.initialize(_currentUserNpub ?? ''),
-      ];
-
-      await Future.wait(providerFutures);
+  /// Initialize only the absolute minimum needed for UI display
+  Future<void> _initializeMinimalCritical() async {
+    await measureOperation('minimal_critical_init', () async {
+      // Only initialize UserProvider for immediate UI needs
+      await UserProvider.instance.initialize();
     });
   }
 
-  /// Schedule progressive cache loading in background
-  void _scheduleProgressiveCacheLoading() {
+  /// Schedule progressive initialization in background
+  void _scheduleProgressiveInitialization() {
     Future.microtask(() async {
       try {
-        // Load critical data first (immediate display)
+        // Phase 1: Initialize remaining providers
+        await _initializeRemainingProviders();
+
+        // Phase 2: Load critical cache data
         await _loadCriticalCacheData();
 
-        // Load secondary data progressively
+        // Phase 3: Load secondary data progressively
         await _loadSecondaryCacheData();
 
-        // Preload user profiles
+        // Phase 4: Preload user profiles
         await _preloadUserProfiles();
       } catch (e) {
-        debugPrint('[InitializationService] Progressive cache loading error: $e');
+        debugPrint('[InitializationService] Progressive initialization error: $e');
       }
+    });
+  }
+
+  /// Initialize remaining providers in background
+  Future<void> _initializeRemainingProviders() async {
+    await measureOperation('remaining_providers_init', () async {
+      await Future.wait([
+        NotesProvider.instance.initialize(_currentUserNpub ?? ''),
+        InteractionsProvider.instance.initialize(_currentUserNpub ?? ''),
+      ]);
     });
   }
 

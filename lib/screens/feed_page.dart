@@ -4,10 +4,11 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/widgets/sidebar_widget.dart';
-import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/data_service.dart';
+import 'package:qiqstr/providers/user_provider.dart';
 import '../theme/theme_manager.dart';
 
 class FeedPage extends StatefulWidget {
@@ -19,10 +20,8 @@ class FeedPage extends StatefulWidget {
 }
 
 class _FeedPageState extends State<FeedPage> {
-  UserModel? user;
   late DataService dataService;
   bool isLoading = true;
-  bool _isInitializingDataService = true;
   String? errorMessage;
   bool isFirstOpen = false;
 
@@ -42,17 +41,19 @@ class _FeedPageState extends State<FeedPage> {
 
   Future<void> _initializeProgressively() async {
     try {
-      // Phase 1: Load user profile and lightweight DataService init
+      // Phase 1: Initialize UserProvider and lightweight DataService init
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
       await Future.wait([
-        _loadUserProfile(),
+        userProvider.initialize(),
         dataService.initializeLightweight(),
       ]);
 
-      if (mounted) {
-        setState(() {
-          _isInitializingDataService = false;
-        });
+      // Set current user if this is the current user's feed
+      if (userProvider.currentUserNpub == widget.npub) {
+        await userProvider.setCurrentUser(widget.npub);
       }
+
+      // UI is shown immediately without loading state
 
       // Phase 2: Heavy operations in background
       Future.delayed(const Duration(milliseconds: 100), () {
@@ -64,7 +65,6 @@ class _FeedPageState extends State<FeedPage> {
       print('[FeedPage] Progressive initialization error: $e');
       if (mounted) {
         setState(() {
-          _isInitializingDataService = false;
           errorMessage = 'Failed to initialize feed';
         });
       }
@@ -105,37 +105,6 @@ class _FeedPageState extends State<FeedPage> {
     }
   }
 
-  Future<void> _loadUserProfile() async {
-    try {
-      // Use lightweight profile loading without full DataService initialization
-      final profileData = await dataService.getCachedUserProfile(widget.npub);
-      if (!mounted) return;
-      setState(() {
-        user = UserModel.fromCachedProfile(widget.npub, profileData);
-      });
-    } catch (e) {
-      print('[FeedPage] Error loading profile: $e');
-      if (mounted) {
-        // Create a default user instead of showing error
-        setState(() {
-          user = UserModel(
-            npub: widget.npub,
-            name: 'Anonymous',
-            about: '',
-            nip05: '',
-            banner: '',
-            profileImage: '',
-            lud16: '',
-            website: '',
-            updatedAt: DateTime.now(),
-          );
-        });
-      }
-    } finally {
-      if (mounted) setState(() => isLoading = false);
-    }
-  }
-
   Widget _buildHeader(BuildContext context, double topPadding) {
     final colors = context.colors;
 
@@ -156,14 +125,19 @@ class _FeedPageState extends State<FeedPage> {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Builder(
-                        builder: (context) => GestureDetector(
-                          onTap: () => Scaffold.of(context).openDrawer(),
-                          child: CircleAvatar(
-                            radius: 16,
-                            backgroundColor: colors.avatarPlaceholder,
-                            backgroundImage: user?.profileImage != null ? CachedNetworkImageProvider(user!.profileImage) : null,
-                            child: user?.profileImage == null ? Icon(Icons.person, color: colors.iconPrimary, size: 18) : null,
-                          ),
+                        builder: (context) => Consumer<UserProvider>(
+                          builder: (context, userProvider, child) {
+                            final user = userProvider.getUserOrDefault(widget.npub);
+                            return GestureDetector(
+                              onTap: () => Scaffold.of(context).openDrawer(),
+                              child: CircleAvatar(
+                                radius: 16,
+                                backgroundColor: colors.avatarPlaceholder,
+                                backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
+                                child: user.profileImage.isEmpty ? Icon(Icons.person, color: colors.iconPrimary, size: 18) : null,
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ),
@@ -210,38 +184,6 @@ class _FeedPageState extends State<FeedPage> {
     );
   }
 
-  Widget _buildInitializingState(BuildContext context) {
-    return SliverToBoxAdapter(
-      child: Container(
-        padding: const EdgeInsets.all(32),
-        child: Center(
-          child: Column(
-            children: [
-              SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    context.colors.accent,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Loading feed...',
-                style: TextStyle(
-                  color: context.colors.textSecondary,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
@@ -250,48 +192,44 @@ class _FeedPageState extends State<FeedPage> {
 
     return Scaffold(
       backgroundColor: colors.background,
-      drawer: SidebarWidget(user: user),
-      body: isLoading
-          ? ColoredBox(color: colors.background)
-          : errorMessage != null
-              ? Center(
-                  child: Text(
-                    errorMessage!,
-                    style: TextStyle(color: colors.textSecondary),
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: () async {
-                    await dataService.refreshNotes();
-                  },
-                  child: CustomScrollView(
-                    controller: _scrollController,
-                    physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                    cacheExtent: 1500,
-                    slivers: [
-                      SliverPersistentHeader(
-                        floating: true,
-                        delegate: _PinnedHeaderDelegate(
-                          height: headerHeight,
-                          child: AnimatedOpacity(
-                            opacity: _showAppBar ? 1.0 : 0.0,
-                            duration: const Duration(milliseconds: 300),
-                            child: _buildHeader(context, topPadding),
-                          ),
-                        ),
+      drawer: const SidebarWidget(),
+      body: errorMessage != null
+          ? Center(
+              child: Text(
+                errorMessage!,
+                style: TextStyle(color: colors.textSecondary),
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: () async {
+                await dataService.refreshNotes();
+              },
+              child: CustomScrollView(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                cacheExtent: 1500,
+                slivers: [
+                  SliverPersistentHeader(
+                    floating: true,
+                    delegate: _PinnedHeaderDelegate(
+                      height: headerHeight,
+                      child: AnimatedOpacity(
+                        opacity: _showAppBar ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 300),
+                        child: _buildHeader(context, topPadding),
                       ),
-                      const SliverToBoxAdapter(
-                        child: SizedBox(height: 8),
-                      ),
-                      _isInitializingDataService
-                          ? _buildInitializingState(context)
-                          : NoteListWidget(
-                              npub: widget.npub,
-                              dataType: DataType.feed,
-                            ),
-                    ],
+                    ),
                   ),
-                ),
+                  const SliverToBoxAdapter(
+                    child: SizedBox(height: 8),
+                  ),
+                  NoteListWidget(
+                    npub: widget.npub,
+                    dataType: DataType.feed,
+                  ),
+                ],
+              ),
+            ),
     );
   }
 }

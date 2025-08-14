@@ -5,6 +5,7 @@ import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/widgets/profile_info_widget.dart';
+import 'package:nostr_nip19/nostr_nip19.dart';
 import '../theme/theme_manager.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -19,56 +20,60 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   DataService? dataService;
   late ScrollController _scrollController;
-  bool _showFakeLoading = true;
-  bool _showProfileInfo = false;
   bool _profileInfoLoaded = false;
-  bool _notesLoading = false;
+  String? _userHexKey;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController()..addListener(_scrollListener);
 
-    // Staged loading: Profile info first, then notes
-    _startStagedLoading();
+    // Convert npub to hex format for DataService
+    _userHexKey = _convertNpubToHex(widget.user.npub);
+
+    // Initialize immediately without loading states
+    _initializeImmediately();
   }
 
-  void _startStagedLoading() {
-    // Create DataService immediately during fake loading so ProfileInfoWidget can use it
+  String? _convertNpubToHex(String npub) {
+    try {
+      if (npub.startsWith('npub1')) {
+        return decodeBasicBech32(npub, 'npub');
+      } else if (_isValidHex(npub)) {
+        return npub; // Already hex format
+      }
+    } catch (e) {
+      print('[ProfilePage] Error converting npub to hex: $e');
+    }
+    return npub; // Return original if conversion fails
+  }
+
+  bool _isValidHex(String value) {
+    if (value.isEmpty || value.length != 64) return false;
+    return RegExp(r'^[0-9a-fA-F]+$').hasMatch(value);
+  }
+
+  void _initializeImmediately() {
+    // Create DataService and show content immediately
     _createDataServiceEarly();
 
-    // Phase 1: Show fake loading for 200ms
-    Future.delayed(const Duration(milliseconds: 200), () {
-      if (mounted) {
-        setState(() {
-          _showFakeLoading = false;
-          _showProfileInfo = true;
-        });
+    // Show profile info immediately
+    if (mounted) {
+      setState(() {
+        _profileInfoLoaded = true;
+      });
+    }
 
-        // Phase 2: Wait for profile info to settle, then start notes loading
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted) {
-            setState(() {
-              _profileInfoLoaded = true;
-            });
-
-            // Phase 3: Add additional 200ms delay before fetching notes
-            Future.delayed(const Duration(milliseconds: 200), () {
-              if (mounted) {
-                _startNotesLoading();
-              }
-            });
-          }
-        });
-      }
-    });
+    // Start notes loading in background
+    Future.microtask(() => _startNotesLoading());
   }
 
   Future<void> _createDataServiceEarly() async {
     try {
       // Create DataService early so ProfileInfoWidget can use it
+      // Use hex format for DataService
       dataService = DataService(
-        npub: widget.user.npub,
+        npub: _userHexKey ?? widget.user.npub,
         dataType: DataType.profile,
         onNewNote: (_) {},
         onReactionsUpdated: (_, __) {},
@@ -93,18 +98,12 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _startNotesLoading() async {
-    if (mounted) {
-      setState(() {
-        _notesLoading = true;
-      });
-    }
-
     try {
       // DataService should already exist from _createDataServiceEarly()
       if (dataService == null) {
         print('[ProfilePage] DataService not found, creating new one');
         dataService = DataService(
-          npub: widget.user.npub,
+          npub: _userHexKey ?? widget.user.npub,
           dataType: DataType.profile,
           onNewNote: (_) {},
           onReactionsUpdated: (_, __) {},
@@ -115,12 +114,6 @@ class _ProfilePageState extends State<ProfilePage> {
           onRepostCountUpdated: (_, __) {},
         );
         await dataService!.initializeLightweight();
-      }
-
-      if (mounted) {
-        setState(() {
-          _notesLoading = false;
-        });
       }
 
       // Start heavy operations in background
@@ -137,11 +130,6 @@ class _ProfilePageState extends State<ProfilePage> {
       });
     } catch (e) {
       print('[ProfilePage] Notes loading error: $e');
-      if (mounted) {
-        setState(() {
-          _notesLoading = false;
-        });
-      }
     }
   }
 
@@ -200,11 +188,11 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _showFakeLoading ? context.colors.background : context.colors.background,
+      backgroundColor: context.colors.background,
       body: Stack(
         children: [
-          if (_showFakeLoading) _buildFakeLoadingScreen(context) else _buildStagedContent(context),
-          if (!_showFakeLoading) _buildFloatingBackButton(context),
+          _buildStagedContent(context),
+          _buildFloatingBackButton(context),
         ],
       ),
     );
@@ -224,81 +212,22 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
         cacheExtent: 1500,
         slivers: [
-          // Phase 1: Always show profile info first
-          if (_showProfileInfo)
-            SliverToBoxAdapter(
-              child: ProfileInfoWidget(
-                user: widget.user,
-                sharedDataService: dataService,
-              ),
-            ),
-
-          // Phase 2: Show notes section only after profile info is loaded
-          if (_profileInfoLoaded) ...[
-            if (_notesLoading)
-              SliverToBoxAdapter(
-                child: _buildNotesLoadingIndicator(context),
-              )
-            else if (dataService != null)
-              NoteListWidget(
-                npub: widget.user.npub,
-                dataType: DataType.profile,
-                sharedDataService: dataService,
-              )
-            else
-              SliverToBoxAdapter(
-                child: _buildNotesLoadingIndicator(context),
-              ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNotesLoadingIndicator(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      child: Center(
-        child: Column(
-          children: [
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  context.colors.accent,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Loading notes...',
-              style: TextStyle(
-                color: context.colors.textSecondary,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFakeLoadingScreen(BuildContext context) {
-    return Container(
-      color: context.colors.background,
-      child: Center(
-        child: SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation<Color>(
-              context.colors.accent,
+          // Show profile info immediately
+          SliverToBoxAdapter(
+            child: ProfileInfoWidget(
+              user: widget.user,
+              sharedDataService: dataService,
             ),
           ),
-        ),
+
+          // Show notes section after profile info is loaded
+          if (_profileInfoLoaded && dataService != null)
+            NoteListWidget(
+              npub: _userHexKey ?? widget.user.npub,
+              dataType: DataType.profile,
+              sharedDataService: dataService,
+            ),
+        ],
       ),
     );
   }
