@@ -838,26 +838,6 @@ class DataService {
     print('[DataService] Profile interaction fetching completed');
   }
 
-  Future<void> _fetchReactionsForBatch(List<String> noteIds) async {
-    final filter = NostrService.createReactionFilter(eventIds: noteIds, limit: 500);
-    await _broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter)));
-  }
-
-  Future<void> _fetchRepliesForBatch(List<String> noteIds) async {
-    final filter = NostrService.createReplyFilter(eventIds: noteIds, limit: 500);
-    await _broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter)));
-  }
-
-  Future<void> _fetchRepostsForBatch(List<String> noteIds) async {
-    final filter = NostrService.createRepostFilter(eventIds: noteIds, limit: 500);
-    await _broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter)));
-  }
-
-  Future<void> _fetchZapsForBatch(List<String> noteIds) async {
-    final filter = NostrService.createZapFilter(eventIds: noteIds, limit: 500);
-    await _broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter)));
-  }
-
   // Enhanced batch fetching with retry logic for better reliability
   Future<void> _fetchReactionsForBatchWithRetry(List<String> noteIds, {int retries = 2}) async {
     for (int attempt = 0; attempt <= retries; attempt++) {

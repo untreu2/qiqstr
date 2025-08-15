@@ -39,8 +39,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
   static const double _buttonHeight = 34.0;
   static const double _buttonBorderRadius = 24.0;
   static const double _userSuggestionsMaxHeight = 200.0;
-  static const double _blurSigma = 20.0;
-  static const Duration _backgroundAnimationDuration = Duration(milliseconds: 500);
 
   static const double _fontSize = 15.0;
   static const double _lineHeight = 1.4;
@@ -71,7 +69,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
   bool _isPosting = false;
   bool _isMediaUploading = false;
   final List<String> _mediaUrls = [];
-  UserModel? _user;
   List<UserModel> _allUsers = [];
   List<UserModel> _filteredUsers = [];
   bool _isSearchingUsers = false;
@@ -197,12 +194,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
       if (npub == null || npub.isEmpty) return;
 
-      final profileData = await widget.dataService.getCachedUserProfile(npub);
-
       if (mounted) {
-        setState(() {
-          _user = UserModel.fromCachedProfile(npub, profileData);
-        });
+        setState(() {});
       }
     } catch (e) {
       _showErrorSnackBar('$_errorLoadingProfile: ${e.toString()}');
