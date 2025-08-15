@@ -556,32 +556,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
       backgroundColor: context.colors.background,
       body: Stack(
         children: [
-          if (_mediaUrls.isNotEmpty) _buildBackgroundImage(),
           _buildMainScaffold(),
         ],
-      ),
-    );
-  }
-
-  Widget _buildBackgroundImage() {
-    return Positioned.fill(
-      child: AnimatedSwitcher(
-        duration: _backgroundAnimationDuration,
-        child: Container(
-          key: ValueKey(_mediaUrls.first),
-          decoration: BoxDecoration(
-            image: DecorationImage(
-              image: CachedNetworkImageProvider(_mediaUrls.first),
-              fit: BoxFit.cover,
-            ),
-          ),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: _blurSigma, sigmaY: _blurSigma),
-            child: Container(
-              color: context.colors.background.withOpacity(0.8),
-            ),
-          ),
-        ),
       ),
     );
   }
@@ -776,19 +752,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildUserAvatar(),
-        const SizedBox(width: 12),
         Expanded(child: _buildTextInputStack()),
       ],
-    );
-  }
-
-  Widget _buildUserAvatar() {
-    return CircleAvatar(
-      radius: _avatarRadius,
-      backgroundColor: context.colors.surfaceTransparent,
-      backgroundImage: _user?.profileImage != null ? CachedNetworkImageProvider(_user!.profileImage) : null,
-      child: _user?.profileImage == null ? Icon(Icons.person, color: context.colors.textPrimary, size: 20) : null,
     );
   }
 
