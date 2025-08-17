@@ -15,7 +15,6 @@ class NetworkProvider extends ChangeNotifier {
 
   // Connection state
   bool _isOnline = true;
-  DateTime? _lastConnectionCheck;
 
   // Request queue for offline support
   final List<Map<String, dynamic>> _pendingRequests = [];
@@ -60,7 +59,6 @@ class NetworkProvider extends ChangeNotifier {
     try {
       await _networkService!.initializeConnections(targetNpubs);
       _isOnline = true;
-      _lastConnectionCheck = DateTime.now();
       _isConnecting = false;
 
       // Process any pending requests
@@ -330,8 +328,6 @@ class NetworkProvider extends ChangeNotifier {
 
   // Connection health monitoring
   Future<void> checkConnectionHealth() async {
-    _lastConnectionCheck = DateTime.now();
-
     if (_networkService != null) {
       final connectedCount = _networkService!.connectedRelaysCount;
       _isOnline = connectedCount > 0;

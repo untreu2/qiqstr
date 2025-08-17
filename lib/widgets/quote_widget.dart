@@ -134,9 +134,15 @@ class QuoteWidget extends StatelessWidget {
             children: [
               CircleAvatar(
                 radius: 14,
+                backgroundColor: user.profileImage.isNotEmpty ? context.colors.surfaceTransparent : context.colors.secondary,
                 backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
-                backgroundColor: user.profileImage.isEmpty ? context.colors.secondary : context.colors.surfaceTransparent,
-                child: user.profileImage.isEmpty ? Icon(Icons.person, size: 14, color: context.colors.textPrimary) : null,
+                child: user.profileImage.isEmpty
+                    ? Icon(
+                        Icons.person,
+                        size: 14,
+                        color: context.colors.textPrimary,
+                      )
+                    : null,
               ),
               const SizedBox(width: 8),
               Text(
