@@ -2069,13 +2069,10 @@ class DataService {
   }
 
   void addNote(NoteModel note) {
-    // For profile, only add relevant notes to tree
-    if (dataType == DataType.profile) {
-      if (note.author != npub && !(note.isRepost && note.repostedBy == npub)) {
-        return; // Skip irrelevant notes for profile
-      }
-    }
+    // For interaction data completeness, we need to store all notes globally
+    // but filter at display level for profile views
 
+    // Always add to the tree for interaction data access
     _itemsTree.add(note);
     _invalidateFilterCache();
     notesNotifier.value = _getFilteredNotesList();
@@ -2097,7 +2094,13 @@ class DataService {
 
     // Rebuild filtered cache for profile
     final allNotes = _itemsTree.toList();
-    _cachedFilteredNotes = allNotes.where((note) => note.author == npub || (note.isRepost && note.repostedBy == npub)).toList();
+
+    // For profile view: Show only notes authored by the profile owner (main posts, reposts, and replies)
+    _cachedFilteredNotes = allNotes.where((note) {
+      // Show all notes (including replies) authored by the profile owner
+      return note.author == npub || (note.isRepost && note.repostedBy == npub);
+    }).toList();
+
     _filterCacheValid = true;
 
     return _cachedFilteredNotes!;
@@ -3186,8 +3189,11 @@ class DataService {
       // Filter notes based on dataType
       List<NoteModel> filteredNotes;
       if (dataType == DataType.profile) {
-        // For profile, only show notes authored by the profile owner or reposted by the profile owner
-        filteredNotes = allNotes.where((note) => note.author == npub || (note.isRepost && note.repostedBy == npub)).toList();
+        // For profile, show only notes authored by the profile owner (main posts, reposts, and their replies)
+        filteredNotes = allNotes.where((note) {
+          // Show all notes authored by the profile owner
+          return note.author == npub || (note.isRepost && note.repostedBy == npub);
+        }).toList();
       } else {
         // For feed and other types, show all notes
         filteredNotes = allNotes;
@@ -3614,20 +3620,23 @@ class DataService {
 
       for (var note in data) {
         if (!eventIds.contains(note.id)) {
-          // Early filter for profile to avoid unnecessary processing
-          if (dataType == DataType.profile) {
-            if (note.author != npub && !(note.isRepost && note.repostedBy == npub)) {
-              continue; // Skip irrelevant notes immediately
-            }
+          // Always process interaction notes (replies, reactions, reposts, zaps) regardless of dataType
+          // Only apply profile filtering to main posts at display level
+          bool shouldProcess = true;
+
+          // Always process all notes for interaction data completeness
+          // Profile filtering happens at display level in _getFilteredNotesList()
+          shouldProcess = true;
+
+          if (shouldProcess) {
+            parseContentForNote(note);
+            notes.add(note);
+            eventIds.add(note.id);
+            newNoteIds.add(note.id);
+
+            await notesBox?.put(note.id, note);
+            addNote(note);
           }
-
-          parseContentForNote(note);
-          notes.add(note);
-          eventIds.add(note.id);
-          newNoteIds.add(note.id);
-
-          await notesBox?.put(note.id, note);
-          addNote(note);
         }
       }
 
@@ -3700,16 +3709,27 @@ class DataService {
       }
       final String eventAuthor = eventAuthorNullable;
 
-      // Early exit for profile if event is not relevant
-      if (dataType == DataType.profile && kind == 1) {
-        if (eventAuthor != npub) {
-          return; // Skip notes not authored by profile user
+      // For profile view, allow all interaction events (replies, reactions, reposts, zaps) to be processed
+      // Only filter main posts (kind 1 non-replies) and reposts (kind 6) for display
+      if (dataType == DataType.profile) {
+        // Check if this is a reply by looking at tags
+        bool isReply = false;
+        final List<dynamic> eventTags = List<dynamic>.from(eventData['tags'] ?? []);
+        for (var tag in eventTags) {
+          if (tag is List && tag.length >= 2 && tag[0] == 'e') {
+            isReply = true;
+            break;
+          }
         }
-      }
-      if (dataType == DataType.profile && kind == 6) {
-        if (eventAuthor != npub) {
+
+        // Allow all replies and interaction events, only filter main posts
+        if (kind == 1 && !isReply && eventAuthor != npub) {
+          return; // Skip main posts not authored by profile user
+        }
+        if (kind == 6 && eventAuthor != npub) {
           return; // Skip reposts not made by profile user
         }
+        // Allow all other events (replies, reactions, zaps) regardless of author
       }
 
       if (eventAuthor != npub) {
