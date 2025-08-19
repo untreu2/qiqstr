@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/models/user_model.dart';
+import 'package:qiqstr/providers/user_provider.dart';
 import 'package:hive/hive.dart';
 import 'package:file_picker/file_picker.dart';
 
@@ -61,6 +62,8 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
 
     final dataService = DataService(npub: npub, dataType: DataType.profile);
     await dataService.initialize();
+    // Initialize connections to enable profile updates
+    await dataService.initializeConnections();
 
     setState(() {
       _dataService = dataService;
@@ -96,8 +99,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
       );
       if (result != null && result.files.single.path != null) {
         final filePath = result.files.single.path!;
-        final url = await _dataService!
-            .sendMedia(filePath, 'https://blossom.primal.net');
+        final url = await _dataService!.sendMedia(filePath, 'https://blossom.primal.net');
         setState(() {
           controller.text = url;
         });
@@ -130,6 +132,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
     setState(() => _isSaving = true);
 
     try {
+      // Send profile update to relays
       await _dataService!.sendProfileEdit(
         name: _nameController.text.trim(),
         about: _aboutController.text.trim(),
@@ -140,23 +143,64 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
         website: _websiteController.text.trim(),
       );
 
+      // Wait a moment for the profile to be saved
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      // Get the updated user from Hive
       final usersBox = await Hive.openBox<UserModel>('users');
       final updatedUser = usersBox.get(_dataService!.npub);
 
       if (updatedUser != null) {
+        // Update DataService notifier
         _dataService!.profilesNotifier.value = {
           ..._dataService!.profilesNotifier.value,
           updatedUser.npub: updatedUser,
         };
+
+        // Update UserProvider so ProfileInfoWidget sees the changes
+        UserProvider.instance.updateUser(_dataService!.npub, updatedUser);
+      } else {
+        // If not in Hive yet, create the updated user model manually
+        final newUser = UserModel(
+          npub: _dataService!.npub,
+          name: _nameController.text.trim(),
+          about: _aboutController.text.trim(),
+          profileImage: _pictureController.text.trim(),
+          nip05: _nip05Controller.text.trim(),
+          banner: _bannerController.text.trim(),
+          lud16: _lud16Controller.text.trim(),
+          website: _websiteController.text.trim(),
+          updatedAt: DateTime.now(),
+        );
+
+        // Save to Hive
+        await usersBox.put(_dataService!.npub, newUser);
+
+        // Update both DataService and UserProvider
+        _dataService!.profilesNotifier.value = {
+          ..._dataService!.profilesNotifier.value,
+          newUser.npub: newUser,
+        };
+        UserProvider.instance.updateUser(_dataService!.npub, newUser);
       }
 
       if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile updated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
         Navigator.pop(context);
       }
     } catch (e) {
+      print('[EditProfile] Error saving profile: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
+          SnackBar(
+            content: Text('Failed to update profile: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     } finally {
@@ -214,8 +258,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
             leading: Padding(
               padding: const EdgeInsets.only(left: 8.0),
               child: IconButton(
-                icon: Icon(Icons.arrow_back_ios_new_rounded,
-                    color: context.colors.textPrimary, size: 20),
+                icon: Icon(Icons.arrow_back_ios_new_rounded, color: context.colors.textPrimary, size: 20),
                 onPressed: () => Navigator.pop(context),
               ),
             ),
@@ -241,8 +284,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                               height: 18,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.5,
-                                valueColor:
-                                    AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
+                                valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -282,12 +324,27 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                     controller: _nameController,
                     decoration: _inputDecoration(context, 'Username'),
                     style: TextStyle(color: context.colors.textPrimary),
+                    maxLength: 50,
+                    validator: (value) {
+                      if (value != null && value.trim().length > 50) {
+                        return 'Username must be 50 characters or less';
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _aboutController,
                     decoration: _inputDecoration(context, 'Bio'),
                     style: TextStyle(color: context.colors.textPrimary),
+                    maxLines: 3,
+                    maxLength: 300,
+                    validator: (value) {
+                      if (value != null && value.trim().length > 300) {
+                        return 'Bio must be 300 characters or less';
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
@@ -295,7 +352,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                     enabled: !_isUploadingPicture,
                     decoration: _inputDecoration(
                       context,
-                      'Profile image',
+                      'Profile image URL',
                       onUpload: _isUploadingPicture
                           ? null
                           : () => _pickAndUploadMedia(
@@ -305,6 +362,15 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                               ),
                     ),
                     style: TextStyle(color: context.colors.textPrimary),
+                    validator: (value) {
+                      if (value != null && value.trim().isNotEmpty) {
+                        final uri = Uri.tryParse(value.trim());
+                        if (uri == null || !uri.hasScheme) {
+                          return 'Please enter a valid URL';
+                        }
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
@@ -312,7 +378,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                     enabled: !_isUploadingBanner,
                     decoration: _inputDecoration(
                       context,
-                      'Banner',
+                      'Banner URL',
                       onUpload: _isUploadingBanner
                           ? null
                           : () => _pickAndUploadMedia(
@@ -322,18 +388,46 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                               ),
                     ),
                     style: TextStyle(color: context.colors.textPrimary),
+                    validator: (value) {
+                      if (value != null && value.trim().isNotEmpty) {
+                        final uri = Uri.tryParse(value.trim());
+                        if (uri == null || !uri.hasScheme) {
+                          return 'Please enter a valid URL';
+                        }
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _lud16Controller,
                     decoration: _inputDecoration(context, 'Lightning address'),
                     style: TextStyle(color: context.colors.textPrimary),
+                    validator: (value) {
+                      if (value != null && value.trim().isNotEmpty) {
+                        final lud16 = value.trim();
+                        if (!lud16.contains('@') || lud16.split('@').length != 2) {
+                          return 'Please enter a valid lightning address (e.g., user@domain.com)';
+                        }
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _websiteController,
                     decoration: _inputDecoration(context, 'Website'),
                     style: TextStyle(color: context.colors.textPrimary),
+                    validator: (value) {
+                      if (value != null && value.trim().isNotEmpty) {
+                        final website = value.trim();
+                        // Allow URLs with or without protocol
+                        if (!website.contains('.') || website.contains(' ')) {
+                          return 'Please enter a valid website URL';
+                        }
+                      }
+                      return null;
+                    },
                   ),
                 ],
               ),

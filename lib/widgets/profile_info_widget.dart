@@ -137,6 +137,15 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   Future<void> _initFollowStatusAsync() async {
     try {
       _currentUserNpub = await _secureStorage.read(key: 'npub');
+
+      // Always set the current user npub, even if viewing own profile
+      if (mounted) {
+        setState(() {
+          // This triggers a rebuild so the edit profile button can show
+        });
+      }
+
+      // If viewing own profile or no current user, don't load following status
       if (_currentUserNpub == null || _currentUserNpub == widget.user.npub) return;
 
       _followingBox = await Hive.openBox<FollowingModel>('followingBox');
@@ -354,6 +363,16 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   }
 
   Widget _buildAvatarAndActionsRow(BuildContext context, UserModel user) {
+    // Debug logging to help identify issues
+    print('[ProfileInfoWidget] Current user npub: $_currentUserNpub');
+    print('[ProfileInfoWidget] Viewing user npub: ${widget.user.npub}');
+    print('[ProfileInfoWidget] Are they equal: ${widget.user.npub == _currentUserNpub}');
+    print('[ProfileInfoWidget] IsFollowing: $_isFollowing');
+
+    // Check if this is the current user's profile with robust npub comparison
+    final isOwnProfile = _isCurrentUserProfile();
+    print('[ProfileInfoWidget] Is own profile: $isOwnProfile');
+
     return Row(
       children: [
         GestureDetector(
@@ -373,7 +392,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         if (_currentUserNpub != null)
           Padding(
             padding: const EdgeInsets.only(top: 35.0),
-            child: (widget.user.npub == _currentUserNpub)
+            child: isOwnProfile
                 ? _buildEditProfileButton(context)
                 : (_isFollowing != null)
                     ? _buildFollowButton(context)
@@ -381,6 +400,56 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           ),
       ],
     );
+  }
+
+  // Helper method to check if viewing current user's profile
+  bool _isCurrentUserProfile() {
+    if (_currentUserNpub == null) return false;
+
+    final currentUserNpub = _currentUserNpub!;
+    final viewingUserNpub = widget.user.npub;
+
+    // Direct comparison
+    if (currentUserNpub == viewingUserNpub) return true;
+
+    // Try comparing with format conversion
+    try {
+      // Convert both to hex format for comparison
+      String currentUserHex = currentUserNpub;
+      String viewingUserHex = viewingUserNpub;
+
+      // Convert npub to hex if needed
+      if (currentUserNpub.startsWith('npub1')) {
+        currentUserHex = decodeBasicBech32(currentUserNpub, 'npub');
+      }
+
+      if (viewingUserNpub.startsWith('npub1')) {
+        viewingUserHex = decodeBasicBech32(viewingUserNpub, 'npub');
+      }
+
+      // Compare hex formats
+      if (currentUserHex == viewingUserHex) return true;
+
+      // Convert both to npub format for comparison
+      String currentUserNpubFormat = currentUserNpub;
+      String viewingUserNpubFormat = viewingUserNpub;
+
+      // Convert hex to npub if needed
+      if (!currentUserNpub.startsWith('npub1') && currentUserNpub.length == 64) {
+        currentUserNpubFormat = encodeBasicBech32(currentUserNpub, 'npub');
+      }
+
+      if (!viewingUserNpub.startsWith('npub1') && viewingUserNpub.length == 64) {
+        viewingUserNpubFormat = encodeBasicBech32(viewingUserNpub, 'npub');
+      }
+
+      // Compare npub formats
+      if (currentUserNpubFormat == viewingUserNpubFormat) return true;
+    } catch (e) {
+      print('[ProfileInfoWidget] Error comparing npub formats: $e');
+    }
+
+    return false;
   }
 
   Widget _buildEditProfileButton(BuildContext context) {
