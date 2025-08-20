@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:hive/hive.dart';
 import '../models/user_model.dart';
 import '../constants/relays.dart';
+import 'relay_service.dart';
 
 class CachedProfile {
   final Map<String, String> data;
@@ -40,10 +41,15 @@ class ProfileService {
   Box<UserModel>? _usersBox;
   Timer? _cleanupTimer;
 
+  // Primal cache client for fast profile fetching
+  final PrimalCacheClient _primalClient = PrimalCacheClient();
+
   // Performance metrics
   int _cacheHits = 0;
   int _cacheMisses = 0;
   int _relayFetches = 0;
+  int _primalFetches = 0;
+  int _primalFailures = 0;
   int _batchRequestsProcessed = 0;
 
   Future<void> initialize() async {
@@ -258,14 +264,31 @@ class ProfileService {
       return null;
     }
 
-    // Use only 1 fast relay for individual requests
+    // First, try PrimalCacheClient for fast fetching
+    try {
+      _primalFetches++;
+      final primalResult = await _primalClient.fetchUserProfile(npub);
+      if (primalResult != null) {
+        print('[ProfileService] Profile fetched successfully from Primal cache: $npub');
+        return primalResult;
+      }
+    } catch (e) {
+      _primalFailures++;
+      print('[ProfileService] Primal cache failed for $npub: $e, falling back to relays');
+    }
+
+    // Fallback to relay fetching if Primal cache fails
     final relayUrl = relaySetMainSockets.first;
 
     try {
+      _relayFetches++;
       final result = await _fetchProfileFromSingleRelay(relayUrl, npub);
+      if (result != null) {
+        print('[ProfileService] Profile fetched successfully from relay fallback: $npub');
+      }
       return result;
     } catch (e) {
-      print('[ProfileService] Error fetching from $relayUrl: $e');
+      print('[ProfileService] Error fetching from relay $relayUrl: $e');
       return null;
     }
   }
@@ -382,6 +405,7 @@ class ProfileService {
 
   Map<String, dynamic> getProfileStats() {
     final hitRate = _cacheHits + _cacheMisses > 0 ? (_cacheHits / (_cacheHits + _cacheMisses) * 100).toStringAsFixed(1) : '0.0';
+    final primalSuccessRate = _primalFetches > 0 ? ((_primalFetches - _primalFailures) / _primalFetches * 100).toStringAsFixed(1) : '0.0';
 
     return {
       'cacheSize': _profileCache.length,
@@ -389,10 +413,14 @@ class ProfileService {
       'cacheHits': _cacheHits,
       'cacheMisses': _cacheMisses,
       'hitRate': '$hitRate%',
+      'primalFetches': _primalFetches,
+      'primalFailures': _primalFailures,
+      'primalSuccessRate': '$primalSuccessRate%',
       'relayFetches': _relayFetches,
       'batchRequestsProcessed': _batchRequestsProcessed,
       'pendingRequests': _pendingRequests.length,
       'queuedRequests': _requestQueue.length,
+      'primalCacheStats': PrimalCacheClient.getCacheStats(),
     };
   }
 

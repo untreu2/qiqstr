@@ -1491,11 +1491,8 @@ class DataService {
   }
 
   Future<void> _batchFetchProfiles(List<String> npubs) async {
-    // Skip Primal cache for now to avoid dependency issues
-    // TODO: Re-enable when PrimalCacheClient is properly imported
     final stillRemaining = npubs.toList();
 
-    // Fallback to relay for all profiles in single request
     if (stillRemaining.isNotEmpty) {
       final filter = NostrService.createProfileFilter(
         authors: stillRemaining,
@@ -1795,15 +1792,12 @@ class DataService {
     if (_isClosed) return _getDefaultProfile();
 
     try {
-      // Use ProfileService if available and properly initialized
-      try {
-        return await _profileService.getCachedUserProfile(npub);
-      } catch (e) {
-        print('[DataService] ProfileService error, using fallback: $e');
-        // Continue to fallback implementation
-      }
+      // Use ProfileService with integrated Primal cache and relay fallback
+      return await _profileService.getCachedUserProfile(npub);
+    } catch (e) {
+      print('[DataService] ProfileService error, using fallback: $e');
 
-      // Fallback implementation for when ProfileService isn't initialized yet
+      // Emergency fallback implementation
       final now = DateTime.now();
 
       // Check memory cache first
@@ -1838,13 +1832,7 @@ class DataService {
         }
       }
 
-      // Skip Primal cache for now to avoid dependency issues
-      // TODO: Re-enable when PrimalCacheClient is properly imported
-
       // Return default profile if all else fails
-      return _getDefaultProfile();
-    } catch (e) {
-      print('[DataService] Error in getCachedUserProfile: $e');
       return _getDefaultProfile();
     }
   }
@@ -4373,9 +4361,7 @@ class DataService {
   }
 
   Future<NoteModel?> fetchNoteByIdIndependently(String eventId) async {
-    // Skip Primal cache for now to avoid dependency issues
-    // TODO: Re-enable when PrimalCacheClient is properly imported
-
+    // Use relay fetching for notes (PrimalCacheClient is primarily for profiles)
     final fetchTasks = relaySetIndependentFetch.map((relayUrl) => _fetchFromSingleRelay(relayUrl, eventId)).toList();
 
     try {
@@ -4388,21 +4374,22 @@ class DataService {
   }
 
   Future<Map<String, String>?> fetchUserProfileIndependently(String npub) async {
-    // Use ProfileService if available
+    // Use ProfileService with integrated Primal cache and relay fallback
     try {
       return await _profileService.getCachedUserProfile(npub);
     } catch (e) {
       print('[DataService] ProfileService error in independent fetch: $e');
     }
 
-    // Fallback to direct relay fetch
+    // Emergency fallback to direct relay fetch (should rarely be needed)
     for (final relayUrl in relaySetIndependentFetch) {
       final result = await _fetchProfileFromSingleRelay(relayUrl, npub);
       if (result != null) {
+        print('[DataService] Emergency relay fallback successful for: $npub');
         return result;
       }
     }
-    print('[fetchUserProfileIndependently] No result from any relay.');
+    print('[fetchUserProfileIndependently] No result from any source.');
     return null;
   }
 
