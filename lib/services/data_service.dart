@@ -12,7 +12,6 @@ import 'package:qiqstr/models/zap_model.dart';
 import 'package:qiqstr/screens/profile_page.dart';
 import 'package:qiqstr/models/notification_model.dart';
 import 'package:qiqstr/services/isolate_manager.dart';
-import 'package:qiqstr/services/media_service.dart';
 import 'package:qiqstr/services/relay_service.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/user_model.dart';
@@ -2249,7 +2248,6 @@ class DataService {
   }
 
   // Legacy methods for backward compatibility - now delegated to NoteListNotifier
-  List<NoteModel> _getFilteredNotesList() => notesNotifier.notes;
   void _invalidateFilterCache() => notesNotifier._invalidateFilterCache();
 
   Future<void> _subscribeToAllZaps() async {
@@ -4039,34 +4037,6 @@ class DataService {
         _onCacheLoad!(data);
         _onCacheLoad = null;
       }
-    }
-  }
-
-  Future<void> _fetchProfilesForAllData() async {
-    if (_isClosed) return;
-
-    final allAuthors = <String>{};
-    allAuthors.addAll(notes.map((note) => note.author));
-
-    for (var replies in repliesMap.values) {
-      for (var reply in replies) {
-        allAuthors.add(reply.author);
-      }
-    }
-
-    for (var reactions in reactionsMap.values) {
-      for (var reaction in reactions) {
-        allAuthors.add(reaction.author);
-      }
-    }
-
-    final uncachedAuthors = allAuthors
-        .where(
-            (author) => !profileCache.containsKey(author) || DateTime.now().difference(profileCache[author]!.fetchedAt) > profileCacheTTL)
-        .toList();
-
-    if (uncachedAuthors.isNotEmpty) {
-      await fetchProfilesBatch(uncachedAuthors);
     }
   }
 

@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:hive/hive.dart';
 import '../models/user_model.dart';
-import 'nostr_service.dart';
 import '../constants/relays.dart';
 
 class CachedProfile {
