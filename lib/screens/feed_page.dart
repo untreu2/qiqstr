@@ -223,7 +223,7 @@ class _FeedPageState extends State<FeedPage> {
                   const SliverToBoxAdapter(
                     child: SizedBox(height: 8),
                   ),
-                  NoteListWidget(
+                  NoteListWidgetFactory.create(
                     npub: widget.npub,
                     dataType: DataType.feed,
                   ),

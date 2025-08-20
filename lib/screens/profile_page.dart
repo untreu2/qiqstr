@@ -222,7 +222,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
           // Show notes section after profile info is loaded
           if (_profileInfoLoaded && dataService != null)
-            NoteListWidget(
+            NoteListWidgetFactory.create(
               npub: _userHexKey ?? widget.user.npub,
               dataType: DataType.profile,
               sharedDataService: dataService,

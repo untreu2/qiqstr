@@ -118,38 +118,73 @@ class _ThreadPageState extends State<ThreadPage> {
     if (!mounted) return;
     setState(() => _isLoading = true);
 
-    _currentUserNpub = await _secureStorage.read(key: 'npub');
-    final allNotes = widget.dataService.notesNotifier.value;
+    try {
+      _currentUserNpub = await _secureStorage.read(key: 'npub');
+      final allNotes = widget.dataService.notesNotifier.value;
 
-    _rootNote = allNotes.firstWhereOrNull((n) => n.id == widget.rootNoteId);
+      _rootNote = allNotes.firstWhereOrNull((n) => n.id == widget.rootNoteId);
 
-    if (widget.focusedNoteId != null && widget.focusedNoteId != widget.rootNoteId) {
-      _focusedNote = allNotes.firstWhereOrNull((n) => n.id == widget.focusedNoteId);
-    } else {
-      _focusedNote = null;
-    }
-
-    // If we have a focused note but no root note, or if the focused note is a reply
-    // but we don't have its parent/root context, fetch the missing notes
-    await _fetchMissingContextNotes();
-
-    _updateRelevantNoteIds();
-
-    // After fetching context notes, also fetch their replies to build complete thread
-    if (_rootNote != null) {
-      await _fetchThreadReplies(_rootNote!.id);
-    }
-
-    // Fetch profiles for all users in the thread
-    await _fetchAllThreadUserProfiles();
-
-    if (mounted) {
-      setState(() => _isLoading = false);
-      if (widget.focusedNoteId != null && (_focusedNote != null || _rootNote?.id == widget.focusedNoteId)) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _scrollToFocusedNote();
-        });
+      if (widget.focusedNoteId != null && widget.focusedNoteId != widget.rootNoteId) {
+        _focusedNote = allNotes.firstWhereOrNull((n) => n.id == widget.focusedNoteId);
+      } else {
+        _focusedNote = null;
       }
+
+      _updateRelevantNoteIds();
+
+      // Show content immediately if we have the root note, don't wait for everything
+      if (mounted) {
+        setState(() => _isLoading = false);
+        if (widget.focusedNoteId != null && (_focusedNote != null || _rootNote?.id == widget.focusedNoteId)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _scrollToFocusedNote();
+          });
+        }
+      }
+
+      // Load additional data in background without blocking UI
+      _loadAdditionalDataInBackground();
+    } catch (e) {
+      print('[ThreadPage] Error in _loadRootNote: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  /// Load additional data in background without blocking the UI
+  Future<void> _loadAdditionalDataInBackground() async {
+    // Run these operations in background with timeouts
+    final futures = <Future>[];
+
+    // Fetch missing context notes with timeout
+    futures.add(
+        _fetchMissingContextNotes().timeout(const Duration(seconds: 3)).catchError((e) => print('[ThreadPage] Context fetch timeout: $e')));
+
+    // Fetch thread replies with timeout
+    if (_rootNote != null) {
+      futures.add(_fetchThreadReplies(_rootNote!.id)
+          .timeout(const Duration(seconds: 2))
+          .catchError((e) => print('[ThreadPage] Replies fetch timeout: $e')));
+    }
+
+    // Fetch profiles with timeout
+    futures.add(_fetchAllThreadUserProfiles()
+        .timeout(const Duration(seconds: 3))
+        .catchError((e) => print('[ThreadPage] Profiles fetch timeout: $e')));
+
+    // Wait for all with overall timeout
+    try {
+      await Future.wait(futures).timeout(const Duration(seconds: 5));
+    } catch (e) {
+      print('[ThreadPage] Background loading timeout: $e');
+    }
+
+    // Update UI if needed after background loading
+    if (mounted) {
+      setState(() {
+        _updateRelevantNoteIds();
+      });
     }
   }
 
@@ -186,10 +221,14 @@ class _ThreadPageState extends State<ThreadPage> {
       }
     }
 
-    // Fetch profiles for all users in the thread
+    // Fetch profiles for all users in the thread with timeout
     if (allUserNpubs.isNotEmpty) {
       print('[ThreadPage] Fetching profiles for ${allUserNpubs.length} thread users');
-      await widget.dataService.fetchProfilesBatch(allUserNpubs.toList());
+      try {
+        await widget.dataService.fetchProfilesBatch(allUserNpubs.toList()).timeout(const Duration(seconds: 3));
+      } catch (e) {
+        print('[ThreadPage] Profile fetch timeout: $e');
+      }
     }
   }
 
@@ -223,16 +262,20 @@ class _ThreadPageState extends State<ThreadPage> {
       }
     }
 
-    // Fetch missing notes
+    // Fetch missing notes with timeout
     if (notesToFetch.isNotEmpty) {
       print('[ThreadPage] Fetching missing context notes: $notesToFetch');
-      await _fetchNotesById(notesToFetch);
+      try {
+        await _fetchNotesById(notesToFetch).timeout(const Duration(seconds: 3));
 
-      // Refresh our local references after fetching
-      final updatedNotes = widget.dataService.notesNotifier.value;
-      _rootNote = updatedNotes.firstWhereOrNull((n) => n.id == widget.rootNoteId);
-      if (widget.focusedNoteId != null) {
-        _focusedNote = updatedNotes.firstWhereOrNull((n) => n.id == widget.focusedNoteId);
+        // Refresh our local references after fetching
+        final updatedNotes = widget.dataService.notesNotifier.value;
+        _rootNote = updatedNotes.firstWhereOrNull((n) => n.id == widget.rootNoteId);
+        if (widget.focusedNoteId != null) {
+          _focusedNote = updatedNotes.firstWhereOrNull((n) => n.id == widget.focusedNoteId);
+        }
+      } catch (e) {
+        print('[ThreadPage] Timeout fetching missing notes: $e');
       }
     }
   }
@@ -240,7 +283,7 @@ class _ThreadPageState extends State<ThreadPage> {
   Future<void> _fetchNotesById(List<String> noteIds) async {
     final futures = noteIds.map((noteId) async {
       try {
-        final note = await widget.dataService.getCachedNote(noteId);
+        final note = await widget.dataService.getCachedNote(noteId).timeout(const Duration(seconds: 2));
         if (note != null) {
           print('[ThreadPage] Successfully fetched note: $noteId');
           // The note should already be added to the notes list by getCachedNote
@@ -252,7 +295,7 @@ class _ThreadPageState extends State<ThreadPage> {
       }
     });
 
-    await Future.wait(futures);
+    await Future.wait(futures).timeout(const Duration(seconds: 5));
   }
 
   Future<void> _fetchThreadReplies(String rootNoteId) async {
@@ -265,11 +308,10 @@ class _ThreadPageState extends State<ThreadPage> {
 
       print('[ThreadPage] Fetching replies for thread context: $allEventIds');
 
-      // Use the existing interaction fetching mechanism
-      await widget.dataService.fetchInteractionsForEvents(allEventIds);
+      // Use the existing interaction fetching mechanism with timeout
+      await widget.dataService.fetchInteractionsForEvents(allEventIds).timeout(const Duration(seconds: 2));
 
-      // Small delay to allow for processing
-      await Future.delayed(const Duration(milliseconds: 100));
+      // Remove the blocking delay - let it process asynchronously
     } catch (e) {
       print('[ThreadPage] Error fetching thread replies: $e');
     }

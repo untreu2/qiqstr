@@ -18,14 +18,14 @@ class MemoryManager {
   Timer? _monitoringTimer;
   Timer? _cleanupTimer;
 
-  // Memory thresholds (in MB)
-  static const double _warningThreshold = 150.0;
-  static const double _criticalThreshold = 200.0;
-  static const double _emergencyThreshold = 250.0;
+  // Memory thresholds (in MB) - Much more conservative for social media app
+  static const double _warningThreshold = 300.0; // Increased from 150MB
+  static const double _criticalThreshold = 400.0; // Increased from 200MB
+  static const double _emergencyThreshold = 500.0; // Increased from 250MB
 
-  // Monitoring intervals
-  static const Duration _monitoringInterval = Duration(minutes: 2);
-  static const Duration _cleanupInterval = Duration(minutes: 5);
+  // Monitoring intervals - Less frequent to avoid disrupting UX
+  static const Duration _monitoringInterval = Duration(minutes: 5); // Increased from 2 minutes
+  static const Duration _cleanupInterval = Duration(minutes: 15); // Increased from 5 minutes
 
   // Memory state
   MemoryPressureLevel _currentPressureLevel = MemoryPressureLevel.normal;
@@ -85,8 +85,9 @@ class MemoryManager {
         await _handlePressureLevelChange(previousLevel, _currentPressureLevel);
       }
 
-      // Emergency cleanup if memory is consistently high
-      if (_consecutiveHighMemoryReadings >= 3) {
+      // Emergency cleanup if memory is consistently high - but be conservative
+      if (_consecutiveHighMemoryReadings >= 5) {
+        // Increased from 3 to 5
         await _performEmergencyCleanup();
         _consecutiveHighMemoryReadings = 0;
       }
@@ -189,15 +190,15 @@ class MemoryManager {
 
   Future<void> _performLightCleanup() async {
     try {
-      // Clear some media cache
+      // ONLY clear failed/expired media cache - preserve UI data
       final mediaService = MediaService();
-      mediaService.clearCache(clearFailed: false);
+      mediaService.clearCache(clearFailed: true); // Only clear failed items
 
-      // Optimize cache service
+      // Gentle optimization without clearing critical data
       final cacheService = CacheService();
       await cacheService.optimizeMemoryUsage();
 
-      debugPrint('[MemoryManager] Light cleanup completed');
+      debugPrint('[MemoryManager] Light cleanup completed (non-aggressive)');
     } catch (e) {
       debugPrint('[MemoryManager] Light cleanup error: $e');
     }
@@ -205,18 +206,19 @@ class MemoryManager {
 
   Future<void> _performMediumCleanup() async {
     try {
-      // More aggressive cleanup
+      // Conservative cleanup - preserve UI interactions data
       await _performLightCleanup();
 
-      // Clear failed URLs and compact Hive boxes
+      // Only compact Hive boxes, don't clear them
       final hiveManager = HiveManager.instance;
       await hiveManager.compactAllBoxes();
 
-      // Clear memory cache
+      // DO NOT clear memory cache - this removes reactions/interactions!
+      // Instead, only optimize without clearing critical UI data
       final cacheService = CacheService();
-      await cacheService.clearMemoryCache();
+      await cacheService.optimizeMemoryUsage();
 
-      debugPrint('[MemoryManager] Medium cleanup completed');
+      debugPrint('[MemoryManager] Medium cleanup completed (preserving UI data)');
     } catch (e) {
       debugPrint('[MemoryManager] Medium cleanup error: $e');
     }
@@ -224,23 +226,25 @@ class MemoryManager {
 
   Future<void> _performEmergencyCleanup() async {
     try {
-      // Most aggressive cleanup
+      // Even in emergency, protect critical UI data
       await _performMediumCleanup();
 
-      // Handle memory pressure in all services
+      // Handle memory pressure in services but preserve UI interactions
       final hiveManager = HiveManager.instance;
       await hiveManager.handleMemoryPressure();
 
       final mediaService = MediaService();
       mediaService.handleMemoryPressure();
 
-      // Force garbage collection
+      // Log warning instead of aggressive cleanup
+      debugPrint('[MemoryManager] Emergency cleanup - preserving UI interactions data');
+
+      // Force garbage collection only in debug
       if (!kReleaseMode) {
-        // Only in debug mode to avoid performance issues in release
         await Future.delayed(const Duration(milliseconds: 100));
       }
 
-      debugPrint('[MemoryManager] Emergency cleanup completed');
+      debugPrint('[MemoryManager] Emergency cleanup completed (UI data preserved)');
     } catch (e) {
       debugPrint('[MemoryManager] Emergency cleanup error: $e');
     }
@@ -248,10 +252,10 @@ class MemoryManager {
 
   Future<void> _performBackgroundCleanup() async {
     try {
-      // App is going to background, good opportunity for cleanup
-      await _performMediumCleanup();
+      // App is going to background - ONLY light cleanup to preserve state
+      await _performLightCleanup();
 
-      debugPrint('[MemoryManager] Background cleanup completed');
+      debugPrint('[MemoryManager] Background cleanup completed (light only)');
     } catch (e) {
       debugPrint('[MemoryManager] Background cleanup error: $e');
     }

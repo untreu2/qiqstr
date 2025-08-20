@@ -18,8 +18,7 @@ import 'models/following_model.dart';
 import 'models/link_preview_model.dart';
 import 'models/zap_model.dart';
 import 'models/notification_model.dart';
-import 'screens/login_page.dart';
-import 'screens/home_navigator.dart';
+import 'screens/splash_screen.dart';
 import 'services/data_service.dart';
 import 'providers/user_provider.dart';
 import 'providers/notes_provider.dart';
@@ -31,9 +30,9 @@ import 'providers/media_provider.dart';
 import 'providers/notification_provider.dart';
 import 'services/memory_manager.dart';
 
-Future<void> main() async {
+void main() {
   // Set up global error handling for unhandled exceptions
-  runZonedGuarded(() async {
+  runZonedGuarded(() {
     WidgetsFlutterBinding.ensureInitialized();
 
     // Set up Flutter error handling
@@ -64,112 +63,7 @@ Future<void> main() async {
       print('Could not set platform error handler: $e');
     }
 
-    try {
-      // Initialize Hive with optimized settings
-      await _initializeHiveOptimized();
-
-      final secureStorage = const FlutterSecureStorage();
-      final credentials = await Future.wait([
-        secureStorage.read(key: 'privateKey'),
-        secureStorage.read(key: 'npub'),
-      ]);
-
-      final privateKey = credentials[0];
-      final npub = credentials[1];
-
-      if (privateKey != null && npub != null) {
-        // Show app immediately with loading state
-        final dataService = DataService(npub: npub, dataType: DataType.feed);
-
-        runApp(
-          provider.MultiProvider(
-            providers: [
-              provider.ChangeNotifierProvider(create: (context) => theme.ThemeManager()),
-              provider.ChangeNotifierProvider.value(value: UserProvider.instance),
-              provider.ChangeNotifierProvider.value(value: NotesProvider.instance),
-              provider.ChangeNotifierProvider.value(value: InteractionsProvider.instance),
-              provider.ChangeNotifierProvider.value(value: ContentCacheProvider.instance),
-              provider.ChangeNotifierProvider.value(value: RelayProvider.instance),
-              provider.ChangeNotifierProvider.value(value: NetworkProvider.instance),
-              provider.ChangeNotifierProvider.value(value: MediaProvider.instance),
-              provider.ChangeNotifierProvider.value(value: NotificationProvider.instance),
-            ],
-            child: ProviderScope(
-              child: QiqstrApp(
-                home: HomeNavigator(
-                  npub: npub,
-                  dataService: dataService,
-                ),
-              ),
-            ),
-          ),
-        );
-
-        // Initialize everything in background after UI is shown
-        _initializeAppInBackground(npub, dataService);
-      } else {
-        runApp(
-          provider.MultiProvider(
-            providers: [
-              provider.ChangeNotifierProvider(create: (context) => theme.ThemeManager()),
-              provider.ChangeNotifierProvider.value(value: UserProvider.instance),
-              provider.ChangeNotifierProvider.value(value: ContentCacheProvider.instance),
-              provider.ChangeNotifierProvider.value(value: RelayProvider.instance),
-              provider.ChangeNotifierProvider.value(value: NetworkProvider.instance),
-              provider.ChangeNotifierProvider.value(value: MediaProvider.instance),
-              provider.ChangeNotifierProvider.value(value: NotificationProvider.instance),
-            ],
-            child: const ProviderScope(child: QiqstrApp(home: LoginPage())),
-          ),
-        );
-      }
-    } catch (e) {
-      print('Initialization error: $e');
-      await _handleInitializationError(e);
-    }
-  }, (error, stack) {
-    // Handle any unhandled errors in the zone
-    if (error is SocketException) {
-      // Silently handle socket exceptions to prevent spam
-      return;
-    }
-    // Log other unhandled errors but don't crash
-    print('Unhandled error: $error');
-  });
-}
-
-Future<void> _initializeHiveOptimized() async {
-  await Hive.initFlutter();
-
-  // Register adapters efficiently
-  final adapters = [
-    () => Hive.registerAdapter(NoteModelAdapter()),
-    () => Hive.registerAdapter(ReactionModelAdapter()),
-    () => Hive.registerAdapter(ReplyModelAdapter()),
-    () => Hive.registerAdapter(RepostModelAdapter()),
-    () => Hive.registerAdapter(UserModelAdapter()),
-    () => Hive.registerAdapter(ZapModelAdapter()),
-    () => Hive.registerAdapter(FollowingModelAdapter()),
-    () => Hive.registerAdapter(LinkPreviewModelAdapter()),
-    () => Hive.registerAdapter(NotificationModelAdapter()),
-  ];
-
-  for (int i = 0; i < adapters.length; i++) {
-    final typeId = i == 8 ? 12 : i; // NotificationModel uses typeId 12
-    if (!Hive.isAdapterRegistered(typeId)) {
-      adapters[i]();
-    }
-  }
-
-  // Open link preview cache
-  await Hive.openBox<LinkPreviewModel>('link_preview_cache');
-}
-
-Future<void> _handleInitializationError(dynamic error) async {
-  try {
-    await Hive.deleteFromDisk();
-    print('Hive data deleted. Navigating to login page...');
-    // Navigate to LoginPage as a safe fallback instead of recursively calling main()
+    // Show app immediately with SplashScreen - no blocking operations
     runApp(
       provider.MultiProvider(
         providers: [
@@ -183,14 +77,24 @@ Future<void> _handleInitializationError(dynamic error) async {
           provider.ChangeNotifierProvider.value(value: MediaProvider.instance),
           provider.ChangeNotifierProvider.value(value: NotificationProvider.instance),
         ],
-        child: const ProviderScope(child: QiqstrApp(home: LoginPage())),
+        child: const ProviderScope(
+          child: QiqstrApp(home: SplashScreen()),
+        ),
       ),
     );
-  } catch (deleteError) {
-    print('Failed to delete Hive data: $deleteError');
-    runApp(const HiveErrorApp());
-  }
+  }, (error, stack) {
+    // Handle any unhandled errors in the zone
+    if (error is SocketException) {
+      // Silently handle socket exceptions to prevent spam
+      return;
+    }
+    // Log other unhandled errors but don't crash
+    print('Unhandled error: $error');
+  });
 }
+
+// Removed _initializeHiveOptimized and _handleInitializationError functions
+// These are now handled in SplashScreen
 
 class QiqstrApp extends ConsumerWidget {
   final Widget home;
@@ -299,100 +203,5 @@ class HiveErrorApp extends StatelessWidget {
   }
 }
 
-Future<void> _initializeAppInBackground(String npub, DataService dataService) async {
-  try {
-    // Phase 1: Initialize memory manager first
-    MemoryManager.instance; // Initialize singleton
-
-    // Phase 2: Open critical boxes first
-    await _openCriticalBoxes(npub);
-
-    // Phase 3: Initialize providers in parallel
-    final usersBox = Hive.box<UserModel>('users');
-    UserProvider.instance.setUsersBox(usersBox);
-
-    await Future.wait([
-      UserProvider.instance.initialize(),
-      NotesProvider.instance.initialize(npub),
-      InteractionsProvider.instance.initialize(npub),
-      MediaProvider.instance.initialize(),
-    ]);
-
-    // Phase 4: Initialize network providers after settings are loaded
-    await Future.wait([
-      RelayProvider.instance.initialize(),
-      NetworkProvider.instance.initialize(),
-      NotificationProvider.instance.initialize(npub, dataService: dataService, userProvider: UserProvider.instance),
-    ]);
-
-    // Phase 5: Initialize DataService
-    await dataService.initialize();
-
-    // Phase 6: Open remaining boxes in background
-    _openRemainingBoxes(npub);
-
-    // Phase 7: Initialize connections (non-blocking)
-    Future.microtask(() => dataService.initializeConnections());
-
-    // Phase 8: Setup memory pressure callbacks
-    _setupMemoryPressureHandling();
-  } catch (e) {
-    print('Background initialization error: $e');
-  }
-}
-
-Future<void> _openCriticalBoxes(String npub) async {
-  // Only open boxes needed for immediate UI display
-  await Future.wait([
-    Hive.openBox<UserModel>('users'),
-    Hive.openBox<NoteModel>('notes_Feed_$npub'),
-    Hive.openBox<FollowingModel>('followingBox'),
-  ]);
-}
-
-void _openRemainingBoxes(String npub) {
-  // Open remaining boxes in background without blocking
-  Future.microtask(() async {
-    final remainingBoxFutures = [
-      Hive.openBox<ReactionModel>('reactions_Feed_$npub'),
-      Hive.openBox<ReplyModel>('replies_Feed_$npub'),
-      Hive.openBox<RepostModel>('reposts_Feed_$npub'),
-      Hive.openBox<NoteModel>('notes_Profile_$npub'),
-      Hive.openBox<ReactionModel>('reactions_Profile_$npub'),
-      Hive.openBox<ReplyModel>('replies_Profile_$npub'),
-      Hive.openBox<RepostModel>('reposts_Profile_$npub'),
-      Hive.openBox<ZapModel>('zaps_$npub'),
-      Hive.openBox<NotificationModel>('notifications_$npub'),
-    ];
-
-    await Future.wait(remainingBoxFutures);
-  });
-}
-
-void _setupMemoryPressureHandling() {
-  final memoryManager = MemoryManager.instance;
-
-  // Add memory pressure callback to handle provider cleanup
-  memoryManager.addMemoryPressureCallback(() {
-    // Handle memory pressure in providers
-    try {
-      MediaProvider.instance.handleMemoryPressure();
-
-      // Notify other providers about memory pressure
-      if (memoryManager.currentPressureLevel.index >= 2) {
-        // Critical or emergency
-        // Force cleanup in critical situations
-        Future.microtask(() async {
-          try {
-            NotesProvider.instance.clearCache();
-            InteractionsProvider.instance.clearCache();
-          } catch (e) {
-            print('Provider cleanup error: $e');
-          }
-        });
-      }
-    } catch (e) {
-      print('Memory pressure handling error: $e');
-    }
-  });
-}
+// Removed background initialization functions
+// These are now handled in SplashScreen

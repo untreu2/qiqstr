@@ -1,10 +1,8 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'package:hive/hive.dart';
 import '../models/user_model.dart';
-import '../models/note_model.dart';
 import 'nostr_service.dart';
 import '../constants/relays.dart';
 
@@ -21,69 +19,59 @@ class CachedProfile {
   }
 }
 
-class ProfileBatchRequest {
-  final List<String> npubs;
-  final Completer<void> completer;
-  final DateTime requestedAt;
-
-  ProfileBatchRequest(this.npubs, this.completer, this.requestedAt);
-}
-
 class ProfileService {
+  // Memory cache (existing)
   final Map<String, CachedProfile> _profileCache = {};
+
+  // NEW STRUCTURE FOR PENDING REQUESTS
+  // Keeps one Completer per 'npub'. This way, 10 simultaneous requests
+  // for the same profile will all wait for a single network call result.
   final Map<String, Completer<Map<String, String>>> _pendingRequests = {};
-  final Queue<ProfileBatchRequest> _batchQueue = Queue();
+
+  // QUEUE TO ACCUMULATE npubs TO BE PROCESSED
+  final Set<String> _requestQueue = <String>{};
+
+  // SHORT-TERM TIMER (DEBOUNCER)
+  // When a request comes in, waits briefly for other requests to accumulate.
+  Timer? _debounceTimer;
+
+  // Cache configuration
   final Duration _cacheTTL = const Duration(minutes: 30);
   final int _maxCacheSize = 5000;
-
   Box<UserModel>? _usersBox;
-  Timer? _batchTimer;
   Timer? _cleanupTimer;
-  bool _isBatchProcessing = false;
 
   // Performance metrics
   int _cacheHits = 0;
   int _cacheMisses = 0;
-  int _primalFetches = 0;
   int _relayFetches = 0;
   int _batchRequestsProcessed = 0;
 
-  // Profile notes fetching - direct relay access
-  final Map<String, List<NoteModel>> _profileNotesCache = {};
-  final Map<String, DateTime> _profileNotesCacheTime = {};
-  final Map<String, Completer<List<NoteModel>>> _pendingNotesRequests = {};
-  final Duration _notesCacheTTL = const Duration(minutes: 15);
-  int _directRelayFetches = 0;
-
   Future<void> initialize() async {
-    _startBatchProcessing();
     _startPeriodicCleanup();
   }
 
-  void _startBatchProcessing() {
-    _batchTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
-      _processBatchQueue();
-    });
-  }
-
   void _startPeriodicCleanup() {
-    _cleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+    _cleanupTimer = Timer.periodic(const Duration(minutes: 2), (_) {
       _performCleanup();
     });
   }
 
   void _performCleanup() {
-    cleanupCache();
-    _cleanupOldBatchRequests();
-  }
+    final now = DateTime.now();
+    final cutoffTime = now.subtract(_cacheTTL);
 
-  void _cleanupOldBatchRequests() {
-    final cutoff = DateTime.now().subtract(const Duration(minutes: 5));
-    while (_batchQueue.isNotEmpty && _batchQueue.first.requestedAt.isBefore(cutoff)) {
-      final request = _batchQueue.removeFirst();
-      if (!request.completer.isCompleted) {
-        request.completer.complete();
-      }
+    final sizeBefore = _profileCache.length;
+    _profileCache.removeWhere((key, cached) => cached.fetchedAt.isBefore(cutoffTime));
+
+    final removed = sizeBefore - _profileCache.length;
+    if (removed > 0) {
+      print('[ProfileService] Cleaned up $removed expired cache entries');
+    }
+
+    // LRU eviction if cache is too large
+    if (_profileCache.length > _maxCacheSize) {
+      _evictLeastRecentlyUsed();
     }
   }
 
@@ -91,100 +79,139 @@ class ProfileService {
     _usersBox = box;
   }
 
+  /// THE SINGLE METHOD USERS WILL CALL
+  /// Never blocks UI - returns immediately with cached data or queues request
   Future<Map<String, String>> getCachedUserProfile(String npub) async {
-    return await _getCachedUserProfileInternal(npub);
+    // 1. Check memory cache first (Fast path)
+    if (_profileCache.containsKey(npub)) {
+      final cached = _profileCache[npub]!;
+      // TTL (Time-To-Live) check
+      if (DateTime.now().difference(cached.fetchedAt) < _cacheTTL) {
+        _cacheHits++;
+        _profileCache[npub] = cached.copyWithAccess(); // Update access time
+        return cached.data;
+      } else {
+        _profileCache.remove(npub); // Remove if expired
+      }
+    }
+
+    _cacheMisses++;
+
+    // 2. Is there already a pending request for this profile? If so, wait for its result.
+    if (_pendingRequests.containsKey(npub)) {
+      return _pendingRequests[npub]!.future;
+    }
+
+    // 3. No request exists, create a new one and add to queue.
+    final completer = Completer<Map<String, String>>();
+    _pendingRequests[npub] = completer;
+
+    _requestQueue.add(npub);
+
+    // Start/reset timer to process the queue
+    _startDebounceTimer();
+
+    return completer.future;
   }
 
-  Future<Map<String, String>> _getCachedUserProfileInternal(String npub) async {
-    final stopwatch = Stopwatch()..start();
+  void _startDebounceTimer() {
+    // If there's already a timer, cancel it.
+    // This ensures multiple requests in short succession are batched together (debouncing).
+    _debounceTimer?.cancel();
 
-    try {
-      final now = DateTime.now();
+    // Process queue after 100ms. This duration can be adjusted based on your app's nature.
+    _debounceTimer = Timer(const Duration(milliseconds: 100), _processRequestQueue);
+  }
 
-      // Check memory cache first
-      if (_profileCache.containsKey(npub)) {
-        final cached = _profileCache[npub]!;
-        if (now.difference(cached.fetchedAt) < _cacheTTL) {
-          _profileCache[npub] = cached.copyWithAccess();
-          _cacheHits++;
-          _recordMetric('profile_cache_hit', stopwatch.elapsedMilliseconds);
-          return cached.data;
-        } else {
-          _profileCache.remove(npub);
-        }
+  Future<void> _processRequestQueue() async {
+    if (_requestQueue.isEmpty) return;
+
+    // Take all requests from queue and clear it.
+    final npubsToFetch = List<String>.from(_requestQueue);
+    _requestQueue.clear();
+
+    print('[ProfileService] Processing batch of ${npubsToFetch.length} profiles.');
+
+    // First check Hive cache.
+    final npubsForRelay = <String>[];
+    for (final npub in npubsToFetch) {
+      final user = _usersBox?.get(npub);
+      if (user != null && DateTime.now().difference(user.updatedAt) < _cacheTTL) {
+        final data = _userModelToMap(user);
+        _addToCache(npub, CachedProfile(data, user.updatedAt));
+        // Complete this request
+        _pendingRequests[npub]?.complete(data);
+        _pendingRequests.remove(npub);
+      } else {
+        npubsForRelay.add(npub);
       }
+    }
 
-      _cacheMisses++;
+    // Make NETWORK request for the remaining ones
+    if (npubsForRelay.isNotEmpty) {
+      final results = await _batchFetchFromRelays(npubsForRelay);
 
-      // Check if already fetching
-      if (_pendingRequests.containsKey(npub)) {
-        final result = await _pendingRequests[npub]!.future;
-        _recordMetric('profile_pending_wait', stopwatch.elapsedMilliseconds);
-        return result;
-      }
+      // Process results
+      for (final npub in npubsForRelay) {
+        final data = results[npub] ?? _getDefaultProfile();
+        _addToCache(npub, CachedProfile(data, DateTime.now()));
 
-      final completer = Completer<Map<String, String>>();
-      _pendingRequests[npub] = completer;
-
-      try {
-        // Check Hive cache first
-        final user = _usersBox?.get(npub);
-        if (user != null && now.difference(user.updatedAt) < _cacheTTL) {
-          final data = _userModelToMap(user);
-          _profileCache[npub] = CachedProfile(data, user.updatedAt);
-          completer.complete(data);
-          _recordMetric('profile_hive_hit', stopwatch.elapsedMilliseconds);
-          return data;
+        if (_usersBox != null && _usersBox!.isOpen) {
+          final userModel = UserModel.fromCachedProfile(npub, data);
+          _saveToHiveAsync(npub, userModel);
         }
 
-        // Try Primal cache - fallback implementation
-        try {
-          // For now, skip Primal cache to avoid dependency issues
-          // final primal = PrimalCacheClient();
-          // final primalProfile = await primal.fetchUserProfile(npub);
-          // if (primalProfile != null) { ... }
-        } catch (e) {
-          print('[ProfileService] Primal cache unavailable: $e');
-        }
-
-        // Fallback to relay fetch
-        final fetched = await _fetchUserProfileFromRelay(npub);
-        if (fetched != null) {
-          _relayFetches++;
-          final cached = CachedProfile(fetched, DateTime.now());
-          _addToCache(npub, cached);
-
-          final usersBox = _usersBox;
-          if (usersBox != null) {
-            unawaited(usersBox.put(npub, UserModel.fromCachedProfile(npub, fetched)));
-          }
-
-          completer.complete(fetched);
-          _recordMetric('profile_relay_fetch', stopwatch.elapsedMilliseconds);
-          return fetched;
-        }
-
-        // Return default profile
-        final defaultProfile = _getDefaultProfile();
-        completer.complete(defaultProfile);
-        _recordMetric('profile_default', stopwatch.elapsedMilliseconds);
-        return defaultProfile;
-      } catch (e) {
-        final defaultProfile = _getDefaultProfile();
-        completer.complete(defaultProfile);
-        _recordMetric('profile_error', stopwatch.elapsedMilliseconds);
-        return defaultProfile;
-      } finally {
+        // Complete this request too
+        _pendingRequests[npub]?.complete(data);
         _pendingRequests.remove(npub);
       }
-    } catch (e) {
-      _recordMetric('profile_fetch_error', stopwatch.elapsedMilliseconds);
-      return _getDefaultProfile();
     }
+
+    _batchRequestsProcessed += npubsToFetch.length;
   }
 
+  /// This method should now return a result map
+  Future<Map<String, Map<String, String>>> _batchFetchFromRelays(List<String> npubs) async {
+    final results = <String, Map<String, String>>{};
+    if (npubs.isEmpty) return results;
+
+    _relayFetches += npubs.length;
+
+    // For simplicity, we'll use individual requests in parallel
+    // In a real implementation, you'd want to use a single filter for all npubs
+    final futures = npubs.map((npub) => _fetchUserProfileFromRelay(npub));
+    final profileResults = await Future.wait(futures, eagerError: false);
+
+    for (int i = 0; i < npubs.length; i++) {
+      final npub = npubs[i];
+      final profile = profileResults[i];
+      if (profile != null) {
+        results[npub] = profile;
+      }
+    }
+
+    return results;
+  }
+
+  /// Legacy method for backward compatibility - now routes through unified system
+  Future<void> batchFetchProfiles(List<String> npubs) async {
+    if (npubs.isEmpty) return;
+
+    final futures = npubs.map((npub) => getCachedUserProfile(npub));
+    await Future.wait(futures, eagerError: false);
+  }
+
+  // Helper methods
   Map<String, String> _getDefaultProfile() {
-    return {'name': 'Anonymous', 'profileImage': '', 'about': '', 'nip05': '', 'banner': '', 'lud16': '', 'website': ''};
+    return {
+      'name': 'Anonymous',
+      'profileImage': '',
+      'about': '',
+      'nip05': '',
+      'banner': '',
+      'lud16': '',
+      'website': '',
+    };
   }
 
   Map<String, String> _userModelToMap(UserModel user) {
@@ -225,156 +252,6 @@ class ProfileService {
     }
   }
 
-  Future<void> batchFetchProfiles(List<String> npubs) async {
-    if (npubs.isEmpty) return;
-
-    final completer = Completer<void>();
-    final request = ProfileBatchRequest(
-        npubs.toSet().toList(), // Remove duplicates
-        completer,
-        DateTime.now());
-
-    _batchQueue.add(request);
-
-    // Process immediately if queue is getting large
-    if (_batchQueue.length >= 5) {
-      unawaited(_processBatchQueue());
-    }
-
-    return completer.future;
-  }
-
-  Future<void> _processBatchQueue() async {
-    if (_isBatchProcessing || _batchQueue.isEmpty) return;
-
-    _isBatchProcessing = true;
-    final stopwatch = Stopwatch()..start();
-
-    try {
-      final requestsToProcess = <ProfileBatchRequest>[];
-      final allNpubs = <String>{};
-
-      // Collect up to 3 batch requests to process together
-      while (_batchQueue.isNotEmpty && requestsToProcess.length < 3) {
-        final request = _batchQueue.removeFirst();
-        requestsToProcess.add(request);
-        allNpubs.addAll(request.npubs);
-      }
-
-      if (allNpubs.isNotEmpty) {
-        await _processBatchInternal(allNpubs.toList());
-        _batchRequestsProcessed += requestsToProcess.length;
-      }
-
-      // Complete all requests
-      for (final request in requestsToProcess) {
-        if (!request.completer.isCompleted) {
-          request.completer.complete();
-        }
-      }
-
-      _recordMetric('batch_processing', stopwatch.elapsedMilliseconds);
-    } catch (e) {
-      print('[ProfileService] Batch processing error: $e');
-    } finally {
-      _isBatchProcessing = false;
-    }
-  }
-
-  Future<void> _processBatchInternal(List<String> npubs) async {
-    final now = DateTime.now();
-    final remainingForRelay = <String>[];
-
-    // Filter out already cached profiles
-    final npubsToFetch = npubs.where((npub) {
-      if (_profileCache.containsKey(npub)) {
-        final cached = _profileCache[npub]!;
-        if (now.difference(cached.fetchedAt) < _cacheTTL) {
-          return false; // Skip, already cached
-        } else {
-          _profileCache.remove(npub);
-        }
-      }
-      return true;
-    }).toList();
-
-    // Process in smaller batches to avoid overwhelming services
-    const batchSize = 15;
-    for (int i = 0; i < npubsToFetch.length; i += batchSize) {
-      final batch = npubsToFetch.skip(i).take(batchSize).toList();
-
-      await Future.wait(batch.map((pub) async {
-        try {
-          // Check Hive cache first
-          final user = _usersBox?.get(pub);
-          if (user != null && now.difference(user.updatedAt) < _cacheTTL) {
-            final data = _userModelToMap(user);
-            _addToCache(pub, CachedProfile(data, user.updatedAt));
-            return;
-          }
-
-          // Skip Primal cache for now to avoid dependency issues
-          // TODO: Re-enable when PrimalCacheClient is properly imported
-          remainingForRelay.add(pub);
-        } catch (e) {
-          print('[ProfileService] Error fetching profile for $pub: $e');
-          remainingForRelay.add(pub);
-        }
-      }), eagerError: false);
-
-      // Small delay between batches
-      if (i + batchSize < npubsToFetch.length) {
-        await Future.delayed(const Duration(milliseconds: 30));
-      }
-    }
-
-    // Fetch remaining from relays if needed
-    if (remainingForRelay.isNotEmpty) {
-      unawaited(_batchFetchFromRelays(remainingForRelay));
-    }
-  }
-
-  Future<void> _batchFetchFromRelays(List<String> npubs) async {
-    if (npubs.isEmpty) return;
-
-    _relayFetches += npubs.length;
-    final now = DateTime.now();
-
-    // Process in smaller batches to avoid overwhelming relays
-    const batchSize = 10;
-    for (int i = 0; i < npubs.length; i += batchSize) {
-      final batch = npubs.skip(i).take(batchSize).toList();
-
-      await Future.wait(batch.map((npub) async {
-        try {
-          final profile = await _fetchUserProfileFromRelay(npub);
-          if (profile != null) {
-            _addToCache(npub, CachedProfile(profile, now));
-
-            final usersBox = _usersBox;
-            if (usersBox != null && usersBox.isOpen) {
-              final userModel = UserModel.fromCachedProfile(npub, profile);
-              unawaited(usersBox.put(npub, userModel));
-            }
-          } else {
-            // Add default profile to cache to avoid repeated fetching
-            final defaultProfile = _getDefaultProfile();
-            _addToCache(npub, CachedProfile(defaultProfile, now));
-          }
-        } catch (e) {
-          print('[ProfileService] Error fetching profile for $npub: $e');
-          final defaultProfile = _getDefaultProfile();
-          _addToCache(npub, CachedProfile(defaultProfile, now));
-        }
-      }), eagerError: false);
-
-      // Small delay between batches
-      if (i + batchSize < npubs.length) {
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-    }
-  }
-
   Future<Map<String, String>?> _fetchUserProfileFromRelay(String npub) async {
     // Validate hex string format
     if (!_isValidHex(npub)) {
@@ -382,22 +259,16 @@ class ProfileService {
       return null;
     }
 
-    // Use a subset of main relays for profile fetching
-    final relaysToUse = relaySetMainSockets.take(3).toList();
+    // Use only 1 fast relay for individual requests
+    final relayUrl = relaySetMainSockets.first;
 
-    for (final relayUrl in relaysToUse) {
-      try {
-        final result = await _fetchProfileFromSingleRelay(relayUrl, npub);
-        if (result != null) {
-          return result;
-        }
-      } catch (e) {
-        print('[ProfileService] Error fetching from $relayUrl: $e');
-        continue;
-      }
+    try {
+      final result = await _fetchProfileFromSingleRelay(relayUrl, npub);
+      return result;
+    } catch (e) {
+      print('[ProfileService] Error fetching from $relayUrl: $e');
+      return null;
     }
-
-    return null;
   }
 
   Future<Map<String, String>?> _fetchProfileFromSingleRelay(String relayUrl, String npub) async {
@@ -409,7 +280,7 @@ class ProfileService {
 
     WebSocket? ws;
     try {
-      ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
+      ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 3));
       final subscriptionId = DateTime.now().millisecondsSinceEpoch.toString();
       final request = jsonEncode([
         "REQ",
@@ -448,7 +319,7 @@ class ProfileService {
         ws.add(request);
       }
 
-      final eventData = await completer.future.timeout(const Duration(seconds: 5), onTimeout: () => null);
+      final eventData = await completer.future.timeout(const Duration(seconds: 3), onTimeout: () => null);
 
       try {
         await sub.cancel();
@@ -488,275 +359,28 @@ class ProfileService {
     }
   }
 
-  // PROFILE NOTES FETCHING - DIRECT RELAY ACCESS
-  // This method fetches kind 1 and 6 events directly from relays for profiles using the old approach
-  Future<List<NoteModel>> fetchProfileNotesDirectly(String npub, {int limit = 100}) async {
-    final stopwatch = Stopwatch()..start();
-
-    try {
-      final now = DateTime.now();
-
-      // Check cache first
-      if (_profileNotesCache.containsKey(npub)) {
-        final cacheTime = _profileNotesCacheTime[npub];
-        if (cacheTime != null && now.difference(cacheTime) < _notesCacheTTL) {
-          _recordMetric('profile_notes_cache_hit', stopwatch.elapsedMilliseconds);
-          return _profileNotesCache[npub]!;
-        } else {
-          _profileNotesCache.remove(npub);
-          _profileNotesCacheTime.remove(npub);
-        }
-      }
-
-      // Check if already fetching
-      if (_pendingNotesRequests.containsKey(npub)) {
-        final result = await _pendingNotesRequests[npub]!.future;
-        _recordMetric('profile_notes_pending_wait', stopwatch.elapsedMilliseconds);
-        return result;
-      }
-
-      final completer = Completer<List<NoteModel>>();
-      _pendingNotesRequests[npub] = completer;
-
+  void _saveToHiveAsync(String npub, UserModel userModel) {
+    // Save to Hive asynchronously without blocking
+    Future.microtask(() async {
       try {
-        final notes = await _fetchNotesFromRelaysDirectly(npub, limit);
-
-        // Cache the results
-        _profileNotesCache[npub] = notes;
-        _profileNotesCacheTime[npub] = now;
-
-        completer.complete(notes);
-        _recordMetric('profile_notes_relay_fetch', stopwatch.elapsedMilliseconds);
-        _directRelayFetches++;
-
-        print('[ProfileService] Fetched ${notes.length} notes for profile $npub directly from relays');
-        return notes;
+        final usersBox = _usersBox;
+        if (usersBox != null && usersBox.isOpen) {
+          await usersBox.put(npub, userModel);
+        }
       } catch (e) {
-        print('[ProfileService] Error fetching profile notes for $npub: $e');
-        final emptyList = <NoteModel>[];
-        completer.complete(emptyList);
-        _recordMetric('profile_notes_error', stopwatch.elapsedMilliseconds);
-        return emptyList;
-      } finally {
-        _pendingNotesRequests.remove(npub);
+        print('[ProfileService] Error saving to Hive: $e');
       }
-    } catch (e) {
-      _recordMetric('profile_notes_fetch_error', stopwatch.elapsedMilliseconds);
-      return <NoteModel>[];
-    }
-  }
-
-  Future<List<NoteModel>> _fetchNotesFromRelaysDirectly(String npub, int limit) async {
-    // Validate hex string format
-    if (!_isValidHex(npub)) {
-      print('[ProfileService] Invalid hex format for notes fetch: $npub');
-      return <NoteModel>[];
-    }
-
-    final allNotes = <NoteModel>[];
-    final processedEventIds = <String>{};
-
-    // Create filter for kind 1 (notes) and kind 6 (reposts) for this specific user
-    final filter = NostrService.createNotesFilter(
-      authors: [npub],
-      kinds: [1, 6],
-      limit: limit,
-    );
-
-    final request = NostrService.serializeRequest(NostrService.createRequest(filter));
-
-    // Use a subset of main relays for better performance
-    final relaysToUse = relaySetMainSockets.take(5).toList();
-
-    final futures = relaysToUse.map((relayUrl) => _fetchFromSingleRelayDirect(relayUrl, request, npub, processedEventIds));
-
-    try {
-      final results = await Future.wait(futures, eagerError: false);
-
-      // Combine results from all relays
-      for (final relayNotes in results) {
-        for (final note in relayNotes) {
-          if (!processedEventIds.contains(note.id)) {
-            allNotes.add(note);
-            processedEventIds.add(note.id);
-          }
-        }
-      }
-
-      // Sort by timestamp (newest first)
-      allNotes.sort((a, b) {
-        final aTime = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
-        final bTime = b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
-        return bTime.compareTo(aTime);
-      });
-
-      // Limit the results
-      return allNotes.take(limit).toList();
-    } catch (e) {
-      print('[ProfileService] Error in direct relay fetch: $e');
-      return allNotes;
-    }
-  }
-
-  Future<List<NoteModel>> _fetchFromSingleRelayDirect(String relayUrl, String request, String npub, Set<String> processedEventIds) async {
-    final notes = <NoteModel>[];
-    WebSocket? ws;
-
-    try {
-      ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
-      NostrService.generateUUID();
-      final completer = Completer<void>();
-
-      late StreamSubscription sub;
-      sub = ws.listen(
-        (event) {
-          try {
-            final decoded = jsonDecode(event);
-            if (decoded is List && decoded.length >= 3) {
-              if (decoded[0] == 'EVENT') {
-                final eventData = decoded[2] as Map<String, dynamic>;
-                final eventId = eventData['id'] as String?;
-
-                if (eventId != null && !processedEventIds.contains(eventId)) {
-                  final note = _parseEventToNote(eventData, npub);
-                  if (note != null) {
-                    notes.add(note);
-                    processedEventIds.add(eventId);
-                  }
-                }
-              } else if (decoded[0] == 'EOSE') {
-                if (!completer.isCompleted) {
-                  completer.complete();
-                }
-              }
-            }
-          } catch (e) {
-            // Silently handle parsing errors
-          }
-        },
-        onError: (error) {
-          if (!completer.isCompleted) {
-            completer.complete();
-          }
-        },
-        onDone: () {
-          if (!completer.isCompleted) {
-            completer.complete();
-          }
-        },
-        cancelOnError: false,
-      );
-
-      if (ws.readyState == WebSocket.open) {
-        ws.add(request);
-      }
-
-      await completer.future.timeout(const Duration(seconds: 8), onTimeout: () {});
-
-      await sub.cancel();
-      await ws.close();
-    } catch (e) {
-      try {
-        await ws?.close();
-      } catch (_) {}
-    }
-
-    return notes;
-  }
-
-  NoteModel? _parseEventToNote(Map<String, dynamic> eventData, String expectedAuthor) {
-    try {
-      final kind = eventData['kind'] as int?;
-      final eventId = eventData['id'] as String?;
-      final author = eventData['pubkey'] as String?;
-      final content = eventData['content'] as String?;
-      final createdAt = eventData['created_at'] as int?;
-
-      if (eventId == null || author == null || createdAt == null) {
-        return null;
-      }
-
-      // Only process events from the expected author
-      if (author != expectedAuthor) {
-        return null;
-      }
-
-      final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
-      final isRepost = kind == 6;
-
-      // For reposts, try to parse the inner content
-      String noteContent = content ?? '';
-      String? originalAuthor;
-      DateTime? repostTimestamp;
-
-      if (isRepost) {
-        repostTimestamp = timestamp;
-
-        // Try to parse the reposted content
-        if (content != null && content.isNotEmpty) {
-          try {
-            final innerEvent = jsonDecode(content) as Map<String, dynamic>;
-            noteContent = innerEvent['content'] as String? ?? '';
-            originalAuthor = innerEvent['pubkey'] as String?;
-          } catch (e) {
-            // If parsing fails, use the content as is
-            noteContent = content;
-          }
-        }
-      }
-
-      return NoteModel(
-        id: eventId,
-        content: noteContent,
-        author: originalAuthor ?? author,
-        timestamp: isRepost ? (repostTimestamp ?? timestamp) : timestamp,
-        isRepost: isRepost,
-        repostedBy: isRepost ? author : null,
-        repostTimestamp: repostTimestamp,
-        rawWs: jsonEncode(eventData),
-      );
-    } catch (e) {
-      print('[ProfileService] Error parsing event to note: $e');
-      return null;
-    }
-  }
-
-  // Clear profile notes cache
-  void clearProfileNotesCache() {
-    _profileNotesCache.clear();
-    _profileNotesCacheTime.clear();
-  }
-
-  // Get cached profile notes without fetching
-  List<NoteModel>? getCachedProfileNotes(String npub) {
-    final now = DateTime.now();
-    final cacheTime = _profileNotesCacheTime[npub];
-
-    if (cacheTime != null && now.difference(cacheTime) < _notesCacheTTL) {
-      return _profileNotesCache[npub];
-    }
-
-    return null;
+    });
   }
 
   void cleanupCache() {
-    final now = DateTime.now();
-    final cutoffTime = now.subtract(_cacheTTL);
-
-    final sizeBefore = _profileCache.length;
-    _profileCache.removeWhere((key, cached) => cached.fetchedAt.isBefore(cutoffTime));
-
-    final removed = sizeBefore - _profileCache.length;
-    if (removed > 0) {
-      print('[ProfileService] Cleaned up $removed expired cache entries');
-    }
+    _performCleanup();
   }
 
   Map<String, UserModel> getProfilesSnapshot() {
     return {for (var entry in _profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)};
   }
 
-  // Enhanced statistics and monitoring
   Map<String, dynamic> getProfileStats() {
     final hitRate = _cacheHits + _cacheMisses > 0 ? (_cacheHits / (_cacheHits + _cacheMisses) * 100).toStringAsFixed(1) : '0.0';
 
@@ -766,22 +390,16 @@ class ProfileService {
       'cacheHits': _cacheHits,
       'cacheMisses': _cacheMisses,
       'hitRate': '$hitRate%',
-      'primalFetches': _primalFetches,
       'relayFetches': _relayFetches,
       'batchRequestsProcessed': _batchRequestsProcessed,
       'pendingRequests': _pendingRequests.length,
-      'queuedBatches': _batchQueue.length,
-      'isProcessing': _isBatchProcessing,
-      // Profile notes stats
-      'profileNotesCacheSize': _profileNotesCache.length,
-      'directRelayFetches': _directRelayFetches,
-      'pendingNotesRequests': _pendingNotesRequests.length,
+      'queuedRequests': _requestQueue.length,
     };
   }
 
   Future<void> dispose() async {
-    _batchTimer?.cancel();
     _cleanupTimer?.cancel();
+    _debounceTimer?.cancel();
 
     // Complete any pending requests
     for (final completer in _pendingRequests.values) {
@@ -790,57 +408,15 @@ class ProfileService {
       }
     }
 
-    // Complete any pending batch requests
-    for (final request in _batchQueue) {
-      if (!request.completer.isCompleted) {
-        request.completer.complete();
-      }
-    }
-
     _profileCache.clear();
     _pendingRequests.clear();
-    _batchQueue.clear();
-
-    // Clear profile notes cache
-    _profileNotesCache.clear();
-    _profileNotesCacheTime.clear();
-    _pendingNotesRequests.clear();
-
-    // Cleanup complete
+    _requestQueue.clear();
   }
 
   // Force process pending batches
   void flushPendingBatches() {
-    unawaited(_processBatchQueue());
-  }
-
-  // Performance metrics tracking
-  final Map<String, List<int>> _metrics = {};
-
-  void _recordMetric(String name, int value) {
-    _metrics.putIfAbsent(name, () => []);
-    _metrics[name]!.add(value);
-
-    // Keep only recent metrics to prevent memory bloat
-    if (_metrics[name]!.length > 100) {
-      _metrics[name]!.removeRange(0, _metrics[name]!.length - 50);
-    }
-  }
-
-  Map<String, dynamic> getMetrics() {
-    final result = <String, dynamic>{};
-    for (final entry in _metrics.entries) {
-      if (entry.value.isNotEmpty) {
-        final values = entry.value;
-        result[entry.key] = {
-          'count': values.length,
-          'avg': values.reduce((a, b) => a + b) / values.length,
-          'min': values.reduce((a, b) => a < b ? a : b),
-          'max': values.reduce((a, b) => a > b ? a : b),
-        };
-      }
-    }
-    return result;
+    _debounceTimer?.cancel();
+    _processRequestQueue();
   }
 
   // Helper method to validate hex strings

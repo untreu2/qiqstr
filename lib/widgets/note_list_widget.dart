@@ -1,336 +1,191 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../theme/theme_manager.dart';
-import '../models/note_model.dart';
+import 'package:provider/provider.dart';
+import '../providers/notes_list_provider.dart';
 import '../services/data_service.dart';
-import '../services/initialization_service.dart';
-import '../providers/user_provider.dart';
-import '../providers/notes_provider.dart';
-import '../providers/interactions_provider.dart';
+import '../theme/theme_manager.dart';
 import 'note_widget.dart';
 
 class NoteListWidget extends StatefulWidget {
-  final String npub;
-  final DataType dataType;
-  final DataService? sharedDataService;
-
-  const NoteListWidget({
-    super.key,
-    required this.npub,
-    required this.dataType,
-    this.sharedDataService,
-  });
+  const NoteListWidget({super.key});
 
   @override
   State<NoteListWidget> createState() => _NoteListWidgetState();
 }
 
 class _NoteListWidgetState extends State<NoteListWidget> {
-  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
   final ScrollController _scrollController = ScrollController();
-  late DataService _dataService;
-
-  String? _currentUserNpub;
-  bool _isLoadingMore = false;
-
-  List<NoteModel> _filteredNotes = [];
 
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_onScroll);
+    _setupScrollListener();
+
+    // Trigger initial data fetch
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeAsync();
+      final provider = context.read<NotesListProvider>();
+      provider.fetchInitialNotes();
+    });
+  }
+
+  void _setupScrollListener() {
+    _scrollController.addListener(() {
+      // Trigger load more when scrolled to 90% of the way down
+      if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.9) {
+        final provider = context.read<NotesListProvider>();
+        provider.fetchMoreNotes();
+      }
     });
   }
 
   @override
   void dispose() {
-    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
-    _dataService.notesNotifier.removeListener(_onNotesChanged);
-    NotesProvider.instance.removeListener(_onProviderNotesChanged);
-
-    // Only close connections if we created our own DataService
-    if (widget.sharedDataService == null) {
-      _dataService.closeConnections();
-    }
     super.dispose();
-  }
-
-  void _onNotesChanged() {
-    if (mounted) {
-      _updateFilteredNotes(_dataService.notesNotifier.value);
-    }
-  }
-
-  void _onProviderNotesChanged() {
-    if (mounted) {
-      // Sync notes from provider to DataService if needed
-      final providerNotes = NotesProvider.instance.getFeedNotes();
-      _updateFilteredNotes(providerNotes);
-    }
-  }
-
-  Future<void> _initializeAsync() async {
-    try {
-      _currentUserNpub = await _secureStorage.read(key: 'npub');
-      if (!mounted) return;
-
-      // Use optimized initialization service for faster startup
-      await InitializationService.instance.initializeApp(_currentUserNpub ?? '');
-
-      // Initialize InteractionsProvider for this specific dataType
-      await _initializeInteractionsProvider();
-
-      await _setupDataService();
-      _dataService.notesNotifier.addListener(_onNotesChanged);
-
-      // Listen to NotesProvider changes as well
-      NotesProvider.instance.addListener(_onProviderNotesChanged);
-
-      _updateFilteredNotes(_dataService.notesNotifier.value);
-
-      // UI is shown immediately without loading state
-    } catch (e) {
-      debugPrint('[NoteListWidget] Initialization error: $e');
-      // No loading state to update
-    }
-  }
-
-  Future<void> _initializeInteractionsProvider() async {
-    try {
-      // Initialize InteractionsProvider with correct dataType
-      final dataTypeString = widget.dataType.toString().split('.').last;
-      await InteractionsProvider.instance.initialize(_currentUserNpub ?? '', dataType: dataTypeString);
-    } catch (e) {
-      debugPrint('[NoteListWidget] InteractionsProvider initialization error: $e');
-    }
-  }
-
-  Future<void> _setupDataService() async {
-    if (widget.sharedDataService != null) {
-      _dataService = widget.sharedDataService!;
-
-      // Check if shared DataService matches our requirements
-      if (_dataService.npub != widget.npub || _dataService.dataType != widget.dataType) {
-        _dataService = _createDataService();
-        await _initializeDataService();
-      } else {
-        // Trigger initial load if needed for shared DataService
-        _scheduleConnectionInitialization(50);
-      }
-    } else {
-      _dataService = _createDataService();
-      await _initializeDataService();
-    }
-  }
-
-  Future<void> _initializeDataService() async {
-    await _dataService.initializeLightweight();
-    _scheduleHeavyOperations();
-  }
-
-  void _scheduleHeavyOperations() {
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (mounted) {
-        _dataService.initializeHeavyOperations().then((_) {
-          if (mounted) {
-            _dataService.initializeConnections();
-          }
-        }).catchError((e) {
-          debugPrint('[NoteListWidget] Heavy initialization error: $e');
-        });
-      }
-    });
-  }
-
-  void _scheduleConnectionInitialization(int delayMs) {
-    Future.delayed(Duration(milliseconds: delayMs), () {
-      if (mounted && _dataService.notesNotifier.value.isEmpty) {
-        _dataService.initializeConnections();
-      }
-    });
-  }
-
-  DataService _createDataService() {
-    return DataService(
-      npub: widget.npub,
-      dataType: widget.dataType,
-      onNewNote: (_) {},
-      onReactionsUpdated: (_, __) {},
-      onRepliesUpdated: (_, __) {},
-      onRepostsUpdated: (_, __) {},
-      onReactionCountUpdated: (_, __) {},
-      onReplyCountUpdated: (_, __) {},
-      onRepostCountUpdated: (_, __) {},
-    );
-  }
-
-  void _onScroll() {
-    if (!_isLoadingMore && _scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.9) {
-      _loadMoreItemsFromNetwork();
-    }
-  }
-
-  void _loadMoreItemsFromNetwork() {
-    if (_isLoadingMore) return;
-
-    setState(() => _isLoadingMore = true);
-
-    _dataService.loadMoreNotes().whenComplete(() {
-      if (mounted) {
-        setState(() => _isLoadingMore = false);
-      }
-    });
-  }
-
-  void _updateFilteredNotes(List<NoteModel> notes) {
-    final filtered = notes.where((n) => !n.isReply || n.isRepost).toList();
-
-    if (mounted) {
-      setState(() {
-        _filteredNotes = filtered;
-      });
-    }
-
-    // Progressive loading in background - non-blocking
-    _scheduleProgressiveLoading(filtered);
-  }
-
-  /// Progressive loading strategy to prevent UI blocking
-  void _scheduleProgressiveLoading(List<NoteModel> notes) {
-    Future.microtask(() async {
-      // Phase 1: Load critical user profiles for first 5 notes only
-      final criticalUserNpubs = <String>{};
-      for (final note in notes.take(5)) {
-        criticalUserNpubs.add(note.author);
-        if (note.repostedBy != null) {
-          criticalUserNpubs.add(note.repostedBy!);
-        }
-      }
-
-      if (criticalUserNpubs.isNotEmpty) {
-        UserProvider.instance.loadUsers(criticalUserNpubs.toList());
-      }
-
-      // Small delay before loading more
-      await Future.delayed(const Duration(milliseconds: 50));
-
-      // Phase 2: Load remaining user profiles in batches
-      _loadRemainingUsersInBatches(notes);
-
-      // Phase 3: Load interactions progressively
-      _loadInteractionsProgressively(notes);
-    });
-  }
-
-  void _loadRemainingUsersInBatches(List<NoteModel> notes) {
-    Future.microtask(() async {
-      const batchSize = 10;
-      final remainingNotes = notes.skip(5).toList();
-
-      for (int i = 0; i < remainingNotes.length; i += batchSize) {
-        final batch = remainingNotes.skip(i).take(batchSize);
-        final userNpubs = <String>{};
-
-        for (final note in batch) {
-          userNpubs.add(note.author);
-          if (note.repostedBy != null) {
-            userNpubs.add(note.repostedBy!);
-          }
-        }
-
-        if (userNpubs.isNotEmpty) {
-          UserProvider.instance.loadUsers(userNpubs.toList());
-        }
-
-        // Small delay between batches
-        await Future.delayed(const Duration(milliseconds: 25));
-      }
-    });
-  }
-
-  void _loadInteractionsProgressively(List<NoteModel> notes) {
-    Future.microtask(() async {
-      const batchSize = 5;
-      final interactionsProvider = InteractionsProvider.instance;
-      final notesProvider = NotesProvider.instance;
-
-      for (int i = 0; i < notes.length; i += batchSize) {
-        final batch = notes.skip(i).take(batchSize);
-
-        for (final note in batch) {
-          // Load interactions without blocking
-          Future.microtask(() {
-            final reactions = interactionsProvider.getReactionsForNote(note.id);
-            final replies = interactionsProvider.getRepliesForNote(note.id);
-            final reposts = interactionsProvider.getRepostsForNote(note.id);
-            final zaps = interactionsProvider.getZapsForNote(note.id);
-
-            // Update counts if available
-            if (reactions.isNotEmpty || replies.isNotEmpty || reposts.isNotEmpty || zaps.isNotEmpty) {
-              notesProvider.updateNoteInteractionCounts(
-                note.id,
-                reactionCount: reactions.length,
-                replyCount: replies.length,
-                repostCount: reposts.length,
-                zapAmount: zaps.fold<int>(0, (sum, zap) => sum + zap.amount),
-              );
-            }
-          });
-        }
-
-        // Delay between interaction batches
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-    });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_filteredNotes.isEmpty) {
-      return _buildEmptyState();
-    }
+    return Consumer<NotesListProvider>(
+      builder: (context, provider, child) {
+        // Show initial loading state
+        if (provider.isLoading && provider.notes.isEmpty) {
+          return _buildInitialLoadingState();
+        }
 
-    return _buildNotesList();
+        // Show error state
+        if (provider.hasError) {
+          return _buildErrorState(provider.errorMessage ?? 'Unknown error');
+        }
+
+        // Show empty state
+        if (provider.isEmpty) {
+          return _buildEmptyState();
+        }
+
+        // Show notes list
+        return _buildNotesList(provider);
+      },
+    );
+  }
+
+  Widget _buildInitialLoadingState() {
+    return const SliverToBoxAdapter(
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Loading notes...'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState(String error) {
+    return SliverToBoxAdapter(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(
+                Icons.error_outline,
+                size: 48,
+                color: Colors.red,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Error loading notes',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                error,
+                style: Theme.of(context).textTheme.bodyMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  final provider = context.read<NotesListProvider>();
+                  provider.fetchInitialNotes();
+                },
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildEmptyState() {
     return const SliverToBoxAdapter(
       child: Center(
         child: Padding(
-          padding: EdgeInsets.all(24.0),
-          child: Text('No notes found.'),
+          padding: EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.note_alt_outlined,
+                size: 64,
+                color: Colors.grey,
+              ),
+              SizedBox(height: 16),
+              Text(
+                'No notes found',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Check back later for new content',
+                style: TextStyle(
+                  color: Colors.grey,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildNotesList() {
-    final itemsToShow = _filteredNotes.length;
+  Widget _buildNotesList(NotesListProvider provider) {
+    final notes = provider.notes;
 
     return SliverList.separated(
-      itemCount: itemsToShow + (_isLoadingMore ? 1 : 0),
+      itemCount: notes.length + (provider.isLoadingMore ? 1 : 0),
       separatorBuilder: (context, index) => Divider(
         height: 12,
         thickness: 1,
         color: context.colors.border,
       ),
       itemBuilder: (context, index) {
-        if (index >= itemsToShow) {
-          return _buildLoadingIndicator();
+        // Show loading indicator for "load more"
+        if (index >= notes.length) {
+          return _buildLoadMoreIndicator();
         }
 
-        return _buildNoteItem(index);
+        final note = notes[index];
+        return _buildNoteItem(note, provider);
       },
     );
   }
 
-  Widget _buildLoadingIndicator() {
-    return const Center(
-      child: Padding(
-        padding: EdgeInsets.all(16.0),
+  Widget _buildLoadMoreIndicator() {
+    return const Padding(
+      padding: EdgeInsets.all(16.0),
+      child: Center(
         child: SizedBox(
           width: 20,
           height: 20,
@@ -340,19 +195,36 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     );
   }
 
-  Widget _buildNoteItem(int index) {
-    final note = _filteredNotes[index];
+  Widget _buildNoteItem(note, NotesListProvider provider) {
     return NoteWidget(
       key: ValueKey(note.id),
       note: note,
       reactionCount: note.reactionCount,
       replyCount: note.replyCount,
       repostCount: note.repostCount,
-      dataService: _dataService,
-      currentUserNpub: _currentUserNpub!,
-      notesNotifier: _dataService.notesNotifier,
-      profiles: {}, // Empty since we're using UserProvider now
+      dataService: provider.dataService,
+      currentUserNpub: provider.npub,
+      notesNotifier: provider.dataService.notesNotifier,
+      profiles: {}, // Empty since we're using UserProvider globally
       isSmallView: true,
+    );
+  }
+}
+
+/// Factory method to create a NoteListWidget with proper provider setup
+class NoteListWidgetFactory {
+  static Widget create({
+    required String npub,
+    required DataType dataType,
+    DataService? sharedDataService,
+  }) {
+    return ChangeNotifierProvider(
+      create: (context) => NotesListProvider(
+        npub: npub,
+        dataType: dataType,
+        sharedDataService: sharedDataService,
+      ),
+      child: const NoteListWidget(),
     );
   }
 }

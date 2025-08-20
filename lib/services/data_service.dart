@@ -220,7 +220,7 @@ class DataService {
 
   Timer? _cacheCleanupTimer;
   Timer? _interactionRefreshTimer;
-  int currentLimit = 100;
+  int currentLimit = 100; // Start with 100 notes for better feed experience
 
   final Map<String, Completer<Map<String, String>>> _pendingProfileRequests = {};
 
@@ -296,6 +296,9 @@ class DataService {
       // Load cached notes immediately for UI (lightweight operation)
       await loadNotesFromCache((loadedNotes) {});
 
+      // Immediately preload profiles for visible notes to prevent loading later
+      await _preloadProfilesForVisibleNotes();
+
       _metrics.recordOperation('lightweight_init', stopwatch.elapsedMilliseconds);
       print('[DataService] Lightweight initialization completed in ${stopwatch.elapsedMilliseconds}ms');
     } catch (e) {
@@ -351,6 +354,9 @@ class DataService {
 
       // Load cache data in background
       Future.microtask(() => _loadCacheDataInBackground());
+
+      // Aggressively preload all profiles for cached notes to prevent loading later
+      Future.microtask(() => _aggressivelyPreloadAllProfiles());
 
       // Start optimized timers
       _startOptimizedTimers();
@@ -965,6 +971,101 @@ class DataService {
   }
 
   Future<void> _broadcastRequest(String serializedRequest) async => await _safeBroadcast(serializedRequest);
+
+  /// Preload profiles for visible notes during startup to prevent loading states
+  Future<void> _preloadProfilesForVisibleNotes() async {
+    if (notes.isEmpty) return;
+
+    final stopwatch = Stopwatch()..start();
+
+    // Get authors from first 50 notes (what users will see immediately)
+    final visibleNotes = notes.take(50).toList();
+    final authorsToPreload = <String>{};
+
+    for (final note in visibleNotes) {
+      authorsToPreload.add(note.author);
+      if (note.repostedBy != null) {
+        authorsToPreload.add(note.repostedBy!);
+      }
+    }
+
+    // Aggressively fetch these profiles to avoid loading states
+    await fetchProfilesBatch(authorsToPreload.toList());
+
+    print('[DataService] Preloaded ${authorsToPreload.length} profiles for visible notes in ${stopwatch.elapsedMilliseconds}ms');
+  }
+
+  /// Fetch profiles specifically for visible notes immediately
+  Future<void> _fetchProfilesForVisibleNotes(List<NoteModel> notes) async {
+    if (notes.isEmpty) return;
+
+    final authorsToFetch = <String>{};
+
+    for (final note in notes) {
+      authorsToFetch.add(note.author);
+      if (note.repostedBy != null) {
+        authorsToFetch.add(note.repostedBy!);
+      }
+    }
+
+    // Immediately fetch profiles to prevent loading states
+    await fetchProfilesBatch(authorsToFetch.toList());
+  }
+
+  /// Aggressively preload ALL profiles for cached notes to eliminate loading states
+  Future<void> _aggressivelyPreloadAllProfiles() async {
+    final stopwatch = Stopwatch()..start();
+
+    // Get all unique authors from ALL cached notes
+    final allAuthors = <String>{};
+
+    for (final note in notes) {
+      allAuthors.add(note.author);
+      if (note.repostedBy != null) {
+        allAuthors.add(note.repostedBy!);
+      }
+    }
+
+    // Also get authors from interactions
+    for (final reactions in reactionsMap.values) {
+      for (final reaction in reactions) {
+        allAuthors.add(reaction.author);
+      }
+    }
+
+    for (final replies in repliesMap.values) {
+      for (final reply in replies) {
+        allAuthors.add(reply.author);
+      }
+    }
+
+    for (final reposts in repostsMap.values) {
+      for (final repost in reposts) {
+        allAuthors.add(repost.repostedBy);
+      }
+    }
+
+    // Filter out already cached profiles
+    final uncachedAuthors = allAuthors.where((author) {
+      return !profileCache.containsKey(author) || DateTime.now().difference(profileCache[author]!.fetchedAt) > profileCacheTTL;
+    }).toList();
+
+    if (uncachedAuthors.isNotEmpty) {
+      // Process in batches to avoid overwhelming the system
+      const batchSize = 50;
+      for (int i = 0; i < uncachedAuthors.length; i += batchSize) {
+        final batch = uncachedAuthors.skip(i).take(batchSize).toList();
+        await fetchProfilesBatch(batch);
+
+        // Small delay between batches to prevent blocking
+        if (i + batchSize < uncachedAuthors.length) {
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+      }
+    }
+
+    print('[DataService] Aggressively preloaded ${uncachedAuthors.length} profiles in ${stopwatch.elapsedMilliseconds}ms');
+  }
 
   Future<void> _safeBroadcast(String message) async {
     try {
@@ -1964,7 +2065,7 @@ class DataService {
     final filter = NostrService.createNotesFilter(
       authors: [userNpub],
       kinds: [1, 6],
-      limit: 50, // Get latest 50 notes
+      limit: 100, // Get latest 100 notes for profile refresh
       since: since != null ? since.millisecondsSinceEpoch ~/ 1000 : null,
     );
 
@@ -3253,7 +3354,7 @@ class DataService {
         return bTime.compareTo(aTime);
       });
 
-      final limitedNotes = filteredNotes.take(150).toList();
+      final limitedNotes = filteredNotes.take(100).toList(); // Load 100 notes from cache initially
       final newNotes = <NoteModel>[];
 
       // Process notes in batches to avoid blocking
@@ -3292,14 +3393,16 @@ class DataService {
 
         final cachedEventIds = newNotes.map((note) => note.id).toList();
 
-        // Fetch interactions and profiles in background
+        // Immediately fetch profiles for better UX (no loading states)
+        await _fetchProfilesForVisibleNotes(newNotes);
+
+        // Fetch remaining interactions in background
         Future.microtask(() => fetchInteractionsForEvents(cachedEventIds));
-        Future.microtask(() async {
-          await _fetchProfilesForAllData();
-          profilesNotifier.value = {
-            for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data),
-          };
-        });
+
+        // Update profiles notifier
+        profilesNotifier.value = {
+          for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data),
+        };
       }
     } catch (e) {
       print('[DataService ERROR] Error loading notes from cache: $e');
