@@ -45,14 +45,24 @@ class CacheService {
   int _cacheEvictions = 0;
 
   CacheService() {
-    _startMemoryManagement();
+    // Will be started lazily when first cache operation occurs
   }
 
   void _startMemoryManagement() {
+    if (_memoryCleanupTimer != null) return; // Already started
+
     // More frequent cleanup for better memory management
     _memoryCleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
       _performMemoryCleanup();
     });
+  }
+
+  void _ensureMemoryManagementStarted() {
+    if (_memoryCleanupTimer == null) {
+      Future.delayed(const Duration(minutes: 1), () {
+        _startMemoryManagement();
+      });
+    }
   }
 
   void _performMemoryCleanup() {
@@ -166,6 +176,8 @@ class CacheService {
   }
 
   Future<void> initializeBoxes(String npub, String dataType) async {
+    _ensureMemoryManagementStarted();
+
     // Phase 1: Open critical boxes first (blocking)
     await _initializeCriticalBoxes(npub, dataType);
 
@@ -209,19 +221,23 @@ class CacheService {
   }
 
   void _startProgressiveCacheLoading() {
-    Future.microtask(() async {
-      // Load critical cache first (reactions for immediate display)
-      await loadReactionsFromCache();
+    Future.delayed(const Duration(milliseconds: 500), () async {
+      try {
+        // Load critical cache first (reactions for immediate display)
+        await loadReactionsFromCache();
 
-      // Small delay then load remaining cache progressively
-      await Future.delayed(const Duration(milliseconds: 50));
+        // Longer delay then load remaining cache progressively
+        await Future.delayed(const Duration(milliseconds: 200));
 
-      // Load remaining cache in parallel but with lower priority
-      Future.wait([
-        loadRepliesFromCache(),
-        loadRepostsFromCache(),
-        loadZapsFromCache(),
-      ]);
+        // Load remaining cache in parallel but with lower priority
+        Future.wait([
+          loadRepliesFromCache(),
+          loadRepostsFromCache(),
+          loadZapsFromCache(),
+        ]);
+      } catch (e) {
+        debugPrint('[CacheService] Progressive cache loading error: $e');
+      }
     });
   }
 

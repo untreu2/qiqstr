@@ -17,7 +17,7 @@ class MediaService {
   factory MediaService() => _instance;
 
   MediaService._internal() {
-    _startMemoryManagement();
+    // Will be started lazily when first media is cached
   }
 
   final Set<String> _cachedUrls = {};
@@ -38,10 +38,20 @@ class MediaService {
   static const int _memoryPressureThreshold = 1500; // New threshold
 
   void _startMemoryManagement() {
+    if (_cleanupTimer != null) return; // Already started
+
     // More frequent cleanup for better memory management
     _cleanupTimer = Timer.periodic(const Duration(minutes: 10), (_) {
       _performMemoryCleanup();
     });
+  }
+
+  void _ensureMemoryManagementStarted() {
+    if (_cleanupTimer == null && (_cachedUrls.isNotEmpty || _failedUrls.isNotEmpty)) {
+      Future.delayed(const Duration(minutes: 2), () {
+        _startMemoryManagement();
+      });
+    }
   }
 
   void _performMemoryCleanup() {
@@ -88,6 +98,8 @@ class MediaService {
     final newUrls = urls.where((url) => !_cachedUrls.contains(url) && !_failedUrls.contains(url) && _isValidMediaUrl(url)).toList();
 
     if (newUrls.isEmpty) return;
+
+    _ensureMemoryManagementStarted();
 
     for (final url in newUrls) {
       final item = MediaCacheItem(url, priority);

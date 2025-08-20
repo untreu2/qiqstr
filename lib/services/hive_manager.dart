@@ -14,7 +14,7 @@ class HiveManager {
   static HiveManager get instance => _instance ??= HiveManager._internal();
 
   HiveManager._internal() {
-    _startAutomaticCleanup();
+    // Will be started lazily when first box is opened
   }
 
   // Batch operation queues
@@ -40,6 +40,8 @@ class HiveManager {
   bool _isInitialized = false;
 
   void _startAutomaticCleanup() {
+    if (_cleanupTimer != null) return; // Already started
+
     // Regular cleanup of old data
     _cleanupTimer = Timer.periodic(_cleanupInterval, (_) {
       _performAutomaticCleanup();
@@ -49,6 +51,14 @@ class HiveManager {
     _compactionTimer = Timer.periodic(_compactionInterval, (_) {
       _performAutomaticCompaction();
     });
+  }
+
+  void _ensureCleanupStarted() {
+    if (_cleanupTimer == null && _openBoxes.isNotEmpty) {
+      Future.delayed(const Duration(minutes: 5), () {
+        _startAutomaticCleanup();
+      });
+    }
   }
 
   Future<void> _performAutomaticCleanup() async {
@@ -183,6 +193,8 @@ class HiveManager {
       final box = await Hive.openBox<T>(boxName);
       _openBoxes[boxName] = box;
       _pendingBoxes.remove(boxName);
+
+      _ensureCleanupStarted();
 
       debugPrint('[HiveManager] Opened box: $boxName');
       return box;

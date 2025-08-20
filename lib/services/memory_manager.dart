@@ -12,7 +12,7 @@ class MemoryManager {
   static MemoryManager get instance => _instance ??= MemoryManager._internal();
 
   MemoryManager._internal() {
-    _startMemoryMonitoring();
+    // Will be started lazily when needed
   }
 
   Timer? _monitoringTimer;
@@ -36,6 +36,8 @@ class MemoryManager {
   final List<VoidCallback> _memoryPressureCallbacks = [];
 
   void _startMemoryMonitoring() {
+    if (_monitoringTimer != null) return; // Already started
+
     // Monitor memory usage
     _monitoringTimer = Timer.periodic(_monitoringInterval, (_) {
       _checkMemoryUsage();
@@ -48,6 +50,14 @@ class MemoryManager {
 
     // Listen to system memory warnings
     _setupSystemMemoryWarnings();
+  }
+
+  void _ensureInitialized() {
+    if (_monitoringTimer == null) {
+      Future.delayed(const Duration(seconds: 10), () {
+        _startMemoryMonitoring();
+      });
+    }
   }
 
   void _setupSystemMemoryWarnings() {
@@ -263,6 +273,7 @@ class MemoryManager {
 
   // Public API
   void addMemoryPressureCallback(VoidCallback callback) {
+    _ensureInitialized();
     _memoryPressureCallbacks.add(callback);
   }
 
@@ -274,7 +285,10 @@ class MemoryManager {
 
   double get lastKnownMemoryUsage => _lastKnownMemoryUsage;
 
-  bool get isUnderMemoryPressure => _currentPressureLevel.index >= MemoryPressureLevel.warning.index;
+  bool get isUnderMemoryPressure {
+    _ensureInitialized();
+    return _currentPressureLevel.index >= MemoryPressureLevel.warning.index;
+  }
 
   Map<String, dynamic> getMemoryStats() {
     return {

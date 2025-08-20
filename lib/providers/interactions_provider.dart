@@ -181,6 +181,10 @@ class InteractionsProvider extends ChangeNotifier {
 
   // Add new interactions
   Future<void> addReaction(ReactionModel reaction) async {
+    if (!reaction.id.startsWith('optimistic_')) {
+      _reactionsByNote[reaction.targetEventId]?.removeWhere((r) => r.author == reaction.author && r.id.startsWith('optimistic_'));
+    }
+
     _addReactionToCache(reaction);
 
     try {
@@ -205,6 +209,10 @@ class InteractionsProvider extends ChangeNotifier {
   }
 
   Future<void> addRepost(RepostModel repost) async {
+    if (!repost.id.startsWith('optimistic_')) {
+      _repostsByNote[repost.originalNoteId]?.removeWhere((r) => r.repostedBy == repost.repostedBy && r.id.startsWith('optimistic_'));
+    }
+
     _addRepostToCache(repost);
 
     try {
@@ -231,6 +239,9 @@ class InteractionsProvider extends ChangeNotifier {
   // Batch operations
   Future<void> addReactions(List<ReactionModel> reactions) async {
     for (final reaction in reactions) {
+      if (!reaction.id.startsWith('optimistic_')) {
+        _reactionsByNote[reaction.targetEventId]?.removeWhere((r) => r.author == reaction.author && r.id.startsWith('optimistic_'));
+      }
       _addReactionToCache(reaction);
     }
 
@@ -261,6 +272,9 @@ class InteractionsProvider extends ChangeNotifier {
 
   Future<void> addReposts(List<RepostModel> reposts) async {
     for (final repost in reposts) {
+      if (!repost.id.startsWith('optimistic_')) {
+        _repostsByNote[repost.originalNoteId]?.removeWhere((r) => r.repostedBy == repost.repostedBy && r.id.startsWith('optimistic_'));
+      }
       _addRepostToCache(repost);
     }
 

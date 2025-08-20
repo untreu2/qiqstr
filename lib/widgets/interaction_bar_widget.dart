@@ -140,51 +140,45 @@ class _InteractionBarState extends State<InteractionBar> {
     final double fontSize = widget.isLarge ? 15.5 : 15;
     final double spacing = widget.isLarge ? 7 : 6.5;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _reactionButtonKey.currentState?.onTap(),
-      child: Row(
-        children: [
-          IgnorePointer(
-            child: LikeButton(
-              key: _reactionButtonKey,
-              size: iconSize * textScaleFactor,
-              isLiked: hasReacted,
-              animationDuration: const Duration(milliseconds: 1000),
-              likeBuilder: (bool isLiked) {
-                return SvgPicture.asset(
-                  'assets/reaction_button.svg',
-                  width: iconSize * textScaleFactor,
-                  height: iconSize * textScaleFactor,
-                  colorFilter: ColorFilter.mode(
-                    (widget.isReactionGlowing || isLiked) ? colors.reaction : colors.secondary,
-                    BlendMode.srcIn,
-                  ),
-                );
-              },
-              onTap: (bool isLiked) async {
-                return await _handleReactionTap(isLiked);
-              },
-              circleColor: CircleColor(
-                start: colors.reaction.withOpacity(0.3),
-                end: colors.reaction,
+    return Row(
+      children: [
+        LikeButton(
+          key: _reactionButtonKey,
+          size: iconSize * textScaleFactor,
+          isLiked: hasReacted,
+          animationDuration: const Duration(milliseconds: 1000),
+          likeBuilder: (bool isLiked) {
+            return SvgPicture.asset(
+              'assets/reaction_button.svg',
+              width: iconSize * textScaleFactor,
+              height: iconSize * textScaleFactor,
+              colorFilter: ColorFilter.mode(
+                (widget.isReactionGlowing || isLiked) ? colors.reaction : colors.secondary,
+                BlendMode.srcIn,
               ),
-              bubblesColor: BubblesColor(
-                dotPrimaryColor: colors.reaction,
-                dotSecondaryColor: colors.reaction.withOpacity(0.7),
-              ),
-            ),
+            );
+          },
+          onTap: (bool isLiked) async {
+            return await _handleReactionTap(isLiked);
+          },
+          circleColor: CircleColor(
+            start: colors.reaction.withOpacity(0.3),
+            end: colors.reaction,
           ),
-          SizedBox(width: spacing),
-          Opacity(
-            opacity: reactionCount > 0 ? 1.0 : 0.0,
-            child: Text(
-              _formatCount(reactionCount),
-              style: TextStyle(fontSize: fontSize, color: colors.secondary),
-            ),
+          bubblesColor: BubblesColor(
+            dotPrimaryColor: colors.reaction,
+            dotSecondaryColor: colors.reaction.withOpacity(0.7),
           ),
-        ],
-      ),
+        ),
+        SizedBox(width: spacing),
+        Opacity(
+          opacity: reactionCount > 0 ? 1.0 : 0.0,
+          child: Text(
+            _formatCount(reactionCount),
+            style: TextStyle(fontSize: fontSize, color: colors.secondary),
+          ),
+        ),
+      ],
     );
   }
 
@@ -195,52 +189,46 @@ class _InteractionBarState extends State<InteractionBar> {
     final double fontSize = widget.isLarge ? 15 : 14.5;
     final double spacing = widget.isLarge ? 6 : 5.5;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _replyButtonKey.currentState?.onTap(),
-      child: Row(
-        children: [
-          IgnorePointer(
-            child: LikeButton(
-              key: _replyButtonKey,
-              size: iconSize * textScaleFactor,
-              isLiked: hasReplied,
-              animationDuration: const Duration(milliseconds: 1000),
-              likeBuilder: (bool isLiked) {
-                return SvgPicture.asset(
-                  'assets/reply_button.svg',
-                  width: iconSize * textScaleFactor,
-                  height: iconSize * textScaleFactor,
-                  colorFilter: ColorFilter.mode(
-                    (widget.isReplyGlowing || isLiked) ? colors.reply : colors.secondary,
-                    BlendMode.srcIn,
-                  ),
-                );
-              },
-              onTap: (bool isLiked) async {
-                _handleReplyTap();
-                return false; // Reply doesn't toggle state
-              },
-              circleColor: CircleColor(
-                start: colors.reply.withOpacity(0.3),
-                end: colors.reply,
+    return Row(
+      children: [
+        LikeButton(
+          key: _replyButtonKey,
+          size: iconSize * textScaleFactor,
+          isLiked: hasReplied,
+          animationDuration: const Duration(milliseconds: 1000),
+          likeBuilder: (bool isLiked) {
+            return SvgPicture.asset(
+              'assets/reply_button.svg',
+              width: iconSize * textScaleFactor,
+              height: iconSize * textScaleFactor,
+              colorFilter: ColorFilter.mode(
+                (widget.isReplyGlowing || isLiked) ? colors.reply : colors.secondary,
+                BlendMode.srcIn,
               ),
-              bubblesColor: BubblesColor(
-                dotPrimaryColor: colors.reply,
-                dotSecondaryColor: colors.reply.withOpacity(0.7),
-              ),
-            ),
+            );
+          },
+          onTap: (bool isLiked) async {
+            _handleReplyTap();
+            return false; // Reply doesn't toggle state
+          },
+          circleColor: CircleColor(
+            start: colors.reply.withOpacity(0.3),
+            end: colors.reply,
           ),
-          SizedBox(width: spacing),
-          Opacity(
-            opacity: replyCount > 0 ? 1.0 : 0.0,
-            child: Text(
-              _formatCount(replyCount),
-              style: TextStyle(fontSize: fontSize, color: colors.secondary),
-            ),
+          bubblesColor: BubblesColor(
+            dotPrimaryColor: colors.reply,
+            dotSecondaryColor: colors.reply.withOpacity(0.7),
           ),
-        ],
-      ),
+        ),
+        SizedBox(width: spacing),
+        Opacity(
+          opacity: replyCount > 0 ? 1.0 : 0.0,
+          child: Text(
+            _formatCount(replyCount),
+            style: TextStyle(fontSize: fontSize, color: colors.secondary),
+          ),
+        ),
+      ],
     );
   }
 
@@ -251,54 +239,48 @@ class _InteractionBarState extends State<InteractionBar> {
     final double fontSize = widget.isLarge ? 15 : 14.5;
     final double spacing = widget.isLarge ? 6 : 5.5;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _repostButtonKey.currentState?.onTap(),
-      child: Row(
-        children: [
-          IgnorePointer(
-            child: LikeButton(
-              key: _repostButtonKey,
-              size: iconSize * textScaleFactor,
-              isLiked: hasReposted,
-              animationDuration: const Duration(milliseconds: 1000),
-              likeBuilder: (bool isLiked) {
-                return SvgPicture.asset(
-                  'assets/repost_button.svg',
-                  width: iconSize * textScaleFactor,
-                  height: iconSize * textScaleFactor,
-                  colorFilter: ColorFilter.mode(
-                    (widget.isRepostGlowing || isLiked) ? colors.repost : colors.secondary,
-                    BlendMode.srcIn,
-                  ),
-                );
-              },
-              onTap: (bool isLiked) async {
-                if (!isLiked) {
-                  _handleRepostTap();
-                }
-                return !isLiked;
-              },
-              circleColor: CircleColor(
-                start: colors.repost.withOpacity(0.3),
-                end: colors.repost,
+    return Row(
+      children: [
+        LikeButton(
+          key: _repostButtonKey,
+          size: iconSize * textScaleFactor,
+          isLiked: hasReposted,
+          animationDuration: const Duration(milliseconds: 1000),
+          likeBuilder: (bool isLiked) {
+            return SvgPicture.asset(
+              'assets/repost_button.svg',
+              width: iconSize * textScaleFactor,
+              height: iconSize * textScaleFactor,
+              colorFilter: ColorFilter.mode(
+                (widget.isRepostGlowing || isLiked) ? colors.repost : colors.secondary,
+                BlendMode.srcIn,
               ),
-              bubblesColor: BubblesColor(
-                dotPrimaryColor: colors.repost,
-                dotSecondaryColor: colors.repost.withOpacity(0.7),
-              ),
-            ),
+            );
+          },
+          onTap: (bool isLiked) async {
+            if (!isLiked) {
+              _handleRepostTap();
+            }
+            return !isLiked;
+          },
+          circleColor: CircleColor(
+            start: colors.repost.withOpacity(0.3),
+            end: colors.repost,
           ),
-          SizedBox(width: spacing),
-          Opacity(
-            opacity: repostCount > 0 ? 1.0 : 0.0,
-            child: Text(
-              _formatCount(repostCount),
-              style: TextStyle(fontSize: fontSize, color: colors.secondary),
-            ),
+          bubblesColor: BubblesColor(
+            dotPrimaryColor: colors.repost,
+            dotSecondaryColor: colors.repost.withOpacity(0.7),
           ),
-        ],
-      ),
+        ),
+        SizedBox(width: spacing),
+        Opacity(
+          opacity: repostCount > 0 ? 1.0 : 0.0,
+          child: Text(
+            _formatCount(repostCount),
+            style: TextStyle(fontSize: fontSize, color: colors.secondary),
+          ),
+        ),
+      ],
     );
   }
 
@@ -309,52 +291,46 @@ class _InteractionBarState extends State<InteractionBar> {
     final double fontSize = widget.isLarge ? 15 : 14.5;
     final double spacing = widget.isLarge ? 6 : 5.5;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _zapButtonKey.currentState?.onTap(),
-      child: Row(
-        children: [
-          IgnorePointer(
-            child: LikeButton(
-              key: _zapButtonKey,
-              size: iconSize * textScaleFactor,
-              isLiked: hasZapped,
-              animationDuration: const Duration(milliseconds: 1000),
-              likeBuilder: (bool isLiked) {
-                return SvgPicture.asset(
-                  'assets/zap_button.svg',
-                  width: iconSize * textScaleFactor,
-                  height: iconSize * textScaleFactor,
-                  colorFilter: ColorFilter.mode(
-                    (widget.isZapGlowing || isLiked) ? colors.zap : colors.secondary,
-                    BlendMode.srcIn,
-                  ),
-                );
-              },
-              onTap: (bool isLiked) async {
-                _handleZapTap();
-                return !isLiked;
-              },
-              circleColor: CircleColor(
-                start: colors.zap.withOpacity(0.3),
-                end: colors.zap,
+    return Row(
+      children: [
+        LikeButton(
+          key: _zapButtonKey,
+          size: iconSize * textScaleFactor,
+          isLiked: hasZapped,
+          animationDuration: const Duration(milliseconds: 1000),
+          likeBuilder: (bool isLiked) {
+            return SvgPicture.asset(
+              'assets/zap_button.svg',
+              width: iconSize * textScaleFactor,
+              height: iconSize * textScaleFactor,
+              colorFilter: ColorFilter.mode(
+                (widget.isZapGlowing || isLiked) ? colors.zap : colors.secondary,
+                BlendMode.srcIn,
               ),
-              bubblesColor: BubblesColor(
-                dotPrimaryColor: colors.zap,
-                dotSecondaryColor: colors.zap.withOpacity(0.7),
-              ),
-            ),
+            );
+          },
+          onTap: (bool isLiked) async {
+            _handleZapTap();
+            return !isLiked;
+          },
+          circleColor: CircleColor(
+            start: colors.zap.withOpacity(0.3),
+            end: colors.zap,
           ),
-          SizedBox(width: spacing),
-          Opacity(
-            opacity: zapAmount > 0 ? 1.0 : 0.0,
-            child: Text(
-              _formatCount(zapAmount),
-              style: TextStyle(fontSize: fontSize, color: colors.secondary),
-            ),
+          bubblesColor: BubblesColor(
+            dotPrimaryColor: colors.zap,
+            dotSecondaryColor: colors.zap.withOpacity(0.7),
           ),
-        ],
-      ),
+        ),
+        SizedBox(width: spacing),
+        Opacity(
+          opacity: zapAmount > 0 ? 1.0 : 0.0,
+          child: Text(
+            _formatCount(zapAmount),
+            style: TextStyle(fontSize: fontSize, color: colors.secondary),
+          ),
+        ),
+      ],
     );
   }
 
