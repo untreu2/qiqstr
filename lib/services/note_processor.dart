@@ -205,7 +205,9 @@ class NoteProcessor {
         parentId: parentId,
       );
 
-      dataService.parseContentForNote(newNote);
+      // Content parsing is now handled lazily through note.parsedContentLazy
+      // Set hasMedia based on lazy parsing
+      newNote.hasMedia = newNote.hasMediaLazy;
 
       if (!dataService.eventIds.contains(newNote.id)) {
         // Optimized profile fetching

@@ -61,9 +61,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       isRepost: false,
     );
 
-    _dataService!.parseContentForNote(tempNote);
-
-    final parsedBioContent = tempNote.parsedContent ?? {};
+    // Content parsing is now handled lazily through note.parsedContentLazy
+    final parsedBioContent = tempNote.parsedContentLazy;
 
     return Padding(
       padding: const EdgeInsets.only(top: 8.0),

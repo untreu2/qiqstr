@@ -64,13 +64,8 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   }
 
   Map<String, dynamic> _parseContentOnce() {
-    if (widget.note.parsedContent != null) {
-      return widget.note.parsedContent!;
-    }
-
-    // Parse content once and cache it
-    widget.dataService.parseContentForNote(widget.note);
-    return widget.note.parsedContent!;
+    // Use lazy parsing - this will parse only once and cache the result
+    return widget.note.parsedContentLazy;
   }
 
   void _scheduleUserLoading() {

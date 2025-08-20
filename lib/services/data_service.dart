@@ -692,30 +692,6 @@ class DataService {
     }
   }
 
-  void parseContentForNote(NoteModel note) {
-    final parsed = parseContent(note.content);
-    note.parsedContent = parsed;
-    note.hasMedia = (parsed['mediaUrls'] as List).isNotEmpty;
-
-    final List<String> mediaUrls = List<String>.from(parsed['mediaUrls']);
-
-    final imageUrls = mediaUrls.where((url) {
-      final lower = url.toLowerCase();
-      return lower.endsWith('.jpg') ||
-          lower.endsWith('.jpeg') ||
-          lower.endsWith('.png') ||
-          lower.endsWith('.webp') ||
-          lower.endsWith('.gif');
-    }).toList();
-
-    if (imageUrls.isNotEmpty) {
-      MediaService().cacheMediaUrls(imageUrls);
-    }
-
-    note.isVideo = false;
-    note.videoUrl = null;
-  }
-
   void _startRealTimeSubscription(List<String> targetNpubs) {
     final sinceTimestamp = (notes.isNotEmpty)
         ? (notes.first.timestamp.millisecondsSinceEpoch ~/ 1000)
@@ -1281,7 +1257,9 @@ class DataService {
           rawWs: jsonEncode(eventData),
         );
 
-        parseContentForNote(noteModel);
+        // Content parsing is now handled lazily through note.parsedContentLazy
+        // Set hasMedia based on lazy parsing
+        noteModel.hasMedia = noteModel.hasMediaLazy;
 
         if (!eventIds.contains(noteModel.id)) {
           notes.add(noteModel);
@@ -1460,7 +1438,9 @@ class DataService {
       if (inHive != null) {
         // Add to memory and notify if not already there
         if (!eventIds.contains(inHive.id)) {
-          parseContentForNote(inHive);
+          // Content parsing is now handled lazily through note.parsedContentLazy
+          // Set hasMedia based on lazy parsing for cached notes
+          inHive.hasMedia = inHive.hasMediaLazy;
           notes.add(inHive);
           eventIds.add(inHive.id);
           addNote(inHive);
@@ -1472,7 +1452,9 @@ class DataService {
     final fetchedNote = await fetchNoteByIdIndependently(eventIdHex);
     if (fetchedNote == null) return null;
 
-    parseContentForNote(fetchedNote);
+    // Content parsing is now handled lazily through note.parsedContentLazy
+    // Set hasMedia based on lazy parsing
+    fetchedNote.hasMedia = fetchedNote.hasMediaLazy;
     notes.add(fetchedNote);
     eventIds.add(fetchedNote.id);
     await notesBox?.put(fetchedNote.id, fetchedNote);
@@ -1780,7 +1762,9 @@ class DataService {
 
       for (final note in relevantCached) {
         if (!eventIds.contains(note.id)) {
-          parseContentForNote(note);
+          // Content parsing is now handled lazily through note.parsedContentLazy
+          // Set hasMedia based on lazy parsing
+          note.hasMedia = note.hasMediaLazy;
           notes.add(note);
           eventIds.add(note.id);
           addNote(note);
@@ -2923,7 +2907,9 @@ class DataService {
         rawWs: jsonEncode(NostrService.eventToJson(event)),
       );
 
-      parseContentForNote(replyNoteModel);
+      // Content parsing is now handled lazily through note.parsedContentLazy
+      // Set hasMedia based on lazy parsing
+      replyNoteModel.hasMedia = replyNoteModel.hasMediaLazy;
 
       if (!eventIds.contains(replyNoteModel.id)) {
         notes.add(replyNoteModel);
@@ -3055,7 +3041,9 @@ class DataService {
         isRepost: false,
       );
 
-      parseContentForNote(newNote);
+      // Content parsing is now handled lazily through note.parsedContentLazy
+      // Set hasMedia based on lazy parsing
+      newNote.hasMedia = newNote.hasMediaLazy;
 
       notes.add(newNote);
       eventIds.add(newNote.id);
@@ -3137,7 +3125,9 @@ class DataService {
         rawWs: jsonEncode(NostrService.eventToJson(event)),
       );
 
-      parseContentForNote(replyNoteModel);
+      // Content parsing is now handled lazily through note.parsedContentLazy
+      // Set hasMedia based on lazy parsing
+      replyNoteModel.hasMedia = replyNoteModel.hasMediaLazy;
 
       if (!eventIds.contains(replyNoteModel.id)) {
         notes.add(replyNoteModel);
@@ -3273,7 +3263,9 @@ class DataService {
 
         for (final note in batch) {
           if (!eventIds.contains(note.id)) {
-            parseContentForNote(note);
+            // Content parsing is now handled lazily through note.parsedContentLazy
+            // Set hasMedia based on lazy parsing
+            note.hasMedia = note.hasMediaLazy;
             notes.add(note);
             eventIds.add(note.id);
             addNote(note);
@@ -3498,7 +3490,9 @@ class DataService {
                 rawWs: '', // We don't have the raw WebSocket data for cached replies
               );
 
-              parseContentForNote(replyNoteModel);
+              // Content parsing is now handled lazily through note.parsedContentLazy
+              // Set hasMedia based on lazy parsing
+              replyNoteModel.hasMedia = replyNoteModel.hasMediaLazy;
               replyNotes.add(replyNoteModel);
               notes.add(replyNoteModel);
               eventIds.add(replyNoteModel.id);
@@ -3686,7 +3680,9 @@ class DataService {
           shouldProcess = true;
 
           if (shouldProcess) {
-            parseContentForNote(note);
+            // Content parsing is now handled lazily through note.parsedContentLazy
+            // Set hasMedia based on lazy parsing
+            note.hasMedia = note.hasMediaLazy;
             notes.add(note);
             eventIds.add(note.id);
             newNoteIds.add(note.id);

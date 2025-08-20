@@ -67,6 +67,10 @@ class NoteModel extends HiveObject {
   @HiveField(20)
   List<String> replyIds;
 
+  // This field stores the parsed content in memory only, not in Hive
+  // Fields without @HiveField annotations are automatically ignored by Hive
+  Map<String, dynamic>? _parsedContentCache;
+
   NoteModel({
     required this.id,
     required this.content,
@@ -90,6 +94,81 @@ class NoteModel extends HiveObject {
     this.rootId,
     List<String>? replyIds,
   }) : replyIds = replyIds ?? [];
+
+  // Lazy parsing getter - parses content only when first accessed
+  Map<String, dynamic> get parsedContentLazy {
+    // If _parsedContentCache is null, parse the content and cache it
+    _parsedContentCache ??= _parseInternal();
+    return _parsedContentCache!;
+  }
+
+  // Helper getter for checking if note has media using lazy parsing
+  bool get hasMediaLazy => (parsedContentLazy['mediaUrls'] as List).isNotEmpty;
+
+  // Internal parsing method - moved from DataService.parseContent
+  Map<String, dynamic> _parseInternal() {
+    final RegExp mediaRegExp = RegExp(
+      r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|mp4|mov))',
+      caseSensitive: false,
+    );
+    final mediaMatches = mediaRegExp.allMatches(content);
+    final List<String> mediaUrls = mediaMatches.map((m) => m.group(0)!).toList();
+
+    final RegExp linkRegExp = RegExp(r'(https?:\/\/\S+)', caseSensitive: false);
+    final linkMatches = linkRegExp.allMatches(content);
+    final List<String> linkUrls = linkMatches
+        .map((m) => m.group(0)!)
+        .where((u) => !mediaUrls.contains(u) && !u.toLowerCase().endsWith('.mp4') && !u.toLowerCase().endsWith('.mov'))
+        .toList();
+
+    final RegExp quoteRegExp = RegExp(
+      r'(?:nostr:)?(note1[0-9a-z]+|nevent1[0-9a-z]+)',
+      caseSensitive: false,
+    );
+    final quoteMatches = quoteRegExp.allMatches(content);
+    final List<String> quoteIds = quoteMatches.map((m) => m.group(1)!).toList();
+
+    String cleanedText = content;
+    for (final m in [...mediaMatches, ...quoteMatches]) {
+      cleanedText = cleanedText.replaceFirst(m.group(0)!, '');
+    }
+    cleanedText = cleanedText.trim();
+
+    final RegExp mentionRegExp = RegExp(
+      r'nostr:(npub1[0-9a-z]+|nprofile1[0-9a-z]+)',
+      caseSensitive: false,
+    );
+    final mentionMatches = mentionRegExp.allMatches(cleanedText);
+
+    final List<Map<String, dynamic>> textParts = [];
+    int lastEnd = 0;
+    for (final m in mentionMatches) {
+      if (m.start > lastEnd) {
+        textParts.add({
+          'type': 'text',
+          'text': cleanedText.substring(lastEnd, m.start),
+        });
+      }
+
+      final id = m.group(1)!;
+      textParts.add({'type': 'mention', 'id': id});
+      lastEnd = m.end;
+    }
+
+    if (lastEnd < cleanedText.length) {
+      textParts.add({
+        'type': 'text',
+        'text': cleanedText.substring(lastEnd),
+      });
+    }
+
+    return {
+      'mediaUrls': mediaUrls,
+      'linkUrls': linkUrls,
+      'quoteIds': quoteIds,
+      'textParts': textParts,
+    };
+  }
 
   @override
   bool operator ==(Object other) => identical(this, other) || other is NoteModel && runtimeType == other.runtimeType && id == other.id;

@@ -44,15 +44,15 @@ class ReplyPreviewWidget extends StatelessWidget {
         }
 
         final note = snapshot.data!;
-        dataService.parseContentForNote(note);
-        final parsed = note.parsedContent!;
+        // Content parsing is now handled lazily through note.parsedContentLazy
+        final parsed = note.parsedContentLazy;
 
         return FutureBuilder<Map<String, String>>(
           future: dataService.getCachedUserProfile(note.author),
           builder: (context, userSnapshot) {
             String authorName = 'Unknown';
             String authorImage = '';
-            
+
             if (userSnapshot.hasData) {
               final user = UserModel.fromCachedProfile(note.author, userSnapshot.data!);
               authorName = user.name;
@@ -87,7 +87,6 @@ class ReplyPreviewWidget extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 8),
-                
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -103,12 +102,8 @@ class ReplyPreviewWidget extends StatelessWidget {
                           CircleAvatar(
                             radius: 12,
                             backgroundColor: context.colors.surfaceTransparent,
-                            backgroundImage: authorImage.isNotEmpty
-                                ? CachedNetworkImageProvider(authorImage)
-                                : null,
-                            child: authorImage.isEmpty
-                                ? Icon(Icons.person, color: context.colors.textPrimary, size: 12)
-                                : null,
+                            backgroundImage: authorImage.isNotEmpty ? CachedNetworkImageProvider(authorImage) : null,
+                            child: authorImage.isEmpty ? Icon(Icons.person, color: context.colors.textPrimary, size: 12) : null,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
@@ -132,7 +127,6 @@ class ReplyPreviewWidget extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      
                       NoteContentWidget(
                         parsedContent: parsed,
                         dataService: dataService,
@@ -141,7 +135,6 @@ class ReplyPreviewWidget extends StatelessWidget {
                     ],
                   ),
                 ),
-                
                 Container(
                   margin: const EdgeInsets.symmetric(vertical: 12),
                   height: 1,
