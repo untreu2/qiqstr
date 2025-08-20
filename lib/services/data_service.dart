@@ -217,6 +217,20 @@ class DataService {
   bool _isInitialized = false;
   bool _isClosed = false;
 
+  // Connection state monitoring
+  bool _isConnecting = false;
+  bool _hasActiveConnections = false;
+  DateTime? _lastSuccessfulConnection;
+  int _connectionRetryCount = 0;
+  final int _maxConnectionRetries = 5;
+
+  // Error state management
+  String? _lastError;
+  DateTime? _lastErrorTime;
+  bool _isInErrorState = false;
+  final ValueNotifier<String?> errorStateNotifier = ValueNotifier(null);
+  final ValueNotifier<bool> connectionStateNotifier = ValueNotifier(false);
+
   Timer? _cacheCleanupTimer;
   Timer? _interactionRefreshTimer;
   int currentLimit = 100; // Start with 100 notes for better feed experience
@@ -266,6 +280,9 @@ class DataService {
   Future<void> initialize() async {
     await initializeLightweight();
     await initializeHeavyOperations();
+
+    // Ensure connections are established before considering initialization complete
+    await _ensureConnectionsReady();
   }
 
   // Phase 1: Lightweight initialization for immediate UI responsiveness
@@ -337,19 +354,13 @@ class DataService {
       _cacheService.repostsBox = repostsBox;
       _cacheService.zapsBox = zapsBox;
 
-      // Initialize isolates in background (non-blocking)
-      Future.microtask(() async {
-        try {
-          await Future.wait([
-            _initializeEventProcessorIsolate(),
-            _initializeFetchProcessorIsolate(),
-            _initializeIsolate(),
-          ]);
-          print('[DataService] Isolates initialized');
-        } catch (e) {
-          print('[DataService] Isolate initialization error: $e');
-        }
-      });
+      // Initialize isolates and wait for them to be ready
+      await Future.wait([
+        _initializeEventProcessorIsolate(),
+        _initializeFetchProcessorIsolate(),
+        _initializeIsolate(),
+      ]);
+      print('[DataService] Isolates initialized');
 
       // Load cache data in background
       Future.microtask(() => _loadCacheDataInBackground());
@@ -372,6 +383,226 @@ class DataService {
       print('[DataService] Heavy initialization error: $e');
       // Don't rethrow here - UI should still work with lightweight init
     }
+  }
+
+  // Ensure all critical connections are ready before feed loading
+  Future<void> _ensureConnectionsReady() async {
+    const maxRetries = 3;
+    const retryDelay = Duration(seconds: 2);
+
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        print('[DataService] Attempting to establish connections (attempt $attempt/$maxRetries)');
+
+        // Initialize connections with timeout
+        await initializeConnections().timeout(
+          const Duration(seconds: 15),
+          onTimeout: () {
+            throw TimeoutException('Connection initialization timed out', const Duration(seconds: 15));
+          },
+        );
+// Verify we have active connections
+        if (_socketManager.activeSockets.isNotEmpty) {
+          print('[DataService] Connections established successfully with ${_socketManager.activeSockets.length} active relays');
+          _updateConnectionState(true);
+          return;
+        } else {
+          throw Exception('No active relay connections after initialization');
+        }
+      } catch (e) {
+        print('[DataService] Connection attempt $attempt failed: $e');
+
+        if (attempt < maxRetries) {
+          print('[DataService] Retrying connection in ${retryDelay.inSeconds} seconds...');
+          await Future.delayed(retryDelay);
+        } else {
+          print('[DataService] Failed to establish connections after $maxRetries attempts');
+          _handleConnectionError('Failed to establish connections', e);
+          // Try emergency connection with minimal setup
+          await _emergencyConnectionSetup();
+        }
+      }
+    }
+  }
+
+  // Emergency connection setup for when normal initialization fails
+  Future<void> _emergencyConnectionSetup() async {
+    try {
+      print('[DataService] Attempting emergency connection setup');
+
+      // Use a minimal relay set for emergency connections
+      final emergencyRelays = relaySetMainSockets.take(2).toList();
+      _socketManager = WebSocketManager(relayUrls: emergencyRelays);
+
+      // Simple connection without full initialization
+      List<String> targetNpubs = [npub];
+      if (dataType == DataType.feed) {
+        try {
+          final following = await getFollowingList(npub);
+          if (following.isNotEmpty) {
+            following.add(npub);
+            targetNpubs = following.toSet().toList();
+          }
+        } catch (e) {
+          print('[DataService] Emergency: Failed to get following list, using own npub only');
+        }
+      }
+
+      await _socketManager.connectRelays(
+        targetNpubs,
+        onEvent: (event, relayUrl) => _handleEvent(event, targetNpubs),
+        onDisconnected: (relayUrl) => _socketManager.reconnectRelay(relayUrl, targetNpubs),
+      );
+
+      // Start minimal feed loading
+      if (dataType == DataType.profile) {
+        await _fetchProfileNotesDirectly(npub);
+      } else {
+        await fetchNotes(targetNpubs, initialLoad: true);
+      }
+
+      print('[DataService] Emergency connection setup completed');
+      _updateConnectionState(true);
+    } catch (e) {
+      print('[DataService] Emergency connection setup failed: $e');
+      _handleConnectionError('Emergency connection setup failed', e);
+      // At this point, we'll rely on cached data only
+      _enableOfflineMode();
+    }
+  }
+
+  // Connection state management
+  void _updateConnectionState(bool isConnected) {
+    _hasActiveConnections = isConnected;
+    connectionStateNotifier.value = isConnected;
+
+    if (isConnected) {
+      _lastSuccessfulConnection = DateTime.now();
+      _connectionRetryCount = 0;
+      _clearErrorState();
+    }
+
+    print('[DataService] Connection state updated: $isConnected');
+  }
+
+  // Error state management
+  void _handleConnectionError(String message, dynamic error) {
+    _lastError = '$message: $error';
+    _lastErrorTime = DateTime.now();
+    _isInErrorState = true;
+    _connectionRetryCount++;
+
+    errorStateNotifier.value = _getErrorMessage();
+    _updateConnectionState(false);
+
+    print('[DataService] Connection error handled: $_lastError');
+
+    // Auto-retry with exponential backoff if not exceeded max retries
+    if (_connectionRetryCount < _maxConnectionRetries) {
+      final delay = Duration(seconds: _connectionRetryCount * 2);
+      print(
+          '[DataService] Auto-retry scheduled in ${delay.inSeconds} seconds (attempt ${_connectionRetryCount + 1}/$_maxConnectionRetries)');
+
+      Future.delayed(delay, () {
+        if (!_isClosed && !_hasActiveConnections) {
+          _attemptReconnection();
+        }
+      });
+    } else {
+      print('[DataService] Max connection retries exceeded, enabling offline mode');
+      _enableOfflineMode();
+    }
+  }
+
+  void _clearErrorState() {
+    _lastError = null;
+    _lastErrorTime = null;
+    _isInErrorState = false;
+    errorStateNotifier.value = null;
+  }
+
+  String _getErrorMessage() {
+    if (_lastError == null) return 'Unknown connection error';
+
+    if (_connectionRetryCount >= _maxConnectionRetries) {
+      return 'Unable to connect to relays. Using cached data only.';
+    }
+
+    return 'Connection issues detected. Retrying... (${_connectionRetryCount}/$_maxConnectionRetries)';
+  }
+
+  // Offline mode support
+  void _enableOfflineMode() {
+    print('[DataService] Enabling offline mode - using cached data only');
+    errorStateNotifier.value = 'Offline mode: Using cached data only';
+
+    // Ensure cached data is loaded
+    Future.microtask(() async {
+      try {
+        await _loadCacheDataInBackground();
+        print('[DataService] Offline mode: Cached data loaded successfully');
+      } catch (e) {
+        print('[DataService] Offline mode: Error loading cached data: $e');
+      }
+    });
+  }
+
+  // Manual reconnection attempt
+  Future<void> _attemptReconnection() async {
+    if (_isConnecting || _isClosed) return;
+
+    _isConnecting = true;
+    print('[DataService] Attempting manual reconnection...');
+
+    try {
+      await _ensureConnectionsReady();
+      print('[DataService] Manual reconnection successful');
+    } catch (e) {
+      print('[DataService] Manual reconnection failed: $e');
+      _handleConnectionError('Manual reconnection failed', e);
+    } finally {
+      _isConnecting = false;
+    }
+  }
+
+  // Public method to retry connection
+  Future<void> retryConnection() async {
+    if (_isClosed) return;
+
+    _connectionRetryCount = 0; // Reset retry count for manual retry
+    await _attemptReconnection();
+  }
+
+  // Check connection health
+  bool get isHealthy {
+    if (_isClosed) return false;
+    if (!_hasActiveConnections) return false;
+    if (_isInErrorState) return false;
+
+    // Check if last successful connection was recent
+    if (_lastSuccessfulConnection != null) {
+      final timeSinceLastConnection = DateTime.now().difference(_lastSuccessfulConnection!);
+      if (timeSinceLastConnection > const Duration(minutes: 5)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  // Get connection status for UI
+  Map<String, dynamic> getConnectionStatus() {
+    return {
+      'isConnected': _hasActiveConnections,
+      'isHealthy': isHealthy,
+      'isInErrorState': _isInErrorState,
+      'lastError': _lastError,
+      'lastErrorTime': _lastErrorTime?.toIso8601String(),
+      'lastSuccessfulConnection': _lastSuccessfulConnection?.toIso8601String(),
+      'retryCount': _connectionRetryCount,
+      'maxRetries': _maxConnectionRetries,
+      'activeRelays': _socketManager.activeSockets.length,
+    };
   }
 
   Future<void> _loadCacheDataInBackground() async {
@@ -774,57 +1005,158 @@ class DataService {
   Future<void> initializeConnections() async {
     if (!_isInitialized) return;
 
-    List<String> targetNpubs;
-    if (dataType == DataType.feed) {
-      final following = await getFollowingList(npub);
-      following.add(npub);
-      targetNpubs = following.toSet().toList();
+    const maxRetries = 2;
+    const retryDelay = Duration(milliseconds: 500);
 
-      await Future.wait(
-        following.where((followedNpub) => followedNpub != npub).map((followedNpub) => getFollowingList(followedNpub)),
-      );
-    } else {
-      targetNpubs = [npub];
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        print('[DataService] Initializing connections (attempt $attempt/$maxRetries)');
+
+        // Get target npubs with timeout
+        List<String> targetNpubs;
+        if (dataType == DataType.feed) {
+          try {
+            final following = await getFollowingList(npub).timeout(
+              const Duration(seconds: 8),
+              onTimeout: () {
+                print('[DataService] Following list fetch timed out, using cached or minimal list');
+                return [npub]; // Fallback to just own npub
+              },
+            );
+            following.add(npub);
+            targetNpubs = following.toSet().toList();
+            print('[DataService] Feed mode: ${targetNpubs.length} target npubs');
+          } catch (e) {
+            print('[DataService] Error getting following list: $e, using own npub only');
+            targetNpubs = [npub];
+          }
+        } else {
+          targetNpubs = [npub];
+          print('[DataService] Profile mode: single target npub');
+        }
+
+        if (_isClosed) return;
+
+        // Connect to relays with timeout and retry logic
+        try {
+          await _socketManager
+              .connectRelays(
+            targetNpubs,
+            onEvent: (event, relayUrl) => _handleEvent(event, targetNpubs),
+            onDisconnected: (relayUrl) => _socketManager.reconnectRelay(relayUrl, targetNpubs),
+          )
+              .timeout(
+            const Duration(seconds: 10),
+            onTimeout: () {
+              throw TimeoutException('Relay connection timed out', const Duration(seconds: 10));
+            },
+          );
+
+          print('[DataService] Connected to ${_socketManager.activeSockets.length} relays');
+        } catch (e) {
+          if (attempt < maxRetries) {
+            print('[DataService] Relay connection failed (attempt $attempt): $e, retrying...');
+            await Future.delayed(retryDelay);
+            continue;
+          } else {
+            throw Exception('Failed to connect to relays after $maxRetries attempts: $e');
+          }
+        }
+
+        // Critical: Wait for connections to be established before proceeding
+        if (_socketManager.activeSockets.isEmpty) {
+          throw Exception('No active relay connections established');
+        }
+
+        // Fetch initial data with timeout and retry logic
+        try {
+          if (dataType == DataType.profile) {
+            await _fetchProfileNotesDirectly(npub).timeout(
+              const Duration(seconds: 8),
+              onTimeout: () {
+                print('[DataService] Profile notes fetch timed out, continuing with cached data');
+              },
+            );
+          } else {
+            await fetchNotes(targetNpubs, initialLoad: true).timeout(
+              const Duration(seconds: 8),
+              onTimeout: () {
+                print('[DataService] Feed notes fetch timed out, continuing with cached data');
+              },
+            );
+          }
+        } catch (e) {
+          print('[DataService] Note fetching error: $e, continuing with cached data');
+          // Don't fail initialization if note fetching fails - cached data should be sufficient
+        }
+
+        // Load cached interactions in parallel (non-blocking)
+        Future.microtask(() async {
+          try {
+            await Future.wait([
+              loadReactionsFromCache(),
+              loadRepliesFromCache(),
+              loadRepostsFromCache(),
+            ], eagerError: false);
+            print('[DataService] Cached interactions loaded');
+          } catch (e) {
+            print('[DataService] Error loading cached interactions: $e');
+          }
+        });
+
+        // Subscribe to interactions for all loaded notes (non-blocking)
+        Future.microtask(() async {
+          try {
+            await Future.wait([
+              _subscribeToAllReactions(),
+              _subscribeToAllReplies(),
+              _subscribeToAllReposts(),
+              _subscribeToAllZaps(),
+              _subscribeToNotifications(),
+            ], eagerError: false);
+            print('[DataService] Interaction subscriptions completed');
+          } catch (e) {
+            print('[DataService] Error subscribing to interactions: $e');
+          }
+        });
+
+        // Start background processes
+        _scheduleInteractionRefresh();
+
+        if (dataType == DataType.feed) {
+          Future.microtask(() {
+            try {
+              _startRealTimeSubscription(targetNpubs);
+              _subscribeToFollowing();
+            } catch (e) {
+              print('[DataService] Error starting real-time subscriptions: $e');
+            }
+          });
+        }
+
+        // Fetch user profile in background
+        Future.microtask(() async {
+          try {
+            await getCachedUserProfile(npub);
+          } catch (e) {
+            print('[DataService] Error fetching user profile: $e');
+          }
+        });
+
+        print('[DataService] Connection initialization completed successfully');
+        return; // Success, exit retry loop
+      } catch (e) {
+        print('[DataService] Connection initialization attempt $attempt failed: $e');
+
+        if (attempt < maxRetries) {
+          print('[DataService] Retrying connection initialization in ${retryDelay.inMilliseconds}ms...');
+          await Future.delayed(retryDelay);
+        } else {
+          print('[DataService] Connection initialization failed after $maxRetries attempts');
+          rethrow; // Rethrow to trigger emergency connection setup
+        }
+      }
     }
-
-    if (_isClosed) return;
-
-    await _socketManager.connectRelays(
-      targetNpubs,
-      onEvent: (event, relayUrl) => _handleEvent(event, targetNpubs),
-      onDisconnected: (relayUrl) => _socketManager.reconnectRelay(relayUrl, targetNpubs),
-    );
-
-    // Fetch profile notes directly for profiles
-    if (dataType == DataType.profile) {
-      await _fetchProfileNotesDirectly(npub);
-    } else {
-      await fetchNotes(targetNpubs, initialLoad: true);
-    }
-
-    // Load cached interactions for all data types
-    await Future.wait([
-      loadReactionsFromCache(),
-      loadRepliesFromCache(),
-      loadRepostsFromCache(),
-    ]);
-
-    // Subscribe to interactions for all loaded notes
-    await _subscribeToAllReactions();
-    await _subscribeToAllReplies();
-    await _subscribeToAllReposts();
-    await _subscribeToAllZaps();
-    await _subscribeToNotifications();
-
-    // Start periodic interaction refresh
-    _scheduleInteractionRefresh();
-
-    if (dataType == DataType.feed) {
-      _startRealTimeSubscription(targetNpubs);
-      await _subscribeToFollowing();
-    }
-
-    await getCachedUserProfile(npub);
   }
 
   Future<void> _fetchProfileNotesDirectly(String userNpub, {int? limit, DateTime? until}) async {

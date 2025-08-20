@@ -28,7 +28,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
   int _currentIndex = 0;
 
   late final List<Widget> _pages = [
-    FeedPage(npub: widget.npub),
+    FeedPage(npub: widget.npub, dataService: widget.dataService),
     const UserSearchPage(),
     const SizedBox(),
     NotificationPage(dataService: widget.dataService),
@@ -79,11 +79,8 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                             if (index == 2) {
                               _handleAction("Designing: DMs");
                             } else if (index == 3) {
-                              widget.dataService
-                                  .markAllUserNotificationsAsRead()
-                                  .then((_) {
-                                if (mounted)
-                                  setState(() => _currentIndex = index);
+                              widget.dataService.markAllUserNotificationsAsRead().then((_) {
+                                if (mounted) setState(() => _currentIndex = index);
                               });
                             } else {
                               if (mounted) {
@@ -106,13 +103,10 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                                         item['icon'],
                                         width: 20,
                                         height: 20,
-                                        color: isSelected
-                                            ? context.colors.accent
-                                            : context.colors.textPrimary,
+                                        color: isSelected ? context.colors.accent : context.colors.textPrimary,
                                       ),
                                       ValueListenableBuilder<int>(
-                                        valueListenable: widget.dataService
-                                            .unreadNotificationsCountNotifier,
+                                        valueListenable: widget.dataService.unreadNotificationsCountNotifier,
                                         builder: (context, count, child) {
                                           if (count == 0) {
                                             return const SizedBox.shrink();
@@ -125,10 +119,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                                               decoration: BoxDecoration(
                                                 color: context.colors.surface,
                                                 shape: BoxShape.circle,
-                                                border: Border.all(
-                                                    color: context
-                                                        .colors.textPrimary,
-                                                    width: 0.5),
+                                                border: Border.all(color: context.colors.textPrimary, width: 0.5),
                                               ),
                                               constraints: const BoxConstraints(
                                                 minWidth: 14,
@@ -136,8 +127,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                                               ),
                                               child: Text('$count',
                                                   style: TextStyle(
-                                                    color: context
-                                                        .colors.textPrimary,
+                                                    color: context.colors.textPrimary,
                                                     fontSize: 9,
                                                     fontWeight: FontWeight.bold,
                                                   ),
@@ -153,9 +143,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                                     item['icon'],
                                     width: 20,
                                     height: 20,
-                                    color: isSelected
-                                        ? context.colors.accent
-                                        : context.colors.textPrimary,
+                                    color: isSelected ? context.colors.accent : context.colors.textPrimary,
                                   ),
                               ],
                             ),
@@ -189,8 +177,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) =>
-                            ShareNotePage(dataService: widget.dataService),
+                        builder: (_) => ShareNotePage(dataService: widget.dataService),
                       ),
                     );
                   },

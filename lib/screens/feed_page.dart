@@ -13,7 +13,8 @@ import '../theme/theme_manager.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
-  const FeedPage({Key? key, required this.npub}) : super(key: key);
+  final DataService? dataService;
+  const FeedPage({Key? key, required this.npub, this.dataService}) : super(key: key);
 
   @override
   _FeedPageState createState() => _FeedPageState();
@@ -31,7 +32,8 @@ class _FeedPageState extends State<FeedPage> {
   @override
   void initState() {
     super.initState();
-    dataService = DataService(npub: widget.npub, dataType: DataType.feed);
+    // Use provided dataService or create new one
+    dataService = widget.dataService ?? DataService(npub: widget.npub, dataType: DataType.feed);
     _scrollController = ScrollController()..addListener(_scrollListener);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeProgressively();
@@ -43,24 +45,34 @@ class _FeedPageState extends State<FeedPage> {
     try {
       // Phase 1: Initialize UserProvider and lightweight DataService init
       final userProvider = Provider.of<UserProvider>(context, listen: false);
-      await Future.wait([
-        userProvider.initialize(),
-        dataService.initializeLightweight(),
-      ]);
 
-      // Set current user if this is the current user's feed
-      if (userProvider.currentUserNpub == widget.npub) {
-        await userProvider.setCurrentUser(widget.npub);
-      }
-
-      // UI is shown immediately without loading state
-
-      // Phase 2: Heavy operations in background
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (mounted) {
-          dataService.initializeHeavyOperations();
+      // If dataService is provided (from login), skip initialization
+      if (widget.dataService != null) {
+        await userProvider.initialize();
+        // Set current user if this is the current user's feed
+        if (userProvider.currentUserNpub == widget.npub) {
+          await userProvider.setCurrentUser(widget.npub);
         }
-      });
+        print('[FeedPage] Using provided DataService - skipping initialization');
+      } else {
+        // Only initialize if we created a new DataService
+        await Future.wait([
+          userProvider.initialize(),
+          dataService.initializeLightweight(),
+        ]);
+
+        // Set current user if this is the current user's feed
+        if (userProvider.currentUserNpub == widget.npub) {
+          await userProvider.setCurrentUser(widget.npub);
+        }
+
+        // Phase 2: Heavy operations in background
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) {
+            dataService.initializeHeavyOperations();
+          }
+        });
+      }
     } catch (e) {
       print('[FeedPage] Progressive initialization error: $e');
       if (mounted) {
@@ -226,6 +238,7 @@ class _FeedPageState extends State<FeedPage> {
                   NoteListWidgetFactory.create(
                     npub: widget.npub,
                     dataType: DataType.feed,
+                    sharedDataService: dataService,
                   ),
                 ],
               ),
