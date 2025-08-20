@@ -353,6 +353,59 @@ class InteractionsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // OPTIMISTIC UPDATE METHODS FOR IMPROVED USER EXPERIENCE
+
+  /// Adds an optimistic reaction immediately to the UI for instant feedback
+  /// Creates a temporary reaction model that will be replaced by the real one from the network
+  void addOptimisticReaction(String noteId, String userId) {
+    // Create a temporary, optimistic reaction model
+    final optimisticReaction = ReactionModel(
+      id: 'optimistic_${DateTime.now().millisecondsSinceEpoch}', // Temporary unique ID
+      author: userId,
+      content: '+',
+      targetEventId: noteId,
+      timestamp: DateTime.now(),
+      fetchedAt: DateTime.now(),
+    );
+
+    // Add to cache immediately (but don't save to Hive)
+    _addReactionToCache(optimisticReaction);
+    notifyListeners();
+  }
+
+  /// Adds an optimistic repost immediately to the UI for instant feedback
+  void addOptimisticRepost(String noteId, String userId) {
+    // Create a temporary, optimistic repost model
+    final optimisticRepost = RepostModel(
+      id: 'optimistic_${DateTime.now().millisecondsSinceEpoch}', // Temporary unique ID
+      originalNoteId: noteId,
+      repostedBy: userId,
+      repostTimestamp: DateTime.now(),
+    );
+
+    // Add to cache immediately (but don't save to Hive)
+    _addRepostToCache(optimisticRepost);
+    notifyListeners();
+  }
+
+  /// Removes an optimistic reaction if the network request fails
+  /// This rolls back the UI to the previous state
+  void removeOptimisticReaction(String noteId, String userId) {
+    // Remove any optimistic reactions by this user for this note
+    _reactionsByNote[noteId]?.removeWhere((r) => r.author == userId && r.id.startsWith('optimistic_'));
+    _userReactions[userId]?.remove(noteId);
+    notifyListeners();
+  }
+
+  /// Removes an optimistic repost if the network request fails
+  /// This rolls back the UI to the previous state
+  void removeOptimisticRepost(String noteId, String userId) {
+    // Remove any optimistic reposts by this user for this note
+    _repostsByNote[noteId]?.removeWhere((r) => r.repostedBy == userId && r.id.startsWith('optimistic_'));
+    _userReposts[userId]?.remove(noteId);
+    notifyListeners();
+  }
+
   void clearCache() {
     _reactionsByNote.clear();
     _repliesByNote.clear();

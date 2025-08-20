@@ -56,17 +56,28 @@ class _InteractionBarState extends State<InteractionBar> {
     return count.toString();
   }
 
-  void _handleReactionTap() async {
-    if (widget.dataService == null) return;
+  /// Handles reaction tap with optimistic updates for instant UI feedback
+  Future<bool> _handleReactionTap(bool isCurrentlyLiked) async {
+    if (widget.dataService == null) return false;
 
-    final hasReacted = InteractionsProvider.instance.hasUserReacted(widget.currentUserNpub, widget.noteId);
-    if (hasReacted) return;
+    // If already liked, don't do anything for now (could implement unlike later)
+    if (isCurrentlyLiked) {
+      return false;
+    }
+
+    // 1. OPTIMISTIC UPDATE: Update UI immediately
+    InteractionsProvider.instance.addOptimisticReaction(widget.noteId, widget.currentUserNpub);
 
     try {
-      // Send reaction to network
+      // 2. NETWORK REQUEST: Send the actual request in the background
       await widget.dataService!.sendReactionInstantly(widget.noteId, '+');
+      // If successful, the real reaction will come through the relay and replace the optimistic one
+      return true;
     } catch (e) {
       print('Error sending reaction: $e');
+      // 3. ROLLBACK: If network request fails, remove the optimistic reaction
+      InteractionsProvider.instance.removeOptimisticReaction(widget.noteId, widget.currentUserNpub);
+      return false;
     }
   }
 
@@ -152,11 +163,7 @@ class _InteractionBarState extends State<InteractionBar> {
                 );
               },
               onTap: (bool isLiked) async {
-                if (!isLiked) {
-                  _handleReactionTap();
-                  return true;
-                }
-                return false;
+                return await _handleReactionTap(isLiked);
               },
               circleColor: CircleColor(
                 start: colors.reaction.withOpacity(0.3),

@@ -3,6 +3,8 @@ import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/screens/share_note.dart';
+import 'package:qiqstr/providers/interactions_provider.dart';
+import 'package:qiqstr/providers/user_provider.dart';
 import '../../theme/theme_manager.dart';
 
 Future<void> showRepostDialog({
@@ -24,9 +26,7 @@ Future<void> showRepostDialog({
           title: Text('Repost', style: TextStyle(color: context.colors.textPrimary, fontSize: 16)),
           onTap: () async {
             Navigator.pop(modalContext);
-            try {
-              await dataService.sendRepostInstantly(note);
-            } catch (_) {}
+            await _performOptimisticRepost(context, dataService, note);
           },
         ),
         ListTile(
@@ -52,4 +52,27 @@ Future<void> showRepostDialog({
       ],
     ),
   );
+}
+
+/// Performs an optimistic repost with immediate UI feedback
+Future<void> _performOptimisticRepost(
+  BuildContext context,
+  DataService dataService,
+  NoteModel note,
+) async {
+  final currentUserNpub = UserProvider.instance.currentUser?.npub;
+  if (currentUserNpub == null) return;
+
+  // 1. OPTIMISTIC UPDATE: Update UI immediately
+  InteractionsProvider.instance.addOptimisticRepost(note.id, currentUserNpub);
+
+  try {
+    // 2. NETWORK REQUEST: Send the actual repost in the background
+    await dataService.sendRepostInstantly(note);
+    // If successful, the real repost will come through the relay and replace the optimistic one
+  } catch (e) {
+    print('Error sending repost: $e');
+    // 3. ROLLBACK: If network request fails, remove the optimistic repost
+    InteractionsProvider.instance.removeOptimisticRepost(note.id, currentUserNpub);
+  }
 }
