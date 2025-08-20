@@ -91,6 +91,12 @@ class NoteModel extends HiveObject {
     List<String>? replyIds,
   }) : replyIds = replyIds ?? [];
 
+  @override
+  bool operator ==(Object other) => identical(this, other) || other is NoteModel && runtimeType == other.runtimeType && id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
+
   factory NoteModel.fromJson(Map<String, dynamic> json) {
     return NoteModel(
       id: json['id'] as String,
@@ -110,9 +116,7 @@ class NoteModel extends HiveObject {
       rawWs: json['rawWs'] as String?,
       reactionCount: json['reactionCount'] as int? ?? 0,
       replyCount: json['replyCount'] as int? ?? 0,
-      parsedContent: json['parsedContent'] != null
-          ? Map<String, dynamic>.from(json['parsedContent'])
-          : null,
+      parsedContent: json['parsedContent'] != null ? Map<String, dynamic>.from(json['parsedContent']) : null,
       hasMedia: json['hasMedia'] as bool? ?? false,
       estimatedHeight: (json['estimatedHeight'] as num?)?.toDouble(),
       isVideo: json['isVideo'] as bool? ?? false,
@@ -121,9 +125,7 @@ class NoteModel extends HiveObject {
       isReply: json['isReply'] as bool? ?? false,
       parentId: json['parentId'] as String?,
       rootId: json['rootId'] as String?,
-      replyIds: json['replyIds'] != null
-          ? List<String>.from(json['replyIds'])
-          : null,
+      replyIds: json['replyIds'] != null ? List<String>.from(json['replyIds']) : null,
     );
   }
 

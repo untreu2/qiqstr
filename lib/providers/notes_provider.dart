@@ -120,6 +120,7 @@ class NotesProvider extends ChangeNotifier {
   }
 
   Future<void> addNote(NoteModel note, {DataType? dataType}) async {
+    final wasNewNote = !_notes.containsKey(note.id);
     _addNoteToCache(note);
 
     // Save to appropriate Hive box
@@ -133,11 +134,19 @@ class NotesProvider extends ChangeNotifier {
       debugPrint('[NotesProvider] Error saving note to Hive: $e');
     }
 
-    notifyListeners();
+    // Only notify listeners if this was actually a new note
+    if (wasNewNote) {
+      notifyListeners();
+    }
   }
 
   Future<void> addNotes(List<NoteModel> notes, {DataType? dataType}) async {
+    bool hasNewNotes = false;
+
     for (final note in notes) {
+      if (!_notes.containsKey(note.id)) {
+        hasNewNotes = true;
+      }
       _addNoteToCache(note);
     }
 
@@ -154,13 +163,25 @@ class NotesProvider extends ChangeNotifier {
       debugPrint('[NotesProvider] Error batch saving notes to Hive: $e');
     }
 
-    notifyListeners();
+    // Only notify listeners if there were actually new notes added
+    if (hasNewNotes) {
+      notifyListeners();
+    }
   }
 
   void updateNote(NoteModel note) {
     if (_notes.containsKey(note.id)) {
+      final oldNote = _notes[note.id]!;
       _notes[note.id] = note;
-      notifyListeners();
+
+      // Only notify if there are actual changes
+      if (oldNote.reactionCount != note.reactionCount ||
+          oldNote.replyCount != note.replyCount ||
+          oldNote.repostCount != note.repostCount ||
+          oldNote.zapAmount != note.zapAmount ||
+          oldNote.content != note.content) {
+        notifyListeners();
+      }
     }
   }
 
@@ -173,32 +194,30 @@ class NotesProvider extends ChangeNotifier {
   }) {
     final note = _notes[noteId];
     if (note != null) {
-      final updatedNote = NoteModel(
-        id: note.id,
-        content: note.content,
-        author: note.author,
-        timestamp: note.timestamp,
-        isRepost: note.isRepost,
-        repostedBy: note.repostedBy,
-        repostTimestamp: note.repostTimestamp,
-        repostCount: repostCount ?? note.repostCount,
-        rawWs: note.rawWs,
-        reactionCount: reactionCount ?? note.reactionCount,
-        replyCount: replyCount ?? note.replyCount,
-        parsedContent: note.parsedContent,
-        hasMedia: note.hasMedia,
-        estimatedHeight: note.estimatedHeight,
-        isVideo: note.isVideo,
-        videoUrl: note.videoUrl,
-        zapAmount: zapAmount ?? note.zapAmount,
-        isReply: note.isReply,
-        parentId: note.parentId,
-        rootId: note.rootId,
-        replyIds: note.replyIds,
-      );
+      bool hasChanges = false;
 
-      _notes[noteId] = updatedNote;
-      notifyListeners();
+      // Only update if values actually changed
+      if (reactionCount != null && note.reactionCount != reactionCount) {
+        note.reactionCount = reactionCount;
+        hasChanges = true;
+      }
+      if (replyCount != null && note.replyCount != replyCount) {
+        note.replyCount = replyCount;
+        hasChanges = true;
+      }
+      if (repostCount != null && note.repostCount != repostCount) {
+        note.repostCount = repostCount;
+        hasChanges = true;
+      }
+      if (zapAmount != null && note.zapAmount != zapAmount) {
+        note.zapAmount = zapAmount;
+        hasChanges = true;
+      }
+
+      // Only notify listeners if there were actual changes
+      if (hasChanges) {
+        notifyListeners();
+      }
     }
   }
 

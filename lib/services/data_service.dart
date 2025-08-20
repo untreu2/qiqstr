@@ -32,6 +32,89 @@ import '../providers/interactions_provider.dart';
 
 enum DataType { feed, profile, note }
 
+// Optimized list notifier for incremental updates
+class NoteListNotifier extends ValueNotifier<List<NoteModel>> {
+  final SplayTreeSet<NoteModel> _itemsTree;
+  final DataType _dataType;
+  final String _npub;
+
+  // Cache for filtered results
+  List<NoteModel>? _cachedFilteredNotes;
+  bool _filterCacheValid = false;
+
+  NoteListNotifier(this._dataType, this._npub)
+      : _itemsTree = SplayTreeSet(DataService._compareNotes),
+        super([]);
+
+  // Getter for notes list
+  List<NoteModel> get notes => value;
+
+  // Add a single note
+  void addNote(NoteModel note) {
+    if (_itemsTree.add(note)) {
+      _invalidateFilterCache();
+      value = _getFilteredNotesList();
+    }
+  }
+
+  // Update an existing note
+  void updateNote(NoteModel updatedNote) {
+    if (_itemsTree.remove(updatedNote)) {
+      _itemsTree.add(updatedNote);
+      _invalidateFilterCache();
+      value = _getFilteredNotesList();
+    }
+  }
+
+  // Remove a note
+  void removeNote(NoteModel note) {
+    if (_itemsTree.remove(note)) {
+      _invalidateFilterCache();
+      value = _getFilteredNotesList();
+    }
+  }
+
+  // Clear all notes
+  void clear() {
+    if (_itemsTree.isNotEmpty) {
+      _itemsTree.clear();
+      _invalidateFilterCache();
+      value = [];
+    }
+  }
+
+  // Get raw tree for operations
+  SplayTreeSet<NoteModel> get itemsTree => _itemsTree;
+
+  // Invalidate filter cache
+  void _invalidateFilterCache() {
+    _filterCacheValid = false;
+  }
+
+  // Get filtered notes list based on data type
+  List<NoteModel> _getFilteredNotesList() {
+    if (_dataType != DataType.profile) {
+      return _itemsTree.toList();
+    }
+
+    // For profile, use cached filtered results if valid
+    if (_filterCacheValid && _cachedFilteredNotes != null) {
+      return _cachedFilteredNotes!;
+    }
+
+    // Rebuild filtered cache for profile
+    final allNotes = _itemsTree.toList();
+
+    // For profile view: Show only notes authored by the profile owner
+    _cachedFilteredNotes = allNotes.where((note) {
+      return note.author == _npub || (note.isRepost && note.repostedBy == _npub);
+    }).toList();
+
+    _filterCacheValid = true;
+    return _cachedFilteredNotes!;
+  }
+}
+
 enum MessageType { newnotes, cacheload, error, close }
 
 class IsolateMessage {
@@ -174,7 +257,9 @@ class DataService {
     this.onReplyCountUpdated,
     this.onRepostsUpdated,
     this.onRepostCountUpdated,
-  });
+  }) {
+    notesNotifier = NoteListNotifier(dataType, npub);
+  }
 
   int get connectedRelaysCount => _socketManager.activeSockets.length;
   int get currentNotesLimit => currentLimit;
@@ -356,7 +441,7 @@ class DataService {
 
     if (hasChanges) {
       _invalidateFilterCache();
-      notesNotifier.value = _getFilteredNotesList();
+      notesNotifier.value = notesNotifier.notes;
       print('[DataService] Updated interaction counts for ${updatedNotes.length} notes (${dataType.toString().split('.').last} type)');
     }
   }
@@ -1100,7 +1185,7 @@ class DataService {
         }
 
         _invalidateFilterCache();
-        notesNotifier.value = _getFilteredNotesList();
+        notesNotifier.value = notesNotifier.notes;
         await fetchProfilesBatch([reaction.author]);
       }
     } catch (e) {
@@ -1139,7 +1224,7 @@ class DataService {
         }
 
         _invalidateFilterCache();
-        notesNotifier.value = _getFilteredNotesList();
+        notesNotifier.value = notesNotifier.notes;
         await fetchProfilesBatch([repost.repostedBy]);
       }
     } catch (e) {
@@ -1211,7 +1296,7 @@ class DataService {
         }
 
         _invalidateFilterCache();
-        notesNotifier.value = _getFilteredNotesList();
+        notesNotifier.value = notesNotifier.notes;
         await fetchProfilesBatch([reply.author]);
       }
     } catch (e) {
@@ -2050,13 +2135,13 @@ class DataService {
     zapsMap.removeWhere((key, value) => removedIds.contains(key));
 
     _invalidateFilterCache();
-    notesNotifier.value = _getFilteredNotesList();
+    notesNotifier.value = notesNotifier.notes;
 
     print('[DataService] Memory relief completed: ${notes.length} notes remaining');
   }
 
   final SplayTreeSet<NoteModel> _itemsTree = SplayTreeSet(_compareNotes);
-  final ValueNotifier<List<NoteModel>> notesNotifier = ValueNotifier([]);
+  late final NoteListNotifier notesNotifier;
   final ValueNotifier<Map<String, UserModel>> profilesNotifier = ValueNotifier({});
   final ValueNotifier<List<NotificationModel>> notificationsNotifier = ValueNotifier([]);
   final ValueNotifier<int> unreadNotificationsCountNotifier = ValueNotifier(0);
@@ -2074,41 +2159,13 @@ class DataService {
 
     // Always add to the tree for interaction data access
     _itemsTree.add(note);
-    _invalidateFilterCache();
-    notesNotifier.value = _getFilteredNotesList();
+    // Use the new NoteListNotifier for incremental updates
+    notesNotifier.addNote(note);
   }
 
-  // Optimize profile filtering - cache filtered results
-  List<NoteModel>? _cachedFilteredNotes;
-  bool _filterCacheValid = false;
-
-  List<NoteModel> _getFilteredNotesList() {
-    if (dataType != DataType.profile) {
-      return _itemsTree.toList();
-    }
-
-    // For profile, use cached filtered results if valid
-    if (_filterCacheValid && _cachedFilteredNotes != null) {
-      return _cachedFilteredNotes!;
-    }
-
-    // Rebuild filtered cache for profile
-    final allNotes = _itemsTree.toList();
-
-    // For profile view: Show only notes authored by the profile owner (main posts, reposts, and replies)
-    _cachedFilteredNotes = allNotes.where((note) {
-      // Show all notes (including replies) authored by the profile owner
-      return note.author == npub || (note.isRepost && note.repostedBy == npub);
-    }).toList();
-
-    _filterCacheValid = true;
-
-    return _cachedFilteredNotes!;
-  }
-
-  void _invalidateFilterCache() {
-    _filterCacheValid = false;
-  }
+  // Legacy methods for backward compatibility - now delegated to NoteListNotifier
+  List<NoteModel> _getFilteredNotesList() => notesNotifier.notes;
+  void _invalidateFilterCache() => notesNotifier._invalidateFilterCache();
 
   Future<void> _subscribeToAllZaps() async {
     if (_isClosed || notes.isEmpty) return;
@@ -2738,7 +2795,7 @@ class DataService {
       onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
       _invalidateFilterCache();
       _invalidateFilterCache();
-      notesNotifier.value = _getFilteredNotesList();
+      notesNotifier.value = notesNotifier.notes;
     } catch (e) {
       print('[DataService ERROR] Error sending reaction: $e');
       throw e;
@@ -2784,7 +2841,7 @@ class DataService {
       }
 
       onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
-      notesNotifier.value = _getFilteredNotesList();
+      notesNotifier.value = notesNotifier.notes;
 
       print('[DataService] Reaction broadcasted to ${activeSockets.length} relays');
     } catch (e) {
@@ -2898,7 +2955,7 @@ class DataService {
       onNewNote?.call(replyNoteModel);
       _invalidateFilterCache();
       _invalidateFilterCache();
-      notesNotifier.value = _getFilteredNotesList();
+      notesNotifier.value = notesNotifier.notes;
 
       print('[DataService] Reply broadcasted to ${activeSockets.length} relays');
     } catch (e) {
@@ -2957,7 +3014,7 @@ class DataService {
       }
 
       onRepostsUpdated?.call(note.id, repostsMap[note.id]!);
-      notesNotifier.value = _getFilteredNotesList();
+      notesNotifier.value = notesNotifier.notes;
 
       print('[DataService] Repost broadcasted to ${activeSockets.length} relays');
     } catch (e) {
@@ -3109,7 +3166,7 @@ class DataService {
       onNewNote?.call(replyNoteModel);
       _invalidateFilterCache();
       _invalidateFilterCache();
-      notesNotifier.value = _getFilteredNotesList();
+      notesNotifier.value = notesNotifier.notes;
 
       print('[DataService] Reply sent and added to local notes: ${reply.id}');
     } catch (e) {
@@ -3156,7 +3213,7 @@ class DataService {
       }
 
       onRepostsUpdated?.call(note.id, repostsMap[note.id]!);
-      notesNotifier.value = _getFilteredNotesList();
+      notesNotifier.value = notesNotifier.notes;
     } catch (e) {
       print('[DataService ERROR] Error sending repost: $e');
       throw e;
@@ -3238,7 +3295,7 @@ class DataService {
 
       if (newNotes.isNotEmpty) {
         _invalidateFilterCache();
-        notesNotifier.value = _getFilteredNotesList();
+        notesNotifier.value = notesNotifier.notes;
         onLoad(newNotes);
 
         final cachedEventIds = newNotes.map((note) => note.id).toList();
@@ -3307,7 +3364,7 @@ class DataService {
       if (note != null) {
         note.zapAmount = zapsMap[key]!.fold(0, (sum, z) => sum + z.amount);
         _invalidateFilterCache();
-        notesNotifier.value = _getFilteredNotesList();
+        notesNotifier.value = notesNotifier.notes;
       }
     } catch (e) {
       print('[DataService ERROR] Error handling zap event: $e');
@@ -3360,7 +3417,7 @@ class DataService {
       }
     }
 
-    notesNotifier.value = _getFilteredNotesList();
+    notesNotifier.value = notesNotifier.notes;
   }
 
   Future<void> loadReactionsFromCache() async {
