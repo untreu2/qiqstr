@@ -323,24 +323,13 @@ class BatchProcessingService {
     // Just a placeholder for batch processing logic
   }
 
-  // Interaction batching (reactions, replies, reposts)
+  // Interaction batching (reactions, replies, reposts) - DISABLED FOR PERFORMANCE
   void addInteractionBatch(List<String> eventIds, {int priority = 2}) {
     if (_isClosed || eventIds.isEmpty) return;
 
-    final item = BatchItem(eventIds, priority);
-    if (priority > 2) {
-      _priorityInteractionQueue.add(item);
-    } else {
-      _interactionQueue.add(item);
-    }
-
-    final totalLength = _interactionQueue.length + _priorityInteractionQueue.length;
-    if (totalLength >= 3) {
-      _flushInteractionBatch();
-    } else {
-      _interactionBatchTimer?.cancel();
-      _interactionBatchTimer = Timer(_batchTimeout, _flushInteractionBatch);
-    }
+    // Automatic interaction fetching disabled - will be fetched manually only on thread page
+    print('[BatchProcessingService] Interaction batch disabled - ${eventIds.length} events skipped');
+    return;
   }
 
   void _flushInteractionBatch() {
@@ -378,67 +367,18 @@ class BatchProcessingService {
   }
 
   Future<void> _processInteractionBatch(List<String> eventIds) async {
-    const batchSize = 50;
-    final futures = <Future>[];
-
-    for (int i = 0; i < eventIds.length; i += batchSize) {
-      final endIndex = (i + batchSize > eventIds.length) ? eventIds.length : i + batchSize;
-      final batch = eventIds.sublist(i, endIndex);
-
-      if (batch.isNotEmpty) {
-        // Create requests for different interaction types
-        final reactionFilter = NostrService.createReactionFilter(eventIds: batch, limit: 500);
-        final replyFilter = NostrService.createReplyFilter(eventIds: batch, limit: 500);
-        final repostFilter = NostrService.createRepostFilter(eventIds: batch, limit: 500);
-        final zapFilter = NostrService.createZapFilter(eventIds: batch, limit: 500);
-
-        futures.addAll([
-          _networkService.broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(reactionFilter))),
-          _networkService.broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(replyFilter))),
-          _networkService.broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(repostFilter))),
-          _networkService.broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(zapFilter))),
-        ]);
-      }
-
-      // Limit concurrent requests
-      if (futures.length >= 12) {
-        await Future.wait(futures);
-        futures.clear();
-        await Future.delayed(const Duration(milliseconds: 50));
-      }
-    }
-
-    if (futures.isNotEmpty) {
-      await Future.wait(futures);
-    }
+    // Automatic interaction fetching disabled - will be fetched manually only on thread page
+    print('[BatchProcessingService] Interaction processing disabled - ${eventIds.length} events skipped');
+    return;
   }
 
-  // Subscription batching for better relay management
+  // Subscription batching for better relay management - DISABLED FOR PERFORMANCE
   Future<void> batchSubscribeToInteractions(List<String> eventIds) async {
     if (_isClosed || eventIds.isEmpty) return;
 
-    const batchSize = 50;
-    final futures = <Future>[];
-
-    for (int i = 0; i < eventIds.length; i += batchSize) {
-      final endIndex = (i + batchSize > eventIds.length) ? eventIds.length : i + batchSize;
-      final batch = eventIds.sublist(i, endIndex);
-
-      if (batch.isNotEmpty) {
-        final filter = NostrService.createCombinedInteractionFilter(eventIds: batch, limit: 1000);
-        futures.add(_networkService.broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(filter))));
-      }
-
-      if (futures.length >= 3) {
-        await Future.wait(futures);
-        futures.clear();
-        await Future.delayed(const Duration(milliseconds: 50));
-      }
-    }
-
-    if (futures.isNotEmpty) {
-      await Future.wait(futures);
-    }
+    // Automatic interaction subscription disabled - will be fetched manually only on thread page
+    print('[BatchProcessingService] Interaction subscription disabled - ${eventIds.length} events skipped');
+    return;
   }
 
   // Priority processing for urgent events

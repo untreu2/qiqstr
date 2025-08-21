@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import '../providers/notes_list_provider.dart';
 import '../services/data_service.dart';
@@ -12,8 +13,18 @@ class NoteListWidget extends StatefulWidget {
   State<NoteListWidget> createState() => _NoteListWidgetState();
 }
 
-class _NoteListWidgetState extends State<NoteListWidget> {
+class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAliveClientMixin {
   final ScrollController _scrollController = ScrollController();
+
+  // Simplified scroll-based lazy loading (VisibilityDetector removed)
+  final Set<String> _interactionsLoaded = <String>{};
+
+  // Throttling for performance optimization
+  DateTime _lastScrollUpdate = DateTime.now();
+  DateTime _lastInteractionUpdate = DateTime.now();
+
+  @override
+  bool get wantKeepAlive => true; // Preserve state - reduce rebuilds
 
   @override
   void initState() {
@@ -29,41 +40,65 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   void _setupScrollListener() {
     _scrollController.addListener(() {
+      // Very aggressive throttling - check only once per second
+      final now = DateTime.now();
+      if (now.difference(_lastScrollUpdate).inMilliseconds < 1000) return;
+      _lastScrollUpdate = now;
+
       // Trigger load more when scrolled to 90% of the way down
       if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.9) {
         final provider = context.read<NotesListProvider>();
         provider.fetchMoreNotes();
       }
+
+      // Stop interaction loading - only load on thread page
+      // _loadInteractionsForVisibleArea();
     });
   }
+
+  // Interaction loading completely disabled - only on thread page
+  // void _loadInteractionsForVisibleArea() { ... }
 
   @override
   void dispose() {
     _scrollController.dispose();
+    _interactionsLoaded.clear();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<NotesListProvider>(
-      builder: (context, provider, child) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
+
+    // Selective rebuild - rebuild only on necessary data changes
+    return Selector<NotesListProvider,
+        ({List<dynamic> notes, bool isLoading, bool hasError, String? errorMessage, bool isLoadingMore, bool isEmpty})>(
+      selector: (context, provider) => (
+        notes: provider.notes,
+        isLoading: provider.isLoading,
+        hasError: provider.hasError,
+        errorMessage: provider.errorMessage,
+        isLoadingMore: provider.isLoadingMore,
+        isEmpty: provider.isEmpty,
+      ),
+      builder: (context, data, child) {
         // Show initial loading state
-        if (provider.isLoading && provider.notes.isEmpty) {
+        if (data.isLoading && data.notes.isEmpty) {
           return _buildInitialLoadingState();
         }
 
         // Show error state
-        if (provider.hasError) {
-          return _buildErrorState(provider.errorMessage ?? 'Unknown error');
+        if (data.hasError) {
+          return _buildErrorState(data.errorMessage ?? 'Unknown error');
         }
 
         // Show empty state
-        if (provider.isEmpty) {
+        if (data.isEmpty) {
           return _buildEmptyState();
         }
 
         // Show notes list
-        return _buildNotesList(provider);
+        return _buildNotesList(data.notes, data.isLoadingMore);
       },
     );
   }
@@ -160,16 +195,9 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     );
   }
 
-  Widget _buildNotesList(NotesListProvider provider) {
-    final notes = provider.notes;
-
-    return SliverList.separated(
-      itemCount: notes.length + (provider.isLoadingMore ? 1 : 0),
-      separatorBuilder: (context, index) => Divider(
-        height: 12,
-        thickness: 1,
-        color: context.colors.border,
-      ),
+  Widget _buildNotesList(List<dynamic> notes, bool isLoadingMore) {
+    return SliverList.builder(
+      itemCount: notes.length + (isLoadingMore ? 1 : 0),
       itemBuilder: (context, index) {
         // Show loading indicator for "load more"
         if (index >= notes.length) {
@@ -177,7 +205,21 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         }
 
         final note = notes[index];
-        return _buildNoteItem(note, provider);
+        // Isolate each note with RepaintBoundary - rebuild performance
+        return RepaintBoundary(
+          key: ValueKey('repaint_${note.id}'),
+          child: Column(
+            children: [
+              _buildNoteItem(note),
+              if (index < notes.length - 1) // No divider on last item
+                Divider(
+                  height: 12,
+                  thickness: 1,
+                  color: context.colors.border,
+                ),
+            ],
+          ),
+        );
       },
     );
   }
@@ -195,18 +237,24 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     );
   }
 
-  Widget _buildNoteItem(note, NotesListProvider provider) {
-    return NoteWidget(
-      key: ValueKey(note.id),
-      note: note,
-      reactionCount: note.reactionCount,
-      replyCount: note.replyCount,
-      repostCount: note.repostCount,
-      dataService: provider.dataService,
-      currentUserNpub: provider.npub,
-      notesNotifier: provider.dataService.notesNotifier,
-      profiles: {}, // Empty since we're using UserProvider globally
-      isSmallView: true,
+  Widget _buildNoteItem(note) {
+    // Static context - Consumer removed for performance
+    return Builder(
+      builder: (context) {
+        final provider = context.read<NotesListProvider>();
+        return NoteWidget(
+          key: ValueKey(note.id),
+          note: note,
+          reactionCount: note.reactionCount,
+          replyCount: note.replyCount,
+          repostCount: note.repostCount,
+          dataService: provider.dataService,
+          currentUserNpub: provider.npub,
+          notesNotifier: provider.dataService.notesNotifier,
+          profiles: {}, // Empty since we're using UserProvider globally
+          isSmallView: true,
+        );
+      },
     );
   }
 }

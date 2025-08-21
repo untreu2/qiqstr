@@ -5,8 +5,6 @@ import '../models/note_model.dart';
 import '../services/data_service.dart';
 import '../services/data_service_manager.dart';
 import '../providers/user_provider.dart';
-import '../providers/interactions_provider.dart';
-import '../providers/notes_provider.dart';
 
 class NotesListProvider extends ChangeNotifier {
   final String npub;
@@ -63,8 +61,8 @@ class NotesListProvider extends ChangeNotifier {
     _filteredNotes = filtered;
     notifyListeners();
 
-    // Schedule progressive loading in a non-blocking way
-    _scheduleProgressiveLoading(filtered);
+    // Progressive loading disabled - only load profiles
+    _scheduleProfileLoading(filtered);
   }
 
   Future<void> fetchInitialNotes() async {
@@ -120,20 +118,16 @@ class NotesListProvider extends ChangeNotifier {
     }, Priority.animation);
   }
 
-  void _scheduleProgressiveLoading(List<NoteModel> notes) {
+  void _scheduleProfileLoading(List<NoteModel> notes) {
     if (notes.isEmpty) return;
 
-    // Use SchedulerBinding instead of Future.delayed for better performance
+    // Only load profiles, interactions will be fetched on thread page
     SchedulerBinding.instance.scheduleTask(() async {
       await _loadCriticalUserProfiles(notes);
     }, Priority.animation);
 
     SchedulerBinding.instance.scheduleTask(() async {
       await _loadRemainingUserProfiles(notes);
-    }, Priority.idle);
-
-    SchedulerBinding.instance.scheduleTask(() async {
-      await _loadInteractionsProgressive(notes);
     }, Priority.idle);
   }
 
@@ -184,43 +178,8 @@ class NotesListProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _loadInteractionsProgressive(List<NoteModel> notes) async {
-    const batchSize = 5;
-    final interactionsProvider = InteractionsProvider.instance;
-    final notesProvider = NotesProvider.instance;
-
-    for (int i = 0; i < notes.length; i += batchSize) {
-      // Yield control to UI thread between batches using SchedulerBinding
-      await SchedulerBinding.instance.endOfFrame;
-
-      final batch = notes.skip(i).take(batchSize);
-
-      for (final note in batch) {
-        // Schedule each note's interactions loading using SchedulerBinding instead of Future.microtask
-        SchedulerBinding.instance.scheduleTask(() {
-          try {
-            final reactions = interactionsProvider.getReactionsForNote(note.id);
-            final replies = interactionsProvider.getRepliesForNote(note.id);
-            final reposts = interactionsProvider.getRepostsForNote(note.id);
-            final zaps = interactionsProvider.getZapsForNote(note.id);
-
-            // Update counts if available
-            if (reactions.isNotEmpty || replies.isNotEmpty || reposts.isNotEmpty || zaps.isNotEmpty) {
-              notesProvider.updateNoteInteractionCounts(
-                note.id,
-                reactionCount: reactions.length,
-                replyCount: replies.length,
-                repostCount: reposts.length,
-                zapAmount: zaps.fold<int>(0, (sum, zap) => sum + zap.amount),
-              );
-            }
-          } catch (e) {
-            debugPrint('[NotesListProvider] Interaction loading error for ${note.id}: $e');
-          }
-        }, Priority.idle);
-      }
-    }
-  }
+  // Progressive interaction loading removed - for performance
+  // Interactions will only be loaded on thread page
 
   void _setLoading(bool loading) {
     if (_isLoading != loading) {

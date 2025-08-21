@@ -144,6 +144,9 @@ class _ThreadPageState extends State<ThreadPage> {
 
       // Load additional data in background without blocking UI
       _loadAdditionalDataInBackground();
+
+      // Fetch interactions for thread on ThreadPage - performance optimization
+      _loadThreadInteractions();
     } catch (e) {
       print('[ThreadPage] Error in _loadRootNote: $e');
       if (mounted) {
@@ -160,13 +163,6 @@ class _ThreadPageState extends State<ThreadPage> {
     // Fetch missing context notes with timeout
     futures.add(
         _fetchMissingContextNotes().timeout(const Duration(seconds: 3)).catchError((e) => print('[ThreadPage] Context fetch timeout: $e')));
-
-    // Fetch thread replies with timeout
-    if (_rootNote != null) {
-      futures.add(_fetchThreadReplies(_rootNote!.id)
-          .timeout(const Duration(seconds: 2))
-          .catchError((e) => print('[ThreadPage] Replies fetch timeout: $e')));
-    }
 
     // Fetch profiles with timeout
     futures.add(_fetchAllThreadUserProfiles()
@@ -185,6 +181,38 @@ class _ThreadPageState extends State<ThreadPage> {
       setState(() {
         _updateRelevantNoteIds();
       });
+    }
+  }
+
+  /// Special interaction loading for threads - only runs on thread page
+  Future<void> _loadThreadInteractions() async {
+    if (_rootNote == null) return;
+
+    try {
+      // Collect eventIds for all notes in the thread
+      final threadEventIds = <String>{_rootNote!.id};
+
+      if (_focusedNote != null) {
+        threadEventIds.add(_focusedNote!.id);
+      }
+
+      // Get all replies from thread hierarchy
+      final threadHierarchy = widget.dataService.buildThreadHierarchy(_rootNote!.id);
+      for (final replies in threadHierarchy.values) {
+        for (final reply in replies) {
+          threadEventIds.add(reply.id);
+        }
+      }
+
+      print('[ThreadPage] Loading interactions for ${threadEventIds.length} thread notes');
+
+      // Fetch interactions only for this thread's notes
+      await widget.dataService
+          .fetchInteractionsForEvents(threadEventIds.toList())
+          .timeout(const Duration(seconds: 3))
+          .catchError((e) => print('[ThreadPage] Thread interactions fetch timeout: $e'));
+    } catch (e) {
+      print('[ThreadPage] Error loading thread interactions: $e');
     }
   }
 
@@ -298,24 +326,7 @@ class _ThreadPageState extends State<ThreadPage> {
     await Future.wait(futures).timeout(const Duration(seconds: 5));
   }
 
-  Future<void> _fetchThreadReplies(String rootNoteId) async {
-    try {
-      // Fetch replies for the root note to ensure we have the complete thread context
-      final allEventIds = [rootNoteId];
-
-      // Also include any other relevant notes we've identified
-      allEventIds.addAll(_relevantNoteIds);
-
-      print('[ThreadPage] Fetching replies for thread context: $allEventIds');
-
-      // Use the existing interaction fetching mechanism with timeout
-      await widget.dataService.fetchInteractionsForEvents(allEventIds).timeout(const Duration(seconds: 2));
-
-      // Remove the blocking delay - let it process asynchronously
-    } catch (e) {
-      print('[ThreadPage] Error fetching thread replies: $e');
-    }
-  }
+  // _fetchThreadReplies removed - now using _loadThreadInteractions
 
   void _updateRelevantNoteIds() {
     _relevantNoteIds.clear();
