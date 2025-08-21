@@ -173,6 +173,7 @@ class DataServiceMetrics {
 }
 
 class DataService {
+  final Set<String> _pendingOptimisticReactionIds = {};
   late Isolate _eventProcessorIsolate;
   late SendPort _eventProcessorSendPort;
   final Completer<void> _eventProcessorReady = Completer<void>();
@@ -1572,8 +1573,23 @@ class DataService {
       if (targetEventId == null) return;
 
       final reaction = ReactionModel.fromEvent(eventData);
+
+      // --- NEW LOGIC TO HANDLE NETWORK ECHO ---
+      // 1. Check if this reaction's ID is in our pending set.
+      if (_pendingOptimisticReactionIds.contains(reaction.id)) {
+        // If yes, this is the network confirmation for our own optimistic update.
+        // We don't need to process it further. Just remove it from the set.
+        _pendingOptimisticReactionIds.remove(reaction.id);
+        print('[DataService] Confirmed optimistic reaction, ignoring network echo: ${reaction.id}');
+        return; // Stop execution to prevent adding a duplicate.
+      }
+
+      // --- ORIGINAL LOGIC FOR NEW, EXTERNAL REACTIONS ---
+      // If the code reaches here, it's a new reaction from someone else.
+
       reactionsMap.putIfAbsent(targetEventId, () => []);
 
+      // 2. A secondary check to prevent duplicates from multiple relays.
       if (!reactionsMap[targetEventId]!.any((r) => r.id == reaction.id)) {
         reactionsMap[targetEventId]!.add(reaction);
         await reactionsBox?.put(reaction.id, reaction);
@@ -3213,42 +3229,53 @@ class DataService {
         throw Exception('Private key not found.');
       }
 
+      // 1. Create the Nostr event for the reaction
       final event = NostrService.createReactionEvent(
         targetEventId: targetEventId,
         content: reactionContent,
         privateKey: privateKey,
       );
 
+      // 2. Broadcast the event to all connected relays
       final serializedEvent = NostrService.serializeEvent(event);
       final activeSockets = _socketManager.activeSockets;
-
       for (final ws in activeSockets) {
         if (ws.readyState == WebSocket.open) {
           ws.add(serializedEvent);
         }
       }
+      print('[DataService] Reaction broadcasted to ${activeSockets.length} relays');
 
+      // --- OPTIMISTIC UPDATE LOGIC ---
+
+      // 3. Create a local model from the event we just created
       final reaction = ReactionModel.fromEvent(NostrService.eventToJson(event));
+
+      // 4. Add the reaction's ID to our pending set to track it
+      _pendingOptimisticReactionIds.add(reaction.id);
+
+      // 5. Add the reaction model to the in-memory map for instant UI update
       reactionsMap.putIfAbsent(targetEventId, () => []);
       reactionsMap[targetEventId]!.add(reaction);
 
+      // 6. Save the optimistic reaction to the local cache
       if (reactionsBox != null) {
         reactionsBox!.put(reaction.id, reaction).catchError((error) {
-          print('[DataService] Error saving reaction to cache: $error');
+          print('[DataService] Error saving optimistic reaction to cache: $error');
         });
       }
 
+      // 7. Update the reaction count on the corresponding note
       final note = notes.firstWhereOrNull((n) => n.id == targetEventId);
       if (note != null) {
         note.reactionCount = reactionsMap[targetEventId]!.length;
       }
 
+      // 8. Notify all listeners that the data has changed
       onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
       notesNotifier.value = notesNotifier.notes;
-
-      print('[DataService] Reaction broadcasted to ${activeSockets.length} relays');
     } catch (e) {
-      print('[DataService ERROR] Error sending reaction: $e');
+      print('[DataService ERROR] Error sending reaction instantly: $e');
       throw e;
     }
   }

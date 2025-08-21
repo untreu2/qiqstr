@@ -26,7 +26,6 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
 
   // Throttling for performance optimization
   DateTime _lastScrollUpdate = DateTime.now();
-  DateTime _lastInteractionUpdate = DateTime.now();
 
   // SCROLL POSITION FIX: Save/restore scroll position
   static final Map<String, double> _savedScrollPositions = {};

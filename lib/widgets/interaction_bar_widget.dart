@@ -56,27 +56,30 @@ class _InteractionBarState extends State<InteractionBar> {
     return count.toString();
   }
 
-  /// Handles reaction tap with optimistic updates for instant UI feedback
+  /// Handles the reaction tap.
+  /// The responsibility for optimistic updates is now entirely within DataService
+  /// to ensure the UI update logic happens only once.
   Future<bool> _handleReactionTap(bool isCurrentlyLiked) async {
-    if (widget.dataService == null) return false;
+    if (widget.dataService == null) {
+      return false;
+    }
 
-    // If already liked, don't do anything for now (could implement unlike later)
+    // Currently, this function does not handle "unliking".
     if (isCurrentlyLiked) {
       return false;
     }
 
-    // 1. OPTIMISTIC UPDATE: Update UI immediately
-    InteractionsProvider.instance.addOptimisticReaction(widget.noteId, widget.currentUserNpub);
-
     try {
-      // 2. NETWORK REQUEST: Send the actual request in the background
+      // 1. Directly call the service. DataService will handle the optimistic update and the network request.
       await widget.dataService!.sendReactionInstantly(widget.noteId, '+');
-      // If successful, the real reaction will come through the relay and replace the optimistic one
+
+      // 2. Return true to the LikeButton to let it complete its animation.
       return true;
     } catch (e) {
       print('Error sending reaction: $e');
-      // 3. ROLLBACK: If network request fails, remove the optimistic reaction
-      InteractionsProvider.instance.removeOptimisticReaction(widget.noteId, widget.currentUserNpub);
+
+      // 3. If the network request fails, DataService is responsible for its own state consistency.
+      // The UI does not need to perform a manual rollback.
       return false;
     }
   }
@@ -84,7 +87,7 @@ class _InteractionBarState extends State<InteractionBar> {
   void _handleReplyTap() {
     if (widget.dataService == null) return;
 
-    // Navigate to reply page
+    // Navigate to the reply page
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -209,7 +212,7 @@ class _InteractionBarState extends State<InteractionBar> {
           },
           onTap: (bool isLiked) async {
             _handleReplyTap();
-            return false; // Reply doesn't toggle state
+            return false; // Reply action does not toggle the button's state.
           },
           circleColor: CircleColor(
             start: colors.reply.withOpacity(0.3),
