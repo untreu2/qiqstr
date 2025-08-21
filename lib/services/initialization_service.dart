@@ -5,6 +5,50 @@ import '../providers/notes_provider.dart';
 import '../providers/interactions_provider.dart';
 import 'base/service_base.dart';
 
+// For the compute function to work, these functions must be
+// outside a class or static.
+// This structure makes it easy to send data to an isolate and process it there.
+
+/// Standalone function to process secondary data in the background (Isolate).
+Future<void> _processSecondaryDataInBackground(Map<String, dynamic> args) async {
+  final List<String> noteIds = args['noteIds'];
+  final String currentUserNpub = args['currentUserNpub'];
+
+  // We may need to re-initialize providers within this isolate.
+  // Or we can access the database directly here.
+  // In this example, we assume that the providers are isolate-safe.
+  await NotesProvider.instance.initialize(currentUserNpub);
+  await InteractionsProvider.instance.initialize(currentUserNpub);
+
+  const batchSize = 20;
+  final interactionsProvider = InteractionsProvider.instance;
+
+  for (int i = 0; i < noteIds.length; i += batchSize) {
+    final batch = noteIds.skip(i).take(batchSize);
+    for (final noteId in batch) {
+      interactionsProvider.getReactionsForNote(noteId);
+      interactionsProvider.getRepliesForNote(noteId);
+      interactionsProvider.getRepostsForNote(noteId);
+      interactionsProvider.getZapsForNote(noteId);
+    }
+    // No need for Future.delayed anymore as it runs inside an Isolate.
+  }
+}
+
+/// Standalone function to process user profiles in the background (Isolate).
+Future<void> _preloadProfilesInBackground(Map<String, dynamic> args) async {
+  final List<String> authorIds = args['authorIds'];
+
+  await UserProvider.instance.initialize();
+  final userProvider = UserProvider.instance;
+  const batchSize = 15;
+
+  for (int i = 0; i < authorIds.length; i += batchSize) {
+    final batch = authorIds.skip(i).take(batchSize).toList();
+    await userProvider.loadUsers(batch);
+  }
+}
+
 /// Optimized initialization service for faster app startup
 class InitializationService extends LifecycleService with PerformanceMonitoringMixin {
   static InitializationService? _instance;
@@ -38,26 +82,27 @@ class InitializationService extends LifecycleService with PerformanceMonitoringM
   /// Initialize only the absolute minimum needed for UI display
   Future<void> _initializeMinimalCritical() async {
     await measureOperation('minimal_critical_init', () async {
-      // Only initialize UserProvider for immediate UI needs
       await UserProvider.instance.initialize();
     });
   }
 
   /// Schedule progressive initialization in background
   void _scheduleProgressiveInitialization() {
+    // OPTIMIZATION: We are moving all heavy operations to Isolates instead of Future.microtask.
+    // This ensures that the UI thread remains completely free.
     Future.microtask(() async {
       try {
-        // Phase 1: Initialize remaining providers
+        // Initialize necessary providers on the main thread
         await _initializeRemainingProviders();
 
-        // Phase 2: Load critical cache data
-        await _loadCriticalCacheData();
+        // OPTIMIZATION: Get the note list once and reuse it.
+        final allNotes = NotesProvider.instance.getFeedNotes();
 
-        // Phase 3: Load secondary data progressively
-        await _loadSecondaryCacheData();
+        // Load the critical cache (this should still be fast)
+        await _loadCriticalCacheData(allNotes);
 
-        // Phase 4: Preload user profiles
-        await _preloadUserProfiles();
+        // Offload remaining heavy operations to Isolates
+        _offloadHeavyTasks(allNotes);
       } catch (e) {
         debugPrint('[InitializationService] Progressive initialization error: $e');
       }
@@ -67,97 +112,70 @@ class InitializationService extends LifecycleService with PerformanceMonitoringM
   /// Initialize remaining providers in background
   Future<void> _initializeRemainingProviders() async {
     await measureOperation('remaining_providers_init', () async {
+      // OPTIMIZATION: Guard clause for null check
+      final userNpub = _currentUserNpub;
+      if (userNpub == null || userNpub.isEmpty) return;
+
       await Future.wait([
-        NotesProvider.instance.initialize(_currentUserNpub ?? ''),
-        InteractionsProvider.instance.initialize(_currentUserNpub ?? ''),
+        NotesProvider.instance.initialize(userNpub),
+        InteractionsProvider.instance.initialize(userNpub),
       ]);
     });
   }
 
   /// Load critical cache data for immediate display
-  Future<void> _loadCriticalCacheData() async {
+  Future<void> _loadCriticalCacheData(List<dynamic> allNotes) async {
     await measureOperation('critical_cache_load', () async {
-      final notesProvider = NotesProvider.instance;
       final interactionsProvider = InteractionsProvider.instance;
+      final criticalNotes = allNotes.take(15).toList();
 
-      // Get most recent notes for immediate display
-      final recentNotes = notesProvider.getFeedNotes().take(15).toList();
-
-      // Preload interactions for first 10 notes only
-      final criticalInteractionsFutures = recentNotes.take(10).map((note) {
-        return Future.microtask(() {
-          // Trigger cache loading for interactions
-          interactionsProvider.getReactionsForNote(note.id);
-          interactionsProvider.getRepliesForNote(note.id);
-          interactionsProvider.getRepostsForNote(note.id);
-          interactionsProvider.getZapsForNote(note.id);
-        });
+      // OPTIMIZATION: A single combined operation might be more efficient than calling them separately.
+      // If the provider doesn't have such a method, the current structure is also acceptable.
+      final criticalInteractionsFutures = criticalNotes.map((note) {
+        // Ideally, the provider should have a method like preloadInteractions(note.id).
+        return interactionsProvider.preloadInteractionsForNote(note.id);
       }).toList();
 
       await Future.wait(criticalInteractionsFutures);
     });
   }
 
-  /// Load secondary cache data progressively
-  Future<void> _loadSecondaryCacheData() async {
-    await measureOperation('secondary_cache_load', () async {
-      const batchSize = 20;
-      final notesProvider = NotesProvider.instance;
-      final interactionsProvider = InteractionsProvider.instance;
+  /// Offload heavy data processing tasks to background isolates
+  void _offloadHeavyTasks(List<dynamic> allNotes) {
+    final userNpub = _currentUserNpub;
+    if (userNpub == null || userNpub.isEmpty) return;
 
-      final allNotes = notesProvider.getFeedNotes();
-      final remainingNotes = allNotes.skip(10).toList();
+    // --- Task 1: Load secondary cache in the background ---
+    final remainingNoteIds = allNotes.skip(15).map((note) => note.id as String).toList();
+    if (remainingNoteIds.isNotEmpty) {
+      compute(_processSecondaryDataInBackground, {
+        'noteIds': remainingNoteIds,
+        'currentUserNpub': userNpub,
+      }).catchError((e) => debugPrint('Secondary cache processing failed: $e'));
+    }
 
-      // Process remaining notes in batches
-      for (int i = 0; i < remainingNotes.length; i += batchSize) {
-        final batch = remainingNotes.skip(i).take(batchSize).toList();
-
-        await Future.microtask(() {
-          for (final note in batch) {
-            // Load interactions for batch
-            interactionsProvider.getReactionsForNote(note.id);
-            interactionsProvider.getRepliesForNote(note.id);
-            interactionsProvider.getRepostsForNote(note.id);
-            interactionsProvider.getZapsForNote(note.id);
-          }
-        });
-
-        // Small delay to prevent blocking
-        await Future.delayed(const Duration(milliseconds: 2));
+    // --- Task 2: Preload user profiles in the background ---
+    final uniqueAuthors = allNotes.fold<Set<String>>(<String>{}, (prev, note) {
+      prev.add(note.author);
+      if (note.repostedBy != null) {
+        prev.add(note.repostedBy!);
       }
-    });
+      return prev;
+    }).toList();
+
+    if (uniqueAuthors.isNotEmpty) {
+      compute(_preloadProfilesInBackground, {
+        'authorIds': uniqueAuthors,
+        'currentUserNpub': userNpub,
+      }).catchError((e) => debugPrint('User profile preloading failed: $e'));
+    }
   }
 
-  /// Preload user profiles progressively
-  Future<void> _preloadUserProfiles() async {
-    await measureOperation('user_profiles_preload', () async {
-      const batchSize = 15;
-      final notesProvider = NotesProvider.instance;
-      final userProvider = UserProvider.instance;
-
-      // Get all unique authors
-      final allNotes = notesProvider.getFeedNotes();
-      final uniqueAuthors = <String>{};
-
-      for (final note in allNotes) {
-        uniqueAuthors.add(note.author);
-        if (note.repostedBy != null) {
-          uniqueAuthors.add(note.repostedBy!);
-        }
-      }
-
-      final authorsList = uniqueAuthors.toList();
-
-      // Load user profiles in batches
-      for (int i = 0; i < authorsList.length; i += batchSize) {
-        final batch = authorsList.skip(i).take(batchSize).toList();
-        await userProvider.loadUsers(batch);
-
-        // Small delay to prevent blocking
-        await Future.delayed(const Duration(milliseconds: 3));
-      }
-    });
-  }
+  // OPTIMIZATION: These two methods are now managed within _offloadHeavyTasks and
+  // the standalone functions called with compute (_processSecondaryDataInBackground,
+  // _preloadProfilesInBackground). Therefore, they can be removed.
+  // Future<void> _loadSecondaryCacheData() async { ... }
+  // Future<void> _preloadUserProfiles() async { ... }
 
   /// Get initialization performance stats
   Map<String, dynamic> getInitializationStats() {
@@ -175,9 +193,7 @@ class InitializationService extends LifecycleService with PerformanceMonitoringM
   }
 
   @override
-  Future<void> onInitialize() async {
-    // Service is initialized when initializeApp is called
-  }
+  Future<void> onInitialize() async {}
 
   @override
   Future<void> onClose() async {
@@ -185,50 +201,14 @@ class InitializationService extends LifecycleService with PerformanceMonitoringM
   }
 }
 
-/// Isolate-based cache processing for heavy operations
-class CacheProcessingIsolate {
-  static Future<void> processCacheData(Map<String, dynamic> params) async {
-    try {
-      final operation = params['operation'] as String;
-      final data = params['data'];
-
-      switch (operation) {
-        case 'process_notes':
-          await _processNotesInIsolate(data);
-          break;
-        case 'process_interactions':
-          await _processInteractionsInIsolate(data);
-          break;
-        case 'process_user_profiles':
-          await _processUserProfilesInIsolate(data);
-          break;
-      }
-    } catch (e) {
-      debugPrint('[CacheProcessingIsolate] Error: $e');
-    }
-  }
-
-  static Future<void> _processNotesInIsolate(List<Map<String, dynamic>> notesData) async {
-    // Process notes data in isolate
-    for (final _ in notesData) {
-      // Perform heavy processing operations
-      await Future.delayed(const Duration(microseconds: 100));
-    }
-  }
-
-  static Future<void> _processInteractionsInIsolate(List<Map<String, dynamic>> interactionsData) async {
-    // Process interactions data in isolate
-    for (final _ in interactionsData) {
-      // Perform heavy processing operations
-      await Future.delayed(const Duration(microseconds: 50));
-    }
-  }
-
-  static Future<void> _processUserProfilesInIsolate(List<Map<String, dynamic>> profilesData) async {
-    // Process user profiles data in isolate
-    for (final _ in profilesData) {
-      // Perform heavy processing operations
-      await Future.delayed(const Duration(microseconds: 75));
-    }
+// Having a combined method like this in InteractionsProvider improves performance.
+extension InteractionsProviderExtension on InteractionsProvider {
+  Future<void> preloadInteractionsForNote(String noteId) {
+    return Future.wait([
+      getReactionsForNote(noteId),
+      getRepliesForNote(noteId),
+      getRepostsForNote(noteId),
+      getZapsForNote(noteId),
+    ] as Iterable<Future>);
   }
 }

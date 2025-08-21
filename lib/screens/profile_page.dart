@@ -23,16 +23,54 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _profileInfoLoaded = false;
   String? _userHexKey;
 
+  bool _isInitialized = false;
+
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController()..addListener(_scrollListener);
 
-    // Convert npub to hex format for DataService
-    _userHexKey = _convertNpubToHex(widget.user.npub);
+    Future.delayed(const Duration(milliseconds: 1250), () {
+      if (!mounted) return;
 
-    // Initialize immediately without loading states
-    _initializeImmediately();
+      _scrollController = ScrollController()..addListener(_scrollListener);
+      _userHexKey = _convertNpubToHex(widget.user.npub);
+      _initializeImmediately();
+
+      setState(() {
+        _isInitialized = true;
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    if (_isInitialized) {
+      _scrollController.dispose();
+    }
+    dataService?.closeConnections();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_isInitialized) {
+      return Scaffold(
+        backgroundColor: context.colors.background,
+        body: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: context.colors.background,
+      body: Stack(
+        children: [
+          _buildStagedContent(context),
+          _buildFloatingBackButton(context),
+        ],
+      ),
+    );
   }
 
   String? _convertNpubToHex(String npub) {
@@ -40,12 +78,12 @@ class _ProfilePageState extends State<ProfilePage> {
       if (npub.startsWith('npub1')) {
         return decodeBasicBech32(npub, 'npub');
       } else if (_isValidHex(npub)) {
-        return npub; // Already hex format
+        return npub;
       }
     } catch (e) {
       print('[ProfilePage] Error converting npub to hex: $e');
     }
-    return npub; // Return original if conversion fails
+    return npub;
   }
 
   bool _isValidHex(String value) {
@@ -54,24 +92,17 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _initializeImmediately() {
-    // Create DataService and show content immediately
     _createDataServiceEarly();
-
-    // Show profile info immediately
     if (mounted) {
       setState(() {
         _profileInfoLoaded = true;
       });
     }
-
-    // Start notes loading in background
     Future.microtask(() => _startNotesLoading());
   }
 
   Future<void> _createDataServiceEarly() async {
     try {
-      // Create DataService early so ProfileInfoWidget can use it
-      // Use hex format for DataService
       dataService = DataService(
         npub: _userHexKey ?? widget.user.npub,
         dataType: DataType.profile,
@@ -83,14 +114,9 @@ class _ProfilePageState extends State<ProfilePage> {
         onReplyCountUpdated: (_, __) {},
         onRepostCountUpdated: (_, __) {},
       );
-
-      // Do lightweight initialization immediately
       await dataService!.initializeLightweight();
-
       if (mounted) {
-        setState(() {
-          // Trigger rebuild so ProfileInfoWidget gets the DataService
-        });
+        setState(() {});
       }
     } catch (e) {
       print('[ProfilePage] Early DataService creation error: $e');
@@ -99,7 +125,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _startNotesLoading() async {
     try {
-      // DataService should already exist from _createDataServiceEarly()
       if (dataService == null) {
         print('[ProfilePage] DataService not found, creating new one');
         dataService = DataService(
@@ -115,8 +140,6 @@ class _ProfilePageState extends State<ProfilePage> {
         );
         await dataService!.initializeLightweight();
       }
-
-      // Start heavy operations in background
       Future.delayed(const Duration(milliseconds: 100), () {
         if (mounted && dataService != null) {
           dataService!.initializeHeavyOperations().then((_) {
@@ -133,15 +156,7 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    dataService?.closeConnections();
-    super.dispose();
-  }
-
   void _scrollListener() {
-    // Infinite scroll support
     dataService?.onScrollPositionChanged(
       _scrollController.position.pixels,
       _scrollController.position.maxScrollExtent,
@@ -150,7 +165,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildFloatingBackButton(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
-
     return Positioned(
       top: topPadding - 8,
       left: 16,
@@ -163,10 +177,7 @@ class _ProfilePageState extends State<ProfilePage> {
             height: 44,
             decoration: BoxDecoration(
               color: context.colors.backgroundTransparent,
-              border: Border.all(
-                color: context.colors.borderLight,
-                width: 1.5,
-              ),
+              border: Border.all(color: context.colors.borderLight, width: 1.5),
               borderRadius: BorderRadius.circular(25.0),
             ),
             child: Bounce(
@@ -185,19 +196,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: context.colors.background,
-      body: Stack(
-        children: [
-          _buildStagedContent(context),
-          _buildFloatingBackButton(context),
-        ],
-      ),
-    );
-  }
-
   Widget _buildStagedContent(BuildContext context) {
     return RefreshIndicator(
       onRefresh: () async {
@@ -212,15 +210,12 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
         cacheExtent: 1500,
         slivers: [
-          // Show profile info immediately
           SliverToBoxAdapter(
             child: ProfileInfoWidget(
               user: widget.user,
               sharedDataService: dataService,
             ),
           ),
-
-          // Show notes section after profile info is loaded
           if (_profileInfoLoaded && dataService != null)
             NoteListWidgetFactory.create(
               npub: _userHexKey ?? widget.user.npub,
