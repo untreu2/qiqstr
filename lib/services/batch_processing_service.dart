@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'network_service.dart';
 import 'nostr_service.dart';
 
@@ -47,66 +48,9 @@ class BatchProcessingService {
   bool _isProcessingInteractions = false;
   bool _isClosed = false;
 
-  // Performance metrics
-  final Map<String, List<Duration>> _processingTimes = {};
-  final Map<String, int> _successCounts = {};
-  final Map<String, int> _errorCounts = {};
+  // MEMORY OPTIMIZATION: Performance metrics completely removed
 
-  BatchProcessingService({required NetworkService networkService}) : _networkService = networkService {
-    _startPerformanceMonitoring();
-  }
-
-  void _startPerformanceMonitoring() {
-    _performanceTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-      _adjustBatchSizes();
-      _cleanupMetrics();
-    });
-  }
-
-  void _adjustBatchSizes() {
-    // Adjust event batch size based on performance
-    final eventTimes = _processingTimes['events'] ?? [];
-    if (eventTimes.isNotEmpty) {
-      final avgTime = eventTimes.fold<int>(0, (sum, d) => sum + d.inMilliseconds) / eventTimes.length;
-      if (avgTime > 200) {
-        _currentEventBatchSize = max(3, _currentEventBatchSize - 1);
-      } else if (avgTime < 50) {
-        _currentEventBatchSize = min(_maxEventBatchSize, _currentEventBatchSize + 1);
-      }
-    }
-
-    // Adjust profile batch size based on performance
-    final profileTimes = _processingTimes['profiles'] ?? [];
-    if (profileTimes.isNotEmpty) {
-      final avgTime = profileTimes.fold<int>(0, (sum, d) => sum + d.inMilliseconds) / profileTimes.length;
-      if (avgTime > 500) {
-        _currentProfileBatchSize = max(10, _currentProfileBatchSize - 5);
-      } else if (avgTime < 100) {
-        _currentProfileBatchSize = min(_maxBatchSize, _currentProfileBatchSize + 5);
-      }
-    }
-  }
-
-  void _cleanupMetrics() {
-    // Keep only last 20 measurements per operation
-    for (final key in _processingTimes.keys) {
-      final times = _processingTimes[key]!;
-      if (times.length > 20) {
-        _processingTimes[key] = times.sublist(times.length - 20);
-      }
-    }
-  }
-
-  void _recordPerformance(String operation, Duration duration, bool success) {
-    _processingTimes.putIfAbsent(operation, () => []);
-    _processingTimes[operation]!.add(duration);
-
-    if (success) {
-      _successCounts[operation] = (_successCounts[operation] ?? 0) + 1;
-    } else {
-      _errorCounts[operation] = (_errorCounts[operation] ?? 0) + 1;
-    }
-  }
+  BatchProcessingService({required NetworkService networkService}) : _networkService = networkService;
 
   // Event batching
   void addEventToBatch(Map<String, dynamic> eventData, {int priority = 2}) {
@@ -232,14 +176,7 @@ class BatchProcessingService {
     }
 
     if (batch.isNotEmpty) {
-      final stopwatch = Stopwatch()..start();
-      _processEventBatch(batch).then((_) {
-        stopwatch.stop();
-        _recordPerformance('events', stopwatch.elapsed, true);
-      }).catchError((error) {
-        stopwatch.stop();
-        _recordPerformance('events', stopwatch.elapsed, false);
-      });
+      _processEventBatch(batch);
     }
 
     _isProcessingEvents = false;
@@ -300,14 +237,7 @@ class BatchProcessingService {
     }
 
     if (batch.isNotEmpty) {
-      final stopwatch = Stopwatch()..start();
-      _processProfileBatch(batch).then((_) {
-        stopwatch.stop();
-        _recordPerformance('profiles', stopwatch.elapsed, true);
-      }).catchError((error) {
-        stopwatch.stop();
-        _recordPerformance('profiles', stopwatch.elapsed, false);
-      });
+      _processProfileBatch(batch);
     }
 
     _isProcessingProfiles = false;
@@ -353,14 +283,7 @@ class BatchProcessingService {
     }
 
     if (allEventIds.isNotEmpty) {
-      final stopwatch = Stopwatch()..start();
-      _processInteractionBatch(allEventIds.toList()).then((_) {
-        stopwatch.stop();
-        _recordPerformance('interactions', stopwatch.elapsed, true);
-      }).catchError((error) {
-        stopwatch.stop();
-        _recordPerformance('interactions', stopwatch.elapsed, false);
-      });
+      _processInteractionBatch(allEventIds.toList());
     }
 
     _isProcessingInteractions = false;
@@ -405,7 +328,6 @@ class BatchProcessingService {
     _eventBatchTimer?.cancel();
     _profileBatchTimer?.cancel();
     _interactionBatchTimer?.cancel();
-    _performanceTimer?.cancel();
 
     // Flush remaining batches
     _flushEventBatch();
@@ -415,30 +337,5 @@ class BatchProcessingService {
     clearQueues();
   }
 
-  // Enhanced statistics for monitoring
-  Map<String, dynamic> getQueueStats() {
-    return {
-      'eventQueue': _eventQueue.length,
-      'priorityEventQueue': _priorityEventQueue.length,
-      'profileQueue': _profileQueue.length,
-      'priorityProfileQueue': _priorityProfileQueue.length,
-      'interactionQueue': _interactionQueue.length,
-      'priorityInteractionQueue': _priorityInteractionQueue.length,
-      'currentEventBatchSize': _currentEventBatchSize,
-      'currentProfileBatchSize': _currentProfileBatchSize,
-      'processingStates': {
-        'events': _isProcessingEvents,
-        'profiles': _isProcessingProfiles,
-        'interactions': _isProcessingInteractions,
-      },
-      'performance': {
-        'successCounts': _successCounts,
-        'errorCounts': _errorCounts,
-        'avgProcessingTimes': {
-          for (final entry in _processingTimes.entries)
-            entry.key: entry.value.isNotEmpty ? entry.value.fold<int>(0, (sum, d) => sum + d.inMilliseconds) / entry.value.length : 0,
-        },
-      },
-    };
-  }
+  // MEMORY OPTIMIZATION: Removed all statistics to save memory
 }

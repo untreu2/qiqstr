@@ -12,11 +12,17 @@ class UserProvider extends ChangeNotifier {
   UserProvider._internal();
 
   final ProfileService _profileService = ProfileService();
+  // MEMORY OPTIMIZATION: Single storage instead of duplicate hex+npub
   final Map<String, UserModel> _users = {};
+  final Map<String, String> _npubToHexMap = {}; // Quick lookup for conversions
   final Set<String> _loadingUsers = {};
   bool _isInitialized = false;
   String? _currentUserNpub;
   UserModel? _currentUser;
+
+  // Memory management
+  static const int _maxUsersCache = 1000;
+  DateTime _lastCleanup = DateTime.now();
 
   Map<String, UserModel> get users => Map.unmodifiable(_users);
   bool get isInitialized => _isInitialized;
@@ -58,32 +64,33 @@ class UserProvider extends ChangeNotifier {
   UserModel? getUser(String identifier) {
     if (identifier.isEmpty) return null;
 
-    // Try both npub and hex formats
-    if (_users.containsKey(identifier)) {
-      return _users[identifier];
+    // MEMORY OPTIMIZATION: Use primary key (npub) and conversion map
+    String primaryKey = _getPrimaryKey(identifier);
+    return _users[primaryKey];
+  }
+
+  String _getPrimaryKey(String identifier) {
+    if (identifier.startsWith('npub1')) {
+      return identifier; // Already primary key
     }
 
-    // If identifier is hex, try to find by npub
-    if (!identifier.startsWith('npub1') && _isValidHex(identifier)) {
+    // Check conversion cache first
+    final cachedNpub = _npubToHexMap.entries.where((entry) => entry.value == identifier).map((entry) => entry.key).firstOrNull;
+
+    if (cachedNpub != null) return cachedNpub;
+
+    // Convert hex to npub if valid
+    if (_isValidHex(identifier)) {
       try {
         final npub = encodeBasicBech32(identifier, 'npub');
-        return _users[npub];
+        _npubToHexMap[npub] = identifier; // Cache conversion
+        return npub;
       } catch (e) {
         debugPrint('[UserProvider] Error converting hex to npub: $e');
       }
     }
 
-    // If identifier is npub, try to find by hex
-    if (identifier.startsWith('npub1')) {
-      try {
-        final hex = decodeBasicBech32(identifier, 'npub');
-        return _users[hex];
-      } catch (e) {
-        debugPrint('[UserProvider] Error converting npub to hex: $e');
-      }
-    }
-
-    return null;
+    return identifier; // Fallback
   }
 
   UserModel getUserOrDefault(String identifier) {
@@ -155,9 +162,9 @@ class UserProvider extends ChangeNotifier {
           updatedAt: cachedUser.updatedAt,
         );
 
-        // Update cache with corrected user
-        _users[hexKey] = updatedUser;
+        // MEMORY OPTIMIZATION: Store only once with primary key
         _users[npubKey] = updatedUser;
+        _npubToHexMap[npubKey] = hexKey;
         notifyListeners();
 
         return updatedUser;
@@ -177,9 +184,10 @@ class UserProvider extends ChangeNotifier {
       final profileData = await _profileService.getCachedUserProfile(hexKey);
       final user = UserModel.fromCachedProfile(npubKey, profileData);
 
-      // Cache with both formats for easy lookup
-      _users[hexKey] = user;
+      // MEMORY OPTIMIZATION: Store only once
       _users[npubKey] = user;
+      _npubToHexMap[npubKey] = hexKey;
+      _performMemoryCleanup();
       notifyListeners();
 
       return user;
@@ -264,14 +272,14 @@ class UserProvider extends ChangeNotifier {
           final profileData = await _profileService.getCachedUserProfile(hexKey);
           final user = UserModel.fromCachedProfile(npubKey, profileData);
 
-          // Cache with both formats
-          _users[hexKey] = user;
+          // MEMORY OPTIMIZATION: Store only once
           _users[npubKey] = user;
+          _npubToHexMap[npubKey] = hexKey;
         } catch (e) {
           debugPrint('[UserProvider] Error loading user $hexKey: $e');
           final defaultUser = getUserOrDefault(npubKey);
-          _users[hexKey] = defaultUser;
           _users[npubKey] = defaultUser;
+          _npubToHexMap[npubKey] = hexKey;
         }
       });
 
@@ -285,22 +293,11 @@ class UserProvider extends ChangeNotifier {
   void updateUser(String identifier, UserModel user) {
     if (identifier.isEmpty) return;
 
-    // Update both hex and npub formats if possible
-    _users[identifier] = user;
+    // MEMORY OPTIMIZATION: Store only once with primary key
+    final primaryKey = _getPrimaryKey(identifier);
+    _users[primaryKey] = user;
 
-    try {
-      if (identifier.startsWith('npub1')) {
-        final hexKey = decodeBasicBech32(identifier, 'npub');
-        _users[hexKey] = user;
-      } else if (_isValidHex(identifier)) {
-        final npubKey = encodeBasicBech32(identifier, 'npub');
-        _users[npubKey] = user;
-      }
-    } catch (e) {
-      debugPrint('[UserProvider] Error updating user formats: $e');
-    }
-
-    if (identifier == _currentUserNpub) {
+    if (identifier == _currentUserNpub || primaryKey == _currentUserNpub) {
       _currentUser = user;
     }
     notifyListeners();
@@ -309,22 +306,33 @@ class UserProvider extends ChangeNotifier {
   void removeUser(String identifier) {
     if (identifier.isEmpty) return;
 
-    _users.remove(identifier);
+    // MEMORY OPTIMIZATION: Remove only primary key and conversion
+    final primaryKey = _getPrimaryKey(identifier);
+    _users.remove(primaryKey);
 
-    // Also remove the other format if possible
-    try {
-      if (identifier.startsWith('npub1')) {
-        final hexKey = decodeBasicBech32(identifier, 'npub');
-        _users.remove(hexKey);
-      } else if (_isValidHex(identifier)) {
-        final npubKey = encodeBasicBech32(identifier, 'npub');
-        _users.remove(npubKey);
-      }
-    } catch (e) {
-      debugPrint('[UserProvider] Error removing user formats: $e');
+    // Clean up conversion map
+    if (primaryKey.startsWith('npub1')) {
+      _npubToHexMap.remove(primaryKey);
     }
 
     notifyListeners();
+  }
+
+  void _performMemoryCleanup() {
+    final now = DateTime.now();
+    if (now.difference(_lastCleanup).inMinutes < 5) return; // Only cleanup every 5 minutes
+
+    _lastCleanup = now;
+
+    if (_users.length > _maxUsersCache) {
+      // Remove oldest 20% of users (simple cleanup - could be improved with LRU)
+      final keysToRemove = _users.keys.take(_users.length ~/ 5).toList();
+      for (final key in keysToRemove) {
+        _users.remove(key);
+        _npubToHexMap.remove(key);
+      }
+      debugPrint('[UserProvider] Cleaned up ${keysToRemove.length} cached users');
+    }
   }
 
   // Helper methods
@@ -349,6 +357,7 @@ class UserProvider extends ChangeNotifier {
 
   void clearCache() {
     _users.clear();
+    _npubToHexMap.clear();
     _loadingUsers.clear();
     _profileService.cleanupCache();
     notifyListeners();

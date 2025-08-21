@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:bounce/bounce.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/services/data_service.dart';
@@ -45,6 +46,26 @@ class _ThreadPageState extends State<ThreadPage> {
 
   Set<String> _relevantNoteIds = {};
 
+  // Performance optimization: Cache thread hierarchy
+  Map<String, List<NoteModel>>? _cachedThreadHierarchy;
+  String? _lastHierarchyRootId;
+  int _lastNotesVersion = 0;
+
+  // Debouncing for UI updates
+  Timer? _uiUpdateTimer;
+  bool _hasPendingUIUpdate = false;
+
+  // Performance optimization: Limit rendering
+  static const int repliesPerPage = 10; // 10'ar 10'ar yüklenecek
+  static const int maxNestingDepth = 2;
+
+  // Widget caching for expensive rebuilds
+  final Map<String, Widget> _widgetCache = {};
+  int _lastWidgetCacheHash = 0;
+
+  // Pagination state for replies
+  int _currentlyShownReplies = 10; // İlk başta 10 reply göster
+
   @override
   void initState() {
     super.initState();
@@ -57,6 +78,7 @@ class _ThreadPageState extends State<ThreadPage> {
     widget.dataService.notesNotifier.removeListener(_onNotesChanged);
     _scrollController.dispose();
     _reloadTimer?.cancel();
+    _uiUpdateTimer?.cancel();
     super.dispose();
   }
 
@@ -64,12 +86,15 @@ class _ThreadPageState extends State<ThreadPage> {
     if (_isLoading) return; // Prevent changes during loading
 
     final allNotes = widget.dataService.notesNotifier.value;
+    final currentVersion = allNotes.hashCode;
+
+    // Quick exit if notes haven't actually changed
+    if (currentVersion == _lastNotesVersion) return;
+    _lastNotesVersion = currentVersion;
+
     bool hasRelevantChanges = false;
 
-    // Check if any relevant notes have actually changed
-    allNotes.where((note) => _relevantNoteIds.contains(note.id)).toList();
-
-    // Only reload if we have new relevant notes or if existing relevant notes have changed
+    // Check if any relevant notes have actually changed (optimized)
     if (_rootNote != null) {
       final currentRootNote = allNotes.firstWhereOrNull((n) => n.id == _rootNote!.id);
       if (currentRootNote != null && currentRootNote != _rootNote) {
@@ -84,7 +109,7 @@ class _ThreadPageState extends State<ThreadPage> {
       }
     }
 
-    // Check for new replies to relevant notes
+    // Check for new replies to relevant notes (optimized early exit)
     if (!hasRelevantChanges && _rootNote != null) {
       for (final note in allNotes) {
         if (note.isReply && (note.rootId == _rootNote!.id || note.parentId == _rootNote!.id) && !_relevantNoteIds.contains(note.id)) {
@@ -95,12 +120,28 @@ class _ThreadPageState extends State<ThreadPage> {
     }
 
     if (hasRelevantChanges) {
-      // Use a debounced approach to prevent rapid successive reloads
-      _debounceReload();
+      // Invalidate hierarchy cache
+      _cachedThreadHierarchy = null;
+
+      // Use debounced UI updates instead of immediate setState
+      _debounceUIUpdate();
 
       // Also fetch profiles for any new users in the thread
       Future.microtask(() => _fetchAllThreadUserProfiles());
     }
+  }
+
+  void _debounceUIUpdate() {
+    if (_hasPendingUIUpdate) return;
+
+    _hasPendingUIUpdate = true;
+    _uiUpdateTimer?.cancel();
+    _uiUpdateTimer = Timer(const Duration(milliseconds: 150), () {
+      if (mounted && !_isLoading) {
+        _hasPendingUIUpdate = false;
+        _loadRootNote();
+      }
+    });
   }
 
   Timer? _reloadTimer;
@@ -196,8 +237,8 @@ class _ThreadPageState extends State<ThreadPage> {
         threadEventIds.add(_focusedNote!.id);
       }
 
-      // Get all replies from thread hierarchy
-      final threadHierarchy = widget.dataService.buildThreadHierarchy(_rootNote!.id);
+      // Get all replies from thread hierarchy (using cached version)
+      final threadHierarchy = _getOrBuildThreadHierarchy(_rootNote!.id);
       for (final replies in threadHierarchy.values) {
         for (final reply in replies) {
           threadEventIds.add(reply.id);
@@ -237,8 +278,8 @@ class _ThreadPageState extends State<ThreadPage> {
       allUserNpubs.add(_focusedNote!.repostedBy!);
     }
 
-    // Get all replies in the thread hierarchy
-    final threadHierarchy = widget.dataService.buildThreadHierarchy(_rootNote!.id);
+    // Get all replies in the thread hierarchy (using cached version)
+    final threadHierarchy = _getOrBuildThreadHierarchy(_rootNote!.id);
     for (final replies in threadHierarchy.values) {
       for (final reply in replies) {
         allUserNpubs.add(reply.author);
@@ -334,7 +375,7 @@ class _ThreadPageState extends State<ThreadPage> {
     if (_rootNote != null) {
       _relevantNoteIds.add(_rootNote!.id);
 
-      final threadHierarchy = widget.dataService.buildThreadHierarchy(_rootNote!.id);
+      final threadHierarchy = _getOrBuildThreadHierarchy(_rootNote!.id);
       for (final replies in threadHierarchy.values) {
         for (final reply in replies) {
           _relevantNoteIds.add(reply.id);
@@ -345,6 +386,17 @@ class _ThreadPageState extends State<ThreadPage> {
     if (_focusedNote != null) {
       _relevantNoteIds.add(_focusedNote!.id);
     }
+  }
+
+  // Memoized thread hierarchy building
+  Map<String, List<NoteModel>> _getOrBuildThreadHierarchy(String rootId) {
+    if (_cachedThreadHierarchy != null && _lastHierarchyRootId == rootId) {
+      return _cachedThreadHierarchy!;
+    }
+
+    _cachedThreadHierarchy = widget.dataService.buildThreadHierarchy(rootId);
+    _lastHierarchyRootId = rootId;
+    return _cachedThreadHierarchy!;
   }
 
   void _scrollToFocusedNote() {
@@ -408,7 +460,7 @@ class _ThreadPageState extends State<ThreadPage> {
   Widget _buildThreadReplies(NoteModel noteForReplies) {
     if (_currentUserNpub == null || _rootNote == null) return const SizedBox.shrink();
 
-    final threadHierarchy = widget.dataService.buildThreadHierarchy(_rootNote!.id);
+    final threadHierarchy = _getOrBuildThreadHierarchy(_rootNote!.id);
     final directReplies = threadHierarchy[noteForReplies.id] ?? [];
 
     if (directReplies.isEmpty) {
@@ -423,23 +475,51 @@ class _ThreadPageState extends State<ThreadPage> {
       );
     }
 
-    List<Widget> threadWidgets = [];
-    for (int i = 0; i < directReplies.length; i++) {
-      threadWidgets.add(
-        _buildThreadReplyWithDepth(
-          directReplies[i],
-          threadHierarchy,
-          0,
-          i == directReplies.length - 1,
-          const [],
-        ),
-      );
-    }
+    // Performance optimization: 10'ar 10'ar reply pagination
+    final visibleReplies = directReplies.take(_currentlyShownReplies).toList();
+    final hasMore = directReplies.length > _currentlyShownReplies;
+    final remainingCount = directReplies.length - _currentlyShownReplies;
 
     return Column(
       children: [
         const SizedBox(height: 8.0),
-        ...threadWidgets,
+        // Build widgets directly instead of ListView for better performance
+        ...visibleReplies.asMap().entries.map((entry) {
+          final index = entry.key;
+          final reply = entry.value;
+          return _buildThreadReplyWithDepth(
+            reply,
+            threadHierarchy,
+            0,
+            index == visibleReplies.length - 1 && !hasMore,
+            const [],
+          );
+        }),
+        // Show load more button if needed - 10'ar 10'ar yükle
+        if (hasMore)
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 20.0),
+            child: ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  // 10 daha fazla reply göster
+                  _currentlyShownReplies += repliesPerPage;
+                  // Maximum olarak tüm reply'ları göster
+                  if (_currentlyShownReplies > directReplies.length) {
+                    _currentlyShownReplies = directReplies.length;
+                  }
+                });
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: context.colors.surface,
+                foregroundColor: context.colors.textPrimary,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              ),
+              child: Text(remainingCount > repliesPerPage
+                  ? 'Load ${repliesPerPage} more replies (${remainingCount} remaining)'
+                  : 'Load ${remainingCount} more replies'),
+            ),
+          ),
       ],
     );
   }
@@ -451,77 +531,105 @@ class _ThreadPageState extends State<ThreadPage> {
     bool isLast,
     List<bool> parentIsLast,
   ) {
-    const double indentWidth = 20.0;
+    // Performance: Limit nesting depth to prevent deep widget trees
+    if (depth >= maxNestingDepth) {
+      return Container(
+        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: context.colors.surfaceTransparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: context.colors.border, width: 0.5),
+        ),
+        child: Text(
+          'More replies... (${(hierarchy[reply.id] ?? []).length} nested)',
+          style: TextStyle(
+            color: context.colors.textSecondary,
+            fontSize: 12,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      );
+    }
 
+    const double indentWidth = 20.0;
     final isFocused = reply.id == widget.focusedNoteId;
     final isHighlighted = reply.id == _highlightedNoteId;
     final nestedReplies = hierarchy[reply.id] ?? [];
 
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (depth > 0)
-            SizedBox(
-              width: depth * indentWidth,
-              child: CustomPaint(
-                painter: _ThreadLinePainter(
-                  depth: depth,
-                  isLast: isLast,
-                  parentIsLast: parentIsLast,
-                  indentWidth: indentWidth,
-                  lineColor: context.colors.border,
+    // Simplified widget structure - removed caching for now due to context issues
+    return RepaintBoundary(
+      child: Container(
+        margin: EdgeInsets.only(
+          left: depth * indentWidth,
+          bottom: depth == 0 ? 8.0 : 2.0,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Simplified thread line - just use a Container instead of CustomPaint
+            if (depth > 0)
+              Container(
+                width: 2,
+                height: 40,
+                margin: const EdgeInsets.only(right: 8, top: 8),
+                decoration: BoxDecoration(
+                  color: context.colors.border,
+                  borderRadius: BorderRadius.circular(1),
                 ),
               ),
-            ),
-          Expanded(
-            child: Column(
-              key: isFocused ? _focusedNoteKey : null,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 500),
-                  curve: Curves.easeInOut,
-                  margin: EdgeInsets.only(left: depth > 0 ? 8 : 0),
-                  decoration: BoxDecoration(
+            Expanded(
+              child: Column(
+                key: isFocused ? _focusedNoteKey : null,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    margin: EdgeInsets.only(left: depth > 0 ? 8 : 0),
+                    decoration: BoxDecoration(
                       color: isHighlighted ? Theme.of(context).primaryColor.withOpacity(0.1) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(8)),
-                  child: ValueListenableBuilder<List<NoteModel>>(
-                    valueListenable: widget.dataService.notesNotifier,
-                    builder: (context, notes, child) {
-                      final updatedReply = notes.firstWhereOrNull((n) => n.id == reply.id) ?? reply;
-                      return NoteWidget(
-                        note: updatedReply,
-                        reactionCount: updatedReply.reactionCount,
-                        replyCount: updatedReply.replyCount,
-                        repostCount: updatedReply.repostCount,
-                        dataService: widget.dataService,
-                        currentUserNpub: _currentUserNpub!,
-                        notesNotifier: widget.dataService.notesNotifier,
-                        profiles: widget.dataService.profilesNotifier.value,
-                        isSmallView: depth > 0,
-                        containerColor: Colors.transparent,
-                      );
-                    },
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: _OptimizedNoteWidget(
+                      noteId: reply.id,
+                      fallbackNote: reply,
+                      dataService: widget.dataService,
+                      currentUserNpub: _currentUserNpub!,
+                      isSmallView: depth > 0,
+                    ),
                   ),
-                ),
-                if (depth < 2)
-                  ...((hierarchy[reply.id] ?? []).asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final nestedReply = entry.value;
-                    return _buildThreadReplyWithDepth(
-                      nestedReply,
-                      hierarchy,
-                      depth + 1,
-                      index == nestedReplies.length - 1,
-                      [...parentIsLast, isLast],
-                    );
-                  })),
-                if (depth == 0) const SizedBox(height: 8),
-              ],
+                  // Only show nested replies if depth is reasonable and limit to 5
+                  if (depth < maxNestingDepth - 1) ...[
+                    ...nestedReplies.take(5).toList().asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final nestedReply = entry.value;
+                      return _buildThreadReplyWithDepth(
+                        nestedReply,
+                        hierarchy,
+                        depth + 1,
+                        index == nestedReplies.take(5).length - 1,
+                        [...parentIsLast, isLast],
+                      );
+                    }),
+                    // Show count if there are more nested replies
+                    if (nestedReplies.length > 5)
+                      Container(
+                        margin: EdgeInsets.only(left: (depth + 1) * indentWidth + 8),
+                        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                        child: Text(
+                          '${nestedReplies.length - 5} more replies...',
+                          style: TextStyle(
+                            color: context.colors.textSecondary,
+                            fontSize: 11,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                  ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -554,23 +662,12 @@ class _ThreadPageState extends State<ThreadPage> {
                               if (contextNote != null)
                                 Padding(
                                   padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                                  child: ValueListenableBuilder<List<NoteModel>>(
-                                    valueListenable: widget.dataService.notesNotifier,
-                                    builder: (context, notes, child) {
-                                      final updatedContextNote = notes.firstWhereOrNull((n) => n.id == contextNote.id) ?? contextNote;
-                                      return NoteWidget(
-                                        note: updatedContextNote,
-                                        reactionCount: updatedContextNote.reactionCount,
-                                        replyCount: updatedContextNote.replyCount,
-                                        repostCount: updatedContextNote.repostCount,
-                                        dataService: widget.dataService,
-                                        currentUserNpub: _currentUserNpub!,
-                                        notesNotifier: widget.dataService.notesNotifier,
-                                        profiles: widget.dataService.profilesNotifier.value,
-                                        isSmallView: true,
-                                        containerColor: Colors.transparent,
-                                      );
-                                    },
+                                  child: _OptimizedNoteWidget(
+                                    noteId: contextNote.id,
+                                    fallbackNote: contextNote,
+                                    dataService: widget.dataService,
+                                    currentUserNpub: _currentUserNpub!,
+                                    isSmallView: true,
                                   ),
                                 ),
                               AnimatedContainer(
@@ -597,6 +694,65 @@ class _ThreadPageState extends State<ThreadPage> {
                         _buildFloatingBackButton(context),
                       ],
                     ),
+        );
+      },
+    );
+  }
+}
+
+class _OptimizedNoteWidget extends StatefulWidget {
+  final String noteId;
+  final NoteModel fallbackNote;
+  final DataService dataService;
+  final String currentUserNpub;
+  final bool isSmallView;
+
+  const _OptimizedNoteWidget({
+    Key? key,
+    required this.noteId,
+    required this.fallbackNote,
+    required this.dataService,
+    required this.currentUserNpub,
+    required this.isSmallView,
+  }) : super(key: key);
+
+  @override
+  State<_OptimizedNoteWidget> createState() => _OptimizedNoteWidgetState();
+}
+
+class _OptimizedNoteWidgetState extends State<_OptimizedNoteWidget> {
+  NoteModel? _cachedNote;
+  int _lastNotesHash = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<List<NoteModel>>(
+      valueListenable: widget.dataService.notesNotifier,
+      builder: (context, notes, child) {
+        final currentHash = notes.hashCode;
+
+        // Only update cache if notes changed
+        if (currentHash != _lastNotesHash) {
+          final updatedNote = notes.firstWhereOrNull((n) => n.id == widget.noteId);
+          if (updatedNote != null) {
+            _cachedNote = updatedNote;
+          }
+          _lastNotesHash = currentHash;
+        }
+
+        final noteToUse = _cachedNote ?? widget.fallbackNote;
+
+        return NoteWidget(
+          note: noteToUse,
+          reactionCount: noteToUse.reactionCount,
+          replyCount: noteToUse.replyCount,
+          repostCount: noteToUse.repostCount,
+          dataService: widget.dataService,
+          currentUserNpub: widget.currentUserNpub,
+          notesNotifier: widget.dataService.notesNotifier,
+          profiles: widget.dataService.profilesNotifier.value,
+          isSmallView: widget.isSmallView,
+          containerColor: Colors.transparent,
         );
       },
     );

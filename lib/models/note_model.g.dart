@@ -28,7 +28,6 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       rawWs: fields[8] as String?,
       reactionCount: fields[9] as int,
       replyCount: fields[10] as int,
-      parsedContent: (fields[11] as Map?)?.cast<String, dynamic>(),
       hasMedia: fields[12] as bool,
       estimatedHeight: fields[13] as double?,
       isVideo: fields[14] as bool,
@@ -44,7 +43,7 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
   @override
   void write(BinaryWriter writer, NoteModel obj) {
     writer
-      ..writeByte(21)
+      ..writeByte(20)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -67,8 +66,6 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       ..write(obj.reactionCount)
       ..writeByte(10)
       ..write(obj.replyCount)
-      ..writeByte(11)
-      ..write(obj.parsedContent)
       ..writeByte(12)
       ..write(obj.hasMedia)
       ..writeByte(13)

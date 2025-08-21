@@ -41,7 +41,7 @@ class NoteWidget extends StatefulWidget {
 
 class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMixin {
   @override
-  bool get wantKeepAlive => true;
+  bool get wantKeepAlive => false; // MEMORY OPTIMIZATION: Don't keep all widgets alive
 
   late final String _formattedTimestamp;
   late final Map<String, dynamic> _parsedContent;
@@ -50,6 +50,9 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   bool _isReplyGlowing = false;
   bool _isRepostGlowing = false;
   bool _isZapGlowing = false;
+
+  // MEMORY OPTIMIZATION: Track disposable resources
+  bool _isDisposed = false;
 
   @override
   void initState() {
@@ -69,8 +72,13 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   }
 
   void _scheduleUserLoading() {
+    // MEMORY OPTIMIZATION: Check if disposed before loading
+    if (_isDisposed) return;
+
     // Load users in background without blocking UI
     Future.microtask(() {
+      if (_isDisposed || !mounted) return;
+
       final usersToLoad = <String>[widget.note.author];
       if (widget.note.repostedBy != null) {
         usersToLoad.add(widget.note.repostedBy!);
@@ -83,6 +91,12 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
 
       UserProvider.instance.loadUsers(usersToLoad);
     });
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
   }
 
   String _formatTimestamp(DateTime timestamp) {
@@ -302,6 +316,11 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                                 child: authorUser.profileImage.isNotEmpty
                                     ? CachedNetworkImage(
                                         imageUrl: authorUser.profileImage,
+                                        memCacheWidth: 88, // MEMORY OPTIMIZATION: Limit image size in memory
+                                        memCacheHeight: 88,
+                                        maxWidthDiskCache: 88,
+                                        maxHeightDiskCache: 88,
+                                        fadeInDuration: const Duration(milliseconds: 200),
                                         imageBuilder: (context, imageProvider) {
                                           return Container(
                                             decoration: BoxDecoration(
@@ -344,6 +363,11 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                                   child: reposterUser.profileImage.isNotEmpty
                                       ? CachedNetworkImage(
                                           imageUrl: reposterUser.profileImage,
+                                          memCacheWidth: 48, // MEMORY OPTIMIZATION: Smaller cache size
+                                          memCacheHeight: 48,
+                                          maxWidthDiskCache: 48,
+                                          maxHeightDiskCache: 48,
+                                          fadeInDuration: const Duration(milliseconds: 200),
                                           imageBuilder: (context, imageProvider) => Container(
                                             decoration: BoxDecoration(
                                               shape: BoxShape.circle,

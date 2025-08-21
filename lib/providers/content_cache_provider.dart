@@ -7,21 +7,27 @@ class ContentCacheProvider extends ChangeNotifier {
 
   ContentCacheProvider._internal();
 
-  // Parsed content cache
+  // MEMORY OPTIMIZATION: Reduced cache sizes and aggressive cleanup
   final Map<String, Map<String, dynamic>> _parsedContentCache = {};
   final Map<String, DateTime> _cacheTimestamps = {};
-  final Duration _cacheTTL = const Duration(hours: 1);
-  final int _maxCacheSize = 1000;
+  final Duration _cacheTTL = const Duration(minutes: 30); // Reduced from 1 hour
+  final int _maxCacheSize = 200; // Reduced from 1000
 
   // LRU tracking
   final LinkedHashMap<String, int> _accessOrder = LinkedHashMap();
   int _accessCounter = 0;
 
-  // Image dimension cache
+  // Image dimension cache with limits
   final Map<String, Map<String, double>> _imageDimensionsCache = {};
+  final int _maxImageCacheSize = 500; // NEW: Limit image cache
 
-  // Link preview cache
+  // Link preview cache with limits
   final Map<String, Map<String, dynamic>> _linkPreviewCache = {};
+  final int _maxLinkCacheSize = 100; // NEW: Limit link preview cache
+
+  // Memory cleanup tracking
+  DateTime _lastImageCleanup = DateTime.now();
+  DateTime _lastLinkCleanup = DateTime.now();
 
   bool get isInitialized => true;
 
@@ -50,7 +56,7 @@ class ContentCacheProvider extends ChangeNotifier {
     _cacheTimestamps[contentHash] = DateTime.now();
     _updateAccessOrder(contentHash);
 
-    debugPrint('[ContentCache] Cached parsed content for hash: ${contentHash.substring(0, 8)}...');
+    // Debug print removed to save memory
   }
 
   void _removeParsedContent(String contentHash) {
@@ -66,15 +72,15 @@ class ContentCacheProvider extends ChangeNotifier {
 
   void _ensureCacheSpace() {
     if (_parsedContentCache.length >= _maxCacheSize) {
-      // Remove oldest accessed items
+      // MEMORY OPTIMIZATION: More aggressive cleanup (remove 50% instead of 25%)
       final sortedKeys = _accessOrder.keys.toList()..sort((a, b) => _accessOrder[a]!.compareTo(_accessOrder[b]!));
 
-      final keysToRemove = sortedKeys.take(_maxCacheSize ~/ 4).toList();
+      final keysToRemove = sortedKeys.take(_maxCacheSize ~/ 2).toList();
       for (final key in keysToRemove) {
         _removeParsedContent(key);
       }
 
-      debugPrint('[ContentCache] Cleaned up ${keysToRemove.length} old entries');
+      // Debug print removed to save memory
     }
   }
 
@@ -84,11 +90,30 @@ class ContentCacheProvider extends ChangeNotifier {
   }
 
   void cacheImageDimensions(String imageUrl, double width, double height) {
+    // MEMORY OPTIMIZATION: Cleanup old image cache entries
+    _cleanupImageCache();
+
     _imageDimensionsCache[imageUrl] = {
       'width': width,
       'height': height,
       'aspectRatio': width / height,
     };
+  }
+
+  void _cleanupImageCache() {
+    final now = DateTime.now();
+    if (now.difference(_lastImageCleanup).inMinutes < 10) return; // Cleanup every 10 minutes
+
+    _lastImageCleanup = now;
+
+    if (_imageDimensionsCache.length > _maxImageCacheSize) {
+      // Remove oldest 30% of entries
+      final keysToRemove = _imageDimensionsCache.keys.take(_imageDimensionsCache.length ~/ 3).toList();
+      for (final key in keysToRemove) {
+        _imageDimensionsCache.remove(key);
+      }
+      // Debug print removed to save memory
+    }
   }
 
   // Link preview cache
@@ -97,7 +122,26 @@ class ContentCacheProvider extends ChangeNotifier {
   }
 
   void cacheLinkPreview(String url, Map<String, dynamic> preview) {
+    // MEMORY OPTIMIZATION: Cleanup old link preview cache
+    _cleanupLinkCache();
+
     _linkPreviewCache[url] = Map<String, dynamic>.from(preview);
+  }
+
+  void _cleanupLinkCache() {
+    final now = DateTime.now();
+    if (now.difference(_lastLinkCleanup).inMinutes < 15) return; // Cleanup every 15 minutes
+
+    _lastLinkCleanup = now;
+
+    if (_linkPreviewCache.length > _maxLinkCacheSize) {
+      // Remove oldest 40% of entries
+      final keysToRemove = _linkPreviewCache.keys.take(_linkPreviewCache.length * 2 ~/ 5).toList();
+      for (final key in keysToRemove) {
+        _linkPreviewCache.remove(key);
+      }
+      // Debug print removed to save memory
+    }
   }
 
   // Utility methods
@@ -134,32 +178,7 @@ class ContentCacheProvider extends ChangeNotifier {
     debugPrint('[ContentCache] Cache cleared');
   }
 
-  Map<String, dynamic> getStats() {
-    return {
-      'parsedContentEntries': _parsedContentCache.length,
-      'imageDimensionsEntries': _imageDimensionsCache.length,
-      'linkPreviewEntries': _linkPreviewCache.length,
-      'maxCacheSize': _maxCacheSize,
-      'cacheHitRate': _calculateHitRate(),
-      'oldestEntry': _getOldestEntryAge(),
-    };
-  }
-
-  double _calculateHitRate() {
-    // This would need to be tracked with hit/miss counters
-    return 0.0; // Placeholder
-  }
-
-  String _getOldestEntryAge() {
-    if (_cacheTimestamps.isEmpty) return 'No entries';
-
-    final oldest = _cacheTimestamps.values.reduce((a, b) => a.isBefore(b) ? a : b);
-    final age = DateTime.now().difference(oldest);
-
-    if (age.inMinutes < 60) return '${age.inMinutes}m';
-    if (age.inHours < 24) return '${age.inHours}h';
-    return '${age.inDays}d';
-  }
+  // MEMORY OPTIMIZATION: Removed all statistics to save memory
 
   @override
   void dispose() {

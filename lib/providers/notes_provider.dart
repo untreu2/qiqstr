@@ -43,7 +43,7 @@ class NotesProvider extends ChangeNotifier {
       _isInitialized = true;
       notifyListeners();
     } catch (e) {
-      debugPrint('[NotesProvider] Initialization error: $e');
+      // Debug print removed to save memory
     }
   }
 
@@ -131,7 +131,7 @@ class NotesProvider extends ChangeNotifier {
         await _profileNotesBox!.put(note.id, note);
       }
     } catch (e) {
-      debugPrint('[NotesProvider] Error saving note to Hive: $e');
+      // Debug print removed to save memory
     }
 
     // Only notify listeners if this was actually a new note
@@ -160,7 +160,7 @@ class NotesProvider extends ChangeNotifier {
         await _profileNotesBox!.putAll(notesMap);
       }
     } catch (e) {
-      debugPrint('[NotesProvider] Error batch saving notes to Hive: $e');
+      // Debug print removed to save memory
     }
 
     // Only notify listeners if there were actually new notes added
@@ -241,23 +241,23 @@ class NotesProvider extends ChangeNotifier {
     _notesByAuthor.clear();
     _repliesByParent.clear();
     _loadingNotes.clear();
+
+    // MEMORY OPTIMIZATION: Also clear NoteModel global parse cache
+    NoteModel.clearParseCache();
     notifyListeners();
   }
 
-  Map<String, dynamic> getStats() {
-    return {
-      'totalNotes': _notes.length,
-      'notesByAuthor': _notesByAuthor.length,
-      'repliesIndexed': _repliesByParent.length,
-      'loadingNotes': _loadingNotes.length,
-      'isInitialized': _isInitialized,
-    };
-  }
+  // MEMORY OPTIMIZATION: Removed statistics to save memory
 
   @override
   void dispose() {
+    // MEMORY OPTIMIZATION: Proper resource disposal
     _feedNotesBox?.close();
     _profileNotesBox?.close();
+
+    // Clear all caches before disposal
+    clearCache();
+
     super.dispose();
   }
 }

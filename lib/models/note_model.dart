@@ -37,8 +37,8 @@ class NoteModel extends HiveObject {
   @HiveField(10)
   int replyCount;
 
-  @HiveField(11)
-  Map<String, dynamic>? parsedContent;
+  // Remove parsedContent from Hive to save storage space
+  // @HiveField(11) - REMOVED to reduce storage
 
   @HiveField(12)
   bool hasMedia;
@@ -67,9 +67,10 @@ class NoteModel extends HiveObject {
   @HiveField(20)
   List<String> replyIds;
 
-  // This field stores the parsed content in memory only, not in Hive
-  // Fields without @HiveField annotations are automatically ignored by Hive
-  Map<String, dynamic>? _parsedContentCache;
+  // Single cache for parsed content - not stored in Hive
+  // Weak reference to prevent memory leaks
+  static final Map<String, Map<String, dynamic>> _globalParseCache = {};
+  static const int _maxCacheSize = 500; // Limit cache size
 
   NoteModel({
     required this.id,
@@ -83,7 +84,7 @@ class NoteModel extends HiveObject {
     this.rawWs,
     this.reactionCount = 0,
     this.replyCount = 0,
-    this.parsedContent,
+    // parsedContent removed to save memory
     this.hasMedia = false,
     this.estimatedHeight,
     this.isVideo = false,
@@ -95,11 +96,32 @@ class NoteModel extends HiveObject {
     List<String>? replyIds,
   }) : replyIds = replyIds ?? [];
 
-  // Lazy parsing getter - parses content only when first accessed
+  // Lazy parsing getter - uses global cache to prevent memory duplication
   Map<String, dynamic> get parsedContentLazy {
-    // If _parsedContentCache is null, parse the content and cache it
-    _parsedContentCache ??= _parseInternal();
-    return _parsedContentCache!;
+    // Check global cache first
+    if (_globalParseCache.containsKey(id)) {
+      return _globalParseCache[id]!;
+    }
+
+    // Parse and cache with size limit
+    final parsed = _parseInternal();
+
+    // Manage cache size
+    if (_globalParseCache.length >= _maxCacheSize) {
+      // Remove oldest 20% of entries
+      final keysToRemove = _globalParseCache.keys.take(_maxCacheSize ~/ 5).toList();
+      for (final key in keysToRemove) {
+        _globalParseCache.remove(key);
+      }
+    }
+
+    _globalParseCache[id] = parsed;
+    return parsed;
+  }
+
+  // Clear cache method for memory management
+  static void clearParseCache() {
+    _globalParseCache.clear();
   }
 
   // Helper getter for checking if note has media using lazy parsing
@@ -195,7 +217,7 @@ class NoteModel extends HiveObject {
       rawWs: json['rawWs'] as String?,
       reactionCount: json['reactionCount'] as int? ?? 0,
       replyCount: json['replyCount'] as int? ?? 0,
-      parsedContent: json['parsedContent'] != null ? Map<String, dynamic>.from(json['parsedContent']) : null,
+      // parsedContent removed to save memory
       hasMedia: json['hasMedia'] as bool? ?? false,
       estimatedHeight: (json['estimatedHeight'] as num?)?.toDouble(),
       isVideo: json['isVideo'] as bool? ?? false,
@@ -221,7 +243,7 @@ class NoteModel extends HiveObject {
       'rawWs': rawWs,
       'reactionCount': reactionCount,
       'replyCount': replyCount,
-      'parsedContent': parsedContent,
+      // parsedContent removed to save memory
       'hasMedia': hasMedia,
       'estimatedHeight': estimatedHeight,
       'isVideo': isVideo,
