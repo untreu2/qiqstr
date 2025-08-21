@@ -1,7 +1,5 @@
 import 'dart:async';
 import 'dart:collection';
-import 'dart:math';
-import 'package:flutter/foundation.dart';
 import 'network_service.dart';
 import 'nostr_service.dart';
 
@@ -27,8 +25,6 @@ class BatchProcessingService {
   final Queue<BatchItem<List<String>>> _priorityInteractionQueue = Queue();
 
   // Adaptive batch configuration
-  static const int _maxBatchSize = 50;
-  static const int _maxEventBatchSize = 10;
   static const Duration _batchTimeout = Duration(milliseconds: 100);
   static const Duration _profileBatchTimeout = Duration(milliseconds: 200);
 
@@ -40,7 +36,6 @@ class BatchProcessingService {
   Timer? _eventBatchTimer;
   Timer? _profileBatchTimer;
   Timer? _interactionBatchTimer;
-  Timer? _performanceTimer;
 
   // Processing state with metrics
   bool _isProcessingEvents = false;

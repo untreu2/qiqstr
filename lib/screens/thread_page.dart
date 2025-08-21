@@ -60,8 +60,6 @@ class _ThreadPageState extends State<ThreadPage> {
   static const int maxNestingDepth = 2;
 
   // Widget caching for expensive rebuilds
-  final Map<String, Widget> _widgetCache = {};
-  int _lastWidgetCacheHash = 0;
 
   // Pagination state for replies
   int _currentlyShownReplies = 10; // İlk başta 10 reply göster
@@ -145,15 +143,6 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Timer? _reloadTimer;
-
-  void _debounceReload() {
-    _reloadTimer?.cancel();
-    _reloadTimer = Timer(const Duration(milliseconds: 300), () {
-      if (mounted && !_isLoading) {
-        _loadRootNote();
-      }
-    });
-  }
 
   Future<void> _loadRootNote() async {
     if (!mounted) return;
@@ -759,6 +748,7 @@ class _OptimizedNoteWidgetState extends State<_OptimizedNoteWidget> {
   }
 }
 
+// ignore: unused_element
 class _ThreadLinePainter extends CustomPainter {
   final int depth;
   final bool isLast;

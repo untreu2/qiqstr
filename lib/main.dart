@@ -5,21 +5,9 @@ import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as provider;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:hive_flutter/hive_flutter.dart';
 import 'colors.dart';
 import 'theme/theme_manager.dart' as theme;
-import 'models/note_model.dart';
-import 'models/reaction_model.dart';
-import 'models/reply_model.dart';
-import 'models/repost_model.dart';
-import 'models/user_model.dart';
-import 'models/following_model.dart';
-import 'models/link_preview_model.dart';
-import 'models/zap_model.dart';
-import 'models/notification_model.dart';
 import 'screens/splash_screen.dart';
-import 'services/data_service.dart';
 import 'providers/user_provider.dart';
 import 'providers/notes_provider.dart';
 import 'providers/interactions_provider.dart';
@@ -28,7 +16,6 @@ import 'providers/relay_provider.dart';
 import 'providers/network_provider.dart';
 import 'providers/media_provider.dart';
 import 'providers/notification_provider.dart';
-import 'services/memory_manager.dart';
 
 void main() {
   // Set up global error handling for unhandled exceptions
