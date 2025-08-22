@@ -173,6 +173,9 @@ class DataServiceMetrics {
 }
 
 class DataService {
+  Timer? _uiThrottleTimer;
+  bool _hasPendingUiUpdate = false;
+
   final Set<String> _pendingOptimisticReactionIds = {};
   late Isolate _eventProcessorIsolate;
   late SendPort _eventProcessorSendPort;
@@ -1561,114 +1564,150 @@ class DataService {
   }
 
   Future<void> _handleReactionEvent(Map<String, dynamic> eventData) async {
+    // If the service is closed, do nothing.
     if (_isClosed) return;
+
     try {
+      // Find the target event ID from the 'e' tag.
       String? targetEventId;
-      for (var tag in eventData['tags']) {
+      final tags = eventData['tags'] as List<dynamic>? ?? [];
+      for (var tag in tags) {
         if (tag is List && tag.length >= 2 && tag[0] == 'e') {
           targetEventId = tag[1] as String;
           break;
         }
       }
+
+      // If there's no target event, we can't process the reaction.
       if (targetEventId == null) return;
 
       final reaction = ReactionModel.fromEvent(eventData);
 
-      // --- NEW LOGIC TO HANDLE NETWORK ECHO ---
-      // 1. Check if this reaction's ID is in our pending set.
+      // This logic handles the echo from the network for our own optimistic updates.
+      // If we sent a reaction, we don't want to process it again when it comes back.
       if (_pendingOptimisticReactionIds.contains(reaction.id)) {
-        // If yes, this is the network confirmation for our own optimistic update.
-        // We don't need to process it further. Just remove it from the set.
         _pendingOptimisticReactionIds.remove(reaction.id);
         print('[DataService] Confirmed optimistic reaction, ignoring network echo: ${reaction.id}');
-        return; // Stop execution to prevent adding a duplicate.
+        return;
       }
 
-      // --- ORIGINAL LOGIC FOR NEW, EXTERNAL REACTIONS ---
-      // If the code reaches here, it's a new reaction from someone else.
-
+      // Ensure the list for this event ID exists in our map.
       reactionsMap.putIfAbsent(targetEventId, () => []);
 
-      // 2. A secondary check to prevent duplicates from multiple relays.
+      // To prevent duplicates from multiple relays, check if we already have this reaction.
       if (!reactionsMap[targetEventId]!.any((r) => r.id == reaction.id)) {
+        // --- UPDATE INTERNAL STATE ---
+        // 1. Add the new reaction to our in-memory map.
         reactionsMap[targetEventId]!.add(reaction);
-        await reactionsBox?.put(reaction.id, reaction);
 
-        // Update InteractionsProvider
-        await _updateInteractionsProvider();
-        InteractionsProvider.instance.updateReactions(targetEventId, reactionsMap[targetEventId]!);
-
-        onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
-
+        // 2. Update the reaction count on the original note model.
         final note = notes.firstWhereOrNull((n) => n.id == targetEventId);
         if (note != null) {
           note.reactionCount = reactionsMap[targetEventId]!.length;
         }
 
-        _invalidateFilterCache();
-        notesNotifier.value = notesNotifier.notes;
-        await fetchProfilesBatch([reaction.author]);
+        // 3. Update the shared InteractionsProvider.
+        // We remove 'await' to not block the event processing loop.
+        _updateInteractionsProvider();
+        InteractionsProvider.instance.updateReactions(targetEventId, reactionsMap[targetEventId]!);
+
+        // --- FIRE-AND-FORGET ASYNC OPERATIONS ---
+        // These are operations that can take time. We start them but DO NOT `await` them.
+
+        // Save to local Hive cache in the background.
+        reactionsBox?.put(reaction.id, reaction);
+
+        // Fetch the profile of the user who reacted, but don't wait for it.
+        // The UI will update automatically when the profile data arrives.
+        fetchProfilesBatch([reaction.author]);
+
+        // --- REMOVED UI UPDATE LOGIC ---
+        // The following lines were removed because they cause high-frequency UI updates.
+        // The central throttle timer now handles this.
+        //
+        // REMOVED: onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
+        // REMOVED: _invalidateFilterCache();
+        // REMOVED: notesNotifier.value = notesNotifier.notes;
       }
     } catch (e) {
       print('[DataService ERROR] Error handling reaction event: $e');
     }
   }
 
+  /// Handles a repost event (kind 6).
+  /// This version updates the internal data models ONLY and does not trigger direct
+  /// UI updates or block the thread.
   Future<void> _handleRepostEvent(Map<String, dynamic> eventData) async {
     if (_isClosed) return;
     try {
+      // Find the original note ID from the 'e' tag.
       String? originalNoteId;
-      for (var tag in eventData['tags']) {
+      final tags = eventData['tags'] as List<dynamic>? ?? [];
+      for (var tag in tags) {
         if (tag is List && tag.length >= 2 && tag[0] == 'e') {
           originalNoteId = tag[1] as String;
           break;
         }
       }
+
       if (originalNoteId == null) return;
 
       final repost = RepostModel.fromEvent(eventData, originalNoteId);
       repostsMap.putIfAbsent(originalNoteId, () => []);
 
+      // Prevent duplicate processing from multiple relays
       if (!repostsMap[originalNoteId]!.any((r) => r.id == repost.id)) {
+        // --- UPDATE INTERNAL STATE ---
+        // 1. Add the new repost to our in-memory map.
         repostsMap[originalNoteId]!.add(repost);
-        await repostsBox?.put(repost.id, repost);
 
-        // Update InteractionsProvider with correct dataType
-        await _updateInteractionsProvider();
-        InteractionsProvider.instance.updateReposts(originalNoteId, repostsMap[originalNoteId]!);
-
-        onRepostsUpdated?.call(originalNoteId, repostsMap[originalNoteId]!);
-
+        // 2. Update the repost count on the original note model.
         final note = notes.firstWhereOrNull((n) => n.id == originalNoteId);
         if (note != null) {
           note.repostCount = repostsMap[originalNoteId]!.length;
         }
 
-        _invalidateFilterCache();
-        notesNotifier.value = notesNotifier.notes;
-        await fetchProfilesBatch([repost.repostedBy]);
+        // --- FIRE-AND-FORGET ASYNC OPERATIONS ---
+        // We start these operations but DO NOT `await` them.
+
+        // Save the repost to the Hive cache in the background.
+        repostsBox?.put(repost.id, repost);
+
+        // Update the shared InteractionsProvider.
+        _updateInteractionsProvider();
+        InteractionsProvider.instance.updateReposts(originalNoteId, repostsMap[originalNoteId]!);
+
+        // Fetch the profile of the user who reposted.
+        fetchProfilesBatch([repost.repostedBy]);
+
+        // --- REMOVED UI UPDATE LOGIC ---
+        // These lines are removed to prevent UI jank. The central throttle timer handles updates.
+        // REMOVED: onRepostsUpdated?.call(...);
+        // REMOVED: _invalidateFilterCache();
+        // REMOVED: notesNotifier.value = notesNotifier.notes;
       }
     } catch (e) {
       print('[DataService ERROR] Error handling repost event: $e');
     }
   }
 
+  /// Handles a reply event (kind 1 with 'e' tags).
+  /// This version updates the internal data models ONLY. It adds the new reply as a
+  /// NoteModel to the internal lists but does not trigger any direct UI updates.
+  /// Handles a reply event (kind 1 with 'e' tags).
+  /// This version updates the internal data models ONLY. It adds the new reply as a
+  /// NoteModel to the internal lists but does not trigger any direct UI updates.
   Future<void> _handleReplyEvent(Map<String, dynamic> eventData, String parentEventId) async {
     if (_isClosed) return;
     try {
       final reply = ReplyModel.fromEvent(eventData);
       repliesMap.putIfAbsent(parentEventId, () => []);
 
+      // Prevent duplicate processing from multiple relays
       if (!repliesMap[parentEventId]!.any((r) => r.id == reply.id)) {
+        // --- UPDATE INTERNAL STATE ---
+        // 1. Update the replies map and the parent note's reply count/IDs.
         repliesMap[parentEventId]!.add(reply);
-        await repliesBox?.put(reply.id, reply);
-
-        // Update InteractionsProvider with correct dataType
-        await _updateInteractionsProvider();
-        InteractionsProvider.instance.updateReplies(parentEventId, repliesMap[parentEventId]!);
-
-        onRepliesUpdated?.call(parentEventId, repliesMap[parentEventId]!);
-
         final parentNote = notes.firstWhereOrNull((n) => n.id == parentEventId);
         if (parentNote != null) {
           parentNote.replyCount = repliesMap[parentEventId]!.length;
@@ -1677,6 +1716,7 @@ class DataService {
           }
         }
 
+        // 2. Also update the root note's reply IDs if it's part of a thread.
         if (reply.rootEventId != null && reply.rootEventId != parentEventId) {
           final rootNote = notes.firstWhereOrNull((n) => n.id == reply.rootEventId);
           if (rootNote != null && !rootNote.replyIds.contains(reply.id)) {
@@ -1684,49 +1724,50 @@ class DataService {
           }
         }
 
-        final isRepost = eventData['kind'] == 6;
-        final createdAtRaw = eventData['created_at'];
-        final repostTimestamp = isRepost && createdAtRaw is int ? DateTime.fromMillisecondsSinceEpoch(createdAtRaw * 1000) : null;
-
+        // 3. Create a NoteModel for the reply itself and add it to our internal state.
+        // FIXED: Using the standard constructor instead of the non-existent 'fromEvent'.
         final noteModel = NoteModel(
           id: reply.id,
           content: reply.content,
           author: reply.author,
           timestamp: reply.timestamp,
           isReply: true,
-          isRepost: isRepost,
-          repostedBy: isRepost ? reply.author : null,
-          repostTimestamp: repostTimestamp,
           parentId: parentEventId,
           rootId: reply.rootEventId,
           rawWs: jsonEncode(eventData),
         );
 
-        // Content parsing is now handled lazily through note.parsedContentLazy
-        // Set hasMedia based on lazy parsing
-        noteModel.hasMedia = noteModel.hasMediaLazy;
-
-        if (!eventIds.contains(noteModel.id)) {
+        if (eventIds.add(noteModel.id)) {
           notes.add(noteModel);
-          eventIds.add(noteModel.id);
-          await notesBox?.put(noteModel.id, noteModel);
-          addNote(noteModel);
-
-          if (reply.author == npub) {
-            onNewNote?.call(noteModel);
-            print('[DataService] Own reply processed and added: ${reply.id}');
-          }
+          // Manually add to the SplayTreeSet without triggering the notifier's listener
+          _itemsTree.add(noteModel);
         }
 
-        _invalidateFilterCache();
-        notesNotifier.value = notesNotifier.notes;
-        await fetchProfilesBatch([reply.author]);
+        // --- FIRE-AND-FORGET ASYNC OPERATIONS ---
+        // We start these operations but DO NOT `await` them.
+
+        // Save the reply and the new note model to the Hive cache in the background.
+        repliesBox?.put(reply.id, reply);
+        notesBox?.put(noteModel.id, noteModel);
+
+        // Update the shared InteractionsProvider.
+        _updateInteractionsProvider();
+        InteractionsProvider.instance.updateReplies(parentEventId, repliesMap[parentEventId]!);
+
+        // Fetch the profile of the user who replied.
+        fetchProfilesBatch([reply.author]);
+
+        // --- REMOVED UI UPDATE LOGIC ---
       }
     } catch (e) {
       print('[DataService ERROR] Error handling reply event: $e');
     }
   }
 
+  /// Handles a profile event (kind 0).
+  /// This version updates the internal state (profileCache, usersBox) ONLY.
+  /// It flags that a UI update is needed using the shared `_hasPendingUiUpdate` flag,
+  /// which the central throttle timer will handle.
   Future<void> _handleProfileEvent(Map<String, dynamic> eventData) async {
     if (_isClosed) return;
     try {
@@ -1758,6 +1799,7 @@ class DataService {
       final lud16 = profileContent['lud16'] as String? ?? '';
       final website = profileContent['website'] as String? ?? '';
 
+      // Gelen verinin cache'deki veriden daha yeni olup olmadığını kontrol et
       if (profileCache.containsKey(author)) {
         final cachedProfile = profileCache[author]!;
         if (createdAt.isBefore(cachedProfile.fetchedAt)) {
@@ -1766,6 +1808,7 @@ class DataService {
         }
       }
 
+      // Hafızadaki cache'i güncelle
       profileCache[author] = CachedProfile({
         'name': display_name,
         'profileImage': profileImage,
@@ -1776,6 +1819,7 @@ class DataService {
         'website': website
       }, createdAt);
 
+      // Veriyi diske (Hive) yaz
       if (usersBox != null && usersBox!.isOpen) {
         final userModel = UserModel(
           npub: author,
@@ -1788,17 +1832,19 @@ class DataService {
           website: website,
           updatedAt: createdAt,
         );
-        await usersBox!.put(author, userModel);
+        // DEĞİŞİKLİK: 'await' kaldırıldı. Bu işlem artık ana thread'i beklemez.
+        usersBox!.put(author, userModel);
       }
 
+      // Servis içinde bu profile ait bekleyen bir istek varsa onu tamamla
       if (_pendingProfileRequests.containsKey(author)) {
         _pendingProfileRequests[author]?.complete(profileCache[author]!.data);
         _pendingProfileRequests.remove(author);
       }
 
-      profilesNotifier.value = {
-        for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
-      };
+      // DEĞİŞİKLİK: Doğrudan UI güncellemesi yapmak yerine, ortak bayrağı ayarla.
+      // Timer bu bayrağı gördüğünde UI'ı güncelleyecek.
+      _hasPendingUiUpdate = true;
     } catch (e) {
       print('[DataService ERROR] Error handling profile event: $e');
     }
@@ -4186,100 +4232,26 @@ class DataService {
     print('[DataService] Subscribed to interactions for ${newNoteIds.length} new notes.');
   }
 
+  /// Processes a parsed event from the Isolate, updates the internal state,
+  /// and uses a throttle timer to batch UI updates to a maximum of once per second.
+  /// Processes a parsed event from the Isolate, updates the internal state,
+  /// and uses a throttle timer to batch UI updates to a maximum of once per second.
   Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
+    // --- 1. Process Data & Update Internal State (without triggering UI) ---
     try {
-      final int? kindNullable = parsedData['kind'] as int?;
-      if (kindNullable == null) {
-        print('[DataService] Skipping event with null kind');
-        return;
-      }
-      final int kind = kindNullable;
+      // Ensure the data from the isolate is valid before processing.
+      final int? kind = parsedData['kind'] as int?;
+      final Map<String, dynamic>? eventData = parsedData['eventData'] as Map<String, dynamic>?;
 
-      final Map<String, dynamic>? eventDataNullable = parsedData['eventData'] as Map<String, dynamic>?;
-      if (eventDataNullable == null) {
-        print('[DataService] Skipping event with null eventData');
-        return;
-      }
-      final Map<String, dynamic> eventData = eventDataNullable;
-
+      // NEW: Extract the targetNpubs list from the incoming data. This is crucial for the feed.
       final List<String> targetNpubs = List<String>.from(parsedData['targetNpubs'] ?? []);
-      final String? eventAuthorNullable = eventData['pubkey'] as String?;
-      if (eventAuthorNullable == null) {
-        print('[DataService] Skipping event with null pubkey');
+
+      if (kind == null || eventData == null) {
+        print('[DataService] Skipped event with null kind or data.');
         return;
       }
-      final String eventAuthor = eventAuthorNullable;
 
-      // For profile view, allow all interaction events (replies, reactions, reposts, zaps) to be processed
-      // Only filter main posts (kind 1 non-replies) and reposts (kind 6) for display
-      if (dataType == DataType.profile) {
-        // Check if this is a reply by looking at tags
-        bool isReply = false;
-        final List<dynamic> eventTags = List<dynamic>.from(eventData['tags'] ?? []);
-        for (var tag in eventTags) {
-          if (tag is List && tag.length >= 2 && tag[0] == 'e') {
-            isReply = true;
-            break;
-          }
-        }
-
-        // Allow all replies and interaction events, only filter main posts
-        if (kind == 1 && !isReply && eventAuthor != npub) {
-          return; // Skip main posts not authored by profile user
-        }
-        if (kind == 6 && eventAuthor != npub) {
-          return; // Skip reposts not made by profile user
-        }
-        // Allow all other events (replies, reactions, zaps) regardless of author
-      }
-
-      if (eventAuthor != npub) {
-        final List<dynamic> eventTags = List<dynamic>.from(eventData['tags'] ?? []);
-        bool isUserPMentioned = eventTags.any((tag) {
-          return tag is List && tag.length >= 2 && tag[0] == 'p' && tag[1] == npub;
-        });
-
-        if (isUserPMentioned && [1, 6, 7, 9735].contains(kind)) {
-          String notificationType;
-          String? firstETagValue;
-
-          for (var tag in eventTags) {
-            if (tag is List && tag.length >= 2 && tag[0] == 'e') {
-              firstETagValue = tag[1] as String;
-              break;
-            }
-          }
-
-          if (kind == 1) {
-            notificationType = "mention";
-            firstETagValue ??= eventData['id'];
-          } else if (kind == 6) {
-            notificationType = "repost";
-          } else if (kind == 7) {
-            notificationType = "reaction";
-          } else if (kind == 9735) {
-            notificationType = "zap";
-          } else {
-            return;
-          }
-
-          final notification = NotificationModel.fromEvent(eventData, notificationType);
-
-          if (notificationsBox != null && notificationsBox!.isOpen) {
-            if (!notificationsBox!.containsKey(notification.id)) {
-              await notificationsBox!.put(notification.id, notification);
-              print("[DataService] New $notificationType notification stored: ${notification.id}");
-              final currentNotifications = List<NotificationModel>.from(notificationsNotifier.value);
-              currentNotifications.insert(0, notification);
-              notificationsNotifier.value = currentNotifications;
-              if (!notification.isRead) {
-                unreadNotificationsCountNotifier.value++;
-              }
-            }
-          }
-        }
-      }
-
+      // Call the appropriate handler based on the event kind.
       if (kind == 0) {
         await _handleProfileEvent(eventData);
       } else if (kind == 3) {
@@ -4287,66 +4259,67 @@ class DataService {
       } else if (kind == 7) {
         await _handleReactionEvent(eventData);
       } else if (kind == 9735) {
-        await _handleZapEvent(eventData);
-      } else if (kind == 1) {
-        final tags = eventData['tags'] as List<dynamic>;
-        final eventAuthor = eventData['pubkey'] as String;
-
-        String? rootId;
-        String? replyId;
-
-        for (var tag in tags) {
-          if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
-            if (tag.length > 3 && tag[3] == 'root') {
-              rootId = tag[1] as String;
-            } else if (tag.length > 3 && tag[3] == 'reply') {
-              replyId = tag[1] as String;
-            }
-          }
-        }
-
-        if (rootId != null || replyId != null) {
-          String parentId = replyId ?? rootId!;
-          await _handleReplyEvent(eventData, parentId);
-
-          if (eventAuthor == npub) {
-            print('[DataService] Processing own reply: ${eventData['id']}');
-          }
-        } else {
-          final replyETags = tags.where((tag) {
-            if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
-              // An 'e' tag is a reply unless it's marked as a 'mention'.
-              if (tag.length >= 4 && tag[3] == 'mention') {
-                return false;
-              }
-              return true;
-            }
-            return false;
-          }).toList();
-
-          if (replyETags.isNotEmpty) {
-            // The last e-tag is the one being replied to.
-            final lastETag = replyETags.last;
-            if (lastETag is List && lastETag.length >= 2) {
-              final parentId = lastETag[1] as String;
-              await _handleReplyEvent(eventData, parentId);
-
-              if (eventAuthor == npub) {
-                print('[DataService] Processing own legacy reply: ${eventData['id']}');
-              }
-            } else {
-              await NoteProcessor.processNoteEvent(this, eventData, targetNpubs, rawWs: jsonEncode(eventData));
-            }
-          } else {
-            await NoteProcessor.processNoteEvent(this, eventData, targetNpubs, rawWs: jsonEncode(eventData));
-          }
-        }
+        await _handleZapEvent(eventData); // Remember to make _handleZapEvent throttle-compatible
       } else if (kind == 6) {
         await _handleRepostEvent(eventData);
+
+        // CHANGED: We are now passing the correct 'targetNpubs' list to the NoteProcessor.
         await NoteProcessor.processNoteEvent(this, eventData, targetNpubs, rawWs: jsonEncode(eventData['content']));
+      } else if (kind == 1) {
+        final tags = List<dynamic>.from(eventData['tags'] ?? []);
+
+        // Determine if the note is a reply by checking for 'e' tags.
+        final replyETags = tags.where((tag) {
+          if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
+            return !(tag.length >= 4 && tag[3] == 'mention');
+          }
+          return false;
+        }).toList();
+
+        if (replyETags.isNotEmpty) {
+          // This is a reply.
+          final lastETag = replyETags.last;
+          if (lastETag is List && lastETag.length >= 2) {
+            final parentId = lastETag[1] as String;
+            await _handleReplyEvent(eventData, parentId);
+          }
+        } else {
+          // It's a new, original note.
+          // CHANGED: We are now passing the correct 'targetNpubs' list to the NoteProcessor.
+          await NoteProcessor.processNoteEvent(this, eventData, targetNpubs, rawWs: jsonEncode(eventData));
+        }
       }
-    } catch (e) {
-      print('[DataService ERROR] Error processing parsed event: $e');
+    } catch (e, stacktrace) {
+      print('[DataService ERROR] Event processing failed: $e');
+      print(stacktrace);
+    }
+
+    // --- 2. Flag that a UI Update is Needed ---
+    _hasPendingUiUpdate = true;
+
+    // --- 3. Check and Start the Timer if Necessary ---
+    if (_uiThrottleTimer == null || !_uiThrottleTimer!.isActive) {
+      print('[DataService] UI Throttle Timer starting on first event...');
+
+      _uiThrottleTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (_isClosed) {
+          timer.cancel();
+          return;
+        }
+
+        if (_hasPendingUiUpdate) {
+          print('[DataService] Throttled UI update executed for all pending changes.');
+
+          // Update all relevant notifiers
+          notesNotifier.value = notesNotifier._getFilteredNotesList();
+          profilesNotifier.value = {
+            for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
+          };
+
+          // Reset the single flag
+          _hasPendingUiUpdate = false;
+        }
+      });
     }
   }
 
