@@ -19,9 +19,9 @@ class MemoryManager {
   Timer? _cleanupTimer;
 
   // Memory thresholds (in MB) - Much more conservative for social media app
-  static const double _warningThreshold = 300.0; // Increased from 150MB
-  static const double _criticalThreshold = 400.0; // Increased from 200MB
-  static const double _emergencyThreshold = 500.0; // Increased from 250MB
+  static const double _warningThreshold = 500.0; // Increased from 150MB
+  static const double _criticalThreshold = 1000.0; // Increased from 200MB
+  static const double _emergencyThreshold = 2000.0; // Increased from 250MB
 
   // Monitoring intervals - Less frequent to avoid disrupting UX
   static const Duration _monitoringInterval = Duration(minutes: 5); // Increased from 2 minutes
