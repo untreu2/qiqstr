@@ -4232,18 +4232,10 @@ class DataService {
     print('[DataService] Subscribed to interactions for ${newNoteIds.length} new notes.');
   }
 
-  /// Processes a parsed event from the Isolate, updates the internal state,
-  /// and uses a throttle timer to batch UI updates to a maximum of once per second.
-  /// Processes a parsed event from the Isolate, updates the internal state,
-  /// and uses a throttle timer to batch UI updates to a maximum of once per second.
   Future<void> _processParsedEvent(Map<String, dynamic> parsedData) async {
-    // --- 1. Process Data & Update Internal State (without triggering UI) ---
     try {
-      // Ensure the data from the isolate is valid before processing.
       final int? kind = parsedData['kind'] as int?;
       final Map<String, dynamic>? eventData = parsedData['eventData'] as Map<String, dynamic>?;
-
-      // NEW: Extract the targetNpubs list from the incoming data. This is crucial for the feed.
       final List<String> targetNpubs = List<String>.from(parsedData['targetNpubs'] ?? []);
 
       if (kind == null || eventData == null) {
@@ -4251,7 +4243,37 @@ class DataService {
         return;
       }
 
-      // Call the appropriate handler based on the event kind.
+      final String eventAuthor = eventData['pubkey'] as String? ?? '';
+      if (eventAuthor.isNotEmpty && eventAuthor != npub) {
+        final List<dynamic> eventTags = List<dynamic>.from(eventData['tags'] ?? []);
+        bool isUserPMentioned = eventTags.any((tag) {
+          return tag is List && tag.length >= 2 && tag[0] == 'p' && tag[1] == npub;
+        });
+
+        if (isUserPMentioned && [1, 6, 7, 9735].contains(kind)) {
+          String notificationType;
+          if (kind == 1)
+            notificationType = "mention";
+          else if (kind == 6)
+            notificationType = "repost";
+          else if (kind == 7)
+            notificationType = "reaction";
+          else if (kind == 9735)
+            notificationType = "zap";
+          else
+            return;
+
+          final notification = NotificationModel.fromEvent(eventData, notificationType);
+          if (notificationsBox != null && notificationsBox!.isOpen) {
+            if (!notificationsBox!.containsKey(notification.id)) {
+              notificationsBox!.put(notification.id, notification);
+              print("[DataService] New $notificationType notification stored: ${notification.id}");
+              _hasPendingUiUpdate = true;
+            }
+          }
+        }
+      }
+
       if (kind == 0) {
         await _handleProfileEvent(eventData);
       } else if (kind == 3) {
@@ -4259,16 +4281,12 @@ class DataService {
       } else if (kind == 7) {
         await _handleReactionEvent(eventData);
       } else if (kind == 9735) {
-        await _handleZapEvent(eventData); // Remember to make _handleZapEvent throttle-compatible
+        await _handleZapEvent(eventData);
       } else if (kind == 6) {
         await _handleRepostEvent(eventData);
-
-        // CHANGED: We are now passing the correct 'targetNpubs' list to the NoteProcessor.
         await NoteProcessor.processNoteEvent(this, eventData, targetNpubs, rawWs: jsonEncode(eventData['content']));
       } else if (kind == 1) {
         final tags = List<dynamic>.from(eventData['tags'] ?? []);
-
-        // Determine if the note is a reply by checking for 'e' tags.
         final replyETags = tags.where((tag) {
           if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
             return !(tag.length >= 4 && tag[3] == 'mention');
@@ -4277,15 +4295,12 @@ class DataService {
         }).toList();
 
         if (replyETags.isNotEmpty) {
-          // This is a reply.
           final lastETag = replyETags.last;
           if (lastETag is List && lastETag.length >= 2) {
             final parentId = lastETag[1] as String;
             await _handleReplyEvent(eventData, parentId);
           }
         } else {
-          // It's a new, original note.
-          // CHANGED: We are now passing the correct 'targetNpubs' list to the NoteProcessor.
           await NoteProcessor.processNoteEvent(this, eventData, targetNpubs, rawWs: jsonEncode(eventData));
         }
       }
@@ -4294,11 +4309,7 @@ class DataService {
       print(stacktrace);
     }
 
-    // --- 2. Flag that a UI Update is Needed ---
-    _hasPendingUiUpdate = true;
-
-    // --- 3. Check and Start the Timer if Necessary ---
-    if (_uiThrottleTimer == null || !_uiThrottleTimer!.isActive) {
+    if (_hasPendingUiUpdate && (_uiThrottleTimer == null || !_uiThrottleTimer!.isActive)) {
       print('[DataService] UI Throttle Timer starting on first event...');
 
       _uiThrottleTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -4310,13 +4321,19 @@ class DataService {
         if (_hasPendingUiUpdate) {
           print('[DataService] Throttled UI update executed for all pending changes.');
 
-          // Update all relevant notifiers
           notesNotifier.value = notesNotifier._getFilteredNotesList();
+
           profilesNotifier.value = {
             for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
           };
 
-          // Reset the single flag
+          if (notificationsBox != null && notificationsBox!.isOpen) {
+            final allNotifications = notificationsBox!.values.toList();
+            allNotifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+            notificationsNotifier.value = allNotifications;
+            _updateUnreadNotificationCount();
+          }
+
           _hasPendingUiUpdate = false;
         }
       });
