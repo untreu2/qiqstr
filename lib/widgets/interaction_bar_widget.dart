@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:like_button/like_button.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../theme/theme_manager.dart';
 import '../providers/interactions_provider.dart';
 import '../services/data_service.dart';
@@ -45,6 +46,9 @@ class _InteractionBarState extends State<InteractionBar> {
   final GlobalKey<LikeButtonState> _repostButtonKey = GlobalKey<LikeButtonState>();
   final GlobalKey<LikeButtonState> _zapButtonKey = GlobalKey<LikeButtonState>();
 
+  final _secureStorage = const FlutterSecureStorage();
+  String? _actualLoggedInUserNpub;
+
   int _reactionCount = 0;
   int _replyCount = 0;
   int _repostCount = 0;
@@ -57,8 +61,22 @@ class _InteractionBarState extends State<InteractionBar> {
   @override
   void initState() {
     super.initState();
-    _updateInteractionData();
+    _loadActualUserNpub();
     InteractionsProvider.instance.addListener(_onInteractionsChanged);
+  }
+
+  Future<void> _loadActualUserNpub() async {
+    try {
+      final npub = await _secureStorage.read(key: 'npub');
+      if (mounted) {
+        setState(() {
+          _actualLoggedInUserNpub = npub;
+          _updateInteractionData();
+        });
+      }
+    } catch (e) {
+      debugPrint('[InteractionBar] Error loading user npub: $e');
+    }
   }
 
   String _formatCount(int count) {
@@ -89,15 +107,17 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   void _onInteractionsChanged() {
+    if (_actualLoggedInUserNpub == null) return;
+
     final provider = InteractionsProvider.instance;
     if (provider.getReactionCount(widget.noteId) != _reactionCount ||
         provider.getReplyCount(widget.noteId) != _replyCount ||
         provider.getRepostCount(widget.noteId) != _repostCount ||
         provider.getZapAmount(widget.noteId) != _zapAmount ||
-        provider.hasUserReacted(widget.currentUserNpub, widget.noteId) != _hasReacted ||
-        provider.hasUserReplied(widget.currentUserNpub, widget.noteId) != _hasReplied ||
-        provider.hasUserReposted(widget.currentUserNpub, widget.noteId) != _hasReposted ||
-        provider.hasUserZapped(widget.currentUserNpub, widget.noteId) != _hasZapped) {
+        provider.hasUserReacted(_actualLoggedInUserNpub!, widget.noteId) != _hasReacted ||
+        provider.hasUserReplied(_actualLoggedInUserNpub!, widget.noteId) != _hasReplied ||
+        provider.hasUserReposted(_actualLoggedInUserNpub!, widget.noteId) != _hasReposted ||
+        provider.hasUserZapped(_actualLoggedInUserNpub!, widget.noteId) != _hasZapped) {
       if (mounted) {
         setState(_updateInteractionData);
       }
@@ -110,14 +130,22 @@ class _InteractionBarState extends State<InteractionBar> {
     _replyCount = provider.getReplyCount(widget.noteId);
     _repostCount = provider.getRepostCount(widget.noteId);
     _zapAmount = provider.getZapAmount(widget.noteId);
-    _hasReacted = provider.hasUserReacted(widget.currentUserNpub, widget.noteId);
-    _hasReplied = provider.hasUserReplied(widget.currentUserNpub, widget.noteId);
-    _hasReposted = provider.hasUserReposted(widget.currentUserNpub, widget.noteId);
-    _hasZapped = provider.hasUserZapped(widget.currentUserNpub, widget.noteId);
+
+    if (_actualLoggedInUserNpub != null) {
+      _hasReacted = provider.hasUserReacted(_actualLoggedInUserNpub!, widget.noteId);
+      _hasReplied = provider.hasUserReplied(_actualLoggedInUserNpub!, widget.noteId);
+      _hasReposted = provider.hasUserReposted(_actualLoggedInUserNpub!, widget.noteId);
+      _hasZapped = provider.hasUserZapped(_actualLoggedInUserNpub!, widget.noteId);
+    } else {
+      _hasReacted = false;
+      _hasReplied = false;
+      _hasReposted = false;
+      _hasZapped = false;
+    }
   }
 
   Future<bool> _handleReactionTap(bool isCurrentlyLiked) async {
-    if (widget.dataService == null) {
+    if (widget.dataService == null || _actualLoggedInUserNpub == null) {
       return false;
     }
 
@@ -127,17 +155,15 @@ class _InteractionBarState extends State<InteractionBar> {
 
     try {
       await widget.dataService!.sendReactionInstantly(widget.noteId, '+');
-
       return true;
     } catch (e) {
-      print('Error sending reaction: $e');
-
+      debugPrint('Error sending reaction: $e');
       return false;
     }
   }
 
   void _handleReplyTap() {
-    if (widget.dataService == null) return;
+    if (widget.dataService == null || _actualLoggedInUserNpub == null) return;
 
     Navigator.push(
       context,
@@ -151,9 +177,9 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   void _handleRepostTap() {
-    if (widget.dataService == null || widget.note == null) return;
+    if (widget.dataService == null || widget.note == null || _actualLoggedInUserNpub == null) return;
 
-    final hasReposted = InteractionsProvider.instance.hasUserReposted(widget.currentUserNpub, widget.noteId);
+    final hasReposted = InteractionsProvider.instance.hasUserReposted(_actualLoggedInUserNpub!, widget.noteId);
     if (hasReposted) return;
 
     showRepostDialog(
@@ -164,7 +190,7 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   void _handleZapTap() {
-    if (widget.dataService == null || widget.note == null) return;
+    if (widget.dataService == null || widget.note == null || _actualLoggedInUserNpub == null) return;
 
     showZapDialog(
       context: context,

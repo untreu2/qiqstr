@@ -4,70 +4,17 @@ import 'dart:io';
 import 'package:hive/hive.dart';
 import '../models/user_model.dart';
 import '../constants/relays.dart';
-import 'relay_service.dart';
-
-class CachedProfile {
-  final Map<String, String> data;
-  final DateTime fetchedAt;
-  final int accessCount;
-  final DateTime lastAccessed;
-
-  CachedProfile(this.data, this.fetchedAt, {this.accessCount = 1, DateTime? lastAccessed}) : lastAccessed = lastAccessed ?? DateTime.now();
-
-  CachedProfile copyWithAccess() {
-    return CachedProfile(data, fetchedAt, accessCount: accessCount + 1, lastAccessed: DateTime.now());
-  }
-}
 
 class ProfileService {
-  final Map<String, CachedProfile> _profileCache = {};
-
+  final Map<String, Map<String, String>> _profileCache = {};
+  final Map<String, DateTime> _cacheTimestamps = {};
   final Map<String, Completer<Map<String, String>>> _pendingRequests = {};
 
-  final Set<String> _requestQueue = <String>{};
-
-  Timer? _debounceTimer;
-
   final Duration _cacheTTL = const Duration(minutes: 30);
-  final int _maxCacheSize = 5000;
+  final int _maxCacheSize = 1000;
   Box<UserModel>? _usersBox;
-  Timer? _cleanupTimer;
 
-  final PrimalCacheClient _primalClient = PrimalCacheClient();
-
-  int _cacheHits = 0;
-  int _cacheMisses = 0;
-  int _relayFetches = 0;
-  int _primalFetches = 0;
-  int _primalFailures = 0;
-  int _batchRequestsProcessed = 0;
-
-  Future<void> initialize() async {
-    _startPeriodicCleanup();
-  }
-
-  void _startPeriodicCleanup() {
-    _cleanupTimer = Timer.periodic(const Duration(minutes: 2), (_) {
-      _performCleanup();
-    });
-  }
-
-  void _performCleanup() {
-    final now = DateTime.now();
-    final cutoffTime = now.subtract(_cacheTTL);
-
-    final sizeBefore = _profileCache.length;
-    _profileCache.removeWhere((key, cached) => cached.fetchedAt.isBefore(cutoffTime));
-
-    final removed = sizeBefore - _profileCache.length;
-    if (removed > 0) {
-      print('[ProfileService] Cleaned up $removed expired cache entries');
-    }
-
-    if (_profileCache.length > _maxCacheSize) {
-      _evictLeastRecentlyUsed();
-    }
-  }
+  Future<void> initialize() async {}
 
   void setUsersBox(Box<UserModel> box) {
     _usersBox = box;
@@ -75,18 +22,14 @@ class ProfileService {
 
   Future<Map<String, String>> getCachedUserProfile(String npub) async {
     if (_profileCache.containsKey(npub)) {
-      final cached = _profileCache[npub]!;
-
-      if (DateTime.now().difference(cached.fetchedAt) < _cacheTTL) {
-        _cacheHits++;
-        _profileCache[npub] = cached.copyWithAccess();
-        return cached.data;
+      final timestamp = _cacheTimestamps[npub];
+      if (timestamp != null && DateTime.now().difference(timestamp) < _cacheTTL) {
+        return _profileCache[npub]!;
       } else {
         _profileCache.remove(npub);
+        _cacheTimestamps.remove(npub);
       }
     }
-
-    _cacheMisses++;
 
     if (_pendingRequests.containsKey(npub)) {
       return _pendingRequests[npub]!.future;
@@ -95,79 +38,34 @@ class ProfileService {
     final completer = Completer<Map<String, String>>();
     _pendingRequests[npub] = completer;
 
-    _requestQueue.add(npub);
-
-    _startDebounceTimer();
-
-    return completer.future;
-  }
-
-  void _startDebounceTimer() {
-    _debounceTimer?.cancel();
-
-    _debounceTimer = Timer(const Duration(milliseconds: 100), _processRequestQueue);
-  }
-
-  Future<void> _processRequestQueue() async {
-    if (_requestQueue.isEmpty) return;
-
-    final npubsToFetch = List<String>.from(_requestQueue);
-    _requestQueue.clear();
-
-    print('[ProfileService] Processing batch of ${npubsToFetch.length} profiles.');
-
-    final npubsForRelay = <String>[];
-    for (final npub in npubsToFetch) {
+    try {
       final user = _usersBox?.get(npub);
       if (user != null && DateTime.now().difference(user.updatedAt) < _cacheTTL) {
         final data = _userModelToMap(user);
-        _addToCache(npub, CachedProfile(data, user.updatedAt));
-
-        _pendingRequests[npub]?.complete(data);
-        _pendingRequests.remove(npub);
-      } else {
-        npubsForRelay.add(npub);
+        _addToCache(npub, data);
+        completer.complete(data);
+        return data;
       }
-    }
 
-    if (npubsForRelay.isNotEmpty) {
-      final results = await _batchFetchFromRelays(npubsForRelay);
+      final profileData = await _fetchUserProfileFromRelay(npub);
+      final data = profileData ?? _getDefaultProfile();
 
-      for (final npub in npubsForRelay) {
-        final data = results[npub] ?? _getDefaultProfile();
-        _addToCache(npub, CachedProfile(data, DateTime.now()));
+      _addToCache(npub, data);
 
-        if (_usersBox != null && _usersBox!.isOpen) {
-          final userModel = UserModel.fromCachedProfile(npub, data);
-          _saveToHiveAsync(npub, userModel);
-        }
-
-        _pendingRequests[npub]?.complete(data);
-        _pendingRequests.remove(npub);
+      if (_usersBox != null && _usersBox!.isOpen) {
+        final userModel = UserModel.fromCachedProfile(npub, data);
+        _saveToHiveAsync(npub, userModel);
       }
+
+      completer.complete(data);
+      return data;
+    } catch (e) {
+      final defaultData = _getDefaultProfile();
+      completer.complete(defaultData);
+      return defaultData;
+    } finally {
+      _pendingRequests.remove(npub);
     }
-
-    _batchRequestsProcessed += npubsToFetch.length;
-  }
-
-  Future<Map<String, Map<String, String>>> _batchFetchFromRelays(List<String> npubs) async {
-    final results = <String, Map<String, String>>{};
-    if (npubs.isEmpty) return results;
-
-    _relayFetches += npubs.length;
-
-    final futures = npubs.map((npub) => _fetchUserProfileFromRelay(npub));
-    final profileResults = await Future.wait(futures, eagerError: false);
-
-    for (int i = 0; i < npubs.length; i++) {
-      final npub = npubs[i];
-      final profile = profileResults[i];
-      if (profile != null) {
-        results[npub] = profile;
-      }
-    }
-
-    return results;
   }
 
   Future<void> batchFetchProfiles(List<String> npubs) async {
@@ -201,58 +99,26 @@ class ProfileService {
     };
   }
 
-  void _addToCache(String npub, CachedProfile cached) {
+  void _addToCache(String npub, Map<String, String> data) {
     if (_profileCache.length >= _maxCacheSize) {
-      _evictLeastRecentlyUsed();
-    }
-    _profileCache[npub] = cached;
-  }
-
-  void _evictLeastRecentlyUsed() {
-    if (_profileCache.isEmpty) return;
-
-    String? oldestKey;
-    DateTime? oldestTime;
-
-    for (final entry in _profileCache.entries) {
-      if (oldestTime == null || entry.value.lastAccessed.isBefore(oldestTime)) {
-        oldestTime = entry.value.lastAccessed;
-        oldestKey = entry.key;
-      }
-    }
-
-    if (oldestKey != null) {
+      final oldestKey = _cacheTimestamps.entries.reduce((a, b) => a.value.isBefore(b.value) ? a : b).key;
       _profileCache.remove(oldestKey);
+      _cacheTimestamps.remove(oldestKey);
     }
+
+    _profileCache[npub] = data;
+    _cacheTimestamps[npub] = DateTime.now();
   }
 
   Future<Map<String, String>?> _fetchUserProfileFromRelay(String npub) async {
     if (!_isValidHex(npub)) {
-      print('[ProfileService] Invalid hex format: $npub');
       return null;
-    }
-
-    try {
-      _primalFetches++;
-      final primalResult = await _primalClient.fetchUserProfile(npub);
-      if (primalResult != null) {
-        print('[ProfileService] Profile fetched successfully from Primal cache: $npub');
-        return primalResult;
-      }
-    } catch (e) {
-      _primalFailures++;
-      print('[ProfileService] Primal cache failed for $npub: $e, falling back to relays');
     }
 
     final relayUrl = relaySetMainSockets.first;
 
     try {
-      _relayFetches++;
-      final result = await _fetchProfileFromSingleRelay(relayUrl, npub);
-      if (result != null) {
-        print('[ProfileService] Profile fetched successfully from relay fallback: $npub');
-      }
-      return result;
+      return await _fetchProfileFromSingleRelay(relayUrl, npub);
     } catch (e) {
       print('[ProfileService] Error fetching from relay $relayUrl: $e');
       return null;
@@ -261,13 +127,12 @@ class ProfileService {
 
   Future<Map<String, String>?> _fetchProfileFromSingleRelay(String relayUrl, String npub) async {
     if (!_isValidHex(npub)) {
-      print('[ProfileService] Invalid hex format for relay request: $npub');
       return null;
     }
 
     WebSocket? ws;
     try {
-      ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 3));
+      ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
       final subscriptionId = DateTime.now().millisecondsSinceEpoch.toString();
       final request = jsonEncode([
         "REQ",
@@ -300,21 +165,16 @@ class ProfileService {
         if (!completer.isCompleted) completer.complete(null);
       }, onDone: () {
         if (!completer.isCompleted) completer.complete(null);
-      }, cancelOnError: true);
+      });
 
       if (ws.readyState == WebSocket.open) {
         ws.add(request);
       }
 
-      final eventData = await completer.future.timeout(const Duration(seconds: 3), onTimeout: () => null);
+      final eventData = await completer.future.timeout(const Duration(seconds: 5), onTimeout: () => null);
 
-      try {
-        await sub.cancel();
-      } catch (_) {}
-
-      try {
-        await ws.close();
-      } catch (_) {}
+      await sub.cancel();
+      await ws.close();
 
       if (eventData != null) {
         final contentRaw = eventData['content'];
@@ -334,9 +194,8 @@ class ProfileService {
           'lud16': profileContent['lud16'] ?? '',
           'website': profileContent['website'] ?? '',
         };
-      } else {
-        return null;
       }
+      return null;
     } catch (e) {
       print('[ProfileService] Error fetching from $relayUrl: $e');
       try {
@@ -360,38 +219,35 @@ class ProfileService {
   }
 
   void cleanupCache() {
-    _performCleanup();
+    final now = DateTime.now();
+    final keysToRemove = <String>[];
+
+    for (final entry in _cacheTimestamps.entries) {
+      if (now.difference(entry.value) > _cacheTTL) {
+        keysToRemove.add(entry.key);
+      }
+    }
+
+    for (final key in keysToRemove) {
+      _profileCache.remove(key);
+      _cacheTimestamps.remove(key);
+    }
   }
 
   Map<String, UserModel> getProfilesSnapshot() {
-    return {for (var entry in _profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)};
+    return {for (var entry in _profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value)};
   }
 
   Map<String, dynamic> getProfileStats() {
-    final hitRate = _cacheHits + _cacheMisses > 0 ? (_cacheHits / (_cacheHits + _cacheMisses) * 100).toStringAsFixed(1) : '0.0';
-    final primalSuccessRate = _primalFetches > 0 ? ((_primalFetches - _primalFailures) / _primalFetches * 100).toStringAsFixed(1) : '0.0';
-
     return {
       'cacheSize': _profileCache.length,
       'maxCacheSize': _maxCacheSize,
-      'cacheHits': _cacheHits,
-      'cacheMisses': _cacheMisses,
-      'hitRate': '$hitRate%',
-      'primalFetches': _primalFetches,
-      'primalFailures': _primalFailures,
-      'primalSuccessRate': '$primalSuccessRate%',
-      'relayFetches': _relayFetches,
-      'batchRequestsProcessed': _batchRequestsProcessed,
       'pendingRequests': _pendingRequests.length,
-      'queuedRequests': _requestQueue.length,
-      'primalCacheStats': PrimalCacheClient.getCacheStats(),
+      'status': 'simplified',
     };
   }
 
   Future<void> dispose() async {
-    _cleanupTimer?.cancel();
-    _debounceTimer?.cancel();
-
     for (final completer in _pendingRequests.values) {
       if (!completer.isCompleted) {
         completer.complete(_getDefaultProfile());
@@ -399,23 +255,12 @@ class ProfileService {
     }
 
     _profileCache.clear();
+    _cacheTimestamps.clear();
     _pendingRequests.clear();
-    _requestQueue.clear();
-  }
-
-  void flushPendingBatches() {
-    _debounceTimer?.cancel();
-    _processRequestQueue();
   }
 
   bool _isValidHex(String value) {
     if (value.isEmpty || value.length != 64) return false;
     return RegExp(r'^[0-9a-fA-F]+$').hasMatch(value);
   }
-}
-
-void unawaited(Future<void> future) {
-  future.catchError((error) {
-    print('[ProfileService] Background operation failed: $error');
-  });
 }

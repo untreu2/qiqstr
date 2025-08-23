@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:collection';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
@@ -22,16 +21,7 @@ class EventHandlerService {
   final Function(String, List<RepostModel>)? onRepostsUpdated;
   final Function(NoteModel)? onNewNote;
 
-  final Queue<Map<String, dynamic>> _pendingEvents = Queue();
-  Timer? _batchTimer;
-  bool _isProcessing = false;
-
-  int _eventsProcessed = 0;
-  int _eventsSkipped = 0;
-  final Map<String, int> _eventTypeCounts = {};
-
   final Set<String> _processedEventIds = {};
-  Timer? _cleanupTimer;
 
   EventHandlerService({
     required CacheService cacheService,
@@ -42,134 +32,17 @@ class EventHandlerService {
     this.onRepostsUpdated,
     this.onNewNote,
   })  : _cacheService = cacheService,
-        _profileService = profileService {
-    _startBatchProcessing();
-    _startPeriodicCleanup();
-  }
+        _profileService = profileService;
 
-  void _startBatchProcessing() {
-    _batchTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
-      _processPendingEvents();
-    });
-  }
-
-  void _startPeriodicCleanup() {
-    _cleanupTimer = Timer.periodic(const Duration(minutes: 10), (_) {
-      _cleanupProcessedEvents();
-    });
-  }
-
-  void _cleanupProcessedEvents() {
-    if (_processedEventIds.length > 10000) {
-      final idsToRemove = _processedEventIds.take(_processedEventIds.length - 5000);
-      _processedEventIds.removeAll(idsToRemove);
-    }
-  }
-
-  void addEventToBatch(Map<String, dynamic> eventData) {
-    final eventId = eventData['id'] as String?;
-    if (eventId != null && _processedEventIds.contains(eventId)) {
-      _eventsSkipped++;
-      return;
-    }
-
-    _pendingEvents.add(eventData);
-
-    if (_pendingEvents.length >= 20) {
-      _processPendingEvents();
-    }
-  }
-
-  Future<void> processUserReaction(Map<String, dynamic> eventData) async {
-    final eventId = eventData['id'] as String?;
-    if (eventId != null && _processedEventIds.contains(eventId)) {
-      return;
-    }
-
-    if (eventId != null) {
-      _processedEventIds.add(eventId);
-    }
-
-    await handleReactionEvent(eventData);
-    _eventsProcessed++;
-    print('[EventHandler] User reaction processed: $eventId');
-  }
-
-  Future<void> processUserReply(Map<String, dynamic> eventData, String parentEventId) async {
-    final eventId = eventData['id'] as String?;
-    if (eventId != null && _processedEventIds.contains(eventId)) {
-      return;
-    }
-
-    if (eventId != null) {
-      _processedEventIds.add(eventId);
-    }
-
-    await handleReplyEvent(eventData, parentEventId);
-    _eventsProcessed++;
-    print('[EventHandler] User reply processed: $eventId');
-  }
-
-  Future<void> processUserRepost(Map<String, dynamic> eventData) async {
-    final eventId = eventData['id'] as String?;
-    if (eventId != null && _processedEventIds.contains(eventId)) {
-      return;
-    }
-
-    if (eventId != null) {
-      _processedEventIds.add(eventId);
-    }
-
-    await handleRepostEvent(eventData);
-    _eventsProcessed++;
-    print('[EventHandler] User repost processed: $eventId');
-  }
-
-  Future<void> processUserNote(Map<String, dynamic> eventData) async {
-    final eventId = eventData['id'] as String?;
-    if (eventId != null && _processedEventIds.contains(eventId)) {
-      return;
-    }
-
-    if (eventId != null) {
-      _processedEventIds.add(eventId);
-    }
-
-    await _handleNoteOrReply(eventData);
-    _eventsProcessed++;
-    print('[EventHandler] User note processed: $eventId');
-  }
-
-  Future<void> processUserZap(Map<String, dynamic> eventData) async {
-    final eventId = eventData['id'] as String?;
-    if (eventId != null && _processedEventIds.contains(eventId)) {
-      return;
-    }
-
-    if (eventId != null) {
-      _processedEventIds.add(eventId);
-    }
-
-    await handleZapEvent(eventData);
-    _eventsProcessed++;
-    print('[EventHandler] User zap processed: $eventId');
-  }
-
-  Future<void> processUserEventInstantly(Map<String, dynamic> eventData) async {
+  Future<void> processEvent(Map<String, dynamic> eventData) async {
     final eventId = eventData['id'] as String?;
     final kind = eventData['kind'] as int?;
 
-    if (eventId == null || kind == null) return;
-
-    if (_processedEventIds.contains(eventId)) {
+    if (eventId == null || kind == null || _processedEventIds.contains(eventId)) {
       return;
     }
 
     _processedEventIds.add(eventId);
-    _eventsProcessed++;
-
-    final eventType = _getEventTypeName(kind);
-    _eventTypeCounts[eventType] = (_eventTypeCounts[eventType] ?? 0) + 1;
 
     switch (kind) {
       case 7:
@@ -190,91 +63,6 @@ class EventHandlerService {
       case 3:
         await handleFollowingEvent(eventData);
         break;
-      default:
-        break;
-    }
-
-    print('[EventHandler] User $eventType processed: $eventId');
-  }
-
-  void _processPendingEvents() {
-    if (_isProcessing || _pendingEvents.isEmpty) return;
-
-    _isProcessing = true;
-
-    final eventsToProcess = <Map<String, dynamic>>[];
-    while (_pendingEvents.isNotEmpty && eventsToProcess.length < 10) {
-      eventsToProcess.add(_pendingEvents.removeFirst());
-    }
-
-    Future.microtask(() async {
-      try {
-        for (final eventData in eventsToProcess) {
-          await _processEvent(eventData);
-        }
-      } finally {
-        _isProcessing = false;
-      }
-    });
-  }
-
-  Future<void> _processEvent(Map<String, dynamic> eventData) async {
-    final eventId = eventData['id'] as String?;
-    final kind = eventData['kind'] as int?;
-
-    if (eventId == null || kind == null) return;
-
-    if (_processedEventIds.contains(eventId)) {
-      _eventsSkipped++;
-      return;
-    }
-
-    _processedEventIds.add(eventId);
-    _eventsProcessed++;
-
-    final eventType = _getEventTypeName(kind);
-    _eventTypeCounts[eventType] = (_eventTypeCounts[eventType] ?? 0) + 1;
-
-    switch (kind) {
-      case 7:
-        await handleReactionEvent(eventData);
-        break;
-      case 6:
-        await handleRepostEvent(eventData);
-        break;
-      case 1:
-        await _handleNoteOrReply(eventData);
-        break;
-      case 9735:
-        await handleZapEvent(eventData);
-        break;
-      case 0:
-        await handleProfileEvent(eventData);
-        break;
-      case 3:
-        await handleFollowingEvent(eventData);
-        break;
-      default:
-        break;
-    }
-  }
-
-  String _getEventTypeName(int kind) {
-    switch (kind) {
-      case 0:
-        return 'profile';
-      case 1:
-        return 'note';
-      case 3:
-        return 'following';
-      case 6:
-        return 'repost';
-      case 7:
-        return 'reaction';
-      case 9735:
-        return 'zap';
-      default:
-        return 'other';
     }
   }
 
@@ -319,12 +107,11 @@ class EventHandlerService {
 
       final reactionsBox = _cacheService.reactionsBox;
       if (reactionsBox != null) {
-        unawaited(reactionsBox.put(reaction.id, reaction));
+        _saveAsync(() => reactionsBox.put(reaction.id, reaction));
       }
 
       onReactionsUpdated?.call(targetEventId, _cacheService.reactionsMap[targetEventId]!);
-
-      unawaited(_profileService.batchFetchProfiles([reaction.author]));
+      _profileService.batchFetchProfiles([reaction.author]);
     } catch (e) {
       print('[EventHandler ERROR] Error handling reaction event: $e');
     }
@@ -355,12 +142,11 @@ class EventHandlerService {
 
       final repostsBox = _cacheService.repostsBox;
       if (repostsBox != null) {
-        unawaited(repostsBox.put(repost.id, repost));
+        _saveAsync(() => repostsBox.put(repost.id, repost));
       }
 
       onRepostsUpdated?.call(originalNoteId, _cacheService.repostsMap[originalNoteId]!);
-
-      unawaited(_profileService.batchFetchProfiles([repost.repostedBy]));
+      _profileService.batchFetchProfiles([repost.repostedBy]);
     } catch (e) {
       print('[EventHandler ERROR] Error handling repost event: $e');
     }
@@ -380,24 +166,18 @@ class EventHandlerService {
 
       final repliesBox = _cacheService.repliesBox;
       if (repliesBox != null) {
-        unawaited(repliesBox.put(reply.id, reply));
+        _saveAsync(() => repliesBox.put(reply.id, reply));
       }
 
       onRepliesUpdated?.call(parentEventId, _cacheService.repliesMap[parentEventId]!);
 
       if (reply.author == npub) {
-        final isRepost = eventData['kind'] == 6;
-        final repostTimestamp = isRepost ? DateTime.fromMillisecondsSinceEpoch((eventData['created_at'] as int) * 1000) : null;
-
         final noteModel = NoteModel(
           id: reply.id,
           content: reply.content,
           author: reply.author,
           timestamp: reply.timestamp,
           isReply: true,
-          isRepost: isRepost,
-          repostedBy: isRepost ? reply.author : null,
-          repostTimestamp: repostTimestamp,
           parentId: parentEventId,
           rootId: reply.rootEventId,
           rawWs: jsonEncode(eventData),
@@ -405,12 +185,12 @@ class EventHandlerService {
 
         final notesBox = _cacheService.notesBox;
         if (notesBox != null) {
-          unawaited(notesBox.put(noteModel.id, noteModel));
+          _saveAsync(() => notesBox.put(noteModel.id, noteModel));
         }
         onNewNote?.call(noteModel);
       }
 
-      unawaited(_profileService.batchFetchProfiles([reply.author]));
+      _profileService.batchFetchProfiles([reply.author]);
     } catch (e) {
       print('[EventHandler ERROR] Error handling reply event: $e');
     }
@@ -433,7 +213,7 @@ class EventHandlerService {
 
       final zapsBox = _cacheService.zapsBox;
       if (zapsBox != null) {
-        unawaited(zapsBox.put(zap.id, zap));
+        _saveAsync(() => zapsBox.put(zap.id, zap));
       }
     } catch (e) {
       print('[EventHandler ERROR] Error handling zap event: $e');
@@ -446,15 +226,13 @@ class EventHandlerService {
       final createdAt = DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000);
       final contentRaw = eventData['content'];
 
-      Map<String, dynamic> profileContent;
+      Map<String, dynamic> profileContent = {};
       if (contentRaw is String && contentRaw.isNotEmpty) {
         try {
           profileContent = jsonDecode(contentRaw) as Map<String, dynamic>;
         } catch (e) {
           profileContent = {};
         }
-      } else {
-        profileContent = {};
       }
 
       final profileData = {
@@ -466,8 +244,6 @@ class EventHandlerService {
         'lud16': profileContent['lud16'] as String? ?? '',
         'website': profileContent['website'] as String? ?? '',
       };
-
-      await _profileService.getCachedUserProfile(author);
 
       if (_cacheService.usersBox != null && _cacheService.usersBox!.isOpen) {
         final userModel = UserModel(
@@ -481,7 +257,7 @@ class EventHandlerService {
           website: profileData['website']!,
           updatedAt: createdAt,
         );
-        await _cacheService.usersBox!.put(author, userModel);
+        _saveAsync(() => _cacheService.usersBox!.put(author, userModel));
       }
     } catch (e) {
       print('[EventHandler ERROR] Error handling profile event: $e');
@@ -503,7 +279,7 @@ class EventHandlerService {
 
       if (_cacheService.followingBox != null && _cacheService.followingBox!.isOpen) {
         final model = FollowingModel(pubkeys: newFollowing, updatedAt: DateTime.now(), npub: npub);
-        await _cacheService.followingBox!.put('following', model);
+        _saveAsync(() => _cacheService.followingBox!.put('following', model));
       }
     } catch (e) {
       print('[EventHandler ERROR] Error handling following event: $e');
@@ -516,7 +292,7 @@ class EventHandlerService {
 
       if (_cacheService.notificationsBox != null && _cacheService.notificationsBox!.isOpen) {
         if (!_cacheService.notificationsBox!.containsKey(notification.id)) {
-          await _cacheService.notificationsBox!.put(notification.id, notification);
+          _saveAsync(() => _cacheService.notificationsBox!.put(notification.id, notification));
         }
       }
     } catch (e) {
@@ -524,32 +300,17 @@ class EventHandlerService {
     }
   }
 
-  Map<String, dynamic> getEventStats() {
-    return {
-      'eventsProcessed': _eventsProcessed,
-      'eventsSkipped': _eventsSkipped,
-      'pendingEvents': _pendingEvents.length,
-      'processedEventIds': _processedEventIds.length,
-      'eventTypeCounts': Map<String, int>.from(_eventTypeCounts),
-      'isProcessing': _isProcessing,
-    };
+  void _saveAsync(Future<void> Function() saveOperation) {
+    Future.microtask(() async {
+      try {
+        await saveOperation();
+      } catch (e) {
+        print('[EventHandler] Background save failed: $e');
+      }
+    });
   }
 
   void dispose() {
-    _batchTimer?.cancel();
-    _cleanupTimer?.cancel();
-    _pendingEvents.clear();
     _processedEventIds.clear();
-    _eventTypeCounts.clear();
   }
-
-  void flushPendingEvents() {
-    _processPendingEvents();
-  }
-}
-
-void unawaited(Future<void> future) {
-  future.catchError((error) {
-    print('[EventHandler] Background operation failed: $error');
-  });
 }

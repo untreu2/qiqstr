@@ -1,6 +1,4 @@
-import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/scheduler.dart';
 import '../models/note_model.dart';
 import '../services/data_service.dart';
 import '../services/data_service_manager.dart';
@@ -52,12 +50,9 @@ class NotesListProvider extends ChangeNotifier {
   }
 
   void _updateFilteredNotes() {
-    final filtered = _notes.where((n) => !n.isReply || n.isRepost).toList();
-
-    _filteredNotes = filtered;
+    _filteredNotes = _notes.where((n) => !n.isReply || n.isRepost).toList();
     notifyListeners();
-
-    _scheduleProfileLoading(filtered);
+    _loadUserProfiles();
   }
 
   Future<void> fetchInitialNotes() async {
@@ -68,15 +63,8 @@ class NotesListProvider extends ChangeNotifier {
 
     try {
       await dataService.initializeLightweight();
-
-      SchedulerBinding.instance.scheduleTask(() async {
-        try {
-          await dataService.initializeHeavyOperations();
-          await dataService.initializeConnections();
-        } catch (e) {
-          debugPrint('[NotesListProvider] Heavy initialization error: $e');
-        }
-      }, Priority.idle);
+      await dataService.initializeHeavyOperations();
+      await dataService.initializeConnections();
     } catch (e) {
       _setError('Failed to load notes: $e');
       debugPrint('[NotesListProvider] Initial fetch error: $e');
@@ -103,66 +91,24 @@ class NotesListProvider extends ChangeNotifier {
     _notes.clear();
     _filteredNotes.clear();
     notifyListeners();
-
-    SchedulerBinding.instance.scheduleTask(() {
-      dataService.initializeConnections();
-    }, Priority.animation);
+    dataService.initializeConnections();
   }
 
-  void _scheduleProfileLoading(List<NoteModel> notes) {
-    if (notes.isEmpty) return;
+  void _loadUserProfiles() {
+    if (_filteredNotes.isEmpty) return;
 
-    SchedulerBinding.instance.scheduleTask(() async {
-      await _loadCriticalUserProfiles(notes);
-    }, Priority.animation);
-
-    SchedulerBinding.instance.scheduleTask(() async {
-      await _loadRemainingUserProfiles(notes);
-    }, Priority.idle);
-  }
-
-  Future<void> _loadCriticalUserProfiles(List<NoteModel> notes) async {
-    final criticalUserNpubs = <String>{};
-    for (final note in notes.take(5)) {
-      criticalUserNpubs.add(note.author);
+    final userNpubs = <String>{};
+    for (final note in _filteredNotes) {
+      userNpubs.add(note.author);
       if (note.repostedBy != null) {
-        criticalUserNpubs.add(note.repostedBy!);
+        userNpubs.add(note.repostedBy!);
       }
     }
 
-    if (criticalUserNpubs.isNotEmpty) {
-      try {
-        await UserProvider.instance.loadUsers(criticalUserNpubs.toList());
-      } catch (e) {
-        debugPrint('[NotesListProvider] Critical user profiles error: $e');
-      }
-    }
-  }
-
-  Future<void> _loadRemainingUserProfiles(List<NoteModel> notes) async {
-    const batchSize = 10;
-    final remainingNotes = notes.skip(5).toList();
-
-    for (int i = 0; i < remainingNotes.length; i += batchSize) {
-      await SchedulerBinding.instance.endOfFrame;
-
-      final batch = remainingNotes.skip(i).take(batchSize);
-      final userNpubs = <String>{};
-
-      for (final note in batch) {
-        userNpubs.add(note.author);
-        if (note.repostedBy != null) {
-          userNpubs.add(note.repostedBy!);
-        }
-      }
-
-      if (userNpubs.isNotEmpty) {
-        try {
-          await UserProvider.instance.loadUsers(userNpubs.toList());
-        } catch (e) {
-          debugPrint('[NotesListProvider] Batch user profiles error: $e');
-        }
-      }
+    if (userNpubs.isNotEmpty) {
+      UserProvider.instance.loadUsers(userNpubs.toList()).catchError((e) {
+        debugPrint('[NotesListProvider] User profiles error: $e');
+      });
     }
   }
 
@@ -197,14 +143,7 @@ class NotesListProvider extends ChangeNotifier {
   @override
   void dispose() {
     dataService.notesNotifier.removeListener(_onNotesChanged);
-
-    SchedulerBinding.instance.scheduleTask(() async {
-      await DataServiceManager.instance.releaseService(
-        npub: npub,
-        dataType: dataType,
-      );
-    }, Priority.idle);
-
+    DataServiceManager.instance.releaseService(npub: npub, dataType: dataType);
     super.dispose();
   }
 }

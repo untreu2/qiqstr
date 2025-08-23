@@ -1,7 +1,5 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:nostr/nostr.dart';
@@ -13,74 +11,9 @@ import 'nostr_service.dart';
 class NetworkService {
   final WebSocketManager _socketManager;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
-
   bool _isClosed = false;
 
-  final Map<String, http.Client> _httpClients = {};
-  final Map<String, DateTime> _clientLastUsed = {};
-  Timer? _clientCleanupTimer;
-
-  final Map<String, Timer> _requestTimers = {};
-
-  int _totalRequests = 0;
-  int _successfulRequests = 0;
-  int _failedRequests = 0;
-  final List<Duration> _requestTimes = [];
-
-  final Map<String, List<DateTime>> _requestHistory = {};
-  static const int _maxRequestsPerMinute = 60;
-
-  NetworkService({required List<String> relayUrls}) : _socketManager = WebSocketManager(relayUrls: relayUrls) {
-    _startClientManagement();
-  }
-
-  void _startClientManagement() {
-    _clientCleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-      _cleanupIdleClients();
-    });
-  }
-
-  void _cleanupIdleClients() {
-    final now = DateTime.now();
-    final keysToRemove = <String>[];
-
-    for (final entry in _clientLastUsed.entries) {
-      if (now.difference(entry.value) > const Duration(minutes: 10)) {
-        keysToRemove.add(entry.key);
-      }
-    }
-
-    for (final key in keysToRemove) {
-      _httpClients[key]?.close();
-      _httpClients.remove(key);
-      _clientLastUsed.remove(key);
-    }
-  }
-
-  http.Client _getHttpClient(String baseUrl) {
-    _clientLastUsed[baseUrl] = DateTime.now();
-
-    if (!_httpClients.containsKey(baseUrl)) {
-      _httpClients[baseUrl] = http.Client();
-    }
-
-    return _httpClients[baseUrl]!;
-  }
-
-  bool _isRateLimited(String endpoint) {
-    final now = DateTime.now();
-    final history = _requestHistory[endpoint] ?? [];
-
-    history.removeWhere((time) => now.difference(time) > const Duration(minutes: 1));
-    _requestHistory[endpoint] = history;
-
-    return history.length >= _maxRequestsPerMinute;
-  }
-
-  void _recordRequest(String endpoint) {
-    _requestHistory.putIfAbsent(endpoint, () => []);
-    _requestHistory[endpoint]!.add(DateTime.now());
-  }
+  NetworkService({required List<String> relayUrls}) : _socketManager = WebSocketManager(relayUrls: relayUrls);
 
   Future<void> initializeConnections(List<String> targetNpubs) async {
     await _socketManager.connectRelays(
@@ -92,205 +25,18 @@ class NetworkService {
 
   Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {}
 
-  Future<void> broadcastRequest(String serializedRequest) async {
-    final stopwatch = Stopwatch()..start();
-    _totalRequests++;
-
+  // Simplified broadcast method
+  Future<void> broadcast(String message) async {
+    if (_isClosed) return;
     try {
-      await _socketManager.broadcast(serializedRequest);
-      _successfulRequests++;
-    } catch (e) {
-      _failedRequests++;
-      rethrow;
-    } finally {
-      stopwatch.stop();
-      _requestTimes.add(stopwatch.elapsed);
-
-      if (_requestTimes.length > 100) {
-        _requestTimes.removeAt(0);
-      }
-    }
-  }
-
-  Future<void> safeBroadcast(String message) async {
-    try {
-      await broadcastRequest(message);
+      await _socketManager.broadcast(message);
     } catch (e) {
       print('[NetworkService ERROR] Broadcast failed: $e');
-    }
-  }
-
-  Future<void> immediateBroadcast(String message) async {
-    final stopwatch = Stopwatch()..start();
-    _totalRequests++;
-
-    try {
-      await _socketManager.executeOnActiveSockets((ws) {
-        ws.add(message);
-      });
-      _successfulRequests++;
-      print('[NetworkService] Instant broadcast completed in ${stopwatch.elapsedMilliseconds}ms');
-    } catch (e) {
-      _failedRequests++;
-      print('[NetworkService ERROR] Instant broadcast failed: $e');
-      rethrow;
-    } finally {
-      stopwatch.stop();
-      _requestTimes.add(stopwatch.elapsed);
-
-      // Keep only recent measurements
-      if (_requestTimes.length > 100) {
-        _requestTimes.removeAt(0);
-      }
-    }
-  }
-
-  Future<void> broadcastUserReaction(String targetEventId, String reactionContent) async {
-    if (_isClosed) return;
-
-    try {
-      final privateKey = await _secureStorage.read(key: 'privateKey');
-      if (privateKey == null || privateKey.isEmpty) {
-        throw Exception('Private key not found.');
-      }
-
-      final event = NostrService.createReactionEvent(
-        targetEventId: targetEventId,
-        content: reactionContent,
-        privateKey: privateKey,
-      );
-
-      // Use immediate broadcast instead of regular broadcast
-      await immediateBroadcast(NostrService.serializeEvent(event));
-    } catch (e) {
-      print('[NetworkService ERROR] Error sending reaction: $e');
       rethrow;
     }
   }
 
-  // Immediate broadcast for user replies
-  Future<void> broadcastUserReply(String parentEventId, String replyContent, String parentAuthor) async {
-    if (_isClosed) return;
-
-    try {
-      final privateKey = await _secureStorage.read(key: 'privateKey');
-      if (privateKey == null || privateKey.isEmpty) {
-        throw Exception('Private key not found.');
-      }
-
-      final tags = NostrService.createReplyTags(
-        rootId: parentEventId,
-        parentAuthor: parentAuthor,
-        relayUrls: relaySetMainSockets,
-      );
-
-      final event = NostrService.createReplyEvent(
-        content: replyContent,
-        privateKey: privateKey,
-        tags: tags,
-      );
-
-      // Use immediate broadcast instead of regular broadcast
-      await immediateBroadcast(NostrService.serializeEvent(event));
-    } catch (e) {
-      print('[NetworkService ERROR] Error sending reply: $e');
-      rethrow;
-    }
-  }
-
-  // Immediate broadcast for user reposts
-  Future<void> broadcastUserRepost(String noteId, String noteAuthor, String? rawContent) async {
-    if (_isClosed) return;
-
-    try {
-      final privateKey = await _secureStorage.read(key: 'privateKey');
-      if (privateKey == null || privateKey.isEmpty) {
-        throw Exception('Private key not found.');
-      }
-
-      final content = rawContent ??
-          jsonEncode({
-            'id': noteId,
-            'pubkey': noteAuthor,
-            'kind': 1,
-            'tags': [],
-          });
-
-      final event = NostrService.createRepostEvent(
-        noteId: noteId,
-        noteAuthor: noteAuthor,
-        content: content,
-        privateKey: privateKey,
-      );
-
-      // Use immediate broadcast instead of regular broadcast
-      await immediateBroadcast(NostrService.serializeEvent(event));
-    } catch (e) {
-      print('[NetworkService ERROR] Error sending repost: $e');
-      rethrow;
-    }
-  }
-
-  // Immediate broadcast for user notes
-  Future<void> broadcastUserNote(String noteContent) async {
-    if (_isClosed) return;
-
-    try {
-      final privateKey = await _secureStorage.read(key: 'privateKey');
-      if (privateKey == null || privateKey.isEmpty) {
-        throw Exception('Private key not found.');
-      }
-
-      final event = NostrService.createNoteEvent(
-        content: noteContent,
-        privateKey: privateKey,
-      );
-
-      // Use immediate broadcast instead of regular broadcast
-      await immediateBroadcast(NostrService.serializeEvent(event));
-    } catch (e) {
-      print('[NetworkService ERROR] Error sending note: $e');
-      rethrow;
-    }
-  }
-
-  // Batched broadcast for multiple messages
-  Future<void> batchBroadcast(List<String> messages, {Duration delay = const Duration(milliseconds: 10)}) async {
-    if (messages.isEmpty) return;
-
-    for (int i = 0; i < messages.length; i++) {
-      await safeBroadcast(messages[i]);
-
-      // Add delay between messages to prevent overwhelming
-      if (i < messages.length - 1 && delay.inMilliseconds > 0) {
-        await Future.delayed(delay);
-      }
-    }
-  }
-
-  String createRequest(String filterJson) => NostrService.serializeRequest(NostrService.createRequest(NostrService.createNotesFilter()));
-
-  Future<void> shareNote(String noteContent, String npub) async {
-    if (_isClosed) return;
-
-    try {
-      final privateKey = await _secureStorage.read(key: 'privateKey');
-      if (privateKey == null || privateKey.isEmpty) {
-        throw Exception('Private key not found.');
-      }
-
-      final event = NostrService.createNoteEvent(
-        content: noteContent,
-        privateKey: privateKey,
-      );
-
-      await _socketManager.broadcast(NostrService.serializeEvent(event));
-    } catch (e) {
-      print('[NetworkService ERROR] Error sharing note: $e');
-      rethrow;
-    }
-  }
-
+  // User interaction methods
   Future<void> sendReaction(String targetEventId, String reactionContent) async {
     if (_isClosed) return;
 
@@ -306,7 +52,7 @@ class NetworkService {
         privateKey: privateKey,
       );
 
-      await _socketManager.broadcast(NostrService.serializeEvent(event));
+      await broadcast(NostrService.serializeEvent(event));
     } catch (e) {
       print('[NetworkService ERROR] Error sending reaction: $e');
       rethrow;
@@ -334,7 +80,7 @@ class NetworkService {
         tags: tags,
       );
 
-      await _socketManager.broadcast(NostrService.serializeEvent(event));
+      await broadcast(NostrService.serializeEvent(event));
     } catch (e) {
       print('[NetworkService ERROR] Error sending reply: $e');
       rethrow;
@@ -365,13 +111,35 @@ class NetworkService {
         privateKey: privateKey,
       );
 
-      await _socketManager.broadcast(NostrService.serializeEvent(event));
+      await broadcast(NostrService.serializeEvent(event));
     } catch (e) {
       print('[NetworkService ERROR] Error sending repost: $e');
       rethrow;
     }
   }
 
+  Future<void> sendNote(String noteContent) async {
+    if (_isClosed) return;
+
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found.');
+      }
+
+      final event = NostrService.createNoteEvent(
+        content: noteContent,
+        privateKey: privateKey,
+      );
+
+      await broadcast(NostrService.serializeEvent(event));
+    } catch (e) {
+      print('[NetworkService ERROR] Error sending note: $e');
+      rethrow;
+    }
+  }
+
+  // Simplified zap method
   Future<String> sendZap({
     required String recipientPubkey,
     required String lud16,
@@ -379,12 +147,6 @@ class NetworkService {
     String? noteId,
     String content = '',
   }) async {
-    // Rate limiting check
-    if (_isRateLimited('zap')) {
-      throw Exception('Rate limit exceeded for zap requests');
-    }
-    _recordRequest('zap');
-
     final privateKey = await _secureStorage.read(key: 'privateKey');
     if (privateKey == null || privateKey.isEmpty) {
       throw Exception('Private key not found.');
@@ -402,93 +164,59 @@ class NetworkService {
     final display_name = parts[0];
     final domain = parts[1];
 
-    // Enhanced LNURL fetch with retry logic
+    // Simple LNURL fetch
     final uri = Uri.parse('https://$domain/.well-known/lnurlp/$display_name');
-    final client = _getHttpClient(domain);
+    final client = http.Client();
 
-    http.Response? response;
-    int attempts = 0;
-    const maxAttempts = 3;
-
-    while (attempts < maxAttempts) {
-      try {
-        response = await client.get(uri).timeout(const Duration(seconds: 10));
-        if (response.statusCode == 200) break;
-
-        attempts++;
-        if (attempts < maxAttempts) {
-          await Future.delayed(Duration(seconds: pow(2, attempts).toInt()));
-        }
-      } catch (e) {
-        attempts++;
-        if (attempts >= maxAttempts) {
-          throw Exception('LNURL fetch failed after $maxAttempts attempts: $e');
-        }
-        await Future.delayed(Duration(seconds: pow(2, attempts).toInt()));
+    try {
+      final response = await client.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode != 200) {
+        throw Exception('LNURL fetch failed with status: ${response.statusCode}');
       }
-    }
 
-    if (response == null || response.statusCode != 200) {
-      throw Exception('LNURL fetch failed with status: ${response?.statusCode ?? 'unknown'}');
-    }
-
-    final lnurlJson = jsonDecode(response.body);
-    if (lnurlJson['allowsNostr'] != true || lnurlJson['nostrPubkey'] == null) {
-      throw Exception('Recipient does not support zaps.');
-    }
-
-    final callback = lnurlJson['callback'];
-    if (callback == null || callback.isEmpty) {
-      throw Exception('Zap callback is missing.');
-    }
-
-    final amountMillisats = (amountSats * 1000).toString();
-    final relays = relaySetMainSockets;
-
-    final tags = NostrService.createZapRequestTags(
-      relays: relays.map((e) => e.toString()).toList(),
-      amountMillisats: amountMillisats,
-      recipientPubkey: recipientPubkey,
-      noteId: noteId,
-    );
-
-    final zapRequest = NostrService.createZapRequestEvent(
-      tags: tags,
-      content: content,
-      privateKey: privateKey,
-    );
-
-    final encodedZap = Uri.encodeComponent(jsonEncode(NostrService.eventToJson(zapRequest)));
-    final zapUrl = Uri.parse('$callback?amount=$amountMillisats&nostr=$encodedZap');
-
-    // Enhanced invoice request with retry
-    attempts = 0;
-    while (attempts < maxAttempts) {
-      try {
-        final invoiceResponse = await client.get(zapUrl).timeout(const Duration(seconds: 15));
-        if (invoiceResponse.statusCode == 200) {
-          final invoiceJson = jsonDecode(invoiceResponse.body);
-          final invoice = invoiceJson['pr'];
-          if (invoice == null || invoice.toString().isEmpty) {
-            throw Exception('Invoice not returned by zap server.');
-          }
-          return invoice;
-        }
-
-        attempts++;
-        if (attempts < maxAttempts) {
-          await Future.delayed(Duration(seconds: pow(2, attempts).toInt()));
-        }
-      } catch (e) {
-        attempts++;
-        if (attempts >= maxAttempts) {
-          throw Exception('Zap callback failed after $maxAttempts attempts: $e');
-        }
-        await Future.delayed(Duration(seconds: pow(2, attempts).toInt()));
+      final lnurlJson = jsonDecode(response.body);
+      if (lnurlJson['allowsNostr'] != true || lnurlJson['nostrPubkey'] == null) {
+        throw Exception('Recipient does not support zaps.');
       }
-    }
 
-    throw Exception('Zap callback failed after $maxAttempts attempts');
+      final callback = lnurlJson['callback'];
+      if (callback == null || callback.isEmpty) {
+        throw Exception('Zap callback is missing.');
+      }
+
+      final amountMillisats = (amountSats * 1000).toString();
+      final relays = relaySetMainSockets;
+
+      final tags = NostrService.createZapRequestTags(
+        relays: relays.map((e) => e.toString()).toList(),
+        amountMillisats: amountMillisats,
+        recipientPubkey: recipientPubkey,
+        noteId: noteId,
+      );
+
+      final zapRequest = NostrService.createZapRequestEvent(
+        tags: tags,
+        content: content,
+        privateKey: privateKey,
+      );
+
+      final encodedZap = Uri.encodeComponent(jsonEncode(NostrService.eventToJson(zapRequest)));
+      final zapUrl = Uri.parse('$callback?amount=$amountMillisats&nostr=$encodedZap');
+
+      final invoiceResponse = await client.get(zapUrl).timeout(const Duration(seconds: 15));
+      if (invoiceResponse.statusCode != 200) {
+        throw Exception('Zap callback failed with status: ${invoiceResponse.statusCode}');
+      }
+
+      final invoiceJson = jsonDecode(invoiceResponse.body);
+      final invoice = invoiceJson['pr'];
+      if (invoice == null || invoice.toString().isEmpty) {
+        throw Exception('Invoice not returned by zap server.');
+      }
+      return invoice;
+    } finally {
+      client.close();
+    }
   }
 
   Future<String> uploadMedia(String filePath, String blossomUrl) async {
@@ -564,44 +292,29 @@ class NetworkService {
 
   int get connectedRelaysCount => _socketManager.activeSockets.length;
 
-  // Enhanced statistics
+  // Basic stats for compatibility
   Map<String, dynamic> getNetworkStats() {
-    final successRate = _totalRequests > 0 ? (_successfulRequests / _totalRequests * 100).toStringAsFixed(2) : '0.00';
-
-    final avgRequestTime =
-        _requestTimes.isNotEmpty ? _requestTimes.fold<int>(0, (sum, d) => sum + d.inMilliseconds) / _requestTimes.length : 0.0;
-
     return {
-      'totalRequests': _totalRequests,
-      'successfulRequests': _successfulRequests,
-      'failedRequests': _failedRequests,
-      'successRate': '$successRate%',
-      'avgRequestTimeMs': avgRequestTime.round(),
       'connectedRelays': connectedRelaysCount,
-      'activeHttpClients': _httpClients.length,
-      'rateLimitStatus': {
-        for (final entry in _requestHistory.entries) entry.key: '${entry.value.length}/$_maxRequestsPerMinute per minute',
-      },
+      'status': 'simplified',
     };
   }
 
   Future<void> closeConnections() async {
     if (_isClosed) return;
     _isClosed = true;
-
-    // Cancel timers
-    _clientCleanupTimer?.cancel();
-    for (final timer in _requestTimers.values) {
-      timer.cancel();
-    }
-
-    // Close HTTP clients
-    for (final client in _httpClients.values) {
-      client.close();
-    }
-    _httpClients.clear();
-
-    // Close WebSocket connections
     await _socketManager.closeConnections();
   }
+
+  // Legacy compatibility methods
+  Future<void> broadcastRequest(String serializedRequest) => broadcast(serializedRequest);
+  Future<void> safeBroadcast(String message) => broadcast(message);
+  Future<void> immediateBroadcast(String message) => broadcast(message);
+  Future<void> shareNote(String noteContent, String npub) => sendNote(noteContent);
+  Future<void> broadcastUserNote(String noteContent) => sendNote(noteContent);
+  Future<void> broadcastUserReaction(String targetEventId, String reactionContent) => sendReaction(targetEventId, reactionContent);
+  Future<void> broadcastUserReply(String parentEventId, String replyContent, String parentAuthor) =>
+      sendReply(parentEventId, replyContent, parentAuthor);
+  Future<void> broadcastUserRepost(String noteId, String noteAuthor, String? rawContent) => sendRepost(noteId, noteAuthor, rawContent);
+  String createRequest(String filterJson) => NostrService.serializeRequest(NostrService.createRequest(NostrService.createNotesFilter()));
 }

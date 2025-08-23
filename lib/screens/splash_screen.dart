@@ -182,26 +182,12 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   void _setupMemoryPressureHandling() {
-    final memoryManager = MemoryManager.instance;
-
-    memoryManager.addMemoryPressureCallback(() {
-      try {
-        MediaProvider.instance.handleMemoryPressure();
-
-        if (memoryManager.currentPressureLevel.index >= 2) {
-          Future.microtask(() async {
-            try {
-              NotesProvider.instance.clearCache();
-              InteractionsProvider.instance.clearCache();
-            } catch (e) {
-              print('Provider cleanup error: $e');
-            }
-          });
-        }
-      } catch (e) {
-        print('Memory pressure handling error: $e');
-      }
-    });
+    try {
+      MediaProvider.instance.handleMemoryPressure();
+      MemoryManager.instance.cleanupMemory();
+    } catch (e) {
+      print('Memory pressure handling error: $e');
+    }
   }
 
   @override

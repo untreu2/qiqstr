@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import '../models/note_model.dart';
@@ -26,199 +25,58 @@ class CacheService {
   final Map<String, List<RepostModel>> repostsMap = {};
   final Map<String, List<ZapModel>> zapsMap = {};
 
-  final Map<String, DateTime> _cacheAccessTimes = {};
-  final Map<String, int> _cacheAccessFrequency = {};
-  final Map<String, int> _cacheDataSize = {};
+  Timer? _cleanupTimer;
+  static const int _maxCacheEntries = 2000;
 
-  static const int _maxCacheEntries = 1500;
-  static const int _cleanupThreshold = 1800;
-  static const int _emergencyThreshold = 2000;
-  Timer? _memoryCleanupTimer;
+  CacheService() {
+    _startBasicCleanup();
+  }
 
-  int _cacheHits = 0;
-  int _cacheMisses = 0;
-  int _cacheEvictions = 0;
-
-  CacheService() {}
-
-  void _startMemoryManagement() {
-    if (_memoryCleanupTimer != null) return;
-
-    _memoryCleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
-      _performMemoryCleanup();
+  void _startBasicCleanup() {
+    _cleanupTimer = Timer.periodic(const Duration(hours: 1), (_) {
+      _performBasicCleanup();
     });
   }
 
-  void _ensureMemoryManagementStarted() {
-    if (_memoryCleanupTimer == null) {
-      Future.delayed(const Duration(minutes: 1), () {
-        _startMemoryManagement();
-      });
-    }
-  }
-
-  void _performMemoryCleanup() {
+  void _performBasicCleanup() {
     final totalEntries = reactionsMap.length + repliesMap.length + repostsMap.length + zapsMap.length;
 
-    if (totalEntries > _emergencyThreshold) {
-      _performEmergencyEviction();
-    } else if (totalEntries > _cleanupThreshold) {
-      _evictLeastRecentlyUsed();
-    } else if (totalEntries > _maxCacheEntries) {
-      _evictLeastFrequentlyUsed();
-    }
-  }
+    if (totalEntries > _maxCacheEntries) {
+      final removeCount = (totalEntries * 0.2).round();
+      final allKeys = [...reactionsMap.keys, ...repliesMap.keys, ...repostsMap.keys, ...zapsMap.keys];
+      allKeys.shuffle();
 
-  void _performEmergencyEviction() {
-    final allKeys = _getAllCacheKeys();
-    final removeCount = (allKeys.length * 0.4).round();
-
-    final scoredKeys = allKeys.map((key) {
-      final lastAccess = _cacheAccessTimes[key] ?? DateTime.now().subtract(const Duration(days: 1));
-      final frequency = _cacheAccessFrequency[key] ?? 0;
-      final dataSize = _cacheDataSize[key] ?? 1;
-
-      final recencyScore = DateTime.now().difference(lastAccess).inMinutes;
-      final frequencyScore = frequency == 0 ? 1000 : (1000 / frequency);
-      final sizeScore = dataSize * 10;
-
-      return MapEntry(key, recencyScore + frequencyScore + sizeScore);
-    }).toList();
-
-    scoredKeys.sort((a, b) => b.value.compareTo(a.value));
-
-    final keysToRemove = scoredKeys.take(removeCount).map((e) => e.key);
-    _removeKeys(keysToRemove);
-
-    _cacheEvictions += removeCount;
-    debugPrint('[CacheService] Emergency eviction: removed $removeCount entries');
-  }
-
-  void _evictLeastRecentlyUsed() {
-    final allKeys = _getAllCacheKeys();
-    final removeCount = allKeys.length - _maxCacheEntries;
-
-    if (removeCount <= 0) return;
-
-    final sortedKeys = allKeys.map((key) {
-      final lastAccess = _cacheAccessTimes[key] ?? DateTime.now().subtract(const Duration(days: 1));
-      return MapEntry(key, lastAccess);
-    }).toList()
-      ..sort((a, b) => a.value.compareTo(b.value));
-
-    final keysToRemove = sortedKeys.take(removeCount).map((e) => e.key);
-    _removeKeys(keysToRemove);
-
-    _cacheEvictions += removeCount;
-  }
-
-  void _evictLeastFrequentlyUsed() {
-    final allKeys = _getAllCacheKeys();
-    final removeCount = (allKeys.length * 0.1).round();
-
-    if (removeCount <= 0) return;
-
-    final sortedKeys = allKeys.map((key) {
-      final frequency = _cacheAccessFrequency[key] ?? 0;
-      return MapEntry(key, frequency);
-    }).toList()
-      ..sort((a, b) => a.value.compareTo(b.value));
-
-    final keysToRemove = sortedKeys.take(removeCount).map((e) => e.key);
-    _removeKeys(keysToRemove);
-
-    _cacheEvictions += removeCount;
-  }
-
-  List<String> _getAllCacheKeys() {
-    final allKeys = <String>[];
-    allKeys.addAll(reactionsMap.keys);
-    allKeys.addAll(repliesMap.keys);
-    allKeys.addAll(repostsMap.keys);
-    allKeys.addAll(zapsMap.keys);
-    return allKeys;
-  }
-
-  void _removeKeys(Iterable<String> keys) {
-    for (final key in keys) {
-      reactionsMap.remove(key);
-      repliesMap.remove(key);
-      repostsMap.remove(key);
-      zapsMap.remove(key);
-      _cacheAccessTimes.remove(key);
-      _cacheAccessFrequency.remove(key);
-      _cacheDataSize.remove(key);
-    }
-  }
-
-  void _recordCacheAccess(String key, {int dataSize = 1}) {
-    _cacheAccessTimes[key] = DateTime.now();
-    _cacheAccessFrequency[key] = (_cacheAccessFrequency[key] ?? 0) + 1;
-    _cacheDataSize[key] = dataSize;
-
-    if (_cacheAccessFrequency[key]! > 100) {
-      _cacheAccessFrequency[key] = (_cacheAccessFrequency[key]! * 0.9).round();
+      final keysToRemove = allKeys.take(removeCount);
+      for (final key in keysToRemove) {
+        reactionsMap.remove(key);
+        repliesMap.remove(key);
+        repostsMap.remove(key);
+        zapsMap.remove(key);
+      }
+      debugPrint('[CacheService] Basic cleanup: removed $removeCount entries');
     }
   }
 
   Future<void> initializeBoxes(String npub, String dataType) async {
-    _ensureMemoryManagementStarted();
+    try {
+      notesBox = await _openHiveBox<NoteModel>('notes_${dataType}_$npub');
+      usersBox = await _openHiveBox<UserModel>('users');
+      followingBox = await _openHiveBox<FollowingModel>('followingBox');
+      reactionsBox = await _openHiveBox<ReactionModel>('reactions_${dataType}_$npub');
+      repliesBox = await _openHiveBox<ReplyModel>('replies_${dataType}_$npub');
+      repostsBox = await _openHiveBox<RepostModel>('reposts_${dataType}_$npub');
+      zapsBox = await _openHiveBox<ZapModel>('zaps_${dataType}_$npub');
+      notificationsBox = await _openHiveBox<NotificationModel>('notifications_$npub');
 
-    await _initializeCriticalBoxes(npub, dataType);
-
-    _initializeRemainingBoxes(npub, dataType);
-
-    _startProgressiveCacheLoading();
-  }
-
-  Future<void> _initializeCriticalBoxes(String npub, String dataType) async {
-    final criticalBoxFutures = [
-      _openHiveBox<NoteModel>('notes_${dataType}_$npub'),
-      _openHiveBox<UserModel>('users'),
-      _openHiveBox<FollowingModel>('followingBox'),
-    ];
-
-    final boxes = await Future.wait(criticalBoxFutures);
-    notesBox = boxes[0] as Box<NoteModel>;
-    usersBox = boxes[1] as Box<UserModel>;
-    followingBox = boxes[2] as Box<FollowingModel>;
-  }
-
-  void _initializeRemainingBoxes(String npub, String dataType) {
-    Future.microtask(() async {
-      final remainingBoxFutures = [
-        _openHiveBox<ReactionModel>('reactions_${dataType}_$npub'),
-        _openHiveBox<ReplyModel>('replies_${dataType}_$npub'),
-        _openHiveBox<RepostModel>('reposts_${dataType}_$npub'),
-        _openHiveBox<ZapModel>('zaps_${dataType}_$npub'),
-        _openHiveBox<NotificationModel>('notifications_$npub'),
-      ];
-
-      final boxes = await Future.wait(remainingBoxFutures);
-      reactionsBox = boxes[0] as Box<ReactionModel>;
-      repliesBox = boxes[1] as Box<ReplyModel>;
-      repostsBox = boxes[2] as Box<RepostModel>;
-      zapsBox = boxes[3] as Box<ZapModel>;
-      notificationsBox = boxes[4] as Box<NotificationModel>;
-    });
-  }
-
-  void _startProgressiveCacheLoading() {
-    Future.delayed(const Duration(milliseconds: 500), () async {
-      try {
-        await loadReactionsFromCache();
-
-        await Future.delayed(const Duration(milliseconds: 200));
-
-        Future.wait([
-          loadRepliesFromCache(),
-          loadRepostsFromCache(),
-          loadZapsFromCache(),
-        ]);
-      } catch (e) {
-        debugPrint('[CacheService] Progressive cache loading error: $e');
-      }
-    });
+      await Future.wait([
+        loadReactionsFromCache(),
+        loadRepliesFromCache(),
+        loadRepostsFromCache(),
+        loadZapsFromCache(),
+      ], eagerError: false);
+    } catch (e) {
+      debugPrint('[CacheService] Initialization error: $e');
+    }
   }
 
   Future<Box<T>> _openHiveBox<T>(String boxName) async {
@@ -236,31 +94,13 @@ class CacheService {
       final allReactions = reactionsBox!.values.cast<ReactionModel>().toList();
       if (allReactions.isEmpty) return;
 
-      const batchSize = 200;
-      final Map<String, List<ReactionModel>> tempMap = {};
-
-      for (int i = 0; i < allReactions.length; i += batchSize) {
-        final batch = allReactions.skip(i).take(batchSize);
-
-        for (var reaction in batch) {
-          tempMap.putIfAbsent(reaction.targetEventId, () => []).add(reaction);
-        }
-
-        if (i % 1000 == 0 && i > 0) {
-          await Future.delayed(Duration.zero);
-        }
+      for (var reaction in allReactions) {
+        reactionsMap.putIfAbsent(reaction.targetEventId, () => []).add(reaction);
       }
 
-      reactionsMap.addAll(tempMap);
-
-      for (final entry in tempMap.entries) {
-        _recordCacheAccess(entry.key, dataSize: entry.value.length);
-      }
-
-      _cacheHits += tempMap.length;
+      print('[CacheService] Loaded ${allReactions.length} reactions');
     } catch (e) {
       print('Error loading reactions from cache: $e');
-      _cacheMisses++;
     }
   }
 
@@ -271,28 +111,11 @@ class CacheService {
       final allReplies = repliesBox!.values.cast<ReplyModel>().toList();
       if (allReplies.isEmpty) return;
 
-      const batchSize = 300;
-      final Map<String, List<ReplyModel>> tempMap = {};
-
-      for (int i = 0; i < allReplies.length; i += batchSize) {
-        final batch = allReplies.skip(i).take(batchSize);
-
-        for (var reply in batch) {
-          tempMap.putIfAbsent(reply.parentEventId, () => []).add(reply);
-        }
-
-        if (i % 1500 == 0 && i > 0) {
-          await Future.delayed(Duration.zero);
-        }
+      for (var reply in allReplies) {
+        repliesMap.putIfAbsent(reply.parentEventId, () => []).add(reply);
       }
 
-      for (final entry in tempMap.entries) {
-        if (repliesMap.containsKey(entry.key)) {
-          repliesMap[entry.key]!.addAll(entry.value);
-        } else {
-          repliesMap[entry.key] = entry.value;
-        }
-      }
+      print('[CacheService] Loaded ${allReplies.length} replies');
     } catch (e) {
       print('Error loading replies from cache: $e');
     }
@@ -305,32 +128,14 @@ class CacheService {
       final allReposts = repostsBox!.values.cast<RepostModel>().toList();
       if (allReposts.isEmpty) return;
 
-      const batchSize = 100;
-      final Map<String, List<RepostModel>> tempMap = {};
-
-      for (int i = 0; i < allReposts.length; i += batchSize) {
-        final batch = allReposts.skip(i).take(batchSize);
-
-        for (var repost in batch) {
-          tempMap.putIfAbsent(repost.originalNoteId, () => []);
-          if (!tempMap[repost.originalNoteId]!.any((r) => r.id == repost.id)) {
-            tempMap[repost.originalNoteId]!.add(repost);
-          }
-        }
-
-        if (i % (batchSize * 5) == 0) {
-          await Future.delayed(Duration.zero);
+      for (var repost in allReposts) {
+        repostsMap.putIfAbsent(repost.originalNoteId, () => []);
+        if (!repostsMap[repost.originalNoteId]!.any((r) => r.id == repost.id)) {
+          repostsMap[repost.originalNoteId]!.add(repost);
         }
       }
 
-      for (final entry in tempMap.entries) {
-        repostsMap.putIfAbsent(entry.key, () => []);
-        for (final repost in entry.value) {
-          if (!repostsMap[entry.key]!.any((r) => r.id == repost.id)) {
-            repostsMap[entry.key]!.add(repost);
-          }
-        }
-      }
+      print('[CacheService] Loaded ${allReposts.length} reposts');
     } catch (e) {
       print('Error loading reposts from cache: $e');
     }
@@ -343,32 +148,14 @@ class CacheService {
       final allZaps = zapsBox!.values.cast<ZapModel>().toList();
       if (allZaps.isEmpty) return;
 
-      const batchSize = 100;
-      final Map<String, List<ZapModel>> tempMap = {};
-
-      for (int i = 0; i < allZaps.length; i += batchSize) {
-        final batch = allZaps.skip(i).take(batchSize);
-
-        for (var zap in batch) {
-          tempMap.putIfAbsent(zap.targetEventId, () => []);
-          if (!tempMap[zap.targetEventId]!.any((r) => r.id == zap.id)) {
-            tempMap[zap.targetEventId]!.add(zap);
-          }
-        }
-
-        if (i % (batchSize * 5) == 0) {
-          await Future.delayed(Duration.zero);
+      for (var zap in allZaps) {
+        zapsMap.putIfAbsent(zap.targetEventId, () => []);
+        if (!zapsMap[zap.targetEventId]!.any((r) => r.id == zap.id)) {
+          zapsMap[zap.targetEventId]!.add(zap);
         }
       }
 
-      for (final entry in tempMap.entries) {
-        zapsMap.putIfAbsent(entry.key, () => []);
-        for (final zap in entry.value) {
-          if (!zapsMap[entry.key]!.any((r) => r.id == zap.id)) {
-            zapsMap[entry.key]!.add(zap);
-          }
-        }
-      }
+      print('[CacheService] Loaded ${allZaps.length} zaps');
     } catch (e) {
       print('Error loading zaps from cache: $e');
     }
@@ -378,36 +165,15 @@ class CacheService {
     if (notesBox?.isOpen != true || notes.isEmpty) return;
 
     try {
-      final maxNotes = min(300, notes.length);
-      final notesToSave = notes.take(maxNotes).toList();
+      final notesToSave = notes.take(300).toList();
       final notesMap = <String, NoteModel>{};
 
-      int batchSize = 50;
-      final stopwatch = Stopwatch()..start();
-
-      for (int i = 0; i < notesToSave.length; i += batchSize) {
-        final batch = notesToSave.skip(i).take(batchSize);
-
-        for (final note in batch) {
-          notesMap[note.id] = note;
-        }
-
-        if (stopwatch.elapsedMilliseconds > 100) {
-          batchSize = max(25, batchSize - 5);
-        } else if (stopwatch.elapsedMilliseconds < 20) {
-          batchSize = min(100, batchSize + 5);
-        }
-
-        if (i % (batchSize * 2) == 0) {
-          await Future.delayed(Duration.zero);
-          stopwatch.reset();
-        }
+      for (final note in notesToSave) {
+        notesMap[note.id] = note;
       }
 
-      if (notesMap.length < notesBox!.length * 0.8) {
-        await notesBox!.clear();
-      }
       await notesBox!.putAll(notesMap);
+      print('[CacheService] Saved ${notesToSave.length} notes');
     } catch (e) {
       print('Error batch saving notes: $e');
     }
@@ -418,45 +184,23 @@ class CacheService {
     repliesMap.clear();
     repostsMap.clear();
     zapsMap.clear();
-    _cacheAccessTimes.clear();
-    _cacheAccessFrequency.clear();
-    _cacheDataSize.clear();
-    _cacheHits = 0;
-    _cacheMisses = 0;
-    _cacheEvictions = 0;
   }
 
   Future<void> optimizeMemoryUsage() async {
-    _performMemoryCleanup();
+    _performBasicCleanup();
 
-    _compactCacheMaps();
-
-    _cleanupTrackingMaps();
-  }
-
-  void _compactCacheMaps() {
     reactionsMap.removeWhere((key, value) => value.isEmpty);
     repliesMap.removeWhere((key, value) => value.isEmpty);
     repostsMap.removeWhere((key, value) => value.isEmpty);
     zapsMap.removeWhere((key, value) => value.isEmpty);
   }
 
-  void _cleanupTrackingMaps() {
-    final allKeys = _getAllCacheKeys().toSet();
-
-    _cacheAccessTimes.removeWhere((key, value) => !allKeys.contains(key));
-    _cacheAccessFrequency.removeWhere((key, value) => !allKeys.contains(key));
-    _cacheDataSize.removeWhere((key, value) => !allKeys.contains(key));
-  }
-
   Future<void> handleMemoryPressure() async {
-    _performEmergencyEviction();
     await optimizeMemoryUsage();
   }
 
   Map<String, dynamic> getCacheStats() {
     final totalEntries = reactionsMap.length + repliesMap.length + repostsMap.length + zapsMap.length;
-    final totalDataSize = _cacheDataSize.values.fold<int>(0, (sum, size) => sum + size);
 
     return {
       'reactionsCount': reactionsMap.length,
@@ -464,26 +208,12 @@ class CacheService {
       'repostsCount': repostsMap.length,
       'zapsCount': zapsMap.length,
       'totalEntries': totalEntries,
-      'totalDataSize': totalDataSize,
       'maxEntries': _maxCacheEntries,
-      'cleanupThreshold': _cleanupThreshold,
-      'emergencyThreshold': _emergencyThreshold,
-      'cacheHits': _cacheHits,
-      'cacheMisses': _cacheMisses,
-      'cacheEvictions': _cacheEvictions,
-      'hitRate': _cacheHits + _cacheMisses > 0 ? (_cacheHits / (_cacheHits + _cacheMisses) * 100).toStringAsFixed(2) : '0.00',
-      'memoryPressure': totalEntries > _cleanupThreshold,
-      'emergencyPressure': totalEntries > _emergencyThreshold,
-      'trackingMapSizes': {
-        'accessTimes': _cacheAccessTimes.length,
-        'frequency': _cacheAccessFrequency.length,
-        'dataSize': _cacheDataSize.length,
-      },
     };
   }
 
   void dispose() {
-    _memoryCleanupTimer?.cancel();
+    _cleanupTimer?.cancel();
     clearMemoryCache();
   }
 
