@@ -261,19 +261,6 @@ class _SuggestedFollowsPageState extends State<SuggestedFollowsPage> {
                           ],
                         ],
                       ),
-                      if (user.about.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          user.about,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: context.colors.textSecondary,
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
                     ],
                   ),
                 ),

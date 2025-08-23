@@ -213,7 +213,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
               ),
             ],
           ),
-          const SizedBox(height: 6),
           Text(
             "There are ${_allUsers.length} users cached on your device.",
             style: TextStyle(
@@ -308,19 +307,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
                       ],
                     ],
                   ),
-                  if (user.about.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      user.about,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: context.colors.textSecondary,
-                        height: 1.3,
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
