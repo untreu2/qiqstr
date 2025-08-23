@@ -33,6 +33,7 @@ enum DataType { feed, profile, note }
 
 class NoteListNotifier extends ValueNotifier<List<NoteModel>> {
   final SplayTreeSet<NoteModel> _itemsTree;
+  Timer? _debounceTimer;
   final DataType _dataType;
   final String _npub;
 
@@ -84,7 +85,10 @@ class NoteListNotifier extends ValueNotifier<List<NoteModel>> {
   }
 
   void _invalidateFilterCache() {
-    _filterCacheValid = false;
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 250), () {
+      _filterCacheValid = false;
+    });
   }
 
   List<NoteModel> _getFilteredNotesList() {
