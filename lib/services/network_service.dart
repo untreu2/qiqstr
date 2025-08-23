@@ -13,7 +13,7 @@ class NetworkService {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   bool _isClosed = false;
 
-  NetworkService({required List<String> relayUrls}) : _socketManager = WebSocketManager(relayUrls: relayUrls);
+  NetworkService({required List<String> relayUrls}) : _socketManager = WebSocketManager.instance;
 
   Future<void> initializeConnections(List<String> targetNpubs) async {
     await _socketManager.connectRelays(
@@ -25,7 +25,6 @@ class NetworkService {
 
   Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {}
 
-  // Simplified broadcast method
   Future<void> broadcast(String message) async {
     if (_isClosed) return;
     try {
@@ -36,7 +35,6 @@ class NetworkService {
     }
   }
 
-  // User interaction methods
   Future<void> sendReaction(String targetEventId, String reactionContent) async {
     if (_isClosed) return;
 
@@ -139,7 +137,6 @@ class NetworkService {
     }
   }
 
-  // Simplified zap method
   Future<String> sendZap({
     required String recipientPubkey,
     required String lud16,
@@ -164,7 +161,6 @@ class NetworkService {
     final display_name = parts[0];
     final domain = parts[1];
 
-    // Simple LNURL fetch
     final uri = Uri.parse('https://$domain/.well-known/lnurlp/$display_name');
     final client = http.Client();
 
@@ -292,7 +288,6 @@ class NetworkService {
 
   int get connectedRelaysCount => _socketManager.activeSockets.length;
 
-  // Basic stats for compatibility
   Map<String, dynamic> getNetworkStats() {
     return {
       'connectedRelays': connectedRelaysCount,
@@ -306,7 +301,6 @@ class NetworkService {
     await _socketManager.closeConnections();
   }
 
-  // Legacy compatibility methods
   Future<void> broadcastRequest(String serializedRequest) => broadcast(serializedRequest);
   Future<void> safeBroadcast(String message) => broadcast(message);
   Future<void> immediateBroadcast(String message) => broadcast(message);

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../services/data_service.dart';
+import '../services/relay_service.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
@@ -76,7 +77,7 @@ class DataServiceManager {
       _services.remove(key);
       _referenceCount.remove(key);
 
-      debugPrint('[DataServiceManager] Closed and removed service for $key');
+      debugPrint('[DataServiceManager] Removed service for $key (WebSocket connections remain open)');
     }
   }
 
@@ -128,6 +129,16 @@ class DataServiceManager {
     _referenceCount.clear();
 
     debugPrint('[DataServiceManager] All services closed');
+  }
+
+  Future<void> shutdownForAppTermination() async {
+    debugPrint('[DataServiceManager] Shutting down for app termination');
+
+    await closeAllServices();
+
+    await WebSocketManager.instance.forceCloseConnections();
+
+    debugPrint('[DataServiceManager] Complete shutdown completed');
   }
 
   String _generateKey(String npub, DataType dataType) {

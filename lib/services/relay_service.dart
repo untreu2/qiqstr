@@ -21,7 +21,13 @@ class RelayConnectionStats {
 }
 
 class WebSocketManager {
-  final List<String> relayUrls;
+  static WebSocketManager? _instance;
+  static WebSocketManager get instance {
+    _instance ??= WebSocketManager._internal();
+    return _instance!;
+  }
+
+  final List<String> relayUrls = [];
   final Map<String, WebSocket> _webSockets = {};
   final Map<String, Timer> _reconnectTimers = {};
   final Map<String, RelayConnectionStats> _connectionStats = {};
@@ -37,16 +43,22 @@ class WebSocketManager {
   Timer? _healthCheckTimer;
   final Duration healthCheckInterval;
 
-  WebSocketManager({
-    required this.relayUrls,
+  WebSocketManager._internal({
     this.connectionTimeout = const Duration(seconds: 3),
     this.maxReconnectAttempts = 5,
     this.maxBackoffDelay = const Duration(minutes: 2),
     this.healthCheckInterval = const Duration(minutes: 1),
   }) {
-    _initializeStats();
-    _startMessageProcessing();
-    _startHealthMonitoring();
+    _initializeWithRelays(relaySetMainSockets);
+  }
+
+  void _initializeWithRelays(List<String> urls) {
+    if (relayUrls.isEmpty) {
+      relayUrls.addAll(urls);
+      _initializeStats();
+      _startMessageProcessing();
+      _startHealthMonitoring();
+    }
   }
 
   void _initializeStats() {
@@ -105,11 +117,25 @@ class WebSocketManager {
     }).toList();
   }
 
+  final Map<String, Function(dynamic event, String relayUrl)?> _eventHandlers = {};
+  final Map<String, Function(String relayUrl)?> _disconnectHandlers = {};
+
   Future<void> connectRelays(
     List<String> targetNpubs, {
     Function(dynamic event, String relayUrl)? onEvent,
     Function(String relayUrl)? onDisconnected,
+    String? serviceId,
   }) async {
+    if (serviceId != null) {
+      _eventHandlers[serviceId] = onEvent;
+      _disconnectHandlers[serviceId] = onDisconnected;
+    }
+
+    if (_webSockets.isNotEmpty) {
+      print('[WebSocketManager] Connections already exist, registering handlers for service: $serviceId');
+      return;
+    }
+
     final connectionFutures = relayUrls.map((relayUrl) => _connectSingleRelay(relayUrl, onEvent, onDisconnected));
 
     await Future.wait(connectionFutures, eagerError: false);
@@ -145,6 +171,17 @@ class WebSocketManager {
           try {
             if (!_isClosed && _webSockets.containsKey(relayUrl)) {
               stats.messagesReceived++;
+
+              for (final handler in _eventHandlers.values) {
+                if (handler != null) {
+                  try {
+                    handler(event, relayUrl);
+                  } catch (e) {
+                    print('[WebSocketManager] Error in event handler: $e');
+                  }
+                }
+              }
+
               onEvent?.call(event, relayUrl);
             }
           } catch (e) {}
@@ -189,7 +226,23 @@ class WebSocketManager {
       stats.connectionStartTime = null;
     }
 
+    for (final handler in _disconnectHandlers.values) {
+      if (handler != null) {
+        try {
+          handler(relayUrl);
+        } catch (e) {
+          print('[WebSocketManager] Error in disconnect handler: $e');
+        }
+      }
+    }
+
     onDisconnected?.call(relayUrl);
+  }
+
+  void unregisterService(String serviceId) {
+    _eventHandlers.remove(serviceId);
+    _disconnectHandlers.remove(serviceId);
+    print('[WebSocketManager] Unregistered service: $serviceId');
   }
 
   Future<void> executeOnActiveSockets(FutureOr<void> Function(WebSocket ws) action) async {
@@ -341,6 +394,16 @@ class WebSocketManager {
           (event) {
             try {
               stats.messagesReceived++;
+
+              for (final handler in _eventHandlers.values) {
+                if (handler != null) {
+                  try {
+                    handler(event, relayUrl);
+                  } catch (e) {
+                    print('[WebSocketManager] Error in reconnection event handler: $e');
+                  }
+                }
+              }
             } catch (e) {}
           },
           onDone: () {
@@ -388,6 +451,11 @@ class WebSocketManager {
   }
 
   Future<void> closeConnections() async {
+    print('[WebSocketManager] closeConnections called - singleton will only close on app termination');
+  }
+
+  Future<void> forceCloseConnections() async {
+    print('[WebSocketManager] Force closing all connections for app termination');
     _isClosed = true;
 
     for (final timer in _reconnectTimers.values) {

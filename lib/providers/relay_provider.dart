@@ -26,7 +26,7 @@ class RelayProvider extends ChangeNotifier {
     if (_isInitialized) return;
 
     try {
-      _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
+      _socketManager = WebSocketManager.instance;
       _isInitialized = true;
       _errorMessage = null;
       notifyListeners();
@@ -159,11 +159,7 @@ class RelayProvider extends ChangeNotifier {
   }
 
   Future<void> closeConnections() async {
-    if (_socketManager != null) {
-      await _socketManager!.closeConnections();
-      _socketManager = null;
-    }
-
+    _socketManager = null;
     _connectedRelays.clear();
     _isInitialized = false;
     _isConnecting = false;

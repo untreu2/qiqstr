@@ -130,7 +130,6 @@ class DataService {
   final Completer<void> _eventProcessorReady = Completer<void>();
 
   late Isolate _fetchProcessorIsolate;
-  late SendPort _fetchProcessorSendPort;
   final Completer<void> _fetchProcessorReady = Completer<void>();
 
   final String npub;
@@ -258,7 +257,7 @@ class DataService {
 
   Future<void> initializeHeavyOperations() async {
     try {
-      _socketManager = WebSocketManager(relayUrls: relaySetMainSockets);
+      _socketManager = WebSocketManager.instance;
 
       reactionsBox = await _openHiveBox<ReactionModel>('reactions');
       repliesBox = await _openHiveBox<ReplyModel>('replies');
@@ -316,39 +315,11 @@ class DataService {
     print('[DataService] Connection state updated: $isConnected');
   }
 
-  void _handleConnectionError(String message, dynamic error) {
-    _lastError = '$message: $error';
-    _lastErrorTime = DateTime.now();
-    _isInErrorState = true;
-
-    errorStateNotifier.value = 'Connection issues detected. Using cached data only.';
-    _updateConnectionState(false);
-
-    print('[DataService] Connection error: $_lastError');
-  }
-
   void _clearErrorState() {
     _lastError = null;
     _lastErrorTime = null;
     _isInErrorState = false;
     errorStateNotifier.value = null;
-  }
-
-  String _getErrorMessage() {
-    if (_lastError == null) return 'Unknown connection error';
-
-    if (_connectionRetryCount >= _maxConnectionRetries) {
-      return 'Unable to connect to relays. Using cached data only.';
-    }
-
-    return 'Connection issues detected. Retrying... (${_connectionRetryCount}/$_maxConnectionRetries)';
-  }
-
-  void _enableOfflineMode() {
-    print('[DataService] Enabling offline mode - using cached data only');
-    errorStateNotifier.value = 'Offline mode: Using cached data only';
-
-    Future.microtask(() => _loadBasicCacheData());
   }
 
   Future<void> _attemptReconnection() async {
@@ -483,7 +454,6 @@ class DataService {
 
     receivePort.listen((dynamic message) {
       if (message is SendPort) {
-        _fetchProcessorSendPort = message;
         _fetchProcessorReady.complete();
       } else if (message is Map<String, dynamic>) {
         if (message.containsKey('error')) {
@@ -772,6 +742,7 @@ class DataService {
             targetNpubs,
             onEvent: (event, relayUrl) => _handleEvent(event, targetNpubs),
             onDisconnected: (relayUrl) => _socketManager.reconnectRelay(relayUrl, targetNpubs),
+            serviceId: '${dataType.toString()}_$npub',
           )
               .timeout(
             const Duration(seconds: 10),
@@ -3013,9 +2984,11 @@ class DataService {
 
     _isolate.kill(priority: Isolate.immediate);
     _receivePort.close();
-    await _socketManager.closeConnections();
 
-    print('[DataService] All connections closed. Hive boxes remain open.');
+    final serviceId = '${dataType.toString()}_$npub';
+    _socketManager.unregisterService(serviceId);
+
+    print('[DataService] Service closed. WebSocket connections remain open for other services.');
   }
 
   Future<void> _updateInteractionsProvider() async {
