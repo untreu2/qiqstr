@@ -61,7 +61,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       isRepost: false,
     );
 
-    //
     final parsedBioContent = tempNote.parsedContentLazy;
 
     return Padding(

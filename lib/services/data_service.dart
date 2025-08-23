@@ -337,8 +337,6 @@ class DataService {
 
       Future.microtask(() => _loadCacheDataInBackground());
 
-      Future.microtask(() => _aggressivelyPreloadAllProfiles());
-
       _startOptimizedTimers();
 
       Future.microtask(() => _preloadNextBatch());
@@ -999,8 +997,6 @@ class DataService {
           }
         });
 
-        _scheduleInteractionRefresh();
-
         if (dataType == DataType.feed) {
           Future.microtask(() {
             try {
@@ -1201,55 +1197,6 @@ class DataService {
     }
 
     await fetchProfilesBatch(authorsToFetch.toList());
-  }
-
-  Future<void> _aggressivelyPreloadAllProfiles() async {
-    final stopwatch = Stopwatch()..start();
-
-    final allAuthors = <String>{};
-
-    for (final note in notes) {
-      allAuthors.add(note.author);
-      if (note.repostedBy != null) {
-        allAuthors.add(note.repostedBy!);
-      }
-    }
-
-    for (final reactions in reactionsMap.values) {
-      for (final reaction in reactions) {
-        allAuthors.add(reaction.author);
-      }
-    }
-
-    for (final replies in repliesMap.values) {
-      for (final reply in replies) {
-        allAuthors.add(reply.author);
-      }
-    }
-
-    for (final reposts in repostsMap.values) {
-      for (final repost in reposts) {
-        allAuthors.add(repost.repostedBy);
-      }
-    }
-
-    final uncachedAuthors = allAuthors.where((author) {
-      return !profileCache.containsKey(author) || DateTime.now().difference(profileCache[author]!.fetchedAt) > profileCacheTTL;
-    }).toList();
-
-    if (uncachedAuthors.isNotEmpty) {
-      const batchSize = 50;
-      for (int i = 0; i < uncachedAuthors.length; i += batchSize) {
-        final batch = uncachedAuthors.skip(i).take(batchSize).toList();
-        await fetchProfilesBatch(batch);
-
-        if (i + batchSize < uncachedAuthors.length) {
-          await Future.delayed(const Duration(milliseconds: 100));
-        }
-      }
-    }
-
-    print('[DataService] Aggressively preloaded ${uncachedAuthors.length} profiles in ${stopwatch.elapsedMilliseconds}ms');
   }
 
   Future<void> _safeBroadcast(String message) async {
@@ -2340,62 +2287,7 @@ class DataService {
         timer.cancel();
         return;
       }
-      await _refreshAllInteractions();
     });
-  }
-
-  void _scheduleInteractionRefresh() {
-    Future.delayed(const Duration(seconds: 30), () {
-      if (!_isClosed) {
-        _refreshAllInteractions();
-      }
-    });
-  }
-
-  Future<void> _refreshAllInteractions() async {
-    if (_isClosed || notes.isEmpty) return;
-
-    print('[DataService] Refreshing all interactions...');
-
-    final allEventIds = notes.map((note) => note.id).toList();
-
-    const batchSize = 25;
-    final futures = <Future>[];
-
-    for (int i = 0; i < allEventIds.length; i += batchSize) {
-      final endIndex = (i + batchSize > allEventIds.length) ? allEventIds.length : i + batchSize;
-      final batch = allEventIds.sublist(i, endIndex);
-
-      if (batch.isNotEmpty) {
-        final reactionFilter = NostrService.createReactionFilter(eventIds: batch, limit: 500);
-        futures.add(_broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(reactionFilter))));
-
-        final replyFilter = NostrService.createReplyFilter(eventIds: batch, limit: 500);
-        futures.add(_broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(replyFilter))));
-
-        final repostFilter = NostrService.createRepostFilter(eventIds: batch, limit: 500);
-        futures.add(_broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(repostFilter))));
-
-        final zapFilter = NostrService.createZapFilter(eventIds: batch, limit: 500);
-        futures.add(_broadcastRequest(NostrService.serializeRequest(NostrService.createRequest(zapFilter))));
-      }
-
-      if (futures.length >= 8) {
-        await Future.wait(futures);
-        futures.clear();
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-    }
-
-    if (futures.isNotEmpty) {
-      await Future.wait(futures);
-    }
-
-    print('[DataService] Interaction refresh completed for ${allEventIds.length} notes.');
-  }
-
-  Future<void> forceRefreshInteractions() async {
-    await _refreshAllInteractions();
   }
 
   Future<void> shareNote(String noteContent) async {

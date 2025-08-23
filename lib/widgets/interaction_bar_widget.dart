@@ -45,6 +45,22 @@ class _InteractionBarState extends State<InteractionBar> {
   final GlobalKey<LikeButtonState> _repostButtonKey = GlobalKey<LikeButtonState>();
   final GlobalKey<LikeButtonState> _zapButtonKey = GlobalKey<LikeButtonState>();
 
+  int _reactionCount = 0;
+  int _replyCount = 0;
+  int _repostCount = 0;
+  int _zapAmount = 0;
+  bool _hasReacted = false;
+  bool _hasReplied = false;
+  bool _hasReposted = false;
+  bool _hasZapped = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _updateInteractionData();
+    InteractionsProvider.instance.addListener(_onInteractionsChanged);
+  }
+
   String _formatCount(int count) {
     if (count >= 1000) {
       final String formatted = (count / 1000).toStringAsFixed(1);
@@ -54,6 +70,50 @@ class _InteractionBarState extends State<InteractionBar> {
       return '${formatted}K';
     }
     return count.toString();
+  }
+
+  @override
+  void didUpdateWidget(covariant InteractionBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.noteId != oldWidget.noteId || widget.currentUserNpub != oldWidget.currentUserNpub) {
+      setState(() {
+        _updateInteractionData();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    InteractionsProvider.instance.removeListener(_onInteractionsChanged);
+    super.dispose();
+  }
+
+  void _onInteractionsChanged() {
+    final provider = InteractionsProvider.instance;
+    if (provider.getReactionCount(widget.noteId) != _reactionCount ||
+        provider.getReplyCount(widget.noteId) != _replyCount ||
+        provider.getRepostCount(widget.noteId) != _repostCount ||
+        provider.getZapAmount(widget.noteId) != _zapAmount ||
+        provider.hasUserReacted(widget.currentUserNpub, widget.noteId) != _hasReacted ||
+        provider.hasUserReplied(widget.currentUserNpub, widget.noteId) != _hasReplied ||
+        provider.hasUserReposted(widget.currentUserNpub, widget.noteId) != _hasReposted ||
+        provider.hasUserZapped(widget.currentUserNpub, widget.noteId) != _hasZapped) {
+      if (mounted) {
+        setState(_updateInteractionData);
+      }
+    }
+  }
+
+  void _updateInteractionData() {
+    final provider = InteractionsProvider.instance;
+    _reactionCount = provider.getReactionCount(widget.noteId);
+    _replyCount = provider.getReplyCount(widget.noteId);
+    _repostCount = provider.getRepostCount(widget.noteId);
+    _zapAmount = provider.getZapAmount(widget.noteId);
+    _hasReacted = provider.hasUserReacted(widget.currentUserNpub, widget.noteId);
+    _hasReplied = provider.hasUserReplied(widget.currentUserNpub, widget.noteId);
+    _hasReposted = provider.hasUserReposted(widget.currentUserNpub, widget.noteId);
+    _hasZapped = provider.hasUserZapped(widget.currentUserNpub, widget.noteId);
   }
 
   Future<bool> _handleReactionTap(bool isCurrentlyLiked) async {
@@ -330,39 +390,24 @@ class _InteractionBarState extends State<InteractionBar> {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: InteractionsProvider.instance,
-      builder: (context, _) {
-        final colors = context.colors;
-        final double statsIconSize = widget.isLarge ? 22 : 21;
+    final colors = context.colors;
+    final double statsIconSize = widget.isLarge ? 22 : 21;
 
-        final reactionCount = InteractionsProvider.instance.getReactionCount(widget.noteId);
-        final replyCount = InteractionsProvider.instance.getReplyCount(widget.noteId);
-        final repostCount = InteractionsProvider.instance.getRepostCount(widget.noteId);
-        final zapAmount = InteractionsProvider.instance.getZapAmount(widget.noteId);
-
-        final hasReacted = InteractionsProvider.instance.hasUserReacted(widget.currentUserNpub, widget.noteId);
-        final hasReplied = InteractionsProvider.instance.hasUserReplied(widget.currentUserNpub, widget.noteId);
-        final hasReposted = InteractionsProvider.instance.hasUserReposted(widget.currentUserNpub, widget.noteId);
-        final hasZapped = InteractionsProvider.instance.hasUserZapped(widget.currentUserNpub, widget.noteId);
-
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _buildReplyButton(context, replyCount, hasReplied),
-            _buildRepostButton(context, repostCount, hasReposted),
-            _buildReactionButton(context, reactionCount, hasReacted),
-            _buildZapButton(context, zapAmount, hasZapped),
-            GestureDetector(
-              onTap: _handleStatisticsTap,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 6),
-                child: Icon(Icons.bar_chart, size: statsIconSize, color: colors.secondary),
-              ),
-            ),
-          ],
-        );
-      },
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        _buildReplyButton(context, _replyCount, _hasReplied),
+        _buildRepostButton(context, _repostCount, _hasReposted),
+        _buildReactionButton(context, _reactionCount, _hasReacted),
+        _buildZapButton(context, _zapAmount, _hasZapped),
+        GestureDetector(
+          onTap: _handleStatisticsTap,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: Icon(Icons.bar_chart, size: statsIconSize, color: colors.secondary),
+          ),
+        ),
+      ],
     );
   }
 }

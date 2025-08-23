@@ -23,45 +23,23 @@ class _ProfilePageState extends State<ProfilePage> {
   bool _profileInfoLoaded = false;
   String? _userHexKey;
 
-  bool _isInitialized = false;
-
   @override
   void initState() {
     super.initState();
-
-    Future.delayed(const Duration(milliseconds: 1250), () {
-      if (!mounted) return;
-
-      _scrollController = ScrollController()..addListener(_scrollListener);
-      _userHexKey = _convertNpubToHex(widget.user.npub);
-      _initializeImmediately();
-
-      setState(() {
-        _isInitialized = true;
-      });
-    });
+    _scrollController = ScrollController()..addListener(_scrollListener);
+    _userHexKey = _convertNpubToHex(widget.user.npub);
+    _initializeImmediately();
   }
 
   @override
   void dispose() {
-    if (_isInitialized) {
-      _scrollController.dispose();
-    }
+    _scrollController.dispose();
     dataService?.closeConnections();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!_isInitialized) {
-      return Scaffold(
-        backgroundColor: context.colors.background,
-        body: const Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
-    }
-
     return Scaffold(
       backgroundColor: context.colors.background,
       body: Stack(
