@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:nostr/nostr.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/screens/home_navigator.dart';
+import 'package:qiqstr/screens/edit_new_account_profile.dart';
 
 import 'package:qiqstr/theme/theme_manager.dart';
 
@@ -51,11 +52,43 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = true);
     try {
       final keychain = Keychain.generate();
-      await _login(keychain.private);
+      await _loginNewAccount(keychain.private);
     } catch (e) {
       if (mounted) {
         setState(() {
           _message = 'Error: Could not create a new account.';
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loginNewAccount(String nsecHex) async {
+    try {
+      final keychain = Keychain(nsecHex);
+      final npubHex = keychain.public;
+
+      await _secureStorage.write(key: 'privateKey', value: nsecHex);
+      await _secureStorage.write(key: 'npub', value: npubHex);
+
+      final dataService = DataService(npub: npubHex, dataType: DataType.feed);
+      await dataService.initialize();
+
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => EditNewAccountProfilePage(
+              npub: npubHex,
+              dataService: dataService,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _message = 'Error: Account creation failed.';
           _isLoading = false;
         });
       }
@@ -107,24 +140,6 @@ class _LoginPageState extends State<LoginPage> {
             color: context.colors.textPrimary,
           ),
           const SizedBox(height: 40),
-          Text(
-            'Welcome to Qiqstr!',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.bold,
-              color: context.colors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Login securely with your private key or create a new account.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 16,
-              color: context.colors.textSecondary,
-            ),
-          ),
-          const SizedBox(height: 40),
           TextField(
             controller: _nsecController,
             style: TextStyle(color: context.colors.textPrimary),
@@ -134,7 +149,7 @@ class _LoginPageState extends State<LoginPage> {
               filled: true,
               fillColor: context.colors.inputFill,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(25),
                 borderSide: BorderSide.none,
               ),
             ),
@@ -149,7 +164,7 @@ class _LoginPageState extends State<LoginPage> {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: context.colors.buttonPrimary,
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(25),
                 border: Border.all(color: context.colors.borderAccent),
               ),
               child: Text(
@@ -171,7 +186,7 @@ class _LoginPageState extends State<LoginPage> {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: context.colors.overlayLight,
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(25),
                 border: Border.all(color: context.colors.borderAccent),
               ),
               child: Text(

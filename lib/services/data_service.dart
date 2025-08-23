@@ -1889,6 +1889,7 @@ class DataService {
         privateKey: privateKey,
       );
       await initializeConnections();
+      print('[DataService] Follow event sent to relays.');
 
       await _socketManager.broadcast(NostrService.serializeEvent(event));
 
@@ -1929,9 +1930,9 @@ class DataService {
         followingPubkeys: currentFollowing,
         privateKey: privateKey,
       );
-      await initializeConnections();
 
       await _socketManager.broadcast(NostrService.serializeEvent(event));
+      print('[DataService] Unfollow event sent to relays.');
 
       final updatedFollowingModel = FollowingModel(
         pubkeys: currentFollowing,
