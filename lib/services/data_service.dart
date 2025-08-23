@@ -580,52 +580,6 @@ class DataService {
 
   void _startEventProcessing() {}
 
-  Future<void> reloadInteractionCounts() async {
-    var hasChanges = false;
-    final updatedNotes = <NoteModel>[];
-
-    List<NoteModel> notesToProcess;
-    if (dataType == DataType.profile) {
-      notesToProcess = notes.where((note) => note.author == npub || (note.isRepost && note.repostedBy == npub)).toList();
-    } else {
-      notesToProcess = notes;
-    }
-
-    const batchSize = 50;
-    for (int i = 0; i < notesToProcess.length; i += batchSize) {
-      final batch = notesToProcess.skip(i).take(batchSize);
-
-      for (var note in batch) {
-        final newReactionCount = reactionsMap[note.id]?.length ?? 0;
-        final newReplyCount = repliesMap[note.id]?.length ?? 0;
-        final newRepostCount = repostsMap[note.id]?.length ?? 0;
-        final newZapAmount = zapsMap[note.id]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
-
-        if (note.reactionCount != newReactionCount ||
-            note.replyCount != newReplyCount ||
-            note.repostCount != newRepostCount ||
-            note.zapAmount != newZapAmount) {
-          note.reactionCount = newReactionCount;
-          note.replyCount = newReplyCount;
-          note.repostCount = newRepostCount;
-          note.zapAmount = newZapAmount;
-          updatedNotes.add(note);
-          hasChanges = true;
-        }
-      }
-
-      if (i % (batchSize * 4) == 0) {
-        await Future.delayed(Duration.zero);
-      }
-    }
-
-    if (hasChanges) {
-      _invalidateFilterCache();
-      notesNotifier.value = notesNotifier.notes;
-      print('[DataService] Updated interaction counts for ${updatedNotes.length} notes (${dataType.toString().split('.').last} type)');
-    }
-  }
-
   Future<Map<String, String>> resolveMentions(List<String> ids) async {
     final Map<String, String> results = {};
 
@@ -895,10 +849,14 @@ class DataService {
   }
 
   void _startRealTimeInteractionSubscription() {
-    if (notes.isEmpty) return;
+    if (notesNotifier.notes.isEmpty) return;
 
-    final allEventIds = notes.map((note) => note.id).toList();
+    const int limit = 100;
+    final latestNotes = notesNotifier.notes.take(limit).toList();
+    final allEventIds = latestNotes.map((note) => note.id).toList();
     final sinceTimestamp = DateTime.now().subtract(const Duration(minutes: 5)).millisecondsSinceEpoch ~/ 1000;
+
+    if (allEventIds.isEmpty) return;
 
     final reactionFilter = NostrService.createReactionFilter(
       eventIds: allEventIds,
@@ -923,8 +881,6 @@ class DataService {
       since: sinceTimestamp,
     );
     _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(zapFilter)));
-
-    print('[DataService] Started real-time interaction subscriptions for ${allEventIds.length} notes.');
   }
 
   Future<void> _subscribeToFollowing() async {
@@ -1105,7 +1061,6 @@ class DataService {
     if (dataType == DataType.profile) {
       Future.microtask(() async {
         await Future.delayed(const Duration(milliseconds: 500));
-        await reloadInteractionCounts();
       });
     }
   }
@@ -1143,7 +1098,6 @@ class DataService {
     }
 
     await Future.delayed(const Duration(milliseconds: 200));
-    await reloadInteractionCounts();
 
     print('[DataService] Profile interaction fetching completed');
   }
@@ -2436,8 +2390,6 @@ class DataService {
     if (futures.isNotEmpty) {
       await Future.wait(futures);
     }
-
-    await reloadInteractionCounts();
 
     print('[DataService] Interaction refresh completed for ${allEventIds.length} notes.');
   }

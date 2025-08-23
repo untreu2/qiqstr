@@ -41,7 +41,7 @@ class NoteWidget extends StatefulWidget {
 
 class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMixin {
   @override
-  bool get wantKeepAlive => false; // MEMORY OPTIMIZATION: Don't keep all widgets alive
+  bool get wantKeepAlive => false;
 
   late final String _formattedTimestamp;
   late final Map<String, dynamic> _parsedContent;
@@ -51,7 +51,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   bool _isRepostGlowing = false;
   bool _isZapGlowing = false;
 
-  // MEMORY OPTIMIZATION: Track disposable resources
   bool _isDisposed = false;
 
   @override
@@ -59,23 +58,18 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     super.initState();
     _formattedTimestamp = _formatTimestamp(widget.note.timestamp);
 
-    // Parse content once during initialization
     _parsedContent = _parseContentOnce();
 
-    // Schedule user loading in background
     _scheduleUserLoading();
   }
 
   Map<String, dynamic> _parseContentOnce() {
-    // Use lazy parsing - this will parse only once and cache the result
     return widget.note.parsedContentLazy;
   }
 
   void _scheduleUserLoading() {
-    // MEMORY OPTIMIZATION: Check if disposed before loading
     if (_isDisposed) return;
 
-    // Load users in background without blocking UI
     Future.microtask(() {
       if (_isDisposed || !mounted) return;
 
@@ -84,7 +78,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
         usersToLoad.add(widget.note.repostedBy!);
       }
 
-      // Load parent author if this is a reply
       if (widget.note.isReply && widget.note.parentId != null) {
         usersToLoad.add(widget.note.parentId!);
       }
@@ -113,17 +106,13 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
 
   void _navigateToMentionProfile(String id) => widget.dataService.openUserProfile(context, id);
 
-  // Get real-time interaction counts from InteractionsProvider
-
   void _navigateToProfile(String npub) {
-    // Immediate navigation with optimized profile loading
     widget.dataService.openUserProfile(context, npub);
   }
 
   void _navigateToThreadPage(NoteModel note) {
     final String rootIdToShow = (note.isReply && note.rootId != null && note.rootId!.isNotEmpty) ? note.rootId! : note.id;
 
-    // Only pass focusedNoteId if the note is a reply and we're showing a different root
     final String? focusedNoteId = (note.isReply && rootIdToShow != note.id) ? note.id : null;
 
     Navigator.push(
@@ -203,7 +192,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   }
 
   Widget _buildUserInfoWithReply(BuildContext context, UserModel authorUser, dynamic colors) {
-    // Get reply info if this is a reply
     String? replyToText;
     if (widget.note.isReply && widget.note.parentId != null) {
       final parentNote = widget.notesNotifier.value.firstWhere(
@@ -216,7 +204,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
         ),
       );
 
-      // Get parent author without triggering load (already scheduled)
       final parentAuthor = UserProvider.instance.getUserOrDefault(parentNote.author);
       replyToText = 'Replying to @${parentAuthor.name.isNotEmpty ? parentAuthor.name : 'user'}';
     }
@@ -283,7 +270,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     return ListenableBuilder(
       listenable: UserProvider.instance,
       builder: (context, _) {
-        // Get users without triggering loads (already scheduled in initState)
         final authorUser = UserProvider.instance.getUserOrDefault(widget.note.author);
 
         UserModel? reposterUser;
@@ -316,7 +302,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                                 child: authorUser.profileImage.isNotEmpty
                                     ? CachedNetworkImage(
                                         imageUrl: authorUser.profileImage,
-                                        memCacheWidth: 88, // MEMORY OPTIMIZATION: Limit image size in memory
+                                        memCacheWidth: 88,
                                         memCacheHeight: 88,
                                         maxWidthDiskCache: 88,
                                         maxHeightDiskCache: 88,
@@ -363,7 +349,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                                   child: reposterUser.profileImage.isNotEmpty
                                       ? CachedNetworkImage(
                                           imageUrl: reposterUser.profileImage,
-                                          memCacheWidth: 48, // MEMORY OPTIMIZATION: Smaller cache size
+                                          memCacheWidth: 48,
                                           memCacheHeight: 48,
                                           maxWidthDiskCache: 48,
                                           maxHeightDiskCache: 48,
