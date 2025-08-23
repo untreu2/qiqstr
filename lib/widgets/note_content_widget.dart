@@ -157,7 +157,7 @@ class NoteContentWidget extends StatelessWidget {
             padding: const EdgeInsets.only(top: 8),
             child: MediaPreviewWidget(mediaUrls: mediaUrls),
           ),
-        if (linkUrls.isNotEmpty)
+        if (linkUrls.isNotEmpty && mediaUrls.isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Column(
