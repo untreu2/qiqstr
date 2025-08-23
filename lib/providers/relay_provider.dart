@@ -14,7 +14,6 @@ class RelayProvider extends ChangeNotifier {
   List<String> _connectedRelays = [];
   String? _errorMessage;
 
-  // Getters
   bool get isInitialized => _isInitialized;
   bool get isConnecting => _isConnecting;
   bool get isConnected => _connectedRelays.isNotEmpty;
@@ -68,7 +67,6 @@ class RelayProvider extends ChangeNotifier {
   }
 
   void _handleRelayEvent(dynamic event, String relayUrl) {
-    // Add relay to connected list if not already there
     if (!_connectedRelays.contains(relayUrl)) {
       _connectedRelays.add(relayUrl);
       notifyListeners();

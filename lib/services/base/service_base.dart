@@ -1,6 +1,5 @@
 import 'dart:async';
 
-/// Base interface for all services
 abstract class ServiceBase {
   bool get isInitialized;
   bool get isClosed;
@@ -9,7 +8,6 @@ abstract class ServiceBase {
   Future<void> close();
 }
 
-/// Base class for services with lifecycle management
 abstract class LifecycleService implements ServiceBase {
   bool _isInitialized = false;
   bool _isClosed = false;
@@ -41,7 +39,6 @@ abstract class LifecycleService implements ServiceBase {
     _isClosed = true;
 
     try {
-      // Cancel all subscriptions and timers
       await Future.wait([
         ..._subscriptions.map((sub) => sub.cancel()),
         Future.wait(_timers.map((timer) async {
@@ -58,37 +55,30 @@ abstract class LifecycleService implements ServiceBase {
     }
   }
 
-  /// Override this method to implement service-specific initialization
   Future<void> onInitialize();
 
-  /// Override this method to implement service-specific cleanup
   Future<void> onClose();
 
-  /// Override this method to handle initialization errors
   Future<void> onInitializeError(Object error) async {
     print('[${runtimeType}] Initialization error: $error');
   }
 
-  /// Override this method to handle close errors
   Future<void> onCloseError(Object error) async {
     print('[${runtimeType}] Close error: $error');
   }
 
-  /// Helper method to register subscriptions for automatic cleanup
   void addSubscription(StreamSubscription subscription) {
     if (!_isClosed) {
       _subscriptions.add(subscription);
     }
   }
 
-  /// Helper method to register timers for automatic cleanup
   void addTimer(Timer timer) {
     if (!_isClosed) {
       _timers.add(timer);
     }
   }
 
-  /// Helper method to check if service is ready for operations
   void ensureInitialized() {
     if (!_isInitialized) {
       throw StateError('Service ${runtimeType} is not initialized');
@@ -99,7 +89,6 @@ abstract class LifecycleService implements ServiceBase {
   }
 }
 
-/// Mixin for services that need batch processing capabilities
 mixin BatchProcessingMixin<T> {
   final List<T> _batchQueue = [];
   Timer? _batchTimer;
@@ -137,7 +126,6 @@ mixin BatchProcessingMixin<T> {
       } finally {
         _isProcessing = false;
 
-        // Process remaining items if any
         if (_batchQueue.isNotEmpty) {
           _scheduleBatchFlush();
         }
@@ -145,7 +133,6 @@ mixin BatchProcessingMixin<T> {
     });
   }
 
-  /// Override this method to implement batch processing logic
   Future<void> processBatch(List<T> batch);
 
   void clearBatch() {
@@ -155,7 +142,6 @@ mixin BatchProcessingMixin<T> {
   }
 }
 
-/// Mixin for services that need caching capabilities
 mixin CachingMixin<K, V> {
   final Map<K, V> _cache = {};
   final Map<K, DateTime> _cacheTimestamps = {};
@@ -213,7 +199,6 @@ mixin CachingMixin<K, V> {
       _cacheTimestamps.remove(key);
     }
 
-    // If still over limit, remove oldest entries
     if (_cache.length > maxCacheSize) {
       final sortedEntries = _cacheTimestamps.entries.toList()..sort((a, b) => a.value.compareTo(b.value));
 
@@ -234,7 +219,6 @@ mixin CachingMixin<K, V> {
   }
 }
 
-/// Mixin for services that need error handling and retry logic
 mixin RetryMixin {
   Future<T> withRetry<T>(
     Future<T> Function() operation, {
@@ -262,7 +246,6 @@ mixin RetryMixin {
   }
 }
 
-/// Mixin for services that need performance monitoring
 mixin PerformanceMonitoringMixin {
   final Map<String, List<Duration>> _operationTimes = {};
   final Map<String, int> _operationCounts = {};
@@ -289,7 +272,6 @@ mixin PerformanceMonitoringMixin {
     _operationTimes[operationName]!.add(duration);
     _operationCounts[operationName] = _operationCounts[operationName]! + 1;
 
-    // Keep only last 100 measurements per operation
     if (_operationTimes[operationName]!.length > 100) {
       _operationTimes[operationName]!.removeAt(0);
     }

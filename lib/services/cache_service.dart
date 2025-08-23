@@ -12,7 +12,6 @@ import '../models/following_model.dart';
 import '../models/notification_model.dart';
 
 class CacheService {
-  // Hive boxes
   Box<UserModel>? usersBox;
   Box<NoteModel>? notesBox;
   Box<ReactionModel>? reactionsBox;
@@ -22,36 +21,29 @@ class CacheService {
   Box<ZapModel>? zapsBox;
   Box<NotificationModel>? notificationsBox;
 
-  // Enhanced cache maps with LRU support
   final Map<String, List<ReactionModel>> reactionsMap = {};
   final Map<String, List<ReplyModel>> repliesMap = {};
   final Map<String, List<RepostModel>> repostsMap = {};
   final Map<String, List<ZapModel>> zapsMap = {};
 
-  // Enhanced LRU tracking with frequency
   final Map<String, DateTime> _cacheAccessTimes = {};
   final Map<String, int> _cacheAccessFrequency = {};
-  final Map<String, int> _cacheDataSize = {}; // Track data size for better eviction
+  final Map<String, int> _cacheDataSize = {};
 
-  // Memory management - more aggressive limits
-  static const int _maxCacheEntries = 1500; // Reduced from 2000
-  static const int _cleanupThreshold = 1800; // Reduced threshold
-  static const int _emergencyThreshold = 2000; // Emergency cleanup threshold
+  static const int _maxCacheEntries = 1500;
+  static const int _cleanupThreshold = 1800;
+  static const int _emergencyThreshold = 2000;
   Timer? _memoryCleanupTimer;
 
-  // Performance metrics
   int _cacheHits = 0;
   int _cacheMisses = 0;
   int _cacheEvictions = 0;
 
-  CacheService() {
-    // Will be started lazily when first cache operation occurs
-  }
+  CacheService() {}
 
   void _startMemoryManagement() {
-    if (_memoryCleanupTimer != null) return; // Already started
+    if (_memoryCleanupTimer != null) return;
 
-    // More frequent cleanup for better memory management
     _memoryCleanupTimer = Timer.periodic(const Duration(minutes: 5), (_) {
       _performMemoryCleanup();
     });
@@ -78,25 +70,22 @@ class CacheService {
   }
 
   void _performEmergencyEviction() {
-    // Emergency: Remove 40% of cache entries
     final allKeys = _getAllCacheKeys();
     final removeCount = (allKeys.length * 0.4).round();
 
-    // Prioritize removal by combining recency and frequency
     final scoredKeys = allKeys.map((key) {
       final lastAccess = _cacheAccessTimes[key] ?? DateTime.now().subtract(const Duration(days: 1));
       final frequency = _cacheAccessFrequency[key] ?? 0;
       final dataSize = _cacheDataSize[key] ?? 1;
 
-      // Lower score = higher priority for removal
       final recencyScore = DateTime.now().difference(lastAccess).inMinutes;
       final frequencyScore = frequency == 0 ? 1000 : (1000 / frequency);
-      final sizeScore = dataSize * 10; // Penalize large entries
+      final sizeScore = dataSize * 10;
 
       return MapEntry(key, recencyScore + frequencyScore + sizeScore);
     }).toList();
 
-    scoredKeys.sort((a, b) => b.value.compareTo(a.value)); // Highest score first (least valuable)
+    scoredKeys.sort((a, b) => b.value.compareTo(a.value));
 
     final keysToRemove = scoredKeys.take(removeCount).map((e) => e.key);
     _removeKeys(keysToRemove);
@@ -111,7 +100,6 @@ class CacheService {
 
     if (removeCount <= 0) return;
 
-    // Sort by access time (oldest first)
     final sortedKeys = allKeys.map((key) {
       final lastAccess = _cacheAccessTimes[key] ?? DateTime.now().subtract(const Duration(days: 1));
       return MapEntry(key, lastAccess);
@@ -126,11 +114,10 @@ class CacheService {
 
   void _evictLeastFrequentlyUsed() {
     final allKeys = _getAllCacheKeys();
-    final removeCount = (allKeys.length * 0.1).round(); // Remove 10%
+    final removeCount = (allKeys.length * 0.1).round();
 
     if (removeCount <= 0) return;
 
-    // Sort by frequency (lowest first)
     final sortedKeys = allKeys.map((key) {
       final frequency = _cacheAccessFrequency[key] ?? 0;
       return MapEntry(key, frequency);
@@ -169,7 +156,6 @@ class CacheService {
     _cacheAccessFrequency[key] = (_cacheAccessFrequency[key] ?? 0) + 1;
     _cacheDataSize[key] = dataSize;
 
-    // Decay frequency over time to prevent old entries from staying forever
     if (_cacheAccessFrequency[key]! > 100) {
       _cacheAccessFrequency[key] = (_cacheAccessFrequency[key]! * 0.9).round();
     }
@@ -178,13 +164,10 @@ class CacheService {
   Future<void> initializeBoxes(String npub, String dataType) async {
     _ensureMemoryManagementStarted();
 
-    // Phase 1: Open critical boxes first (blocking)
     await _initializeCriticalBoxes(npub, dataType);
 
-    // Phase 2: Open remaining boxes in background (non-blocking)
     _initializeRemainingBoxes(npub, dataType);
 
-    // Phase 3: Start progressive cache loading (non-blocking)
     _startProgressiveCacheLoading();
   }
 
@@ -223,13 +206,10 @@ class CacheService {
   void _startProgressiveCacheLoading() {
     Future.delayed(const Duration(milliseconds: 500), () async {
       try {
-        // Load critical cache first (reactions for immediate display)
         await loadReactionsFromCache();
 
-        // Longer delay then load remaining cache progressively
         await Future.delayed(const Duration(milliseconds: 200));
 
-        // Load remaining cache in parallel but with lower priority
         Future.wait([
           loadRepliesFromCache(),
           loadRepostsFromCache(),
@@ -256,8 +236,7 @@ class CacheService {
       final allReactions = reactionsBox!.values.cast<ReactionModel>().toList();
       if (allReactions.isEmpty) return;
 
-      // Ultra-fast loading with minimal processing
-      const batchSize = 200; // Larger batches for speed
+      const batchSize = 200;
       final Map<String, List<ReactionModel>> tempMap = {};
 
       for (int i = 0; i < allReactions.length; i += batchSize) {
@@ -267,16 +246,13 @@ class CacheService {
           tempMap.putIfAbsent(reaction.targetEventId, () => []).add(reaction);
         }
 
-        // Minimal yielding - only every 1000 items
         if (i % 1000 == 0 && i > 0) {
           await Future.delayed(Duration.zero);
         }
       }
 
-      // Direct assignment for speed (no duplicate checking during initial load)
       reactionsMap.addAll(tempMap);
 
-      // Record access times in batch with data size
       for (final entry in tempMap.entries) {
         _recordCacheAccess(entry.key, dataSize: entry.value.length);
       }
@@ -295,7 +271,6 @@ class CacheService {
       final allReplies = repliesBox!.values.cast<ReplyModel>().toList();
       if (allReplies.isEmpty) return;
 
-      // Fast loading with larger batches
       const batchSize = 300;
       final Map<String, List<ReplyModel>> tempMap = {};
 
@@ -306,13 +281,11 @@ class CacheService {
           tempMap.putIfAbsent(reply.parentEventId, () => []).add(reply);
         }
 
-        // Minimal yielding
         if (i % 1500 == 0 && i > 0) {
           await Future.delayed(Duration.zero);
         }
       }
 
-      // Direct merge for speed
       for (final entry in tempMap.entries) {
         if (repliesMap.containsKey(entry.key)) {
           repliesMap[entry.key]!.addAll(entry.value);
@@ -332,7 +305,6 @@ class CacheService {
       final allReposts = repostsBox!.values.cast<RepostModel>().toList();
       if (allReposts.isEmpty) return;
 
-      // Process in batches to avoid blocking the UI
       const batchSize = 100;
       final Map<String, List<RepostModel>> tempMap = {};
 
@@ -346,13 +318,11 @@ class CacheService {
           }
         }
 
-        // Yield control to prevent blocking
         if (i % (batchSize * 5) == 0) {
           await Future.delayed(Duration.zero);
         }
       }
 
-      // Merge with existing cache
       for (final entry in tempMap.entries) {
         repostsMap.putIfAbsent(entry.key, () => []);
         for (final repost in entry.value) {
@@ -373,7 +343,6 @@ class CacheService {
       final allZaps = zapsBox!.values.cast<ZapModel>().toList();
       if (allZaps.isEmpty) return;
 
-      // Process in batches to avoid blocking the UI
       const batchSize = 100;
       final Map<String, List<ZapModel>> tempMap = {};
 
@@ -387,13 +356,11 @@ class CacheService {
           }
         }
 
-        // Yield control to prevent blocking
         if (i % (batchSize * 5) == 0) {
           await Future.delayed(Duration.zero);
         }
       }
 
-      // Merge with existing cache
       for (final entry in tempMap.entries) {
         zapsMap.putIfAbsent(entry.key, () => []);
         for (final zap in entry.value) {
@@ -411,12 +378,10 @@ class CacheService {
     if (notesBox?.isOpen != true || notes.isEmpty) return;
 
     try {
-      // Enhanced memory management
       final maxNotes = min(300, notes.length);
       final notesToSave = notes.take(maxNotes).toList();
       final notesMap = <String, NoteModel>{};
 
-      // Adaptive batch processing
       int batchSize = 50;
       final stopwatch = Stopwatch()..start();
 
@@ -427,23 +392,19 @@ class CacheService {
           notesMap[note.id] = note;
         }
 
-        // Adaptive batch sizing
         if (stopwatch.elapsedMilliseconds > 100) {
           batchSize = max(25, batchSize - 5);
         } else if (stopwatch.elapsedMilliseconds < 20) {
           batchSize = min(100, batchSize + 5);
         }
 
-        // Yield control periodically
         if (i % (batchSize * 2) == 0) {
           await Future.delayed(Duration.zero);
           stopwatch.reset();
         }
       }
 
-      // Efficient save operation
       if (notesMap.length < notesBox!.length * 0.8) {
-        // If we're saving significantly fewer notes, clear first
         await notesBox!.clear();
       }
       await notesBox!.putAll(notesMap);
@@ -452,7 +413,6 @@ class CacheService {
     }
   }
 
-  // Enhanced memory management methods
   Future<void> clearMemoryCache() async {
     reactionsMap.clear();
     repliesMap.clear();
@@ -467,18 +427,14 @@ class CacheService {
   }
 
   Future<void> optimizeMemoryUsage() async {
-    // Smart memory optimization using enhanced LRU
     _performMemoryCleanup();
 
-    // Compact lists to remove null entries
     _compactCacheMaps();
 
-    // Clean up tracking maps
     _cleanupTrackingMaps();
   }
 
   void _compactCacheMaps() {
-    // Remove empty lists and compact non-empty ones
     reactionsMap.removeWhere((key, value) => value.isEmpty);
     repliesMap.removeWhere((key, value) => value.isEmpty);
     repostsMap.removeWhere((key, value) => value.isEmpty);
@@ -486,22 +442,18 @@ class CacheService {
   }
 
   void _cleanupTrackingMaps() {
-    // Get all valid keys
     final allKeys = _getAllCacheKeys().toSet();
 
-    // Remove orphaned tracking entries
     _cacheAccessTimes.removeWhere((key, value) => !allKeys.contains(key));
     _cacheAccessFrequency.removeWhere((key, value) => !allKeys.contains(key));
     _cacheDataSize.removeWhere((key, value) => !allKeys.contains(key));
   }
 
-  // Memory pressure handling
   Future<void> handleMemoryPressure() async {
     _performEmergencyEviction();
     await optimizeMemoryUsage();
   }
 
-  // Enhanced cache statistics
   Map<String, dynamic> getCacheStats() {
     final totalEntries = reactionsMap.length + repliesMap.length + repostsMap.length + zapsMap.length;
     final totalDataSize = _cacheDataSize.values.fold<int>(0, (sum, size) => sum + size);
@@ -530,7 +482,6 @@ class CacheService {
     };
   }
 
-  // Cleanup method
   void dispose() {
     _memoryCleanupTimer?.cancel();
     clearMemoryCache();
@@ -540,13 +491,11 @@ class CacheService {
     final now = DateTime.now();
     final cutoffTime = now.subtract(ttl);
 
-    // Clean reactions
     reactionsMap.removeWhere((eventId, reactions) {
       reactions.removeWhere((reaction) => reaction.fetchedAt.isBefore(cutoffTime));
       return reactions.isEmpty;
     });
 
-    // Clean replies
     repliesMap.removeWhere((eventId, replies) {
       replies.removeWhere((reply) => reply.fetchedAt.isBefore(cutoffTime));
       return replies.isEmpty;

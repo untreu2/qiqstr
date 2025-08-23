@@ -15,11 +15,9 @@ class NotesProvider extends ChangeNotifier {
   final Set<String> _loadingNotes = {};
   bool _isInitialized = false;
 
-  // Getters
   Map<String, NoteModel> get notes => Map.unmodifiable(_notes);
   bool get isInitialized => _isInitialized;
 
-  // Hive boxes
   Box<NoteModel>? _feedNotesBox;
   Box<NoteModel>? _profileNotesBox;
 
@@ -27,7 +25,6 @@ class NotesProvider extends ChangeNotifier {
     if (_isInitialized) return;
 
     try {
-      // Open Hive boxes in parallel for faster initialization
       final boxFutures = [
         Hive.openBox<NoteModel>('notes_Feed_$npub'),
         Hive.openBox<NoteModel>('notes_Profile_$npub'),
@@ -37,20 +34,16 @@ class NotesProvider extends ChangeNotifier {
       _feedNotesBox = boxes[0];
       _profileNotesBox = boxes[1];
 
-      // Load existing notes from Hive in parallel
       await _loadNotesFromHiveOptimized();
 
       _isInitialized = true;
       notifyListeners();
-    } catch (e) {
-      // Debug print removed to save memory
-    }
+    } catch (e) {}
   }
 
   Future<void> _loadNotesFromHiveOptimized() async {
     final loadingFutures = <Future>[];
 
-    // Load from feed box in background
     if (_feedNotesBox != null) {
       loadingFutures.add(Future.microtask(() {
         final notes = _feedNotesBox!.values.toList();
@@ -60,7 +53,6 @@ class NotesProvider extends ChangeNotifier {
       }));
     }
 
-    // Load from profile box in background
     if (_profileNotesBox != null) {
       loadingFutures.add(Future.microtask(() {
         final notes = _profileNotesBox!.values.toList();
@@ -70,20 +62,17 @@ class NotesProvider extends ChangeNotifier {
       }));
     }
 
-    // Wait for all loading operations to complete
     await Future.wait(loadingFutures);
   }
 
   void _addNoteToCache(NoteModel note) {
     _notes[note.id] = note;
 
-    // Index by author
     _notesByAuthor.putIfAbsent(note.author, () => []);
     if (!_notesByAuthor[note.author]!.contains(note.id)) {
       _notesByAuthor[note.author]!.add(note.id);
     }
 
-    // Index replies
     if (note.isReply && note.parentId != null) {
       _repliesByParent.putIfAbsent(note.parentId!, () => []);
       if (!_repliesByParent[note.parentId!]!.contains(note.id)) {
@@ -123,18 +112,14 @@ class NotesProvider extends ChangeNotifier {
     final wasNewNote = !_notes.containsKey(note.id);
     _addNoteToCache(note);
 
-    // Save to appropriate Hive box
     try {
       if (dataType == DataType.feed && _feedNotesBox != null) {
         await _feedNotesBox!.put(note.id, note);
       } else if (dataType == DataType.profile && _profileNotesBox != null) {
         await _profileNotesBox!.put(note.id, note);
       }
-    } catch (e) {
-      // Debug print removed to save memory
-    }
+    } catch (e) {}
 
-    // Only notify listeners if this was actually a new note
     if (wasNewNote) {
       notifyListeners();
     }
@@ -150,7 +135,6 @@ class NotesProvider extends ChangeNotifier {
       _addNoteToCache(note);
     }
 
-    // Batch save to Hive
     try {
       if (dataType == DataType.feed && _feedNotesBox != null) {
         final notesMap = {for (var note in notes) note.id: note};
@@ -159,11 +143,8 @@ class NotesProvider extends ChangeNotifier {
         final notesMap = {for (var note in notes) note.id: note};
         await _profileNotesBox!.putAll(notesMap);
       }
-    } catch (e) {
-      // Debug print removed to save memory
-    }
+    } catch (e) {}
 
-    // Only notify listeners if there were actually new notes added
     if (hasNewNotes) {
       notifyListeners();
     }
@@ -174,7 +155,6 @@ class NotesProvider extends ChangeNotifier {
       final oldNote = _notes[note.id]!;
       _notes[note.id] = note;
 
-      // Only notify if there are actual changes
       if (oldNote.reactionCount != note.reactionCount ||
           oldNote.replyCount != note.replyCount ||
           oldNote.repostCount != note.repostCount ||
@@ -196,7 +176,6 @@ class NotesProvider extends ChangeNotifier {
     if (note != null) {
       bool hasChanges = false;
 
-      // Only update if values actually changed
       if (reactionCount != null && note.reactionCount != reactionCount) {
         note.reactionCount = reactionCount;
         hasChanges = true;
@@ -214,7 +193,6 @@ class NotesProvider extends ChangeNotifier {
         hasChanges = true;
       }
 
-      // Only notify listeners if there were actual changes
       if (hasChanges) {
         notifyListeners();
       }
@@ -224,10 +202,8 @@ class NotesProvider extends ChangeNotifier {
   void removeNote(String noteId) {
     final note = _notes.remove(noteId);
     if (note != null) {
-      // Remove from author index
       _notesByAuthor[note.author]?.remove(noteId);
 
-      // Remove from replies index
       if (note.parentId != null) {
         _repliesByParent[note.parentId!]?.remove(noteId);
       }
@@ -242,20 +218,15 @@ class NotesProvider extends ChangeNotifier {
     _repliesByParent.clear();
     _loadingNotes.clear();
 
-    // MEMORY OPTIMIZATION: Also clear NoteModel global parse cache
     NoteModel.clearParseCache();
     notifyListeners();
   }
 
-  // MEMORY OPTIMIZATION: Removed statistics to save memory
-
   @override
   void dispose() {
-    // MEMORY OPTIMIZATION: Proper resource disposal
     _feedNotesBox?.close();
     _profileNotesBox?.close();
 
-    // Clear all caches before disposal
     clearCache();
 
     super.dispose();

@@ -1,4 +1,3 @@
-/// Task for data processing in isolates
 class DataProcessingTask {
   final String data;
   final String type;
@@ -13,7 +12,6 @@ class DataProcessingTask {
   });
 }
 
-/// Metrics for cache processing
 class CacheMetrics {
   int processedItems = 0;
   int errors = 0;
@@ -35,7 +33,6 @@ class CacheMetrics {
       };
 }
 
-/// Metrics for notes processing
 class NotesMetrics {
   int processedNotes = 0;
   int errors = 0;
@@ -57,7 +54,6 @@ class NotesMetrics {
       };
 }
 
-/// Configuration for isolate processing
 class IsolateConfig {
   final int optimalBatchSize;
   final Duration maxProcessingTime;

@@ -46,23 +46,17 @@ class _ThreadPageState extends State<ThreadPage> {
 
   Set<String> _relevantNoteIds = {};
 
-  // Performance optimization: Cache thread hierarchy
   Map<String, List<NoteModel>>? _cachedThreadHierarchy;
   String? _lastHierarchyRootId;
   int _lastNotesVersion = 0;
 
-  // Debouncing for UI updates
   Timer? _uiUpdateTimer;
   bool _hasPendingUIUpdate = false;
 
-  // Performance optimization: Limit rendering
-  static const int repliesPerPage = 10; // 10'ar 10'ar yüklenecek
+  static const int repliesPerPage = 10;
   static const int maxNestingDepth = 2;
 
-  // Widget caching for expensive rebuilds
-
-  // Pagination state for replies
-  int _currentlyShownReplies = 10; // İlk başta 10 reply göster
+  int _currentlyShownReplies = 10;
 
   @override
   void initState() {
@@ -81,18 +75,16 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   void _onNotesChanged() {
-    if (_isLoading) return; // Prevent changes during loading
+    if (_isLoading) return;
 
     final allNotes = widget.dataService.notesNotifier.value;
     final currentVersion = allNotes.hashCode;
 
-    // Quick exit if notes haven't actually changed
     if (currentVersion == _lastNotesVersion) return;
     _lastNotesVersion = currentVersion;
 
     bool hasRelevantChanges = false;
 
-    // Check if any relevant notes have actually changed (optimized)
     if (_rootNote != null) {
       final currentRootNote = allNotes.firstWhereOrNull((n) => n.id == _rootNote!.id);
       if (currentRootNote != null && currentRootNote != _rootNote) {
@@ -107,7 +99,6 @@ class _ThreadPageState extends State<ThreadPage> {
       }
     }
 
-    // Check for new replies to relevant notes (optimized early exit)
     if (!hasRelevantChanges && _rootNote != null) {
       for (final note in allNotes) {
         if (note.isReply && (note.rootId == _rootNote!.id || note.parentId == _rootNote!.id) && !_relevantNoteIds.contains(note.id)) {
@@ -118,13 +109,10 @@ class _ThreadPageState extends State<ThreadPage> {
     }
 
     if (hasRelevantChanges) {
-      // Invalidate hierarchy cache
       _cachedThreadHierarchy = null;
 
-      // Use debounced UI updates instead of immediate setState
       _debounceUIUpdate();
 
-      // Also fetch profiles for any new users in the thread
       Future.microtask(() => _fetchAllThreadUserProfiles());
     }
   }
@@ -162,7 +150,6 @@ class _ThreadPageState extends State<ThreadPage> {
 
       _updateRelevantNoteIds();
 
-      // Show content immediately if we have the root note, don't wait for everything
       if (mounted) {
         setState(() => _isLoading = false);
         if (widget.focusedNoteId != null && (_focusedNote != null || _rootNote?.id == widget.focusedNoteId)) {
@@ -172,10 +159,8 @@ class _ThreadPageState extends State<ThreadPage> {
         }
       }
 
-      // Load additional data in background without blocking UI
       _loadAdditionalDataInBackground();
 
-      // Fetch interactions for thread on ThreadPage - performance optimization
       _loadThreadInteractions();
     } catch (e) {
       print('[ThreadPage] Error in _loadRootNote: $e');
@@ -185,28 +170,22 @@ class _ThreadPageState extends State<ThreadPage> {
     }
   }
 
-  /// Load additional data in background without blocking the UI
   Future<void> _loadAdditionalDataInBackground() async {
-    // Run these operations in background with timeouts
     final futures = <Future>[];
 
-    // Fetch missing context notes with timeout
     futures.add(
         _fetchMissingContextNotes().timeout(const Duration(seconds: 3)).catchError((e) => print('[ThreadPage] Context fetch timeout: $e')));
 
-    // Fetch profiles with timeout
     futures.add(_fetchAllThreadUserProfiles()
         .timeout(const Duration(seconds: 3))
         .catchError((e) => print('[ThreadPage] Profiles fetch timeout: $e')));
 
-    // Wait for all with overall timeout
     try {
       await Future.wait(futures).timeout(const Duration(seconds: 5));
     } catch (e) {
       print('[ThreadPage] Background loading timeout: $e');
     }
 
-    // Update UI if needed after background loading
     if (mounted) {
       setState(() {
         _updateRelevantNoteIds();
@@ -214,19 +193,16 @@ class _ThreadPageState extends State<ThreadPage> {
     }
   }
 
-  /// Special interaction loading for threads - only runs on thread page
   Future<void> _loadThreadInteractions() async {
     if (_rootNote == null) return;
 
     try {
-      // Collect eventIds for all notes in the thread
       final threadEventIds = <String>{_rootNote!.id};
 
       if (_focusedNote != null) {
         threadEventIds.add(_focusedNote!.id);
       }
 
-      // Get all replies from thread hierarchy (using cached version)
       final threadHierarchy = _getOrBuildThreadHierarchy(_rootNote!.id);
       for (final replies in threadHierarchy.values) {
         for (final reply in replies) {
@@ -236,7 +212,6 @@ class _ThreadPageState extends State<ThreadPage> {
 
       print('[ThreadPage] Loading interactions for ${threadEventIds.length} thread notes');
 
-      // Fetch interactions only for this thread's notes
       await widget.dataService
           .fetchInteractionsForEvents(threadEventIds.toList())
           .timeout(const Duration(seconds: 3))
@@ -251,15 +226,12 @@ class _ThreadPageState extends State<ThreadPage> {
 
     final Set<String> allUserNpubs = {};
 
-    // Add root note author
     allUserNpubs.add(_rootNote!.author);
 
-    // Add focused note author if exists
     if (_focusedNote != null) {
       allUserNpubs.add(_focusedNote!.author);
     }
 
-    // Add reposted by user if it's a repost
     if (_rootNote!.isRepost && _rootNote!.repostedBy != null) {
       allUserNpubs.add(_rootNote!.repostedBy!);
     }
@@ -267,19 +239,17 @@ class _ThreadPageState extends State<ThreadPage> {
       allUserNpubs.add(_focusedNote!.repostedBy!);
     }
 
-    // Get all replies in the thread hierarchy (using cached version)
     final threadHierarchy = _getOrBuildThreadHierarchy(_rootNote!.id);
     for (final replies in threadHierarchy.values) {
       for (final reply in replies) {
         allUserNpubs.add(reply.author);
-        // Add reposted by user if reply is a repost
+
         if (reply.isRepost && reply.repostedBy != null) {
           allUserNpubs.add(reply.repostedBy!);
         }
       }
     }
 
-    // Fetch profiles for all users in the thread with timeout
     if (allUserNpubs.isNotEmpty) {
       print('[ThreadPage] Fetching profiles for ${allUserNpubs.length} thread users');
       try {
@@ -293,17 +263,14 @@ class _ThreadPageState extends State<ThreadPage> {
   Future<void> _fetchMissingContextNotes() async {
     final List<String> notesToFetch = [];
 
-    // If root note is missing, try to fetch it
     if (_rootNote == null) {
       notesToFetch.add(widget.rootNoteId);
     }
 
-    // If focused note is missing, try to fetch it
     if (widget.focusedNoteId != null && _focusedNote == null) {
       notesToFetch.add(widget.focusedNoteId!);
     }
 
-    // If we have a focused note that's a reply, ensure we have its parent/root context
     if (_focusedNote != null && _focusedNote!.isReply) {
       if (_focusedNote!.rootId != null && _focusedNote!.rootId!.isNotEmpty) {
         final rootExists = widget.dataService.notesNotifier.value.any((n) => n.id == _focusedNote!.rootId);
@@ -320,13 +287,11 @@ class _ThreadPageState extends State<ThreadPage> {
       }
     }
 
-    // Fetch missing notes with timeout
     if (notesToFetch.isNotEmpty) {
       print('[ThreadPage] Fetching missing context notes: $notesToFetch');
       try {
         await _fetchNotesById(notesToFetch).timeout(const Duration(seconds: 3));
 
-        // Refresh our local references after fetching
         final updatedNotes = widget.dataService.notesNotifier.value;
         _rootNote = updatedNotes.firstWhereOrNull((n) => n.id == widget.rootNoteId);
         if (widget.focusedNoteId != null) {
@@ -344,7 +309,6 @@ class _ThreadPageState extends State<ThreadPage> {
         final note = await widget.dataService.getCachedNote(noteId).timeout(const Duration(seconds: 2));
         if (note != null) {
           print('[ThreadPage] Successfully fetched note: $noteId');
-          // The note should already be added to the notes list by getCachedNote
         } else {
           print('[ThreadPage] Failed to fetch note: $noteId');
         }
@@ -355,8 +319,6 @@ class _ThreadPageState extends State<ThreadPage> {
 
     await Future.wait(futures).timeout(const Duration(seconds: 5));
   }
-
-  // _fetchThreadReplies removed - now using _loadThreadInteractions
 
   void _updateRelevantNoteIds() {
     _relevantNoteIds.clear();
@@ -377,7 +339,6 @@ class _ThreadPageState extends State<ThreadPage> {
     }
   }
 
-  // Memoized thread hierarchy building
   Map<String, List<NoteModel>> _getOrBuildThreadHierarchy(String rootId) {
     if (_cachedThreadHierarchy != null && _lastHierarchyRootId == rootId) {
       return _cachedThreadHierarchy!;
@@ -464,7 +425,6 @@ class _ThreadPageState extends State<ThreadPage> {
       );
     }
 
-    // Performance optimization: 10'ar 10'ar reply pagination
     final visibleReplies = directReplies.take(_currentlyShownReplies).toList();
     final hasMore = directReplies.length > _currentlyShownReplies;
     final remainingCount = directReplies.length - _currentlyShownReplies;
@@ -472,7 +432,6 @@ class _ThreadPageState extends State<ThreadPage> {
     return Column(
       children: [
         const SizedBox(height: 8.0),
-        // Build widgets directly instead of ListView for better performance
         ...visibleReplies.asMap().entries.map((entry) {
           final index = entry.key;
           final reply = entry.value;
@@ -484,16 +443,14 @@ class _ThreadPageState extends State<ThreadPage> {
             const [],
           );
         }),
-        // Show load more button if needed - 10'ar 10'ar yükle
         if (hasMore)
           Container(
             margin: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 20.0),
             child: ElevatedButton(
               onPressed: () {
                 setState(() {
-                  // 10 daha fazla reply göster
                   _currentlyShownReplies += repliesPerPage;
-                  // Maximum olarak tüm reply'ları göster
+
                   if (_currentlyShownReplies > directReplies.length) {
                     _currentlyShownReplies = directReplies.length;
                   }
@@ -520,7 +477,6 @@ class _ThreadPageState extends State<ThreadPage> {
     bool isLast,
     List<bool> parentIsLast,
   ) {
-    // Performance: Limit nesting depth to prevent deep widget trees
     if (depth >= maxNestingDepth) {
       return Container(
         margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
@@ -546,7 +502,6 @@ class _ThreadPageState extends State<ThreadPage> {
     final isHighlighted = reply.id == _highlightedNoteId;
     final nestedReplies = hierarchy[reply.id] ?? [];
 
-    // Simplified widget structure - removed caching for now due to context issues
     return RepaintBoundary(
       child: Container(
         margin: EdgeInsets.only(
@@ -556,7 +511,6 @@ class _ThreadPageState extends State<ThreadPage> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Simplified thread line - just use a Container instead of CustomPaint
             if (depth > 0)
               Container(
                 width: 2,
@@ -586,7 +540,6 @@ class _ThreadPageState extends State<ThreadPage> {
                       isSmallView: depth > 0,
                     ),
                   ),
-                  // Only show nested replies if depth is reasonable and limit to 5
                   if (depth < maxNestingDepth - 1) ...[
                     ...nestedReplies.take(5).toList().asMap().entries.map((entry) {
                       final index = entry.key;
@@ -599,7 +552,6 @@ class _ThreadPageState extends State<ThreadPage> {
                         [...parentIsLast, isLast],
                       );
                     }),
-                    // Show count if there are more nested replies
                     if (nestedReplies.length > 5)
                       Container(
                         margin: EdgeInsets.only(left: (depth + 1) * indentWidth + 8),
@@ -720,7 +672,6 @@ class _OptimizedNoteWidgetState extends State<_OptimizedNoteWidget> {
       builder: (context, notes, child) {
         final currentHash = notes.hashCode;
 
-        // Only update cache if notes changed
         if (currentHash != _lastNotesHash) {
           final updatedNote = notes.firstWhereOrNull((n) => n.id == widget.noteId);
           if (updatedNote != null) {
@@ -748,7 +699,6 @@ class _OptimizedNoteWidgetState extends State<_OptimizedNoteWidget> {
   }
 }
 
-// ignore: unused_element
 class _ThreadLinePainter extends CustomPainter {
   final int depth;
   final bool isLast;

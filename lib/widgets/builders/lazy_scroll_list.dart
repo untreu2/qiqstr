@@ -57,7 +57,6 @@ class _LazyScrollListState extends State<LazyScrollList> {
   void _onScroll() {
     _updateVisibleRange();
 
-    // Load more when near the end
     if (widget.onLoadMore != null && !widget.isLoading) {
       final maxScroll = _scrollController.position.maxScrollExtent;
       final currentScroll = _scrollController.offset;
@@ -74,11 +73,9 @@ class _LazyScrollListState extends State<LazyScrollList> {
     final viewportHeight = _scrollController.position.viewportDimension;
     final scrollOffset = _scrollController.offset;
 
-    // Calculate visible range with buffer
     int firstIndex = _estimateIndexAtOffset(scrollOffset);
     int lastIndex = _estimateIndexAtOffset(scrollOffset + viewportHeight);
 
-    // Add buffer
     firstIndex = (firstIndex - widget.visibleItemBuffer).clamp(0, widget.items.length - 1);
     lastIndex = (lastIndex + widget.visibleItemBuffer).clamp(0, widget.items.length - 1);
 
@@ -118,7 +115,6 @@ class _LazyScrollListState extends State<LazyScrollList> {
         if (_itemHeights[index] != height) {
           _itemHeights[index] = height;
 
-          // Update note model with measured height for future reference
           if (widget.items[index].estimatedHeight != height) {
             widget.items[index].estimatedHeight = height;
           }
@@ -144,11 +140,9 @@ class _LazyScrollListState extends State<LazyScrollList> {
       delegate: SliverChildBuilderDelegate(
         (context, index) {
           if (index < _firstVisibleIndex || index > _lastVisibleIndex) {
-            // Return a placeholder with estimated height for non-visible items
             return SizedBox(height: _getItemHeight(index));
           }
 
-          // Create key for measuring
           _itemKeys[index] = GlobalKey();
 
           return _MeasuredItem(
@@ -192,7 +186,6 @@ class _MeasuredItemState extends State<_MeasuredItem> {
   }
 }
 
-/// Lazy loading list widget specifically for notes
 class LazyNotesList extends StatelessWidget {
   final List<NoteModel> notes;
   final Widget Function(BuildContext context, NoteModel note, int index) itemBuilder;
@@ -217,7 +210,7 @@ class LazyNotesList extends StatelessWidget {
         LazyScrollList(
           items: notes,
           itemBuilder: itemBuilder,
-          estimatedItemHeight: 180.0, // Estimated height for note widgets
+          estimatedItemHeight: 180.0,
           visibleItemBuffer: 3,
           onLoadMore: onLoadMore,
           isLoading: isLoading,

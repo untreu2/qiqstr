@@ -30,12 +30,10 @@ class WebSocketManager {
   final Duration maxBackoffDelay;
   bool _isClosed = false;
 
-  // Connection pooling and load balancing
   final Queue<String> _messageQueue = Queue();
   Timer? _messageProcessingTimer;
   bool _isProcessingMessages = false;
 
-  // Health monitoring
   Timer? _healthCheckTimer;
   final Duration healthCheckInterval;
 
@@ -75,13 +73,10 @@ class WebSocketManager {
       final url = entry.key;
       final stats = entry.value;
 
-      // Check if relay is unhealthy and needs attention
       if (!stats.isHealthy && !_webSockets.containsKey(url)) {
-        // Attempt to reconnect unhealthy relays
         unawaited(_attemptReconnection(url));
       }
 
-      // Update uptime for connected relays
       if (_webSockets.containsKey(url) && stats.connectionStartTime != null) {
         final uptime = now.difference(stats.connectionStartTime!);
         stats.totalUptime = stats.totalUptime + uptime;
@@ -96,16 +91,13 @@ class WebSocketManager {
 
     try {
       await _connectSingleRelay(url, null, null);
-    } catch (e) {
-      // Reconnection failed, will be retried in next health check
-    }
+    } catch (e) {}
   }
 
   List<WebSocket> get activeSockets => _webSockets.values.where((ws) => ws.readyState == WebSocket.open).toList();
 
   bool get isConnected => activeSockets.isNotEmpty;
 
-  // Get healthy relays for load balancing
   List<String> get healthyRelays {
     return relayUrls.where((url) {
       final stats = _connectionStats[url];
@@ -155,31 +147,23 @@ class WebSocketManager {
               stats.messagesReceived++;
               onEvent?.call(event, relayUrl);
             }
-          } catch (e) {
-            // Silently handle event processing errors
-          }
+          } catch (e) {}
         },
         onDone: () {
           try {
             _handleDisconnection(relayUrl, onDisconnected);
-          } catch (e) {
-            // Silently handle disconnection errors
-          }
+          } catch (e) {}
         },
         onError: (error) {
           try {
-            // Handle specific socket errors
             if (error is SocketException) {
-              // Socket closed or connection lost - handle gracefully
               _handleDisconnection(relayUrl, onDisconnected);
             } else {
               _handleDisconnection(relayUrl, onDisconnected);
             }
-          } catch (e) {
-            // Silently handle error handling errors
-          }
+          } catch (e) {}
         },
-        cancelOnError: false, // Don't cancel on error to prevent cascade failures
+        cancelOnError: false,
       );
     } catch (e) {
       try {
@@ -199,7 +183,6 @@ class WebSocketManager {
     stats.disconnections++;
     stats.lastDisconnected = DateTime.now();
 
-    // Update uptime if we were tracking connection time
     if (stats.connectionStartTime != null) {
       final uptime = DateTime.now().difference(stats.connectionStartTime!);
       stats.totalUptime = stats.totalUptime + uptime;
@@ -215,17 +198,13 @@ class WebSocketManager {
 
     final futures = activeWs.map((ws) async {
       try {
-        // Check if socket is still open before executing action
         if (ws.readyState == WebSocket.open) {
           await action(ws);
         }
       } catch (e) {
-        // Handle socket errors during broadcast
         if (e is SocketException) {
-          // Socket closed - remove from active sockets
           _webSockets.removeWhere((key, value) => value == ws);
         }
-        // Silently handle other errors
       }
     });
 
@@ -233,10 +212,8 @@ class WebSocketManager {
   }
 
   Future<void> broadcast(String message) async {
-    // Add to queue for load balancing
     _messageQueue.add(message);
 
-    // Process immediately if queue is getting large
     if (_messageQueue.length >= 10) {
       _processMessageQueue();
     }
@@ -291,7 +268,6 @@ class WebSocketManager {
     final healthyRelayUrls = healthyRelays;
 
     if (healthyRelayUrls.isEmpty) {
-      // Fallback to all active sockets if no healthy relays
       await executeOnActiveSockets((ws) {
         _updateMessageStats(ws, message);
         return ws.add(message);
@@ -299,7 +275,6 @@ class WebSocketManager {
       return;
     }
 
-    // Use load balancing for healthy relays
     final futures = healthyRelayUrls.map((url) async {
       final ws = _webSockets[url];
       if (ws != null && ws.readyState == WebSocket.open) {
@@ -307,7 +282,6 @@ class WebSocketManager {
           _updateMessageStats(ws, message);
           ws.add(message);
         } catch (e) {
-          // Handle send errors
           if (e is SocketException) {
             _webSockets.remove(url);
           }
@@ -319,7 +293,6 @@ class WebSocketManager {
   }
 
   void _updateMessageStats(WebSocket ws, String message) {
-    // Find which relay this socket belongs to
     for (final entry in _webSockets.entries) {
       if (entry.value == ws) {
         final stats = _connectionStats[entry.key];
@@ -366,13 +339,9 @@ class WebSocketManager {
 
         ws.listen(
           (event) {
-            // Handle events during reconnection if needed
             try {
               stats.messagesReceived++;
-              // Process events silently during reconnection
-            } catch (e) {
-              // Silently handle event processing errors
-            }
+            } catch (e) {}
           },
           onDone: () {
             try {
@@ -380,27 +349,22 @@ class WebSocketManager {
                 _handleDisconnection(relayUrl, null);
                 reconnectRelay(relayUrl, targetNpubs, attempt: attempt + 1);
               }
-            } catch (e) {
-              // Silently handle reconnection errors
-            }
+            } catch (e) {}
           },
           onError: (error) {
             try {
               if (!_isClosed) {
                 _handleDisconnection(relayUrl, null);
-                // Handle specific socket errors during reconnection
+
                 if (error is SocketException) {
-                  // Socket closed - attempt reconnection
                   reconnectRelay(relayUrl, targetNpubs, attempt: attempt + 1);
                 } else {
                   reconnectRelay(relayUrl, targetNpubs, attempt: attempt + 1);
                 }
               }
-            } catch (e) {
-              // Silently handle error handling errors
-            }
+            } catch (e) {}
           },
-          cancelOnError: false, // Don't cancel on error to prevent cascade failures
+          cancelOnError: false,
         );
 
         onReconnected?.call(relayUrl);
@@ -426,7 +390,6 @@ class WebSocketManager {
   Future<void> closeConnections() async {
     _isClosed = true;
 
-    // Cancel all timers
     for (final timer in _reconnectTimers.values) {
       timer.cancel();
     }
@@ -440,9 +403,7 @@ class WebSocketManager {
         if (ws.readyState == WebSocket.open || ws.readyState == WebSocket.connecting) {
           await ws.close();
         }
-      } catch (e) {
-        // Silently handle close errors - socket might already be closed
-      }
+      } catch (e) {}
     });
 
     await Future.wait(closeFutures, eagerError: false);
@@ -450,7 +411,6 @@ class WebSocketManager {
     _messageQueue.clear();
   }
 
-  // Enhanced statistics and monitoring
   Map<String, dynamic> getConnectionStats() {
     final totalStats = {
       'totalRelays': relayUrls.length,
@@ -485,7 +445,6 @@ class WebSocketManager {
     };
   }
 
-  // Force process pending messages
   void flushMessageQueue() {
     _processMessageQueue();
   }
@@ -498,7 +457,6 @@ class PrimalCacheClient {
   static const Duration _cacheTTL = Duration(minutes: 20);
   static const int _maxCacheSize = 2000;
 
-  // Performance metrics
   static int _cacheHits = 0;
   static int _cacheMisses = 0;
   static int _requestsSent = 0;
@@ -573,14 +531,12 @@ class PrimalCacheClient {
     final now = DateTime.now();
     final expiredKeys = <String>[];
 
-    // Remove expired entries
     for (final entry in _cacheTimestamps.entries) {
       if (now.difference(entry.value) > _cacheTTL) {
         expiredKeys.add(entry.key);
       }
     }
 
-    // If still too large, remove oldest entries (LRU)
     if (_profileCache.length - expiredKeys.length > _maxCacheSize * 0.8) {
       final sortedEntries = _cacheTimestamps.entries.toList()..sort((a, b) => a.value.compareTo(b.value));
 
@@ -596,7 +552,6 @@ class PrimalCacheClient {
     }
   }
 
-  // Enhanced statistics
   static Map<String, dynamic> getCacheStats() {
     final hitRate = _cacheHits + _cacheMisses > 0 ? (_cacheHits / (_cacheHits + _cacheMisses) * 100).toStringAsFixed(1) : '0.0';
 
@@ -646,9 +601,7 @@ class PrimalCacheClient {
         },
         onError: (error) {
           try {
-            // Handle specific socket errors in cache client
             if (error is SocketException) {
-              // Socket closed - complete with null
               if (!completer.isCompleted) completer.complete(null);
             } else {
               if (!completer.isCompleted) completer.complete(null);
@@ -660,11 +613,9 @@ class PrimalCacheClient {
         onDone: () {
           try {
             if (!completer.isCompleted) completer.complete(null);
-          } catch (e) {
-            // Silently handle completion errors
-          }
+          } catch (e) {}
         },
-        cancelOnError: false, // Don't cancel on error to prevent cascade failures
+        cancelOnError: false,
       );
 
       ws.add(jsonEncode(request));
@@ -711,7 +662,6 @@ class PrimalCacheClient {
   String _generateId() => DateTime.now().millisecondsSinceEpoch.toString();
 }
 
-// Helper function for fire-and-forget operations
 void unawaited(Future<void> future) {
   future.catchError((error) {
     print('[RelayService] Background operation failed: $error');

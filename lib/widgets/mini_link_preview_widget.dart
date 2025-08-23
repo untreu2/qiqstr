@@ -17,15 +17,12 @@ Future<LinkPreviewModel?> _fetchAndParseMiniLink(String url) async {
       final metaTitle = document.querySelector('title');
       final metaOgImage = document.querySelector('meta[property="og:image"]');
 
-      final String parsedTitle =
-          metaOgTitle?.attributes['content'] ?? metaTitle?.text ?? url;
+      final String parsedTitle = metaOgTitle?.attributes['content'] ?? metaTitle?.text ?? url;
       final String? parsedImage = metaOgImage?.attributes['content'];
 
       return LinkPreviewModel(title: parsedTitle, imageUrl: parsedImage);
     }
-  } catch (e) {
-    // Don't print errors in production
-  }
+  } catch (e) {}
   return null;
 }
 

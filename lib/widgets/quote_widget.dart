@@ -123,7 +123,6 @@ class QuoteWidget extends StatelessWidget {
       builder: (context, _) {
         final user = UserProvider.instance.getUserOrDefault(npub);
 
-        // Load user if not cached
         if (UserProvider.instance.getUser(npub) == null) {
           UserProvider.instance.loadUser(npub);
         }
@@ -203,7 +202,7 @@ class QuoteWidget extends StatelessWidget {
             }
 
             final n = snap.data!;
-            // Content parsing is now handled lazily through note.parsedContentLazy
+
             final parsed = n.parsedContentLazy;
             final hasText = (parsed['textParts'] as List).any((p) => p['type'] == 'text' && (p['text'] as String).trim().isNotEmpty);
             final hasMedia = (parsed['mediaUrls'] as List?)?.isNotEmpty ?? false;

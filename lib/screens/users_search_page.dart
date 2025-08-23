@@ -57,7 +57,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
       return;
     }
 
-    // Check if the query is an npub
     if (_isNpubFormat(query)) {
       _searchByNpub(query);
     } else {
@@ -88,7 +87,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
   }
 
   Future<void> _searchByNpub(String npubQuery) async {
-    // Don't search again if it's the same query
     if (_lastNpubQuery == npubQuery && _npubSearchResult != null) {
       return;
     }
@@ -100,7 +98,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
     });
 
     try {
-      // First check if user is already in local cache
       final existingUser = _allUsers.firstWhere(
         (user) => user.npub.toLowerCase() == npubQuery.toLowerCase(),
         orElse: () => UserModel(
@@ -125,7 +122,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
         return;
       }
 
-      // Convert npub to hex format for profile service
       String? pubkeyHex;
       try {
         pubkeyHex = decodeBasicBech32(npubQuery, 'npub');
@@ -138,19 +134,15 @@ class _UserSearchPageState extends State<UserSearchPage> {
         return;
       }
 
-      // Fetch user profile using ProfileService
       final profileService = ProfileService();
       final profileData = await profileService.getCachedUserProfile(pubkeyHex);
 
       if (profileData['name'] != 'Anonymous' || profileData['about']!.isNotEmpty) {
-        // Create UserModel with the original npub format
         final fetchedUser = UserModel.fromCachedProfile(npubQuery, profileData);
 
-        // Add to local cache using hex as key
         final box = await Hive.openBox<UserModel>('users');
         await box.put(pubkeyHex, fetchedUser);
 
-        // Update local users list
         _allUsers.add(fetchedUser);
 
         setState(() {

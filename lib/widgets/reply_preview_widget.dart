@@ -44,7 +44,6 @@ class ReplyPreviewWidget extends StatelessWidget {
         }
 
         final note = snapshot.data!;
-        // Content parsing is now handled lazily through note.parsedContentLazy
         final parsed = note.parsedContentLazy;
 
         return FutureBuilder<Map<String, String>>(

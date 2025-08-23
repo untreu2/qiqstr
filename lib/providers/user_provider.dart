@@ -12,15 +12,14 @@ class UserProvider extends ChangeNotifier {
   UserProvider._internal();
 
   final ProfileService _profileService = ProfileService();
-  // MEMORY OPTIMIZATION: Single storage instead of duplicate hex+npub
+
   final Map<String, UserModel> _users = {};
-  final Map<String, String> _npubToHexMap = {}; // Quick lookup for conversions
+  final Map<String, String> _npubToHexMap = {};
   final Set<String> _loadingUsers = {};
   bool _isInitialized = false;
   String? _currentUserNpub;
   UserModel? _currentUser;
 
-  // Memory management
   static const int _maxUsersCache = 1000;
   DateTime _lastCleanup = DateTime.now();
 
@@ -64,33 +63,30 @@ class UserProvider extends ChangeNotifier {
   UserModel? getUser(String identifier) {
     if (identifier.isEmpty) return null;
 
-    // MEMORY OPTIMIZATION: Use primary key (npub) and conversion map
     String primaryKey = _getPrimaryKey(identifier);
     return _users[primaryKey];
   }
 
   String _getPrimaryKey(String identifier) {
     if (identifier.startsWith('npub1')) {
-      return identifier; // Already primary key
+      return identifier;
     }
 
-    // Check conversion cache first
     final cachedNpub = _npubToHexMap.entries.where((entry) => entry.value == identifier).map((entry) => entry.key).firstOrNull;
 
     if (cachedNpub != null) return cachedNpub;
 
-    // Convert hex to npub if valid
     if (_isValidHex(identifier)) {
       try {
         final npub = encodeBasicBech32(identifier, 'npub');
-        _npubToHexMap[npub] = identifier; // Cache conversion
+        _npubToHexMap[npub] = identifier;
         return npub;
       } catch (e) {
         debugPrint('[UserProvider] Error converting hex to npub: $e');
       }
     }
 
-    return identifier; // Fallback
+    return identifier;
   }
 
   UserModel getUserOrDefault(String identifier) {
@@ -101,14 +97,13 @@ class UserProvider extends ChangeNotifier {
     final user = getUser(identifier);
     if (user != null) return user;
 
-    // Ensure we always have a valid npub
     String npubForDefault = identifier;
     if (!identifier.startsWith('npub1') && _isValidHex(identifier)) {
       try {
         npubForDefault = encodeBasicBech32(identifier, 'npub');
       } catch (e) {
         debugPrint('[UserProvider] Error creating npub for default user: $e');
-        npubForDefault = identifier; // Keep original if conversion fails
+        npubForDefault = identifier;
       }
     }
 
@@ -120,7 +115,6 @@ class UserProvider extends ChangeNotifier {
       return _createDefaultUser('');
     }
 
-    // Convert npub to hex if needed for ProfileService
     String hexKey = identifier;
     String npubKey = identifier;
 
@@ -145,10 +139,8 @@ class UserProvider extends ChangeNotifier {
       return getUserOrDefault(identifier);
     }
 
-    // Return cached user if available (check both formats)
     final cachedUser = getUser(identifier);
     if (cachedUser != null) {
-      // Ensure the returned user has a valid npub
       if (cachedUser.npub.isEmpty && npubKey.isNotEmpty) {
         final updatedUser = UserModel(
           npub: npubKey,
@@ -162,7 +154,6 @@ class UserProvider extends ChangeNotifier {
           updatedAt: cachedUser.updatedAt,
         );
 
-        // MEMORY OPTIMIZATION: Store only once with primary key
         _users[npubKey] = updatedUser;
         _npubToHexMap[npubKey] = hexKey;
         notifyListeners();
@@ -172,7 +163,6 @@ class UserProvider extends ChangeNotifier {
       return cachedUser;
     }
 
-    // Return default if already loading
     if (_loadingUsers.contains(hexKey) || _loadingUsers.contains(npubKey)) {
       return getUserOrDefault(identifier);
     }
@@ -180,11 +170,9 @@ class UserProvider extends ChangeNotifier {
     _loadingUsers.add(hexKey);
 
     try {
-      // ProfileService expects hex format
       final profileData = await _profileService.getCachedUserProfile(hexKey);
       final user = UserModel.fromCachedProfile(npubKey, profileData);
 
-      // MEMORY OPTIMIZATION: Store only once
       _users[npubKey] = user;
       _npubToHexMap[npubKey] = hexKey;
       _performMemoryCleanup();
@@ -195,7 +183,6 @@ class UserProvider extends ChangeNotifier {
       debugPrint('[UserProvider] Error loading user $identifier: $e');
       final defaultUser = getUserOrDefault(identifier);
 
-      // Ensure default user has npub if possible
       if (defaultUser.npub.isEmpty && npubKey.isNotEmpty) {
         final correctedUser = UserModel(
           npub: npubKey,
@@ -222,7 +209,7 @@ class UserProvider extends ChangeNotifier {
     final npubKeysToLoad = <String>[];
 
     for (final identifier in identifiers) {
-      if (identifier.isEmpty || getUser(identifier) != null) continue; // Already cached
+      if (identifier.isEmpty || getUser(identifier) != null) continue;
 
       String hexKey = identifier;
       String npubKey = identifier;
@@ -233,7 +220,7 @@ class UserProvider extends ChangeNotifier {
           npubKey = identifier;
         } catch (e) {
           debugPrint('[UserProvider] Skipping invalid npub: $identifier');
-          continue; // Skip invalid npub
+          continue;
         }
       } else if (_isValidHex(identifier)) {
         try {
@@ -241,11 +228,11 @@ class UserProvider extends ChangeNotifier {
           hexKey = identifier;
         } catch (e) {
           debugPrint('[UserProvider] Skipping invalid hex: $identifier');
-          continue; // Skip invalid hex
+          continue;
         }
       } else {
         debugPrint('[UserProvider] Skipping invalid identifier: $identifier');
-        continue; // Skip invalid format
+        continue;
       }
 
       if (!_loadingUsers.contains(hexKey)) {
@@ -256,14 +243,11 @@ class UserProvider extends ChangeNotifier {
 
     if (hexKeysToLoad.isEmpty) return;
 
-    // Mark as loading
     _loadingUsers.addAll(hexKeysToLoad);
 
     try {
-      // Use batch fetching from ProfileService (expects hex format)
       await _profileService.batchFetchProfiles(hexKeysToLoad);
 
-      // Load individual profiles
       final futures = List.generate(hexKeysToLoad.length, (index) async {
         final hexKey = hexKeysToLoad[index];
         final npubKey = npubKeysToLoad[index];
@@ -272,7 +256,6 @@ class UserProvider extends ChangeNotifier {
           final profileData = await _profileService.getCachedUserProfile(hexKey);
           final user = UserModel.fromCachedProfile(npubKey, profileData);
 
-          // MEMORY OPTIMIZATION: Store only once
           _users[npubKey] = user;
           _npubToHexMap[npubKey] = hexKey;
         } catch (e) {
@@ -293,7 +276,6 @@ class UserProvider extends ChangeNotifier {
   void updateUser(String identifier, UserModel user) {
     if (identifier.isEmpty) return;
 
-    // MEMORY OPTIMIZATION: Store only once with primary key
     final primaryKey = _getPrimaryKey(identifier);
     _users[primaryKey] = user;
 
@@ -306,11 +288,9 @@ class UserProvider extends ChangeNotifier {
   void removeUser(String identifier) {
     if (identifier.isEmpty) return;
 
-    // MEMORY OPTIMIZATION: Remove only primary key and conversion
     final primaryKey = _getPrimaryKey(identifier);
     _users.remove(primaryKey);
 
-    // Clean up conversion map
     if (primaryKey.startsWith('npub1')) {
       _npubToHexMap.remove(primaryKey);
     }
@@ -320,12 +300,11 @@ class UserProvider extends ChangeNotifier {
 
   void _performMemoryCleanup() {
     final now = DateTime.now();
-    if (now.difference(_lastCleanup).inMinutes < 5) return; // Only cleanup every 5 minutes
+    if (now.difference(_lastCleanup).inMinutes < 5) return;
 
     _lastCleanup = now;
 
     if (_users.length > _maxUsersCache) {
-      // Remove oldest 20% of users (simple cleanup - could be improved with LRU)
       final keysToRemove = _users.keys.take(_users.length ~/ 5).toList();
       for (final key in keysToRemove) {
         _users.remove(key);
@@ -335,7 +314,6 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
-  // Helper methods
   bool _isValidHex(String value) {
     if (value.isEmpty || value.length != 64) return false;
     return RegExp(r'^[0-9a-fA-F]+$').hasMatch(value);

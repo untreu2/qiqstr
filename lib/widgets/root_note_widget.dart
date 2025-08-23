@@ -50,7 +50,6 @@ class RootNoteWidget extends StatelessWidget {
       builder: (context, _) {
         final authorProfile = UserProvider.instance.getUserOrDefault(note.author);
 
-        // Load user if not cached
         if (UserProvider.instance.getUser(note.author) == null) {
           UserProvider.instance.loadUser(note.author);
         }
@@ -112,10 +111,7 @@ class RootNoteWidget extends StatelessWidget {
                               ),
                             Padding(
                               padding: const EdgeInsets.only(left: 6),
-                              child: Text('• $formattedTimestamp',
-                                  style: TextStyle(
-                                      fontSize: 12.5,
-                                      color: context.colors.secondary)),
+                              child: Text('• $formattedTimestamp', style: TextStyle(fontSize: 12.5, color: context.colors.secondary)),
                             ),
                           ],
                         ),

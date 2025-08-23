@@ -30,14 +30,12 @@ class NotificationProvider extends ChangeNotifier {
   bool _isInitialized = false;
   String? _errorMessage;
 
-  // Notification data
   List<NotificationModel> _notifications = [];
   List<dynamic> _displayNotifications = [];
   Map<String, UserModel?> _userProfiles = {};
   bool _isLoading = true;
   int _unreadCount = 0;
 
-  // Getters
   bool get isInitialized => _isInitialized;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -46,7 +44,6 @@ class NotificationProvider extends ChangeNotifier {
   Map<String, UserModel?> get userProfiles => Map.unmodifiable(_userProfiles);
   int get unreadCount => _unreadCount;
 
-  // Statistics
   int get totalNotifications => _notifications.length;
   int get notificationsLast24Hours {
     final now = DateTime.now();
@@ -74,13 +71,10 @@ class NotificationProvider extends ChangeNotifier {
       _dataService = dataService;
       _userProvider = userProvider;
 
-      // Open notifications box
       _notificationsBox = await Hive.openBox<NotificationModel>('notifications_$npub');
 
-      // Load initial notifications
       await _loadNotifications();
 
-      // Set up listener for DataService notifications if available
       if (_dataService != null) {
         _dataService!.notificationsNotifier.addListener(_handleDataServiceUpdate);
       }
@@ -130,10 +124,8 @@ class NotificationProvider extends ChangeNotifier {
 
       final limited = filtered.take(100).toList();
 
-      // Load user profiles
       await _loadUserProfiles(limited, isInitialLoad);
 
-      // Group notifications
       final grouped = <String, NotificationGroup>{};
       final flatMentions = <NotificationGroup>[];
       final individualZaps = <NotificationModel>[];
@@ -194,14 +186,12 @@ class NotificationProvider extends ChangeNotifier {
         try {
           UserModel? profile;
 
-          // Try to get from UserProvider first
           if (_userProvider != null) {
             profile = _userProvider!.getUser(npub);
             if (profile == null) {
               profile = await _userProvider!.loadUser(npub);
             }
           } else if (_dataService != null) {
-            // Fallback to DataService
             final profileData = await _dataService!.getCachedUserProfile(npub);
             profile = UserModel.fromCachedProfile(npub, profileData);
           }
@@ -220,11 +210,9 @@ class NotificationProvider extends ChangeNotifier {
   }
 
   void _updateUnreadCount() {
-    // Count unread notifications (this could be enhanced with read status tracking)
     _unreadCount = _notifications.where((n) => !n.isRead).length;
   }
 
-  // Notification management methods
   Future<void> addNotification(NotificationModel notification) async {
     try {
       if (_notificationsBox != null) {
@@ -308,7 +296,6 @@ class NotificationProvider extends ChangeNotifier {
     }
   }
 
-  // Helper methods for UI
   String buildGroupTitle(NotificationGroup group) {
     final first = group.notifications.first;
     final names = group.notifications

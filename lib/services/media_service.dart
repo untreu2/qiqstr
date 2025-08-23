@@ -16,31 +16,26 @@ class MediaService {
 
   factory MediaService() => _instance;
 
-  MediaService._internal() {
-    // Will be started lazily when first media is cached
-  }
+  MediaService._internal() {}
 
   final Set<String> _cachedUrls = {};
   final Set<String> _failedUrls = {};
   final Queue<MediaCacheItem> _priorityQueue = Queue();
   final Queue<MediaCacheItem> _normalQueue = Queue();
 
-  // Optimized configuration
-  int _maxConcurrentTasks = 4; // Reduced for better memory usage
-  int _maxBatchSize = 15; // Reduced batch size
+  int _maxConcurrentTasks = 4;
+  int _maxBatchSize = 15;
   bool _isRunning = false;
   Timer? _batchTimer;
   Timer? _cleanupTimer;
 
-  // Memory management - reduced limits
-  static const int _maxCachedUrls = 2000; // Reduced from 5000
-  static const int _maxFailedUrls = 500; // Reduced from 1000
-  static const int _memoryPressureThreshold = 1500; // New threshold
+  static const int _maxCachedUrls = 2000;
+  static const int _maxFailedUrls = 500;
+  static const int _memoryPressureThreshold = 1500;
 
   void _startMemoryManagement() {
-    if (_cleanupTimer != null) return; // Already started
+    if (_cleanupTimer != null) return;
 
-    // More frequent cleanup for better memory management
     _cleanupTimer = Timer.periodic(const Duration(minutes: 10), (_) {
       _performMemoryCleanup();
     });
@@ -57,7 +52,6 @@ class MediaService {
   void _performMemoryCleanup() {
     final totalUrls = _cachedUrls.length + _failedUrls.length;
 
-    // Aggressive cleanup when approaching limits
     if (totalUrls > _memoryPressureThreshold) {
       _aggressiveCleanup();
     } else {
@@ -66,14 +60,12 @@ class MediaService {
   }
 
   void _aggressiveCleanup() {
-    // Remove 30% of cached URLs when under memory pressure
     if (_cachedUrls.length > 100) {
       final removeCount = (_cachedUrls.length * 0.3).round();
       final urlsToRemove = _cachedUrls.take(removeCount).toList();
       _cachedUrls.removeAll(urlsToRemove);
     }
 
-    // Clear failed URLs more aggressively
     if (_failedUrls.length > 200) {
       final removeCount = (_failedUrls.length * 0.5).round();
       final urlsToRemove = _failedUrls.take(removeCount).toList();
@@ -82,7 +74,6 @@ class MediaService {
   }
 
   void _standardCleanup() {
-    // Standard cleanup when within normal limits
     if (_cachedUrls.length > _maxCachedUrls) {
       final urlsToRemove = _cachedUrls.take(_cachedUrls.length - _maxCachedUrls);
       _cachedUrls.removeAll(urlsToRemove);
@@ -130,12 +121,10 @@ class MediaService {
 
     final batch = <MediaCacheItem>[];
 
-    // Process priority items first
     while (_priorityQueue.isNotEmpty && batch.length < _maxBatchSize) {
       batch.add(_priorityQueue.removeFirst());
     }
 
-    // Fill remaining slots with normal priority items
     while (_normalQueue.isNotEmpty && batch.length < _maxBatchSize) {
       batch.add(_normalQueue.removeFirst());
     }
@@ -144,7 +133,6 @@ class MediaService {
       await _processCacheBatch(batch);
     }
 
-    // Continue processing if there are more items
     if (_priorityQueue.isNotEmpty || _normalQueue.isNotEmpty) {
       _batchTimer = Timer(const Duration(milliseconds: 50), _processBatch);
     } else {
@@ -166,7 +154,6 @@ class MediaService {
         await Future.wait(futures, eagerError: false);
         futures.clear();
 
-        // Fixed small delay for memory management
         await Future.delayed(const Duration(milliseconds: 10));
       }
     }
@@ -190,7 +177,6 @@ class MediaService {
       final imageProvider = CachedNetworkImageProvider(url);
       final completer = Completer<void>();
 
-      // Shorter timeout for better memory management
       final timeout = _getTimeoutForUrl(url);
       final timeoutTimer = Timer(timeout, () {
         if (!completer.isCompleted) {
@@ -231,15 +217,15 @@ class MediaService {
   Duration _getTimeoutForUrl(String url) {
     final lower = url.toLowerCase();
     if (lower.endsWith('.gif')) {
-      return const Duration(seconds: 8); // Reduced timeout for GIFs
+      return const Duration(seconds: 8);
     } else if (lower.endsWith('.svg')) {
-      return const Duration(seconds: 3); // Reduced timeout for SVGs
+      return const Duration(seconds: 3);
     }
-    return const Duration(seconds: 6); // Reduced default timeout
+    return const Duration(seconds: 6);
   }
 
   bool _isValidMediaUrl(String url) {
-    if (url.isEmpty || url.length > 2000) return false; // Reject very long URLs
+    if (url.isEmpty || url.length > 2000) return false;
 
     try {
       final uri = Uri.parse(url);
@@ -261,17 +247,14 @@ class MediaService {
         lower.endsWith('.heif');
   }
 
-  // Preload critical images with high priority
   void preloadCriticalImages(List<String> urls) {
     cacheMediaUrls(urls, priority: 3);
   }
 
-  // Clear failed URLs to retry them
   void clearFailedUrls() {
     _failedUrls.clear();
   }
 
-  // Simplified cache statistics for memory efficiency
   Map<String, dynamic> getCacheStats() {
     return {
       'cachedUrls': _cachedUrls.length,
@@ -292,7 +275,6 @@ class MediaService {
     };
   }
 
-  // Optimized cache clearing
   void clearCache({bool clearFailed = true}) {
     _cachedUrls.clear();
     if (clearFailed) _failedUrls.clear();
@@ -302,19 +284,16 @@ class MediaService {
     _isRunning = false;
   }
 
-  // Memory-optimized disposal
   void dispose() {
     _cleanupTimer?.cancel();
     _batchTimer?.cancel();
     clearCache();
   }
 
-  // Memory pressure handling
   void handleMemoryPressure() {
     _aggressiveCleanup();
   }
 
-  // Get memory usage info
   Map<String, int> getMemoryUsage() {
     return {
       'cachedUrls': _cachedUrls.length,
@@ -324,7 +303,6 @@ class MediaService {
     };
   }
 
-  // Force retry failed URLs
   void retryFailedUrls() {
     final failedUrls = List<String>.from(_failedUrls);
     _failedUrls.clear();
@@ -334,12 +312,10 @@ class MediaService {
     }
   }
 
-  // Check if URL is already cached
   bool isCached(String url) {
     return _cachedUrls.contains(url);
   }
 
-  // Check if URL failed to cache
   bool hasFailed(String url) {
     return _failedUrls.contains(url);
   }

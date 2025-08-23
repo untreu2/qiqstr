@@ -13,14 +13,11 @@ class NetworkProvider extends ChangeNotifier {
   bool _isConnecting = false;
   String? _errorMessage;
 
-  // Connection state
   bool _isOnline = true;
 
-  // Request queue for offline support
   final List<Map<String, dynamic>> _pendingRequests = [];
   bool _isProcessingQueue = false;
 
-  // Getters
   bool get isInitialized => _isInitialized;
   bool get isConnecting => _isConnecting;
   bool get isOnline => _isOnline;
@@ -61,7 +58,6 @@ class NetworkProvider extends ChangeNotifier {
       _isOnline = true;
       _isConnecting = false;
 
-      // Process any pending requests
       if (_pendingRequests.isNotEmpty) {
         _processPendingRequests();
       }
@@ -76,7 +72,6 @@ class NetworkProvider extends ChangeNotifier {
     }
   }
 
-  // Broadcasting methods
   Future<void> broadcastMessage(String message, {bool immediate = false}) async {
     if (_networkService == null) {
       _queueRequest('broadcast', {'message': message, 'immediate': immediate});
@@ -239,7 +234,6 @@ class NetworkProvider extends ChangeNotifier {
     }
   }
 
-  // Queue management for offline support
   void _queueRequest(String type, Map<String, dynamic> params) {
     _pendingRequests.add({
       'type': type,
@@ -247,7 +241,6 @@ class NetworkProvider extends ChangeNotifier {
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     });
 
-    // Limit queue size
     if (_pendingRequests.length > 100) {
       _pendingRequests.removeAt(0);
     }
@@ -302,11 +295,10 @@ class NetworkProvider extends ChangeNotifier {
             break;
         }
 
-        // Small delay between requests
         await Future.delayed(const Duration(milliseconds: 100));
       } catch (e) {
         debugPrint('[NetworkProvider] Failed to process queued request: $e');
-        // Re-queue failed request
+
         _pendingRequests.add(request);
       }
     }
@@ -326,7 +318,6 @@ class NetworkProvider extends ChangeNotifier {
     }
   }
 
-  // Connection health monitoring
   Future<void> checkConnectionHealth() async {
     if (_networkService != null) {
       final connectedCount = _networkService!.connectedRelaysCount;

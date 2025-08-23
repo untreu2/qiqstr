@@ -16,21 +16,17 @@ class NetworkService {
 
   bool _isClosed = false;
 
-  // Connection pooling and management
   final Map<String, http.Client> _httpClients = {};
   final Map<String, DateTime> _clientLastUsed = {};
   Timer? _clientCleanupTimer;
 
-  // Request batching and throttling
   final Map<String, Timer> _requestTimers = {};
 
-  // Performance metrics
   int _totalRequests = 0;
   int _successfulRequests = 0;
   int _failedRequests = 0;
   final List<Duration> _requestTimes = [];
 
-  // Rate limiting
   final Map<String, List<DateTime>> _requestHistory = {};
   static const int _maxRequestsPerMinute = 60;
 
@@ -75,7 +71,6 @@ class NetworkService {
     final now = DateTime.now();
     final history = _requestHistory[endpoint] ?? [];
 
-    // Remove requests older than 1 minute
     history.removeWhere((time) => now.difference(time) > const Duration(minutes: 1));
     _requestHistory[endpoint] = history;
 
@@ -95,10 +90,7 @@ class NetworkService {
     );
   }
 
-  Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {
-    // This would be handled by the main DataService
-    // Just a placeholder for the network layer
-  }
+  Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {}
 
   Future<void> broadcastRequest(String serializedRequest) async {
     final stopwatch = Stopwatch()..start();
@@ -114,7 +106,6 @@ class NetworkService {
       stopwatch.stop();
       _requestTimes.add(stopwatch.elapsed);
 
-      // Keep only recent measurements
       if (_requestTimes.length > 100) {
         _requestTimes.removeAt(0);
       }
@@ -129,8 +120,6 @@ class NetworkService {
     }
   }
 
-  // INSTANT BROADCASTING FOR USER INTERACTIONS
-  // Bypass all queuing and delays for user-initiated actions
   Future<void> immediateBroadcast(String message) async {
     final stopwatch = Stopwatch()..start();
     _totalRequests++;

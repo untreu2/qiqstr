@@ -38,10 +38,8 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _initializeAppAndNavigate() async {
     try {
-      // 1. Initialize Hive and adapters
       await _initializeHiveOptimized();
 
-      // 2. Read user credentials
       final secureStorage = const FlutterSecureStorage();
       final credentials = await Future.wait([
         secureStorage.read(key: 'privateKey'),
@@ -52,13 +50,10 @@ class _SplashScreenState extends State<SplashScreen> {
       final npub = credentials[1];
 
       if (privateKey != null && npub != null) {
-        // 3. Prepare for main page
         final dataService = DataService(npub: npub, dataType: DataType.feed);
 
-        // 4. Minimal initialization - only essentials for navigation
         await _initializeMinimalForNavigation(npub, dataService);
 
-        // 5. Navigate to main page (background initialization continues)
         if (mounted) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
@@ -69,11 +64,9 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
           );
 
-          // 6. Perform full initialization in background
           _initializeAppInBackground(npub, dataService);
         }
       } else {
-        // Navigate to login page
         if (mounted) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (context) => const LoginPage()),
@@ -83,7 +76,6 @@ class _SplashScreenState extends State<SplashScreen> {
     } catch (e) {
       print("Critical error during startup: $e");
 
-      // Navigate to login page on error
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const LoginPage()),
@@ -95,7 +87,6 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _initializeHiveOptimized() async {
     await Hive.initFlutter();
 
-    // Register adapters efficiently
     final adapters = [
       () => Hive.registerAdapter(NoteModelAdapter()),
       () => Hive.registerAdapter(ReactionModelAdapter()),
@@ -109,22 +100,19 @@ class _SplashScreenState extends State<SplashScreen> {
     ];
 
     for (int i = 0; i < adapters.length; i++) {
-      final typeId = i == 8 ? 12 : i; // NotificationModel uses typeId 12
+      final typeId = i == 8 ? 12 : i;
       if (!Hive.isAdapterRegistered(typeId)) {
         adapters[i]();
       }
     }
 
-    // Open link preview cache
     await Hive.openBox<LinkPreviewModel>('link_preview_cache');
   }
 
   Future<void> _initializeMinimalForNavigation(String npub, DataService dataService) async {
     try {
-      // Phase 1: Only critical boxes for immediate navigation
       await _openCriticalBoxes(npub);
 
-      // Phase 2: Lightweight DataService initialization only
       await dataService.initializeLightweight();
 
       print('[SplashScreen] Minimal initialization completed for navigation');
@@ -135,13 +123,10 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _initializeAppInBackground(String npub, DataService dataService) async {
     try {
-      // Phase 1: Initialize memory manager first
-      MemoryManager.instance; // Initialize singleton
+      MemoryManager.instance;
 
-      // Phase 2: Open critical boxes first
       await _openCriticalBoxes(npub);
 
-      // Phase 3: Initialize providers in parallel
       final usersBox = Hive.box<UserModel>('users');
       UserProvider.instance.setUsersBox(usersBox);
 
@@ -152,23 +137,18 @@ class _SplashScreenState extends State<SplashScreen> {
         MediaProvider.instance.initialize(),
       ]);
 
-      // Phase 4: Initialize network providers after settings are loaded
       await Future.wait([
         RelayProvider.instance.initialize(),
         NetworkProvider.instance.initialize(),
         NotificationProvider.instance.initialize(npub, dataService: dataService, userProvider: UserProvider.instance),
       ]);
 
-      // Phase 5: Initialize DataService
       await dataService.initialize();
 
-      // Phase 6: Open remaining boxes in background
       _openRemainingBoxes(npub);
 
-      // Phase 7: Initialize connections (non-blocking)
       Future.microtask(() => dataService.initializeConnections());
 
-      // Phase 8: Setup memory pressure callbacks
       _setupMemoryPressureHandling();
     } catch (e) {
       print('Background initialization error: $e');
@@ -176,7 +156,6 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _openCriticalBoxes(String npub) async {
-    // Only open boxes needed for immediate UI display
     await Future.wait([
       Hive.openBox<UserModel>('users'),
       Hive.openBox<NoteModel>('notes_Feed_$npub'),
@@ -185,7 +164,6 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   void _openRemainingBoxes(String npub) {
-    // Open remaining boxes in background without blocking
     Future.microtask(() async {
       final remainingBoxFutures = [
         Hive.openBox<ReactionModel>('reactions_Feed_$npub'),
@@ -206,16 +184,11 @@ class _SplashScreenState extends State<SplashScreen> {
   void _setupMemoryPressureHandling() {
     final memoryManager = MemoryManager.instance;
 
-    // Add memory pressure callback to handle provider cleanup
     memoryManager.addMemoryPressureCallback(() {
-      // Handle memory pressure in providers
       try {
         MediaProvider.instance.handleMemoryPressure();
 
-        // Notify other providers about memory pressure
         if (memoryManager.currentPressureLevel.index >= 2) {
-          // Critical or emergency
-          // Force cleanup in critical situations
           Future.microtask(() async {
             try {
               NotesProvider.instance.clearCache();

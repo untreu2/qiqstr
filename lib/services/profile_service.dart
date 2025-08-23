@@ -20,31 +20,21 @@ class CachedProfile {
 }
 
 class ProfileService {
-  // Memory cache (existing)
   final Map<String, CachedProfile> _profileCache = {};
 
-  // NEW STRUCTURE FOR PENDING REQUESTS
-  // Keeps one Completer per 'npub'. This way, 10 simultaneous requests
-  // for the same profile will all wait for a single network call result.
   final Map<String, Completer<Map<String, String>>> _pendingRequests = {};
 
-  // QUEUE TO ACCUMULATE npubs TO BE PROCESSED
   final Set<String> _requestQueue = <String>{};
 
-  // SHORT-TERM TIMER (DEBOUNCER)
-  // When a request comes in, waits briefly for other requests to accumulate.
   Timer? _debounceTimer;
 
-  // Cache configuration
   final Duration _cacheTTL = const Duration(minutes: 30);
   final int _maxCacheSize = 5000;
   Box<UserModel>? _usersBox;
   Timer? _cleanupTimer;
 
-  // Primal cache client for fast profile fetching
   final PrimalCacheClient _primalClient = PrimalCacheClient();
 
-  // Performance metrics
   int _cacheHits = 0;
   int _cacheMisses = 0;
   int _relayFetches = 0;
@@ -74,7 +64,6 @@ class ProfileService {
       print('[ProfileService] Cleaned up $removed expired cache entries');
     }
 
-    // LRU eviction if cache is too large
     if (_profileCache.length > _maxCacheSize) {
       _evictLeastRecentlyUsed();
     }
@@ -84,67 +73,56 @@ class ProfileService {
     _usersBox = box;
   }
 
-  /// THE SINGLE METHOD USERS WILL CALL
-  /// Never blocks UI - returns immediately with cached data or queues request
   Future<Map<String, String>> getCachedUserProfile(String npub) async {
-    // 1. Check memory cache first (Fast path)
     if (_profileCache.containsKey(npub)) {
       final cached = _profileCache[npub]!;
-      // TTL (Time-To-Live) check
+
       if (DateTime.now().difference(cached.fetchedAt) < _cacheTTL) {
         _cacheHits++;
-        _profileCache[npub] = cached.copyWithAccess(); // Update access time
+        _profileCache[npub] = cached.copyWithAccess();
         return cached.data;
       } else {
-        _profileCache.remove(npub); // Remove if expired
+        _profileCache.remove(npub);
       }
     }
 
     _cacheMisses++;
 
-    // 2. Is there already a pending request for this profile? If so, wait for its result.
     if (_pendingRequests.containsKey(npub)) {
       return _pendingRequests[npub]!.future;
     }
 
-    // 3. No request exists, create a new one and add to queue.
     final completer = Completer<Map<String, String>>();
     _pendingRequests[npub] = completer;
 
     _requestQueue.add(npub);
 
-    // Start/reset timer to process the queue
     _startDebounceTimer();
 
     return completer.future;
   }
 
   void _startDebounceTimer() {
-    // If there's already a timer, cancel it.
-    // This ensures multiple requests in short succession are batched together (debouncing).
     _debounceTimer?.cancel();
 
-    // Process queue after 100ms. This duration can be adjusted based on your app's nature.
     _debounceTimer = Timer(const Duration(milliseconds: 100), _processRequestQueue);
   }
 
   Future<void> _processRequestQueue() async {
     if (_requestQueue.isEmpty) return;
 
-    // Take all requests from queue and clear it.
     final npubsToFetch = List<String>.from(_requestQueue);
     _requestQueue.clear();
 
     print('[ProfileService] Processing batch of ${npubsToFetch.length} profiles.');
 
-    // First check Hive cache.
     final npubsForRelay = <String>[];
     for (final npub in npubsToFetch) {
       final user = _usersBox?.get(npub);
       if (user != null && DateTime.now().difference(user.updatedAt) < _cacheTTL) {
         final data = _userModelToMap(user);
         _addToCache(npub, CachedProfile(data, user.updatedAt));
-        // Complete this request
+
         _pendingRequests[npub]?.complete(data);
         _pendingRequests.remove(npub);
       } else {
@@ -152,11 +130,9 @@ class ProfileService {
       }
     }
 
-    // Make NETWORK request for the remaining ones
     if (npubsForRelay.isNotEmpty) {
       final results = await _batchFetchFromRelays(npubsForRelay);
 
-      // Process results
       for (final npub in npubsForRelay) {
         final data = results[npub] ?? _getDefaultProfile();
         _addToCache(npub, CachedProfile(data, DateTime.now()));
@@ -166,7 +142,6 @@ class ProfileService {
           _saveToHiveAsync(npub, userModel);
         }
 
-        // Complete this request too
         _pendingRequests[npub]?.complete(data);
         _pendingRequests.remove(npub);
       }
@@ -175,15 +150,12 @@ class ProfileService {
     _batchRequestsProcessed += npubsToFetch.length;
   }
 
-  /// This method should now return a result map
   Future<Map<String, Map<String, String>>> _batchFetchFromRelays(List<String> npubs) async {
     final results = <String, Map<String, String>>{};
     if (npubs.isEmpty) return results;
 
     _relayFetches += npubs.length;
 
-    // For simplicity, we'll use individual requests in parallel
-    // In a real implementation, you'd want to use a single filter for all npubs
     final futures = npubs.map((npub) => _fetchUserProfileFromRelay(npub));
     final profileResults = await Future.wait(futures, eagerError: false);
 
@@ -198,7 +170,6 @@ class ProfileService {
     return results;
   }
 
-  /// Legacy method for backward compatibility - now routes through unified system
   Future<void> batchFetchProfiles(List<String> npubs) async {
     if (npubs.isEmpty) return;
 
@@ -206,7 +177,6 @@ class ProfileService {
     await Future.wait(futures, eagerError: false);
   }
 
-  // Helper methods
   Map<String, String> _getDefaultProfile() {
     return {
       'name': 'Anonymous',
@@ -232,7 +202,6 @@ class ProfileService {
   }
 
   void _addToCache(String npub, CachedProfile cached) {
-    // Implement LRU eviction if cache is full
     if (_profileCache.length >= _maxCacheSize) {
       _evictLeastRecentlyUsed();
     }
@@ -258,13 +227,11 @@ class ProfileService {
   }
 
   Future<Map<String, String>?> _fetchUserProfileFromRelay(String npub) async {
-    // Validate hex string format
     if (!_isValidHex(npub)) {
       print('[ProfileService] Invalid hex format: $npub');
       return null;
     }
 
-    // First, try PrimalCacheClient for fast fetching
     try {
       _primalFetches++;
       final primalResult = await _primalClient.fetchUserProfile(npub);
@@ -277,7 +244,6 @@ class ProfileService {
       print('[ProfileService] Primal cache failed for $npub: $e, falling back to relays');
     }
 
-    // Fallback to relay fetching if Primal cache fails
     final relayUrl = relaySetMainSockets.first;
 
     try {
@@ -294,7 +260,6 @@ class ProfileService {
   }
 
   Future<Map<String, String>?> _fetchProfileFromSingleRelay(String relayUrl, String npub) async {
-    // Validate hex string format before making request
     if (!_isValidHex(npub)) {
       print('[ProfileService] Invalid hex format for relay request: $npub');
       return null;
@@ -382,7 +347,6 @@ class ProfileService {
   }
 
   void _saveToHiveAsync(String npub, UserModel userModel) {
-    // Save to Hive asynchronously without blocking
     Future.microtask(() async {
       try {
         final usersBox = _usersBox;
@@ -428,7 +392,6 @@ class ProfileService {
     _cleanupTimer?.cancel();
     _debounceTimer?.cancel();
 
-    // Complete any pending requests
     for (final completer in _pendingRequests.values) {
       if (!completer.isCompleted) {
         completer.complete(_getDefaultProfile());
@@ -440,20 +403,17 @@ class ProfileService {
     _requestQueue.clear();
   }
 
-  // Force process pending batches
   void flushPendingBatches() {
     _debounceTimer?.cancel();
     _processRequestQueue();
   }
 
-  // Helper method to validate hex strings
   bool _isValidHex(String value) {
     if (value.isEmpty || value.length != 64) return false;
     return RegExp(r'^[0-9a-fA-F]+$').hasMatch(value);
   }
 }
 
-// Helper function for fire-and-forget operations
 void unawaited(Future<void> future) {
   future.catchError((error) {
     print('[ProfileService] Background operation failed: $error');

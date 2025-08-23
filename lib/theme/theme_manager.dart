@@ -5,47 +5,45 @@ import '../colors.dart';
 
 class ThemeManager extends ChangeNotifier {
   static const String _themeKey = 'theme_mode';
-  bool? _isDarkMode; // null means follow system
-  
+  bool? _isDarkMode;
+
   bool get isDarkMode {
     if (_isDarkMode != null) {
       return _isDarkMode!;
     }
-    // Follow system theme if no preference is set
     final brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
     return brightness == Brightness.dark;
   }
-  
+
   bool get isSystemTheme => _isDarkMode == null;
-  
+
   ThemeManager() {
     _loadTheme();
   }
-  
+
   Future<void> _loadTheme() async {
     final prefs = await SharedPreferences.getInstance();
     if (prefs.containsKey(_themeKey)) {
       _isDarkMode = prefs.getBool(_themeKey);
     } else {
-      _isDarkMode = null; // Follow system
+      _isDarkMode = null;
     }
     notifyListeners();
   }
-  
+
   Future<void> toggleTheme() async {
     if (_isDarkMode == null) {
-      // If following system, set to opposite of current system theme
       final brightness = WidgetsBinding.instance.platformDispatcher.platformBrightness;
-      _isDarkMode = brightness == Brightness.light; // Opposite of system
+      _isDarkMode = brightness == Brightness.light;
     } else {
       _isDarkMode = !_isDarkMode!;
     }
-    
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_themeKey, _isDarkMode!);
     notifyListeners();
   }
-  
+
   Future<void> setTheme(bool isDark) async {
     if (_isDarkMode != isDark) {
       _isDarkMode = isDark;
@@ -54,15 +52,14 @@ class ThemeManager extends ChangeNotifier {
       notifyListeners();
     }
   }
-  
+
   Future<void> setSystemTheme() async {
     _isDarkMode = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_themeKey);
     notifyListeners();
   }
-  
-  // Get current theme colors
+
   AppThemeColors get colors => isDarkMode ? AppThemeColors.dark() : AppThemeColors.light();
 }
 
@@ -326,18 +323,16 @@ class AppThemeColors {
   }
 }
 
-// Extension to easily access theme colors from BuildContext
 extension ThemeExtension on BuildContext {
   AppThemeColors get colors {
     try {
       final themeManager = Provider.of<ThemeManager>(this, listen: false);
       return themeManager.colors;
     } catch (e) {
-      // Fallback to dark theme if Provider is not available
       return AppThemeColors.dark();
     }
   }
-  
+
   ThemeManager? get themeManager {
     try {
       return Provider.of<ThemeManager>(this, listen: false);

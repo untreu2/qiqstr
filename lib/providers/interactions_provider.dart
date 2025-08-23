@@ -11,40 +11,34 @@ class InteractionsProvider extends ChangeNotifier {
 
   InteractionsProvider._internal();
 
-  // Data maps
   final Map<String, List<ReactionModel>> _reactionsByNote = {};
   final Map<String, List<ReplyModel>> _repliesByNote = {};
   final Map<String, List<RepostModel>> _repostsByNote = {};
   final Map<String, List<ZapModel>> _zapsByNote = {};
 
-  // User interaction tracking
-  final Map<String, Set<String>> _userReactions = {}; // userId -> Set of noteIds
+  final Map<String, Set<String>> _userReactions = {};
   final Map<String, Set<String>> _userReplies = {};
   final Map<String, Set<String>> _userReposts = {};
   final Map<String, Set<String>> _userZaps = {};
 
   bool _isInitialized = false;
 
-  // Hive boxes - single boxes for all interactions
   Box<ReactionModel>? _reactionsBox;
   Box<ReplyModel>? _repliesBox;
   Box<RepostModel>? _repostsBox;
   Box<ZapModel>? _zapsBox;
 
-  // Getters
   bool get isInitialized => _isInitialized;
 
   Future<void> initialize(String npub, {String dataType = 'Feed'}) async {
     if (_isInitialized) return;
 
     try {
-      // Open single Hive boxes for all interactions
       _reactionsBox = await Hive.openBox<ReactionModel>('reactions');
       _repliesBox = await Hive.openBox<ReplyModel>('replies');
       _repostsBox = await Hive.openBox<RepostModel>('reposts');
       _zapsBox = await Hive.openBox<ZapModel>('zaps');
 
-      // Load existing data from Hive
       await _loadInteractionsFromHive();
 
       _isInitialized = true;
@@ -55,28 +49,24 @@ class InteractionsProvider extends ChangeNotifier {
   }
 
   Future<void> _loadInteractionsFromHive() async {
-    // Load reactions
     if (_reactionsBox != null) {
       for (final reaction in _reactionsBox!.values) {
         _addReactionToCache(reaction);
       }
     }
 
-    // Load replies
     if (_repliesBox != null) {
       for (final reply in _repliesBox!.values) {
         _addReplyToCache(reply);
       }
     }
 
-    // Load reposts
     if (_repostsBox != null) {
       for (final repost in _repostsBox!.values) {
         _addRepostToCache(repost);
       }
     }
 
-    // Load zaps
     if (_zapsBox != null) {
       for (final zap in _zapsBox!.values) {
         _addZapToCache(zap);
@@ -89,7 +79,6 @@ class InteractionsProvider extends ChangeNotifier {
     if (!_reactionsByNote[reaction.targetEventId]!.any((r) => r.id == reaction.id)) {
       _reactionsByNote[reaction.targetEventId]!.add(reaction);
 
-      // Track user reaction
       _userReactions.putIfAbsent(reaction.author, () => {});
       _userReactions[reaction.author]!.add(reaction.targetEventId);
     }
@@ -100,7 +89,6 @@ class InteractionsProvider extends ChangeNotifier {
     if (!_repliesByNote[reply.parentEventId]!.any((r) => r.id == reply.id)) {
       _repliesByNote[reply.parentEventId]!.add(reply);
 
-      // Track user reply
       _userReplies.putIfAbsent(reply.author, () => {});
       _userReplies[reply.author]!.add(reply.parentEventId);
     }
@@ -111,7 +99,6 @@ class InteractionsProvider extends ChangeNotifier {
     if (!_repostsByNote[repost.originalNoteId]!.any((r) => r.id == repost.id)) {
       _repostsByNote[repost.originalNoteId]!.add(repost);
 
-      // Track user repost
       _userReposts.putIfAbsent(repost.repostedBy, () => {});
       _userReposts[repost.repostedBy]!.add(repost.originalNoteId);
     }
@@ -122,13 +109,11 @@ class InteractionsProvider extends ChangeNotifier {
     if (!_zapsByNote[zap.targetEventId]!.any((z) => z.id == zap.id)) {
       _zapsByNote[zap.targetEventId]!.add(zap);
 
-      // Track user zap
       _userZaps.putIfAbsent(zap.sender, () => {});
       _userZaps[zap.sender]!.add(zap.targetEventId);
     }
   }
 
-  // Getters for interactions
   List<ReactionModel> getReactionsForNote(String noteId) {
     return _reactionsByNote[noteId] ?? [];
   }
@@ -145,7 +130,6 @@ class InteractionsProvider extends ChangeNotifier {
     return _zapsByNote[noteId] ?? [];
   }
 
-  // Count getters
   int getReactionCount(String noteId) {
     return _reactionsByNote[noteId]?.length ?? 0;
   }
@@ -162,7 +146,6 @@ class InteractionsProvider extends ChangeNotifier {
     return _zapsByNote[noteId]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
   }
 
-  // User interaction checks
   bool hasUserReacted(String userId, String noteId) {
     return _userReactions[userId]?.contains(noteId) ?? false;
   }
@@ -179,7 +162,6 @@ class InteractionsProvider extends ChangeNotifier {
     return _userZaps[userId]?.contains(noteId) ?? false;
   }
 
-  // Add new interactions
   Future<void> addReaction(ReactionModel reaction) async {
     if (!reaction.id.startsWith('optimistic_')) {
       _reactionsByNote[reaction.targetEventId]?.removeWhere((r) => r.author == reaction.author && r.id.startsWith('optimistic_'));
@@ -236,7 +218,6 @@ class InteractionsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Batch operations
   Future<void> addReactions(List<ReactionModel> reactions) async {
     for (final reaction in reactions) {
       if (!reaction.id.startsWith('optimistic_')) {
@@ -303,11 +284,9 @@ class InteractionsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Update methods for DataService integration
   void updateReactions(String noteId, List<ReactionModel> reactions) {
     _reactionsByNote[noteId] = reactions;
 
-    // Update user tracking
     for (final reaction in reactions) {
       _userReactions.putIfAbsent(reaction.author, () => {});
       _userReactions[reaction.author]!.add(reaction.targetEventId);
@@ -319,7 +298,6 @@ class InteractionsProvider extends ChangeNotifier {
   void updateReplies(String noteId, List<ReplyModel> replies) {
     _repliesByNote[noteId] = replies;
 
-    // Update user tracking
     for (final reply in replies) {
       _userReplies.putIfAbsent(reply.author, () => {});
       _userReplies[reply.author]!.add(reply.parentEventId);
@@ -331,7 +309,6 @@ class InteractionsProvider extends ChangeNotifier {
   void updateReposts(String noteId, List<RepostModel> reposts) {
     _repostsByNote[noteId] = reposts;
 
-    // Update user tracking
     for (final repost in reposts) {
       _userReposts.putIfAbsent(repost.repostedBy, () => {});
       _userReposts[repost.repostedBy]!.add(repost.originalNoteId);
@@ -343,7 +320,6 @@ class InteractionsProvider extends ChangeNotifier {
   void updateZaps(String noteId, List<ZapModel> zaps) {
     _zapsByNote[noteId] = zaps;
 
-    // Update user tracking
     for (final zap in zaps) {
       _userZaps.putIfAbsent(zap.sender, () => {});
       _userZaps[zap.sender]!.add(zap.targetEventId);
@@ -352,7 +328,6 @@ class InteractionsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Remove interactions
   void removeReaction(String reactionId, String noteId, String userId) {
     _reactionsByNote[noteId]?.removeWhere((r) => r.id == reactionId);
     _userReactions[userId]?.remove(noteId);
@@ -367,14 +342,9 @@ class InteractionsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // OPTIMISTIC UPDATE METHODS FOR IMPROVED USER EXPERIENCE
-
-  /// Adds an optimistic reaction immediately to the UI for instant feedback
-  /// Creates a temporary reaction model that will be replaced by the real one from the network
   void addOptimisticReaction(String noteId, String userId) {
-    // Create a temporary, optimistic reaction model
     final optimisticReaction = ReactionModel(
-      id: 'optimistic_${DateTime.now().millisecondsSinceEpoch}', // Temporary unique ID
+      id: 'optimistic_${DateTime.now().millisecondsSinceEpoch}',
       author: userId,
       content: '+',
       targetEventId: noteId,
@@ -382,39 +352,29 @@ class InteractionsProvider extends ChangeNotifier {
       fetchedAt: DateTime.now(),
     );
 
-    // Add to cache immediately (but don't save to Hive)
     _addReactionToCache(optimisticReaction);
     notifyListeners();
   }
 
-  /// Adds an optimistic repost immediately to the UI for instant feedback
   void addOptimisticRepost(String noteId, String userId) {
-    // Create a temporary, optimistic repost model
     final optimisticRepost = RepostModel(
-      id: 'optimistic_${DateTime.now().millisecondsSinceEpoch}', // Temporary unique ID
+      id: 'optimistic_${DateTime.now().millisecondsSinceEpoch}',
       originalNoteId: noteId,
       repostedBy: userId,
       repostTimestamp: DateTime.now(),
     );
 
-    // Add to cache immediately (but don't save to Hive)
     _addRepostToCache(optimisticRepost);
     notifyListeners();
   }
 
-  /// Removes an optimistic reaction if the network request fails
-  /// This rolls back the UI to the previous state
   void removeOptimisticReaction(String noteId, String userId) {
-    // Remove any optimistic reactions by this user for this note
     _reactionsByNote[noteId]?.removeWhere((r) => r.author == userId && r.id.startsWith('optimistic_'));
     _userReactions[userId]?.remove(noteId);
     notifyListeners();
   }
 
-  /// Removes an optimistic repost if the network request fails
-  /// This rolls back the UI to the previous state
   void removeOptimisticRepost(String noteId, String userId) {
-    // Remove any optimistic reposts by this user for this note
     _repostsByNote[noteId]?.removeWhere((r) => r.repostedBy == userId && r.id.startsWith('optimistic_'));
     _userReposts[userId]?.remove(noteId);
     notifyListeners();

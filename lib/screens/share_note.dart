@@ -94,8 +94,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
     _noteController = TextEditingController();
   }
 
-  //
-
   void _loadInitialData() {
     _loadProfile();
     _loadUsers();
@@ -379,7 +377,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   void _onTextChanged() {
-    // Only handle mention search, no rich text overlay to avoid cursor issues
     _handleMentionSearch();
   }
 
@@ -447,17 +444,14 @@ class _ShareNotePageState extends State<ShareNotePage> {
       final aName = a.name.toLowerCase();
       final bName = b.name.toLowerCase();
 
-      // Exact matches first
       final aExact = aName == query ? 0 : 1;
       final bExact = bName == query ? 0 : 1;
       if (aExact != bExact) return aExact.compareTo(bExact);
 
-      // Then starts with
       final aStarts = aName.startsWith(query) ? 0 : 1;
       final bStarts = bName.startsWith(query) ? 0 : 1;
       if (aStarts != bStarts) return aStarts.compareTo(bStarts);
 
-      // Finally by position
       final aIndex = aName.indexOf(query);
       final bIndex = bName.indexOf(query);
       return aIndex.compareTo(bIndex);

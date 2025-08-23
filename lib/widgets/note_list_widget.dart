@@ -7,7 +7,7 @@ import '../theme/theme_manager.dart';
 import 'note_widget.dart';
 
 class NoteListWidget extends StatefulWidget {
-  final String? scrollRestorationId; // For scroll position preservation
+  final String? scrollRestorationId;
 
   const NoteListWidget({
     super.key,
@@ -21,36 +21,30 @@ class NoteListWidget extends StatefulWidget {
 class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   late final ScrollController _scrollController;
 
-  // Simplified scroll-based lazy loading (VisibilityDetector removed)
   final Set<String> _interactionsLoaded = <String>{};
 
-  // Throttling for performance optimization
   DateTime _lastScrollUpdate = DateTime.now();
 
-  // SCROLL POSITION FIX: Save/restore scroll position
   static final Map<String, double> _savedScrollPositions = {};
   String get _scrollKey => widget.scrollRestorationId ?? 'default_scroll';
 
   @override
-  bool get wantKeepAlive => true; // Preserve state - reduce rebuilds
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
 
-    // SCROLL POSITION FIX: Initialize controller with saved position
     final savedPosition = _savedScrollPositions[_scrollKey] ?? 0.0;
     _scrollController = ScrollController(initialScrollOffset: savedPosition);
 
     _setupScrollListener();
     WidgetsBinding.instance.addObserver(this);
 
-    // Trigger initial data fetch
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<NotesListProvider>();
       provider.fetchInitialNotes();
 
-      // Restore scroll position after content loads
       if (savedPosition > 0) {
         _restoreScrollPosition();
       }
@@ -60,7 +54,6 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
   void _restoreScrollPosition() {
     final savedPosition = _savedScrollPositions[_scrollKey] ?? 0.0;
     if (savedPosition > 0 && _scrollController.hasClients) {
-      // Use animation for smooth restoration
       _scrollController.animateTo(
         savedPosition,
         duration: const Duration(milliseconds: 300),
@@ -72,7 +65,7 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    // Save scroll position when app goes to background
+
     if (state == AppLifecycleState.paused) {
       _saveScrollPosition();
     }
@@ -86,28 +79,19 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
 
   void _setupScrollListener() {
     _scrollController.addListener(() {
-      // Very aggressive throttling - check only once per second
       final now = DateTime.now();
       if (now.difference(_lastScrollUpdate).inMilliseconds < 1000) return;
       _lastScrollUpdate = now;
 
-      // Trigger load more when scrolled to 90% of the way down
       if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.9) {
         final provider = context.read<NotesListProvider>();
         provider.fetchMoreNotes();
       }
-
-      // Stop interaction loading - only load on thread page
-      // _loadInteractionsForVisibleArea();
     });
   }
 
-  // Interaction loading completely disabled - only on thread page
-  // void _loadInteractionsForVisibleArea() { ... }
-
   @override
   void dispose() {
-    // SCROLL POSITION FIX: Save position before disposal
     _saveScrollPosition();
 
     WidgetsBinding.instance.removeObserver(this);
@@ -118,9 +102,8 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // Required for AutomaticKeepAliveClientMixin
+    super.build(context);
 
-    // Selective rebuild - rebuild only on necessary data changes
     return Selector<NotesListProvider,
         ({List<dynamic> notes, bool isLoading, bool hasError, String? errorMessage, bool isLoadingMore, bool isEmpty})>(
       selector: (context, provider) => (
@@ -132,22 +115,18 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
         isEmpty: provider.isEmpty,
       ),
       builder: (context, data, child) {
-        // Show initial loading state
         if (data.isLoading && data.notes.isEmpty) {
           return _buildInitialLoadingState();
         }
 
-        // Show error state
         if (data.hasError) {
           return _buildErrorState(data.errorMessage ?? 'Unknown error');
         }
 
-        // Show empty state
         if (data.isEmpty) {
           return _buildEmptyState();
         }
 
-        // Show notes list
         return _buildNotesList(data.notes, data.isLoadingMore);
       },
     );
@@ -247,27 +226,25 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
 
   Widget _buildNotesList(List<dynamic> notes, bool isLoadingMore) {
     return SliverList.builder(
-      // SCROLL POSITION FIX: Use addAutomaticKeepAlives to preserve widgets
       addAutomaticKeepAlives: true,
       addRepaintBoundaries: true,
       itemCount: notes.length + (isLoadingMore ? 1 : 0),
       itemBuilder: (context, index) {
-        // Show loading indicator for "load more"
         if (index >= notes.length) {
           return _buildLoadMoreIndicator();
         }
 
         final note = notes[index];
-        // SCROLL POSITION FIX: Stable keys and proper widget structure
+
         return Container(
           key: ValueKey('note_container_${note.id}'),
           child: Column(
-            mainAxisSize: MainAxisSize.min, // Prevent unnecessary space
+            mainAxisSize: MainAxisSize.min,
             children: [
               RepaintBoundary(
                 child: _buildNoteItem(note),
               ),
-              if (index < notes.length - 1) // No divider on last item
+              if (index < notes.length - 1)
                 Divider(
                   height: 12,
                   thickness: 1,
@@ -294,12 +271,11 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
   }
 
   Widget _buildNoteItem(note) {
-    // SCROLL POSITION FIX: Stable context and key structure
     return Builder(
       builder: (context) {
         final provider = context.read<NotesListProvider>();
         return NoteWidget(
-          key: ValueKey('note_widget_${note.id}'), // More specific key
+          key: ValueKey('note_widget_${note.id}'),
           note: note,
           reactionCount: note.reactionCount,
           replyCount: note.replyCount,
@@ -307,7 +283,7 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
           dataService: provider.dataService,
           currentUserNpub: provider.npub,
           notesNotifier: provider.dataService.notesNotifier,
-          profiles: {}, // Empty since we're using UserProvider globally
+          profiles: {},
           isSmallView: true,
         );
       },
@@ -315,13 +291,12 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
   }
 }
 
-/// Factory method to create a NoteListWidget with proper provider setup
 class NoteListWidgetFactory {
   static Widget create({
     required String npub,
     required DataType dataType,
     DataService? sharedDataService,
-    String? scrollRestorationId, // SCROLL POSITION FIX
+    String? scrollRestorationId,
   }) {
     return ChangeNotifierProvider(
       create: (context) => NotesListProvider(

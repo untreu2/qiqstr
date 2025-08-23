@@ -28,9 +28,7 @@ class _NotificationPageState extends State<NotificationPage> {
         final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
         final userProvider = Provider.of<UserProvider>(context, listen: false);
 
-        // Initialize NotificationProvider if not already initialized
         if (!notificationProvider.isInitialized) {
-          // Extract npub from DataService or get current user npub
           final npub = userProvider.currentUserNpub ?? '';
           if (npub.isNotEmpty) {
             notificationProvider.initialize(
@@ -41,7 +39,6 @@ class _NotificationPageState extends State<NotificationPage> {
           }
         }
 
-        // Mark all notifications as read
         notificationProvider.markAllAsRead();
       }
     });

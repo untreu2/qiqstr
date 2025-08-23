@@ -32,7 +32,7 @@ class _FeedPageState extends State<FeedPage> {
   @override
   void initState() {
     super.initState();
-    // Use provided dataService or create new one
+
     dataService = widget.dataService ?? DataService(npub: widget.npub, dataType: DataType.feed);
     _scrollController = ScrollController()..addListener(_scrollListener);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -43,30 +43,25 @@ class _FeedPageState extends State<FeedPage> {
 
   Future<void> _initializeProgressively() async {
     try {
-      // Phase 1: Initialize UserProvider and lightweight DataService init
       final userProvider = Provider.of<UserProvider>(context, listen: false);
 
-      // If dataService is provided (from login), skip initialization
       if (widget.dataService != null) {
         await userProvider.initialize();
-        // Set current user if this is the current user's feed
+
         if (userProvider.currentUserNpub == widget.npub) {
           await userProvider.setCurrentUser(widget.npub);
         }
         print('[FeedPage] Using provided DataService - skipping initialization');
       } else {
-        // Only initialize if we created a new DataService
         await Future.wait([
           userProvider.initialize(),
           dataService.initializeLightweight(),
         ]);
 
-        // Set current user if this is the current user's feed
         if (userProvider.currentUserNpub == widget.npub) {
           await userProvider.setCurrentUser(widget.npub);
         }
 
-        // Phase 2: Heavy operations in background
         Future.delayed(const Duration(milliseconds: 100), () {
           if (mounted) {
             dataService.initializeHeavyOperations();
@@ -95,7 +90,6 @@ class _FeedPageState extends State<FeedPage> {
       });
     }
 
-    // Infinite scroll support
     dataService.onScrollPositionChanged(
       _scrollController.position.pixels,
       _scrollController.position.maxScrollExtent,
@@ -173,7 +167,6 @@ class _FeedPageState extends State<FeedPage> {
                   ],
                 ),
               ),
-              // Loading indicator
               ValueListenableBuilder<bool>(
                 valueListenable: dataService.isRefreshingNotifier,
                 builder: (context, isRefreshing, child) {
@@ -199,7 +192,7 @@ class _FeedPageState extends State<FeedPage> {
   @override
   Widget build(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
-    final double headerHeight = topPadding + 55; // Simplified header without filter buttons
+    final double headerHeight = topPadding + 55;
     final colors = context.colors;
 
     return Scaffold(

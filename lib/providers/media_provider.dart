@@ -10,26 +10,22 @@ class MediaProvider extends ChangeNotifier {
   }
 
   late final MediaService _mediaService;
-  bool _isInitialized = true; // MediaService initializes itself
+  bool _isInitialized = true;
   String? _errorMessage;
 
-  // Processing state
   bool _isProcessing = false;
   int _queueSize = 0;
 
-  // Getters
   bool get isInitialized => _isInitialized;
   bool get isProcessing => _isProcessing;
   int get queueSize => _queueSize;
   String? get errorMessage => _errorMessage;
 
   Future<void> initialize() async {
-    // MediaService is already initialized in constructor
     _errorMessage = null;
     notifyListeners();
   }
 
-  // Cache media URLs with different priorities
   void cacheMediaUrls(List<String> urls, {int priority = 1}) {
     try {
       _mediaService.cacheMediaUrls(urls, priority: priority);
@@ -43,7 +39,6 @@ class MediaProvider extends ChangeNotifier {
     }
   }
 
-  // Preload critical images with high priority
   void preloadCriticalImages(List<String> urls) {
     try {
       _mediaService.preloadCriticalImages(urls);
@@ -56,7 +51,6 @@ class MediaProvider extends ChangeNotifier {
     }
   }
 
-  // Cache images from note content
   void cacheImagesFromNotes(List<Map<String, dynamic>> notes) {
     final imageUrls = <String>[];
 
@@ -71,7 +65,6 @@ class MediaProvider extends ChangeNotifier {
     }
   }
 
-  // Cache profile images with high priority
   void cacheProfileImages(List<String> profileImageUrls) {
     final validUrls = profileImageUrls.where((url) => url.isNotEmpty).toList();
     if (validUrls.isNotEmpty) {
@@ -79,7 +72,6 @@ class MediaProvider extends ChangeNotifier {
     }
   }
 
-  // Extract image URLs from text content
   List<String> _extractImageUrls(String content) {
     final imageUrls = <String>[];
     final urlPattern = RegExp(r'https?://[^\s]+\.(jpg|jpeg|png|gif|webp|bmp|svg|avif|heic|heif)', caseSensitive: false);
@@ -95,17 +87,14 @@ class MediaProvider extends ChangeNotifier {
     return imageUrls;
   }
 
-  // Check if URL is cached
   bool isCached(String url) {
     return _mediaService.isCached(url);
   }
 
-  // Check if URL failed to cache
   bool hasFailed(String url) {
     return _mediaService.hasFailed(url);
   }
 
-  // Retry failed URLs
   void retryFailedUrls() {
     try {
       _mediaService.retryFailedUrls();
@@ -118,7 +107,6 @@ class MediaProvider extends ChangeNotifier {
     }
   }
 
-  // Clear failed URLs to allow retry
   void clearFailedUrls() {
     try {
       _mediaService.clearFailedUrls();
@@ -130,17 +118,14 @@ class MediaProvider extends ChangeNotifier {
     }
   }
 
-  // Update queue size from service
   void _updateQueueSize() {
     final stats = _mediaService.getCacheStats();
     _queueSize = stats['queueSize'] as int? ?? 0;
     _isProcessing = stats['isProcessing'] as bool? ?? false;
   }
 
-  // Performance optimization methods
   void optimizeForLowMemory() {
     try {
-      // Clear some cache to free memory
       _mediaService.clearCache(clearFailed: false);
     } catch (e) {
       _errorMessage = 'Failed to optimize for low memory: $e';
@@ -150,12 +135,9 @@ class MediaProvider extends ChangeNotifier {
   }
 
   void optimizeForSlowNetwork() {
-    // This would adjust MediaService settings if it had such methods
-    // For now, we can just reduce the queue processing
     debugPrint('[MediaProvider] Optimizing for slow network');
   }
 
-  // Cache management
   void clearCache({bool clearFailed = true}) {
     try {
       _mediaService.clearCache(clearFailed: clearFailed);
@@ -168,7 +150,6 @@ class MediaProvider extends ChangeNotifier {
     }
   }
 
-  // Batch operations for better performance
   void batchCacheOperations(List<Map<String, dynamic>> operations) {
     try {
       for (final operation in operations) {
@@ -195,7 +176,6 @@ class MediaProvider extends ChangeNotifier {
     }
   }
 
-  // Smart caching based on content type
   void smartCacheFromContent(Map<String, dynamic> content) {
     final contentType = content['type'] as String? ?? 'unknown';
     final urls = content['urls'] as List<String>? ?? [];
@@ -205,20 +185,19 @@ class MediaProvider extends ChangeNotifier {
     int priority = 1;
     switch (contentType) {
       case 'profile':
-        priority = 3; // High priority for profile images
+        priority = 3;
         break;
       case 'note':
-        priority = 2; // Medium priority for note images
+        priority = 2;
         break;
       case 'background':
-        priority = 1; // Low priority for background images
+        priority = 1;
         break;
     }
 
     cacheMediaUrls(urls, priority: priority);
   }
 
-  // Memory management methods
   void handleMemoryPressure() {
     try {
       _mediaService.handleMemoryPressure();
@@ -245,14 +224,12 @@ class MediaProvider extends ChangeNotifier {
     }
   }
 
-  // Check if under memory pressure
   bool isUnderMemoryPressure() {
     final stats = getCacheStats();
     final memoryUsage = stats['memoryUsage'] as Map<String, dynamic>?;
     return memoryUsage?['memoryPressure'] as bool? ?? false;
   }
 
-  // Get cache statistics
   Map<String, dynamic> getCacheStats() {
     try {
       return _mediaService.getCacheStats();

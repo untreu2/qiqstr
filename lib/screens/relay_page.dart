@@ -30,7 +30,6 @@ class _RelayPageState extends State<RelayPage> {
   bool _isPublishingRelays = false;
   bool _disposed = false;
 
-  // Track active connections for cleanup
   final List<WebSocket> _activeConnections = [];
   final List<StreamSubscription> _activeSubscriptions = [];
 
@@ -44,7 +43,6 @@ class _RelayPageState extends State<RelayPage> {
   void dispose() {
     _disposed = true;
 
-    // Cancel all active subscriptions
     for (final subscription in _activeSubscriptions) {
       try {
         subscription.cancel();
@@ -52,7 +50,6 @@ class _RelayPageState extends State<RelayPage> {
     }
     _activeSubscriptions.clear();
 
-    // Close all active WebSocket connections
     for (final ws in _activeConnections) {
       try {
         ws.close();
@@ -70,9 +67,6 @@ class _RelayPageState extends State<RelayPage> {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // Check if user is using their own relays
-
-      // Load custom main relays or use defaults
       final customMainRelays = prefs.getStringList('custom_main_relays');
       final userRelaysJson = prefs.getString('user_relays');
 
@@ -106,34 +100,28 @@ class _RelayPageState extends State<RelayPage> {
     });
 
     try {
-      // Get the private key for signing
       final privateKey = await _secureStorage.read(key: 'privateKey');
       if (privateKey == null) {
         _showSnackBar('Private key not found. Please set up your profile first', isError: true);
         return;
       }
 
-      // Get npub for DataService initialization
       final npub = await _secureStorage.read(key: 'npub');
       if (npub == null) {
         _showSnackBar('Please set up your profile first', isError: true);
         return;
       }
 
-      // Initialize DataService for broadcasting
       final dataService = DataService(npub: npub, dataType: DataType.profile);
       await dataService.initialize();
       await dataService.initializeConnections();
 
-      // Prepare relay list for kind 10002 event
       List<List<String>> relayTags = [];
 
-      // Add relays (read & write by default)
       for (String relay in _relays) {
         relayTags.add(['r', relay]);
       }
 
-      // Create and sign the kind 10002 event using NostrService
       final event = Event.from(
         kind: 10002,
         tags: relayTags,
@@ -141,13 +129,10 @@ class _RelayPageState extends State<RelayPage> {
         privkey: privateKey,
       );
 
-      // Serialize the event for broadcasting
       final serializedEvent = NostrService.serializeEvent(event);
 
-      // Broadcast the event directly to relays using WebSocket connections
       await _broadcastRelayListEvent(serializedEvent);
 
-      // Also save to local storage for backup
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('published_relay_list', jsonEncode(NostrService.eventToJson(event)));
 
@@ -228,7 +213,6 @@ class _RelayPageState extends State<RelayPage> {
       final dataService = DataService(npub: npub, dataType: DataType.profile);
       await dataService.initialize();
 
-      // Fetch kind 10002 event (relay list metadata)
       final userRelayList = await _fetchRelayListMetadata(dataService, npub);
 
       if (userRelayList.isNotEmpty) {
@@ -236,11 +220,9 @@ class _RelayPageState extends State<RelayPage> {
           _userRelays = userRelayList;
         });
 
-        // Save user relays to preferences
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user_relays', jsonEncode(_userRelays));
 
-        // Automatically use the fetched relays
         await _useUserRelays();
 
         if (mounted) {
@@ -272,17 +254,14 @@ class _RelayPageState extends State<RelayPage> {
     final List<Map<String, dynamic>> relayList = [];
 
     try {
-      // Create a WebSocket connection to fetch kind 10002 events
       for (final relayUrl in relaySetMainSockets) {
         WebSocket? ws;
         StreamSubscription? sub;
         try {
-          // Check if disposed before creating connection
           if (_disposed) return relayList;
 
           ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
 
-          // Track the connection for cleanup
           if (!_disposed) {
             _activeConnections.add(ws);
           }
@@ -320,7 +299,6 @@ class _RelayPageState extends State<RelayPage> {
             if (!completer.isCompleted) completer.complete(null);
           });
 
-          // Track the subscription for cleanup
           if (!_disposed) {
             _activeSubscriptions.add(sub);
           }
@@ -331,7 +309,6 @@ class _RelayPageState extends State<RelayPage> {
 
           final eventData = await completer.future.timeout(const Duration(seconds: 5), onTimeout: () => null);
 
-          // Cleanup
           try {
             await sub.cancel();
             _activeSubscriptions.remove(sub);
@@ -354,7 +331,6 @@ class _RelayPageState extends State<RelayPage> {
                   marker = tag[2] as String;
                 }
 
-                // If no marker specified, it's both read and write
                 if (marker.isEmpty) {
                   marker = 'read,write';
                 }
@@ -366,14 +342,13 @@ class _RelayPageState extends State<RelayPage> {
               }
             }
 
-            // If we found relays, break out of the loop
             if (relayList.isNotEmpty) {
               break;
             }
           }
         } catch (e) {
           print('Error fetching from relay $relayUrl: $e');
-          // Ensure cleanup on error
+
           try {
             await sub?.cancel();
             if (sub != null) _activeSubscriptions.remove(sub);
@@ -400,7 +375,6 @@ class _RelayPageState extends State<RelayPage> {
     }
 
     try {
-      // Extract relays that can be used for writing (main relays)
       final writeRelays = _userRelays
           .where((relay) => relay['marker'] == '' || relay['marker'].contains('write') || relay['marker'].contains('read,write'))
           .map((relay) => relay['url'] as String)
@@ -490,7 +464,7 @@ class _RelayPageState extends State<RelayPage> {
       _addRelayController.clear();
 
       if (mounted) {
-        Navigator.pop(context); // Close the dialog
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Relay added to Main list')),
         );
@@ -706,7 +680,6 @@ class _RelayPageState extends State<RelayPage> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         children: [
-          // Fetch and Publish buttons
           Row(
             children: [
               Expanded(
@@ -763,7 +736,6 @@ class _RelayPageState extends State<RelayPage> {
             ],
           ),
           const SizedBox(height: 12),
-          // Add and Reset buttons
           Row(
             children: [
               Expanded(
@@ -872,7 +844,6 @@ class _RelayPageState extends State<RelayPage> {
   }
 
   Widget _buildRelayTile(String relay, bool isMainRelay) {
-    // Check if this relay is from user's personal relays
     final userRelay = _userRelays.firstWhere(
       (r) => r['url'] == relay,
       orElse: () => <String, dynamic>{},
@@ -973,7 +944,7 @@ class _RelayPageState extends State<RelayPage> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(height: MediaQuery.of(context).padding.top + 60), // Space for floating back button
+              SizedBox(height: MediaQuery.of(context).padding.top + 60),
               _buildActionButtons(context),
               Expanded(
                 child: SingleChildScrollView(

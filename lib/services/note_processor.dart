@@ -35,7 +35,6 @@ class NoteProcessor {
   static final Queue<Map<String, dynamic>> _processingQueue = Queue();
   static bool _isProcessing = false;
 
-  // Cache for recently processed events to avoid duplicates
   static final Set<String> _recentlyProcessed = {};
   static Timer? _cleanupTimer;
 
@@ -63,7 +62,6 @@ class NoteProcessor {
       return;
     }
 
-    // Add to processing queue for batch processing
     _processingQueue.add({
       'eventData': eventData,
       'targetNpubs': targetNpubs,
@@ -99,7 +97,6 @@ class NoteProcessor {
     } finally {
       _isProcessing = false;
 
-      // Continue processing if there are more items
       if (_processingQueue.isNotEmpty) {
         Future.microtask(_processQueue);
       }
@@ -155,7 +152,6 @@ class NoteProcessor {
         return;
       }
 
-      // Mark as recently processed
       _recentlyProcessed.add(eventId);
 
       final String noteAuthor = eventData['pubkey'] as String;
@@ -173,7 +169,6 @@ class NoteProcessor {
         return;
       }
 
-      // Optimized target validation
       if (!_isValidTarget(dataService, targetNpubs, outerEventAuthor, noteAuthor, isOuterEventRepost)) {
         _metrics.recordSkip('invalid_target');
         return;
@@ -181,7 +176,6 @@ class NoteProcessor {
 
       final timestamp = DateTime.fromMillisecondsSinceEpoch((eventData['created_at'] as int) * 1000);
 
-      // Optimized tag parsing
       final tagInfo = _parseReplyTags(tags);
       final bool isActualReply = tagInfo['isReply'] as bool;
       final String? rootId = tagInfo['rootId'] as String?;
@@ -205,18 +199,14 @@ class NoteProcessor {
         parentId: parentId,
       );
 
-      // Content parsing is now handled lazily through note.parsedContentLazy
-      // Set hasMedia based on lazy parsing
       newNote.hasMedia = newNote.hasMediaLazy;
 
       if (!dataService.eventIds.contains(newNote.id)) {
-        // Optimized profile fetching
         await _fetchProfilesOptimized(dataService, noteAuthor, isOuterEventRepost ? outerEventAuthor : null);
 
         dataService.notes.add(newNote);
         dataService.eventIds.add(newNote.id);
 
-        // Async save to avoid blocking
         _saveNoteAsync(dataService, newNote);
 
         dataService.addNote(newNote);
@@ -224,7 +214,6 @@ class NoteProcessor {
 
         _metrics.notesProcessed++;
 
-        // Async interaction fetching
         _fetchInteractionsAsync(dataService, newNote.id);
       }
 
@@ -341,7 +330,6 @@ class NoteProcessor {
 
     _metrics.profilesFetched += authorsToFetch.length;
 
-    // Use batch fetching for better performance
     await dataService.fetchProfilesBatch(authorsToFetch.toList());
   }
 
@@ -367,7 +355,6 @@ class NoteProcessor {
     });
   }
 
-  // Cleanup method
   static void dispose() {
     _cleanupTimer?.cancel();
     _cleanupTimer = null;

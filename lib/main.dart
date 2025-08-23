@@ -18,39 +18,30 @@ import 'providers/media_provider.dart';
 import 'providers/notification_provider.dart';
 
 void main() {
-  // Set up global error handling for unhandled exceptions
   runZonedGuarded(() {
     WidgetsFlutterBinding.ensureInitialized();
 
-    // Set up Flutter error handling
     FlutterError.onError = (FlutterErrorDetails details) {
-      // Handle Flutter framework errors
       if (details.exception is SocketException) {
-        // Silently handle socket exceptions to prevent spam
         return;
       }
-      // Log other Flutter errors
+
       FlutterError.presentError(details);
     };
 
-    // Set up platform dispatcher error handling
     try {
       PlatformDispatcher.instance.onError = (error, stack) {
-        // Handle platform errors
         if (error is SocketException) {
-          // Silently handle socket exceptions
           return true;
         }
-        // Log other platform errors but don't crash
+
         print('Platform error: $error');
         return true;
       };
     } catch (e) {
-      // Fallback if PlatformDispatcher is not available
       print('Could not set platform error handler: $e');
     }
 
-    // Show app immediately with SplashScreen - no blocking operations
     runApp(
       provider.MultiProvider(
         providers: [
@@ -70,18 +61,13 @@ void main() {
       ),
     );
   }, (error, stack) {
-    // Handle any unhandled errors in the zone
     if (error is SocketException) {
-      // Silently handle socket exceptions to prevent spam
       return;
     }
-    // Log other unhandled errors but don't crash
+
     print('Unhandled error: $error');
   });
 }
-
-// Removed _initializeHiveOptimized and _handleInitializationError functions
-// These are now handled in SplashScreen
 
 class QiqstrApp extends ConsumerWidget {
   final Widget home;
@@ -189,6 +175,3 @@ class HiveErrorApp extends StatelessWidget {
     );
   }
 }
-
-// Removed background initialization functions
-// These are now handled in SplashScreen

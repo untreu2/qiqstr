@@ -22,9 +22,7 @@ Future<LinkPreviewModel?> _fetchAndParseLink(String url) async {
 
       return LinkPreviewModel(title: parsedTitle, imageUrl: parsedImage);
     }
-  } catch (e) {
-    // Don't print errors in production
-  }
+  } catch (e) {}
   return null;
 }
 

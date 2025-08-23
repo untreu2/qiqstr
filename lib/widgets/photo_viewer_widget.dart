@@ -54,7 +54,6 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
       extendBodyBehindAppBar: true,
       body: Stack(
         children: [
-          // Blurred background image
           Positioned.fill(
             child: CachedNetworkImage(
               imageUrl: widget.imageUrls[currentIndex],
@@ -107,7 +106,6 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
               color: Colors.transparent,
             ),
           ),
-          // Glass-like bottom bar (moved from top)
           Positioned(
             bottom: 80,
             left: 0,
@@ -130,7 +128,7 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
                     ),
                     child: Row(
                       children: [
-                        const SizedBox(width: 48), // Balance space for close button
+                        const SizedBox(width: 48),
                         Expanded(
                           child: Center(
                             child: Text(

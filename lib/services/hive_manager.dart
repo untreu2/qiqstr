@@ -13,41 +13,33 @@ class HiveManager {
   static HiveManager? _instance;
   static HiveManager get instance => _instance ??= HiveManager._internal();
 
-  HiveManager._internal() {
-    // Will be started lazily when first box is opened
-  }
+  HiveManager._internal() {}
 
-  // Batch operation queues
   final Map<String, List<_BatchOperation>> _batchQueues = {};
   final Map<String, Timer> _batchTimers = {};
   final Duration _batchDelay = const Duration(milliseconds: 100);
   final int _maxBatchSize = 50;
 
-  // Connection pool
   final Map<String, Box> _openBoxes = {};
   final Set<String> _pendingBoxes = {};
 
-  // Automatic cleanup
   Timer? _cleanupTimer;
   Timer? _compactionTimer;
 
-  // Memory management settings
   static const Duration _defaultMaxAge = Duration(days: 7);
   static const Duration _cleanupInterval = Duration(hours: 2);
   static const Duration _compactionInterval = Duration(hours: 6);
-  static const int _maxBoxSize = 10000; // Maximum entries per box
+  static const int _maxBoxSize = 10000;
 
   bool _isInitialized = false;
 
   void _startAutomaticCleanup() {
-    if (_cleanupTimer != null) return; // Already started
+    if (_cleanupTimer != null) return;
 
-    // Regular cleanup of old data
     _cleanupTimer = Timer.periodic(_cleanupInterval, (_) {
       _performAutomaticCleanup();
     });
 
-    // Regular compaction of boxes
     _compactionTimer = Timer.periodic(_compactionInterval, (_) {
       _performAutomaticCompaction();
     });
@@ -66,13 +58,10 @@ class HiveManager {
       final boxNames = _openBoxes.keys.toList();
 
       for (final boxName in boxNames) {
-        // Skip critical boxes that shouldn't be auto-cleaned
         if (_isCriticalBox(boxName)) continue;
 
-        // Clean old data from non-critical boxes
         await cleanupOldData(boxName, _defaultMaxAge);
 
-        // Check box size and clean if too large
         final box = _openBoxes[boxName];
         if (box != null && box.length > _maxBoxSize) {
           await _cleanupLargeBox(boxName, box);
@@ -94,7 +83,6 @@ class HiveManager {
         if (box != null && box.length > 1000) {
           await compactBox(boxName);
 
-          // Small delay between compactions to avoid blocking
           await Future.delayed(const Duration(milliseconds: 100));
         }
       }
@@ -106,18 +94,15 @@ class HiveManager {
   }
 
   bool _isCriticalBox(String boxName) {
-    // Define critical boxes that shouldn't be auto-cleaned aggressively
     return boxName.contains('users') || boxName.contains('followingBox') || boxName.contains('settings');
   }
 
   Future<void> _cleanupLargeBox(String boxName, Box box) async {
     try {
-      // Remove oldest 20% of entries when box is too large
       final keysToRemove = <String>[];
       final allKeys = box.keys.toList();
       final removeCount = (allKeys.length * 0.2).round();
 
-      // For boxes with timestamp-based models, remove oldest entries
       final sortedKeys = <MapEntry<dynamic, DateTime>>[];
 
       for (final key in allKeys) {
@@ -144,11 +129,9 @@ class HiveManager {
       }
 
       if (sortedKeys.isNotEmpty) {
-        // Sort by timestamp and remove oldest entries
         sortedKeys.sort((a, b) => a.value.compareTo(b.value));
         keysToRemove.addAll(sortedKeys.take(removeCount).map((e) => e.key.toString()));
       } else {
-        // Fallback: remove first entries if no timestamp available
         keysToRemove.addAll(allKeys.take(removeCount).map((k) => k.toString()));
       }
 
@@ -180,7 +163,6 @@ class HiveManager {
     }
 
     if (_pendingBoxes.contains(boxName)) {
-      // Wait for pending box to open
       while (_pendingBoxes.contains(boxName)) {
         await Future.delayed(const Duration(milliseconds: 10));
       }
@@ -205,7 +187,6 @@ class HiveManager {
     }
   }
 
-  // Batch operations
   Future<void> batchPut<T>(String boxName, Map<String, T> items) async {
     if (items.isEmpty) return;
 
@@ -222,10 +203,8 @@ class HiveManager {
     _batchQueues.putIfAbsent(boxName, () => []);
     _batchQueues[boxName]!.add(operation);
 
-    // Cancel existing timer
     _batchTimers[boxName]?.cancel();
 
-    // Start new timer or execute immediately if batch is full
     if (_batchQueues[boxName]!.length >= _maxBatchSize) {
       _executeBatch(boxName);
     } else {
@@ -243,7 +222,6 @@ class HiveManager {
     try {
       final box = await getBox(boxName);
 
-      // Group operations by type for efficiency
       final putOperations = <String, dynamic>{};
       final deleteKeys = <String>[];
 
@@ -255,7 +233,6 @@ class HiveManager {
         }
       }
 
-      // Execute batch operations
       if (putOperations.isNotEmpty) {
         await box.putAll(putOperations);
       }
@@ -270,7 +247,6 @@ class HiveManager {
     }
   }
 
-  // Optimized queries
   Future<List<T>> getRange<T>(String boxName, int start, int length) async {
     final box = await getBox<T>(boxName);
     final keys = box.keys.skip(start).take(length);
@@ -296,7 +272,6 @@ class HiveManager {
     return result;
   }
 
-  // Cache management
   Future<void> compactBox(String boxName) async {
     try {
       final box = await getBox(boxName);
@@ -317,7 +292,6 @@ class HiveManager {
     }
   }
 
-  // Cleanup old data
   Future<void> cleanupOldData(String boxName, Duration maxAge) async {
     try {
       final box = await getBox(boxName);
@@ -328,7 +302,6 @@ class HiveManager {
         final value = box.get(key);
         DateTime? timestamp;
 
-        // Extract timestamp based on model type
         if (value is NoteModel) {
           timestamp = value.timestamp;
         } else if (value is ReactionModel) {
@@ -357,13 +330,11 @@ class HiveManager {
     }
   }
 
-  // Force flush all pending batches
   Future<void> flushAllBatches() async {
     final futures = _batchQueues.keys.map((boxName) => _executeBatch(boxName));
     await Future.wait(futures);
   }
 
-  // Statistics
   Map<String, dynamic> getStats() {
     return {
       'openBoxes': _openBoxes.length,
@@ -374,7 +345,6 @@ class HiveManager {
     };
   }
 
-  // Enhanced cleanup methods
   Future<void> cleanupAllBoxes({Duration? maxAge}) async {
     final age = maxAge ?? _defaultMaxAge;
     final boxNames = _openBoxes.keys.toList();
@@ -391,21 +361,17 @@ class HiveManager {
 
     for (final boxName in boxNames) {
       await compactBox(boxName);
-      // Small delay to prevent blocking
+
       await Future.delayed(const Duration(milliseconds: 50));
     }
   }
 
-  // Memory pressure handling
   Future<void> handleMemoryPressure() async {
     try {
-      // Aggressive cleanup under memory pressure
       await cleanupAllBoxes(maxAge: const Duration(days: 3));
 
-      // Compact all boxes
       await compactAllBoxes();
 
-      // Close non-essential boxes
       await _closeNonEssentialBoxes();
 
       debugPrint('[HiveManager] Memory pressure handling completed');
@@ -418,7 +384,6 @@ class HiveManager {
     final boxesToClose = <String>[];
 
     for (final boxName in _openBoxes.keys) {
-      // Keep only critical boxes open under memory pressure
       if (!_isCriticalBox(boxName)) {
         boxesToClose.add(boxName);
       }
@@ -441,7 +406,6 @@ class HiveManager {
     }
   }
 
-  // Get memory usage statistics
   Map<String, dynamic> getMemoryStats() {
     int totalEntries = 0;
     final boxStats = <String, int>{};
@@ -465,20 +429,16 @@ class HiveManager {
   }
 
   Future<void> dispose() async {
-    // Cancel cleanup timers
     _cleanupTimer?.cancel();
     _compactionTimer?.cancel();
 
-    // Flush all pending batches
     await flushAllBatches();
 
-    // Cancel all timers
     for (final timer in _batchTimers.values) {
       timer.cancel();
     }
     _batchTimers.clear();
 
-    // Close all boxes
     for (final box in _openBoxes.values) {
       await box.close();
     }

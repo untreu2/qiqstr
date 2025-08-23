@@ -4,29 +4,23 @@ import 'package:nostr/nostr.dart';
 import 'package:uuid/uuid.dart';
 import 'package:crypto/crypto.dart';
 
-/// Service that encapsulates all nostr package functionality
-/// This allows for easy replacement of the nostr package in the future
 class NostrService {
   static final Uuid _uuid = Uuid();
 
-  // Event caching for performance
   static final Map<String, Event> _eventCache = {};
   static final Map<String, Filter> _filterCache = {};
   static final Map<String, Request> _requestCache = {};
   static const int _maxCacheSize = 1000;
 
-  // Performance metrics
   static int _eventsCreated = 0;
   static int _filtersCreated = 0;
   static int _requestsCreated = 0;
   static int _cacheHits = 0;
   static int _cacheMisses = 0;
 
-  // Batch processing for multiple operations
   static final Queue<Map<String, dynamic>> _batchQueue = Queue();
   static bool _isBatchProcessing = false;
 
-  // Event creation methods with caching
   static Event createNoteEvent({
     required String content,
     required String privateKey,
@@ -218,7 +212,6 @@ class NostrService {
     return event;
   }
 
-  // Filter creation methods with caching
   static Filter createNotesFilter({
     List<String>? authors,
     List<int>? kinds,
@@ -361,14 +354,13 @@ class NostrService {
     );
   }
 
-  // Request creation methods
   static Request createRequest(Filter filter) {
     final uuid = generateUUID();
     final cacheKey = 'single_${filter.hashCode}';
 
     if (_requestCache.containsKey(cacheKey)) {
       _cacheHits++;
-      // Create new request with fresh UUID but same filter
+
       return Request(uuid, [filter]);
     }
 
@@ -386,7 +378,7 @@ class NostrService {
 
     if (_requestCache.containsKey(cacheKey)) {
       _cacheHits++;
-      // Create new request with fresh UUID but same filters
+
       return Request(uuid, filters);
     }
 
@@ -398,7 +390,6 @@ class NostrService {
     return request;
   }
 
-  // Utility methods
   static String generateUUID() => _uuid.v4().replaceAll('-', '');
 
   static String serializeEvent(Event event) => event.serialize();
@@ -407,7 +398,6 @@ class NostrService {
 
   static Map<String, dynamic> eventToJson(Event event) => event.toJson();
 
-  // Zap request helpers
   static List<List<String>> createZapRequestTags({
     required List<String> relays,
     required String amountMillisats,
@@ -432,7 +422,6 @@ class NostrService {
     return tags;
   }
 
-  // Reply tags helpers
   static List<List<String>> createReplyTags({
     required String rootId,
     String? replyId,
@@ -457,12 +446,10 @@ class NostrService {
     return tags;
   }
 
-  // Hash calculation for media uploads
   static String calculateSha256Hash(List<int> fileBytes) {
     return sha256.convert(fileBytes).toString();
   }
 
-  // MIME type detection
   static String detectMimeType(String filePath) {
     final lowerPath = filePath.toLowerCase();
     if (lowerPath.endsWith('.jpg') || lowerPath.endsWith('.jpeg')) {
@@ -477,7 +464,6 @@ class NostrService {
     return 'application/octet-stream';
   }
 
-  // Batch processing methods
   static void addToBatch(String operation, Map<String, dynamic> params) {
     _batchQueue.add({
       'operation': operation,
@@ -485,7 +471,6 @@ class NostrService {
       'timestamp': DateTime.now().millisecondsSinceEpoch,
     });
 
-    // Process batch if it gets large
     if (_batchQueue.length >= 10) {
       processBatch();
     }
@@ -536,7 +521,6 @@ class NostrService {
     return results;
   }
 
-  // Cache management methods
   static String _generateEventCacheKey(int kind, String content, String privateKey, List<List<String>>? tags) {
     final tagsStr = tags?.map((tag) => tag.join(':')).join('|') ?? '';
     return 'event_${kind}_${content.hashCode}_${privateKey.hashCode}_${tagsStr.hashCode}';
@@ -574,7 +558,6 @@ class NostrService {
     }
   }
 
-  // Enhanced statistics and monitoring
   static Map<String, dynamic> getNostrStats() {
     final hitRate = _cacheHits + _cacheMisses > 0 ? (_cacheHits / (_cacheHits + _cacheMisses) * 100).toStringAsFixed(1) : '0.0';
 
@@ -593,7 +576,6 @@ class NostrService {
     };
   }
 
-  // Cache cleanup methods
   static void clearEventCache() {
     _eventCache.clear();
   }
@@ -613,7 +595,6 @@ class NostrService {
     _batchQueue.clear();
   }
 
-  // Optimized batch creation methods
   static List<Event> createMultipleNoteEvents(List<Map<String, dynamic>> eventData) {
     return eventData
         .map((data) => createNoteEvent(
@@ -636,9 +617,7 @@ class NostrService {
         .toList();
   }
 
-  // Performance optimization: pre-warm cache with common filters
   static void preWarmCache() {
-    // Pre-create common filters
     createNotesFilter(kinds: [1, 6], limit: 50);
     createProfileFilter(authors: [], limit: 100);
     createReactionFilter(eventIds: [], limit: 100);

@@ -62,7 +62,6 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
 
     final dataService = DataService(npub: npub, dataType: DataType.profile);
     await dataService.initialize();
-    // Initialize connections to enable profile updates
     await dataService.initializeConnections();
 
     setState(() {
@@ -132,7 +131,6 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
     setState(() => _isSaving = true);
 
     try {
-      // Send profile update to relays
       await _dataService!.sendProfileEdit(
         name: _nameController.text.trim(),
         about: _aboutController.text.trim(),
@@ -143,24 +141,19 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
         website: _websiteController.text.trim(),
       );
 
-      // Wait a moment for the profile to be saved
       await Future.delayed(const Duration(milliseconds: 500));
 
-      // Get the updated user from Hive
       final usersBox = await Hive.openBox<UserModel>('users');
       final updatedUser = usersBox.get(_dataService!.npub);
 
       if (updatedUser != null) {
-        // Update DataService notifier
         _dataService!.profilesNotifier.value = {
           ..._dataService!.profilesNotifier.value,
           updatedUser.npub: updatedUser,
         };
 
-        // Update UserProvider so ProfileInfoWidget sees the changes
         UserProvider.instance.updateUser(_dataService!.npub, updatedUser);
       } else {
-        // If not in Hive yet, create the updated user model manually
         final newUser = UserModel(
           npub: _dataService!.npub,
           name: _nameController.text.trim(),
@@ -173,10 +166,8 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
           updatedAt: DateTime.now(),
         );
 
-        // Save to Hive
         await usersBox.put(_dataService!.npub, newUser);
 
-        // Update both DataService and UserProvider
         _dataService!.profilesNotifier.value = {
           ..._dataService!.profilesNotifier.value,
           newUser.npub: newUser,
@@ -421,7 +412,6 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                     validator: (value) {
                       if (value != null && value.trim().isNotEmpty) {
                         final website = value.trim();
-                        // Allow URLs with or without protocol
                         if (!website.contains('.') || website.contains(' ')) {
                           return 'Please enter a valid website URL';
                         }

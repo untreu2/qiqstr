@@ -56,30 +56,22 @@ class _InteractionBarState extends State<InteractionBar> {
     return count.toString();
   }
 
-  /// Handles the reaction tap.
-  /// The responsibility for optimistic updates is now entirely within DataService
-  /// to ensure the UI update logic happens only once.
   Future<bool> _handleReactionTap(bool isCurrentlyLiked) async {
     if (widget.dataService == null) {
       return false;
     }
 
-    // Currently, this function does not handle "unliking".
     if (isCurrentlyLiked) {
       return false;
     }
 
     try {
-      // 1. Directly call the service. DataService will handle the optimistic update and the network request.
       await widget.dataService!.sendReactionInstantly(widget.noteId, '+');
 
-      // 2. Return true to the LikeButton to let it complete its animation.
       return true;
     } catch (e) {
       print('Error sending reaction: $e');
 
-      // 3. If the network request fails, DataService is responsible for its own state consistency.
-      // The UI does not need to perform a manual rollback.
       return false;
     }
   }
@@ -87,7 +79,6 @@ class _InteractionBarState extends State<InteractionBar> {
   void _handleReplyTap() {
     if (widget.dataService == null) return;
 
-    // Navigate to the reply page
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -212,7 +203,7 @@ class _InteractionBarState extends State<InteractionBar> {
           },
           onTap: (bool isLiked) async {
             _handleReplyTap();
-            return false; // Reply action does not toggle the button's state.
+            return false;
           },
           circleColor: CircleColor(
             start: colors.reply.withOpacity(0.3),
@@ -345,7 +336,6 @@ class _InteractionBarState extends State<InteractionBar> {
         final colors = context.colors;
         final double statsIconSize = widget.isLarge ? 22 : 21;
 
-        // Get real-time data from InteractionsProvider
         final reactionCount = InteractionsProvider.instance.getReactionCount(widget.noteId);
         final replyCount = InteractionsProvider.instance.getReplyCount(widget.noteId);
         final repostCount = InteractionsProvider.instance.getRepostCount(widget.noteId);

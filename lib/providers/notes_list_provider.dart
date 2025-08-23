@@ -23,7 +23,6 @@ class NotesListProvider extends ChangeNotifier {
     required this.dataType,
     DataService? sharedDataService,
   }) {
-    // Use shared service or get from manager
     if (sharedDataService != null) {
       dataService = sharedDataService;
     } else {
@@ -35,7 +34,6 @@ class NotesListProvider extends ChangeNotifier {
     _initialize();
   }
 
-  // Getters
   List<NoteModel> get notes => _filteredNotes;
   bool get isLoading => _isLoading;
   bool get isLoadingMore => _isLoadingMore;
@@ -44,9 +42,8 @@ class NotesListProvider extends ChangeNotifier {
   bool get isEmpty => _filteredNotes.isEmpty && !_isLoading;
 
   void _initialize() {
-    // Single source of truth: listen only to DataService
     dataService.notesNotifier.addListener(_onNotesChanged);
-    _onNotesChanged(); // Initial load of existing data
+    _onNotesChanged();
   }
 
   void _onNotesChanged() {
@@ -55,13 +52,11 @@ class NotesListProvider extends ChangeNotifier {
   }
 
   void _updateFilteredNotes() {
-    // Filter out replies unless they are reposts
     final filtered = _notes.where((n) => !n.isReply || n.isRepost).toList();
 
     _filteredNotes = filtered;
     notifyListeners();
 
-    // Progressive loading disabled - only load profiles
     _scheduleProfileLoading(filtered);
   }
 
@@ -72,10 +67,8 @@ class NotesListProvider extends ChangeNotifier {
     _clearError();
 
     try {
-      // Initialize DataService - these methods are idempotent so safe to call multiple times
       await dataService.initializeLightweight();
 
-      // Schedule heavy operations for later using SchedulerBinding instead of Future.delayed
       SchedulerBinding.instance.scheduleTask(() async {
         try {
           await dataService.initializeHeavyOperations();
@@ -101,7 +94,6 @@ class NotesListProvider extends ChangeNotifier {
       await dataService.loadMoreNotes();
     } catch (e) {
       debugPrint('[NotesListProvider] Load more error: $e');
-      // Don't show error for "load more" failures
     } finally {
       _setLoadingMore(false);
     }
@@ -112,7 +104,6 @@ class NotesListProvider extends ChangeNotifier {
     _filteredNotes.clear();
     notifyListeners();
 
-    // Trigger fresh data load
     SchedulerBinding.instance.scheduleTask(() {
       dataService.initializeConnections();
     }, Priority.animation);
@@ -121,7 +112,6 @@ class NotesListProvider extends ChangeNotifier {
   void _scheduleProfileLoading(List<NoteModel> notes) {
     if (notes.isEmpty) return;
 
-    // Only load profiles, interactions will be fetched on thread page
     SchedulerBinding.instance.scheduleTask(() async {
       await _loadCriticalUserProfiles(notes);
     }, Priority.animation);
@@ -132,7 +122,6 @@ class NotesListProvider extends ChangeNotifier {
   }
 
   Future<void> _loadCriticalUserProfiles(List<NoteModel> notes) async {
-    // Load profiles for first 5 notes immediately
     final criticalUserNpubs = <String>{};
     for (final note in notes.take(5)) {
       criticalUserNpubs.add(note.author);
@@ -155,7 +144,6 @@ class NotesListProvider extends ChangeNotifier {
     final remainingNotes = notes.skip(5).toList();
 
     for (int i = 0; i < remainingNotes.length; i += batchSize) {
-      // Yield control to UI thread between batches using SchedulerBinding
       await SchedulerBinding.instance.endOfFrame;
 
       final batch = remainingNotes.skip(i).take(batchSize);
@@ -177,9 +165,6 @@ class NotesListProvider extends ChangeNotifier {
       }
     }
   }
-
-  // Progressive interaction loading removed - for performance
-  // Interactions will only be loaded on thread page
 
   void _setLoading(bool loading) {
     if (_isLoading != loading) {
@@ -213,7 +198,6 @@ class NotesListProvider extends ChangeNotifier {
   void dispose() {
     dataService.notesNotifier.removeListener(_onNotesChanged);
 
-    // Release the DataService reference
     SchedulerBinding.instance.scheduleTask(() async {
       await DataServiceManager.instance.releaseService(
         npub: npub,

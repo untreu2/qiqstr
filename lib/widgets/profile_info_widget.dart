@@ -61,7 +61,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       isRepost: false,
     );
 
-    // Content parsing is now handled lazily through note.parsedContentLazy
+    //
     final parsedBioContent = tempNote.parsedContentLazy;
 
     return Padding(
@@ -79,12 +79,10 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   void initState() {
     super.initState();
 
-    // Use shared DataService if available
     if (widget.sharedDataService != null) {
       _dataService = widget.sharedDataService;
     }
 
-    // Defer all heavy operations with progressive loading
     _startProgressiveInitialization();
   }
 
@@ -92,28 +90,24 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   void didUpdateWidget(ProfileInfoWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    // Update DataService if it becomes available
     if (widget.sharedDataService != null && _dataService == null) {
       _dataService = widget.sharedDataService;
     }
   }
 
   void _startProgressiveInitialization() {
-    // Phase 1: Basic setup (immediate)
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _initBasicData();
       }
     });
 
-    // Phase 2: Follow status (after 100ms)
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) {
         _initFollowStatusAsync();
       }
     });
 
-    // Phase 3: Load user into UserProvider (after 200ms)
     Future.delayed(const Duration(milliseconds: 200), () {
       if (mounted) {
         UserProvider.instance.loadUser(widget.user.npub);
@@ -122,7 +116,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   }
 
   void _initBasicData() {
-    // Set up basic state without heavy operations
     setState(() {
       _isInitialized = true;
     });
@@ -137,14 +130,10 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     try {
       _currentUserNpub = await _secureStorage.read(key: 'npub');
 
-      // Always set the current user npub, even if viewing own profile
       if (mounted) {
-        setState(() {
-          // This triggers a rebuild so the edit profile button can show
-        });
+        setState(() {});
       }
 
-      // If viewing own profile or no current user, don't load following status
       if (_currentUserNpub == null || _currentUserNpub == widget.user.npub) return;
 
       _followingBox = await Hive.openBox<FollowingModel>('followingBox');
@@ -157,7 +146,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         });
       }
 
-      // Don't create new DataService - only use shared one from profile page
       if (_dataService == null) {
         print('[ProfileInfoWidget] No shared DataService available for follow status operations');
       }
@@ -191,7 +179,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     return ListenableBuilder(
       listenable: UserProvider.instance,
       builder: (context, _) {
-        // Get user from UserProvider, fallback to widget.user
         final user = UserProvider.instance.getUser(widget.user.npub) ?? widget.user;
         final npubBech32 = _getNpubBech32(user.npub);
         final screenWidth = MediaQuery.of(context).size.width;
@@ -204,40 +191,26 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Optimized banner loading
               _buildOptimizedBanner(context, user, screenWidth),
-              // Main profile content
               Container(
                 transform: Matrix4.translationValues(0, -30, 0),
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Avatar and action buttons row
                     _buildAvatarAndActionsRow(context, user),
                     const SizedBox(height: 12),
-
-                    // Name and verification
                     _buildNameRow(context, user),
                     const SizedBox(height: 12),
-
-                    // NPUB copy button
                     _buildNpubCopyButton(context, npubBech32),
                     const SizedBox(height: 6),
-
-                    // Lightning address
                     if (user.lud16.isNotEmpty) Text(user.lud16, style: TextStyle(fontSize: 13, color: context.colors.accent)),
-
-                    // About section
                     if (user.about.isNotEmpty) _buildBioContent(user),
-
-                    // Website preview (only load if initialized to avoid blocking)
                     if (user.website.isNotEmpty && _isInitialized)
                       Padding(
                         padding: const EdgeInsets.only(top: 12.0),
                         child: MiniLinkPreviewWidget(url: websiteUrl),
                       ),
-
                     const SizedBox(height: 16),
                   ],
                 ),
@@ -362,13 +335,11 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   }
 
   Widget _buildAvatarAndActionsRow(BuildContext context, UserModel user) {
-    // Debug logging to help identify issues
     print('[ProfileInfoWidget] Current user npub: $_currentUserNpub');
     print('[ProfileInfoWidget] Viewing user npub: ${widget.user.npub}');
     print('[ProfileInfoWidget] Are they equal: ${widget.user.npub == _currentUserNpub}');
     print('[ProfileInfoWidget] IsFollowing: $_isFollowing');
 
-    // Check if this is the current user's profile with robust npub comparison
     final isOwnProfile = _isCurrentUserProfile();
     print('[ProfileInfoWidget] Is own profile: $isOwnProfile');
 
@@ -401,23 +372,18 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     );
   }
 
-  // Helper method to check if viewing current user's profile
   bool _isCurrentUserProfile() {
     if (_currentUserNpub == null) return false;
 
     final currentUserNpub = _currentUserNpub!;
     final viewingUserNpub = widget.user.npub;
 
-    // Direct comparison
     if (currentUserNpub == viewingUserNpub) return true;
 
-    // Try comparing with format conversion
     try {
-      // Convert both to hex format for comparison
       String currentUserHex = currentUserNpub;
       String viewingUserHex = viewingUserNpub;
 
-      // Convert npub to hex if needed
       if (currentUserNpub.startsWith('npub1')) {
         currentUserHex = decodeBasicBech32(currentUserNpub, 'npub');
       }
@@ -426,14 +392,11 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         viewingUserHex = decodeBasicBech32(viewingUserNpub, 'npub');
       }
 
-      // Compare hex formats
       if (currentUserHex == viewingUserHex) return true;
 
-      // Convert both to npub format for comparison
       String currentUserNpubFormat = currentUserNpub;
       String viewingUserNpubFormat = viewingUserNpub;
 
-      // Convert hex to npub if needed
       if (!currentUserNpub.startsWith('npub1') && currentUserNpub.length == 64) {
         currentUserNpubFormat = encodeBasicBech32(currentUserNpub, 'npub');
       }
@@ -442,7 +405,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         viewingUserNpubFormat = encodeBasicBech32(viewingUserNpub, 'npub');
       }
 
-      // Compare npub formats
       if (currentUserNpubFormat == viewingUserNpubFormat) return true;
     } catch (e) {
       print('[ProfileInfoWidget] Error comparing npub formats: $e');
@@ -552,26 +514,22 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     );
   }
 
-  // Helper method to safely get npub bech32 format
   String _getNpubBech32(String identifier) {
     if (identifier.isEmpty) return '';
 
-    // If already in npub format, return as is
     if (identifier.startsWith('npub1')) {
       return identifier;
     }
 
-    // If hex format, convert to npub
     if (identifier.length == 64 && RegExp(r'^[0-9a-fA-F]+$').hasMatch(identifier)) {
       try {
         return encodeBasicBech32(identifier, "npub");
       } catch (e) {
         print('[ProfileInfoWidget] Error converting hex to npub: $e');
-        return identifier; // Return original if conversion fails
+        return identifier;
       }
     }
 
-    // Return original if format is unknown
     return identifier;
   }
 }
