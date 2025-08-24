@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import '../colors.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
@@ -37,6 +39,47 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _initializeAppAndNavigate() async {
+    final results = await Future.wait([
+      _performInitialization(),
+      Future.delayed(const Duration(seconds: 2)),
+    ]);
+
+    final initializationResult = results[0] as Map<String, dynamic>?;
+
+    if (!mounted) return;
+
+    if (initializationResult != null) {
+      final npub = initializationResult['npub'] as String;
+      final dataService = initializationResult['dataService'] as DataService;
+
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => HomeNavigator(
+            npub: npub,
+            dataService: dataService,
+          ),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 750),
+        ),
+      );
+
+      _initializeAppInBackground(npub, dataService);
+    } else {
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => const LoginPage(),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 750),
+        ),
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>?> _performInitialization() async {
     try {
       await _initializeHiveOptimized();
 
@@ -51,36 +94,14 @@ class _SplashScreenState extends State<SplashScreen> {
 
       if (privateKey != null && npub != null) {
         final dataService = DataService(npub: npub, dataType: DataType.feed);
-
         await _initializeMinimalForNavigation(npub, dataService);
-
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => HomeNavigator(
-                npub: npub,
-                dataService: dataService,
-              ),
-            ),
-          );
-
-          _initializeAppInBackground(npub, dataService);
-        }
+        return {'npub': npub, 'dataService': dataService};
       } else {
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (context) => const LoginPage()),
-          );
-        }
+        return null;
       }
     } catch (e) {
       print("Critical error during startup: $e");
-
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const LoginPage()),
-        );
-      }
+      return null;
     }
   }
 
@@ -192,14 +213,20 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = MediaQuery.of(context).platformBrightness;
+    final isDarkMode = brightness == Brightness.dark;
+
+    final iconColor = isDarkMode ? AppColors.iconPrimary : AppColorsLight.iconPrimary;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: isDarkMode ? AppColors.background : AppColorsLight.background,
       body: Center(
-        child: Image.asset(
-          'assets/main_icon_uni.png',
+        child: SvgPicture.asset(
+          'assets/main_icon_white.svg',
           width: 120,
           height: 120,
           fit: BoxFit.contain,
+          colorFilter: ColorFilter.mode(iconColor, BlendMode.srcIn),
         ),
       ),
     );
