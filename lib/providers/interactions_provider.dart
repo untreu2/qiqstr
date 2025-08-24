@@ -219,12 +219,28 @@ class InteractionsProvider extends ChangeNotifier {
   }
 
   Future<void> addReactions(List<ReactionModel> reactions) async {
+    if (reactions.isEmpty) return;
+
+    final groupedReactions = <String, List<ReactionModel>>{};
     for (final reaction in reactions) {
-      if (!reaction.id.startsWith('optimistic_')) {
-        _reactionsByNote[reaction.targetEventId]?.removeWhere((r) => r.author == reaction.author && r.id.startsWith('optimistic_'));
-      }
-      _addReactionToCache(reaction);
+      groupedReactions.putIfAbsent(reaction.targetEventId, () => []).add(reaction);
     }
+
+    groupedReactions.forEach((noteId, newReactions) {
+      final newAuthors = newReactions.map((r) => r.author).toSet();
+      _reactionsByNote[noteId]?.removeWhere((r) => r.id.startsWith('optimistic_') && newAuthors.contains(r.author));
+
+      _reactionsByNote.putIfAbsent(noteId, () => []);
+      final existingIds = _reactionsByNote[noteId]!.map((r) => r.id).toSet();
+
+      for (final reaction in newReactions) {
+        if (existingIds.add(reaction.id)) {
+          _reactionsByNote[noteId]!.add(reaction);
+          _userReactions.putIfAbsent(reaction.author, () => {});
+          _userReactions[reaction.author]!.add(noteId);
+        }
+      }
+    });
 
     try {
       final reactionsMap = {for (var r in reactions) r.id: r};
@@ -232,14 +248,29 @@ class InteractionsProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('[InteractionsProvider] Error batch saving reactions: $e');
     }
-
     notifyListeners();
   }
 
   Future<void> addReplies(List<ReplyModel> replies) async {
+    if (replies.isEmpty) return;
+
+    final groupedReplies = <String, List<ReplyModel>>{};
     for (final reply in replies) {
-      _addReplyToCache(reply);
+      groupedReplies.putIfAbsent(reply.parentEventId, () => []).add(reply);
     }
+
+    groupedReplies.forEach((noteId, newReplies) {
+      _repliesByNote.putIfAbsent(noteId, () => []);
+      final existingIds = _repliesByNote[noteId]!.map((r) => r.id).toSet();
+
+      for (final reply in newReplies) {
+        if (existingIds.add(reply.id)) {
+          _repliesByNote[noteId]!.add(reply);
+          _userReplies.putIfAbsent(reply.author, () => {});
+          _userReplies[reply.author]!.add(noteId);
+        }
+      }
+    });
 
     try {
       final repliesMap = {for (var r in replies) r.id: r};
@@ -247,17 +278,32 @@ class InteractionsProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('[InteractionsProvider] Error batch saving replies: $e');
     }
-
     notifyListeners();
   }
 
   Future<void> addReposts(List<RepostModel> reposts) async {
+    if (reposts.isEmpty) return;
+
+    final groupedReposts = <String, List<RepostModel>>{};
     for (final repost in reposts) {
-      if (!repost.id.startsWith('optimistic_')) {
-        _repostsByNote[repost.originalNoteId]?.removeWhere((r) => r.repostedBy == repost.repostedBy && r.id.startsWith('optimistic_'));
-      }
-      _addRepostToCache(repost);
+      groupedReposts.putIfAbsent(repost.originalNoteId, () => []).add(repost);
     }
+
+    groupedReposts.forEach((noteId, newReposts) {
+      final newAuthors = newReposts.map((r) => r.repostedBy).toSet();
+      _repostsByNote[noteId]?.removeWhere((r) => r.id.startsWith('optimistic_') && newAuthors.contains(r.repostedBy));
+
+      _repostsByNote.putIfAbsent(noteId, () => []);
+      final existingIds = _repostsByNote[noteId]!.map((r) => r.id).toSet();
+
+      for (final repost in newReposts) {
+        if (existingIds.add(repost.id)) {
+          _repostsByNote[noteId]!.add(repost);
+          _userReposts.putIfAbsent(repost.repostedBy, () => {});
+          _userReposts[repost.repostedBy]!.add(noteId);
+        }
+      }
+    });
 
     try {
       final repostsMap = {for (var r in reposts) r.id: r};
@@ -265,14 +311,29 @@ class InteractionsProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('[InteractionsProvider] Error batch saving reposts: $e');
     }
-
     notifyListeners();
   }
 
   Future<void> addZaps(List<ZapModel> zaps) async {
+    if (zaps.isEmpty) return;
+
+    final groupedZaps = <String, List<ZapModel>>{};
     for (final zap in zaps) {
-      _addZapToCache(zap);
+      groupedZaps.putIfAbsent(zap.targetEventId, () => []).add(zap);
     }
+
+    groupedZaps.forEach((noteId, newZaps) {
+      _zapsByNote.putIfAbsent(noteId, () => []);
+      final existingIds = _zapsByNote[noteId]!.map((z) => z.id).toSet();
+
+      for (final zap in newZaps) {
+        if (existingIds.add(zap.id)) {
+          _zapsByNote[noteId]!.add(zap);
+          _userZaps.putIfAbsent(zap.sender, () => {});
+          _userZaps[zap.sender]!.add(noteId);
+        }
+      }
+    });
 
     try {
       final zapsMap = {for (var z in zaps) z.id: z};
@@ -280,7 +341,6 @@ class InteractionsProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('[InteractionsProvider] Error batch saving zaps: $e');
     }
-
     notifyListeners();
   }
 
