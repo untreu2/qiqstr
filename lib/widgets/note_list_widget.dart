@@ -102,23 +102,13 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   }
 
   Widget _buildEmptyState() {
-    final theme = Theme.of(context);
+    Theme.of(context);
     return SliverToBoxAdapter(
       child: Center(
         child: Padding(
           padding: const EdgeInsets.all(32.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.note_alt_outlined, size: 64, color: Colors.grey),
-              const SizedBox(height: 16),
-              Text('No notes found', style: theme.textTheme.titleLarge),
-              const SizedBox(height: 8),
-              Text(
-                'Check back later for new content',
-                style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey),
-              ),
-            ],
           ),
         ),
       ),
