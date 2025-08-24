@@ -153,13 +153,15 @@ class _InteractionBarState extends State<InteractionBar> {
       return false;
     }
 
-    try {
-      await widget.dataService!.sendReactionInstantly(widget.noteId, '+');
-      return true;
-    } catch (e) {
+    setState(() {
+      _reactionCount++;
+      _hasReacted = true;
+    });
+
+    widget.dataService!.sendReactionInstantly(widget.noteId, '+').catchError((e) {
       debugPrint('Error sending reaction: $e');
-      return false;
-    }
+    });
+    return true;
   }
 
   void _handleReplyTap() {
