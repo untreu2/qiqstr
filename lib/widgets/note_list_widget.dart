@@ -31,7 +31,9 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.9) {
         final provider = context.read<NotesListProvider>();
-        provider.fetchMoreNotes();
+        if (!provider.isLoadingMore) {
+          provider.fetchMoreNotes();
+        }
       }
     });
   }
@@ -100,18 +102,22 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   }
 
   Widget _buildEmptyState() {
-    return const SliverToBoxAdapter(
+    final theme = Theme.of(context);
+    return SliverToBoxAdapter(
       child: Center(
         child: Padding(
-          padding: EdgeInsets.all(32.0),
+          padding: const EdgeInsets.all(32.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.note_alt_outlined, size: 64, color: Colors.grey),
-              SizedBox(height: 16),
-              Text('No notes found', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
-              SizedBox(height: 8),
-              Text('Check back later for new content', style: TextStyle(color: Colors.grey)),
+              const Icon(Icons.note_alt_outlined, size: 64, color: Colors.grey),
+              const SizedBox(height: 16),
+              Text('No notes found', style: theme.textTheme.titleLarge),
+              const SizedBox(height: 8),
+              Text(
+                'Check back later for new content',
+                style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey),
+              ),
             ],
           ),
         ),
@@ -120,35 +126,44 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   }
 
   Widget _buildNotesList(List<dynamic> notes, bool isLoadingMore) {
+    final noteCount = notes.length;
+
+    int itemCount = noteCount * 2;
+    if (isLoadingMore) {
+      itemCount++;
+    } else if (itemCount > 0) {
+      itemCount--;
+    }
+
     return SliverList.builder(
-      itemCount: notes.length + (isLoadingMore ? 1 : 0),
+      itemCount: itemCount,
       itemBuilder: (context, index) {
-        if (index >= notes.length) {
+        if (isLoadingMore && index == itemCount - 1) {
           return const Padding(
             padding: EdgeInsets.all(16.0),
             child: Center(child: CircularProgressIndicator()),
           );
         }
 
-        final note = notes[index];
+        if (index.isOdd) {
+          return Divider(height: 12, thickness: 1, color: context.colors.border);
+        }
+
+        final noteIndex = index ~/ 2;
+        final note = notes[noteIndex];
         final provider = context.read<NotesListProvider>();
 
-        return Column(
-          children: [
-            NoteWidget(
-              key: ValueKey('note_${note.id}'),
-              note: note,
-              reactionCount: note.reactionCount,
-              replyCount: note.replyCount,
-              repostCount: note.repostCount,
-              dataService: provider.dataService,
-              currentUserNpub: provider.npub,
-              notesNotifier: provider.dataService.notesNotifier,
-              profiles: {},
-              isSmallView: true,
-            ),
-            if (index < notes.length - 1) Divider(height: 12, thickness: 1, color: context.colors.border),
-          ],
+        return NoteWidget(
+          key: ValueKey('note_${note.id}'),
+          note: note,
+          reactionCount: note.reactionCount,
+          replyCount: note.replyCount,
+          repostCount: note.repostCount,
+          dataService: provider.dataService,
+          currentUserNpub: provider.npub,
+          notesNotifier: provider.dataService.notesNotifier,
+          profiles: {},
+          isSmallView: true,
         );
       },
     );
