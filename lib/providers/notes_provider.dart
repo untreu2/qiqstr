@@ -3,23 +3,71 @@ import 'package:hive/hive.dart';
 import '../models/note_model.dart';
 import '../services/data_service.dart';
 
+class NoteNotifier extends ChangeNotifier {
+  NoteModel _note;
+
+  NoteNotifier(this._note);
+
+  NoteModel get note => _note;
+
+  void updateNote(NoteModel newNote) {
+    if (_note.id == newNote.id) {
+      if (_note != newNote) {
+        _note = newNote;
+        notifyListeners();
+      }
+    }
+  }
+
+  void updateInteractionCounts({
+    int? reactionCount,
+    int? replyCount,
+    int? repostCount,
+    int? zapAmount,
+  }) {
+    bool hasChanges = false;
+    if (reactionCount != null && _note.reactionCount != reactionCount) {
+      _note.reactionCount = reactionCount;
+      hasChanges = true;
+    }
+    if (replyCount != null && _note.replyCount != replyCount) {
+      _note.replyCount = replyCount;
+      hasChanges = true;
+    }
+    if (repostCount != null && _note.repostCount != repostCount) {
+      _note.repostCount = repostCount;
+      hasChanges = true;
+    }
+    if (zapAmount != null && _note.zapAmount != zapAmount) {
+      _note.zapAmount = zapAmount;
+      hasChanges = true;
+    }
+
+    if (hasChanges) {
+      notifyListeners();
+    }
+  }
+}
+
 class NotesProvider extends ChangeNotifier {
   static NotesProvider? _instance;
   static NotesProvider get instance => _instance ??= NotesProvider._internal();
 
   NotesProvider._internal();
 
-  final Map<String, NoteModel> _notes = {};
+  final Map<String, NoteNotifier> _notifiers = {};
   final Map<String, List<String>> _notesByAuthor = {};
   final Map<String, List<String>> _repliesByParent = {};
   final Set<String> _loadingNotes = {};
   bool _isInitialized = false;
 
-  Map<String, NoteModel> get notes => Map.unmodifiable(_notes);
   bool get isInitialized => _isInitialized;
 
   Box<NoteModel>? _feedNotesBox;
   Box<NoteModel>? _profileNotesBox;
+
+  final ValueNotifier<int> _newNoteCountNotifier = ValueNotifier<int>(0);
+  ValueListenable<int> get newNoteCountNotifier => _newNoteCountNotifier;
 
   Future<void> initialize(String npub) async {
     if (_isInitialized) return;
@@ -37,6 +85,7 @@ class NotesProvider extends ChangeNotifier {
       await _loadNotesFromHiveOptimized();
 
       _isInitialized = true;
+
       notifyListeners();
     } catch (e) {}
   }
@@ -44,72 +93,68 @@ class NotesProvider extends ChangeNotifier {
   Future<void> _loadNotesFromHiveOptimized() async {
     final loadingFutures = <Future>[];
 
+    void processNotes(Iterable<NoteModel> notes) {
+      for (final note in notes) {
+        _addNoteToCache(note);
+      }
+    }
+
     if (_feedNotesBox != null) {
-      loadingFutures.add(Future.microtask(() {
-        final notes = _feedNotesBox!.values.toList();
-        for (final note in notes) {
-          _addNoteToCache(note);
-        }
-      }));
+      loadingFutures.add(Future.microtask(() => processNotes(_feedNotesBox!.values)));
     }
 
     if (_profileNotesBox != null) {
-      loadingFutures.add(Future.microtask(() {
-        final notes = _profileNotesBox!.values.toList();
-        for (final note in notes) {
-          _addNoteToCache(note);
-        }
-      }));
+      loadingFutures.add(Future.microtask(() => processNotes(_profileNotesBox!.values)));
     }
 
     await Future.wait(loadingFutures);
   }
 
   void _addNoteToCache(NoteModel note) {
-    _notes[note.id] = note;
+    if (_notifiers.containsKey(note.id)) {
+      _notifiers[note.id]!.updateNote(note);
+    } else {
+      _notifiers[note.id] = NoteNotifier(note);
 
-    _notesByAuthor.putIfAbsent(note.author, () => []);
-    if (!_notesByAuthor[note.author]!.contains(note.id)) {
-      _notesByAuthor[note.author]!.add(note.id);
-    }
-
-    if (note.isReply && note.parentId != null) {
-      _repliesByParent.putIfAbsent(note.parentId!, () => []);
-      if (!_repliesByParent[note.parentId!]!.contains(note.id)) {
-        _repliesByParent[note.parentId!]!.add(note.id);
+      _notesByAuthor.putIfAbsent(note.author, () => []).add(note.id);
+      if (note.isReply && note.parentId != null) {
+        _repliesByParent.putIfAbsent(note.parentId!, () => []).add(note.id);
       }
     }
   }
 
-  NoteModel? getNote(String noteId) {
-    return _notes[noteId];
+  NoteNotifier? getNote(String noteId) {
+    return _notifiers[noteId];
   }
 
-  List<NoteModel> getNotesByAuthor(String authorNpub) {
+  List<NoteNotifier> getNotesByAuthor(String authorNpub) {
     final noteIds = _notesByAuthor[authorNpub] ?? [];
-    return noteIds.map((id) => _notes[id]).whereType<NoteModel>().toList()..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    return noteIds.map((id) => _notifiers[id]).whereType<NoteNotifier>().toList()
+      ..sort((a, b) => b.note.timestamp.compareTo(a.note.timestamp));
   }
 
-  List<NoteModel> getRepliesForNote(String noteId) {
+  List<NoteNotifier> getRepliesForNote(String noteId) {
     final replyIds = _repliesByParent[noteId] ?? [];
-    return replyIds.map((id) => _notes[id]).whereType<NoteModel>().toList()..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    return replyIds.map((id) => _notifiers[id]).whereType<NoteNotifier>().toList()
+      ..sort((a, b) => a.note.timestamp.compareTo(b.note.timestamp));
   }
 
-  List<NoteModel> getAllNotes() {
-    return _notes.values.toList()..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  List<NoteNotifier> getAllNotes() {
+    return _notifiers.values.toList()..sort((a, b) => b.note.timestamp.compareTo(a.note.timestamp));
   }
 
-  List<NoteModel> getFeedNotes() {
-    return _notes.values.where((note) => !note.isReply || note.isRepost).toList()..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  List<NoteNotifier> getFeedNotes() {
+    return _notifiers.values.where((notifier) => !notifier.note.isReply || notifier.note.isRepost).toList()
+      ..sort((a, b) => b.note.timestamp.compareTo(a.note.timestamp));
   }
 
-  List<NoteModel> getMediaNotes() {
-    return _notes.values.where((note) => note.hasMedia && (!note.isReply || note.isRepost)).toList()
-      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  List<NoteNotifier> getMediaNotes() {
+    return _notifiers.values.where((notifier) => notifier.note.hasMedia && (!notifier.note.isReply || notifier.note.isRepost)).toList()
+      ..sort((a, b) => b.note.timestamp.compareTo(a.note.timestamp));
   }
 
   Future<void> addNote(NoteModel note, {DataType? dataType}) async {
-    final wasNewNote = !_notes.containsKey(note.id);
+    final wasNewNote = !_notifiers.containsKey(note.id);
     _addNoteToCache(note);
 
     try {
@@ -121,7 +166,7 @@ class NotesProvider extends ChangeNotifier {
     } catch (e) {}
 
     if (wasNewNote) {
-      notifyListeners();
+      _newNoteCountNotifier.value++;
     }
   }
 
@@ -129,7 +174,7 @@ class NotesProvider extends ChangeNotifier {
     bool hasNewNotes = false;
 
     for (final note in notes) {
-      if (!_notes.containsKey(note.id)) {
+      if (!_notifiers.containsKey(note.id)) {
         hasNewNotes = true;
       }
       _addNoteToCache(note);
@@ -146,23 +191,12 @@ class NotesProvider extends ChangeNotifier {
     } catch (e) {}
 
     if (hasNewNotes) {
-      notifyListeners();
+      _newNoteCountNotifier.value += notes.length;
     }
   }
 
   void updateNote(NoteModel note) {
-    if (_notes.containsKey(note.id)) {
-      final oldNote = _notes[note.id]!;
-      _notes[note.id] = note;
-
-      if (oldNote.reactionCount != note.reactionCount ||
-          oldNote.replyCount != note.replyCount ||
-          oldNote.repostCount != note.repostCount ||
-          oldNote.zapAmount != note.zapAmount ||
-          oldNote.content != note.content) {
-        notifyListeners();
-      }
-    }
+    getNote(note.id)?.updateNote(note);
   }
 
   void updateNoteInteractionCounts(
@@ -172,36 +206,18 @@ class NotesProvider extends ChangeNotifier {
     int? repostCount,
     int? zapAmount,
   }) {
-    final note = _notes[noteId];
-    if (note != null) {
-      bool hasChanges = false;
-
-      if (reactionCount != null && note.reactionCount != reactionCount) {
-        note.reactionCount = reactionCount;
-        hasChanges = true;
-      }
-      if (replyCount != null && note.replyCount != replyCount) {
-        note.replyCount = replyCount;
-        hasChanges = true;
-      }
-      if (repostCount != null && note.repostCount != repostCount) {
-        note.repostCount = repostCount;
-        hasChanges = true;
-      }
-      if (zapAmount != null && note.zapAmount != zapAmount) {
-        note.zapAmount = zapAmount;
-        hasChanges = true;
-      }
-
-      if (hasChanges) {
-        notifyListeners();
-      }
-    }
+    getNote(noteId)?.updateInteractionCounts(
+      reactionCount: reactionCount,
+      replyCount: replyCount,
+      repostCount: repostCount,
+      zapAmount: zapAmount,
+    );
   }
 
   void removeNote(String noteId) {
-    final note = _notes.remove(noteId);
-    if (note != null) {
+    final noteNotifier = _notifiers.remove(noteId);
+    if (noteNotifier != null) {
+      final note = noteNotifier.note;
       _notesByAuthor[note.author]?.remove(noteId);
 
       if (note.parentId != null) {
@@ -213,7 +229,7 @@ class NotesProvider extends ChangeNotifier {
   }
 
   void clearCache() {
-    _notes.clear();
+    _notifiers.clear();
     _notesByAuthor.clear();
     _repliesByParent.clear();
     _loadingNotes.clear();
@@ -227,8 +243,10 @@ class NotesProvider extends ChangeNotifier {
     _feedNotesBox?.close();
     _profileNotesBox?.close();
 
-    clearCache();
+    _notifiers.values.forEach((notifier) => notifier.dispose());
+    _newNoteCountNotifier.dispose();
 
+    clearCache();
     super.dispose();
   }
 }

@@ -41,28 +41,13 @@ class InteractionBar extends StatefulWidget {
 }
 
 class _InteractionBarState extends State<InteractionBar> {
-  final GlobalKey<LikeButtonState> _reactionButtonKey = GlobalKey<LikeButtonState>();
-  final GlobalKey<LikeButtonState> _replyButtonKey = GlobalKey<LikeButtonState>();
-  final GlobalKey<LikeButtonState> _repostButtonKey = GlobalKey<LikeButtonState>();
-  final GlobalKey<LikeButtonState> _zapButtonKey = GlobalKey<LikeButtonState>();
-
   final _secureStorage = const FlutterSecureStorage();
   String? _actualLoggedInUserNpub;
-
-  int _reactionCount = 0;
-  int _replyCount = 0;
-  int _repostCount = 0;
-  int _zapAmount = 0;
-  bool _hasReacted = false;
-  bool _hasReplied = false;
-  bool _hasReposted = false;
-  bool _hasZapped = false;
 
   @override
   void initState() {
     super.initState();
     _loadActualUserNpub();
-    InteractionsProvider.instance.addListener(_onInteractionsChanged);
   }
 
   Future<void> _loadActualUserNpub() async {
@@ -71,13 +56,155 @@ class _InteractionBarState extends State<InteractionBar> {
       if (mounted) {
         setState(() {
           _actualLoggedInUserNpub = npub;
-          _updateInteractionData();
         });
       }
     } catch (e) {
       debugPrint('[InteractionBar] Error loading user npub: $e');
     }
   }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_actualLoggedInUserNpub == null) {
+      return const SizedBox.shrink();
+    }
+
+    final colors = context.colors;
+    final double statsIconSize = widget.isLarge ? 22 : 21;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        _InteractionButton(
+          noteId: widget.noteId,
+          currentUserNpub: _actualLoggedInUserNpub!,
+          iconPath: 'assets/reply_button.svg',
+          color: colors.reply,
+          isGlowing: widget.isReplyGlowing,
+          isLarge: widget.isLarge,
+          onTap: () {
+            if (widget.dataService == null) return;
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ShareNotePage(
+                  dataService: widget.dataService!,
+                  replyToNoteId: widget.noteId,
+                ),
+              ),
+            );
+          },
+          getInteractionCount: (provider) => provider.getReplyCount(widget.noteId),
+          hasUserInteracted: (provider, npub, id) => provider.hasUserReplied(npub, id),
+        ),
+        _InteractionButton(
+          noteId: widget.noteId,
+          currentUserNpub: _actualLoggedInUserNpub!,
+          iconPath: 'assets/repost_button.svg',
+          color: colors.repost,
+          isGlowing: widget.isRepostGlowing,
+          isLarge: widget.isLarge,
+          onTap: () {
+            if (widget.dataService == null || widget.note == null) return;
+            final hasReposted = InteractionsProvider.instance.hasUserReposted(_actualLoggedInUserNpub!, widget.noteId);
+            if (hasReposted) return;
+            showRepostDialog(
+              context: context,
+              dataService: widget.dataService!,
+              note: widget.note!,
+            );
+          },
+          getInteractionCount: (provider) => provider.getRepostCount(widget.noteId),
+          hasUserInteracted: (provider, npub, id) => provider.hasUserReposted(npub, id),
+        ),
+        _InteractionButton(
+          noteId: widget.noteId,
+          currentUserNpub: _actualLoggedInUserNpub!,
+          iconPath: 'assets/reaction_button.svg',
+          color: colors.reaction,
+          isGlowing: widget.isReactionGlowing,
+          isLarge: widget.isLarge,
+          isLikeButton: true,
+          onLikeTap: (isCurrentlyLiked) async {
+            if (widget.dataService == null) return false;
+            if (isCurrentlyLiked) {
+              return false;
+            }
+            await widget.dataService!.sendReactionInstantly(widget.noteId, '+').catchError((e) {
+              debugPrint('Error sending reaction: $e');
+            });
+            return true;
+          },
+          getInteractionCount: (provider) => provider.getReactionCount(widget.noteId),
+          hasUserInteracted: (provider, npub, id) => provider.hasUserReacted(npub, id),
+        ),
+        _InteractionButton(
+          noteId: widget.noteId,
+          currentUserNpub: _actualLoggedInUserNpub!,
+          iconPath: 'assets/zap_button.svg',
+          color: colors.zap,
+          isGlowing: widget.isZapGlowing,
+          isLarge: widget.isLarge,
+          onTap: () {
+            if (widget.dataService == null || widget.note == null) return;
+            showZapDialog(
+              context: context,
+              dataService: widget.dataService!,
+              note: widget.note!,
+            );
+          },
+          getInteractionCount: (provider) => provider.getZapAmount(widget.noteId),
+          hasUserInteracted: (provider, npub, id) => provider.hasUserZapped(npub, id),
+        ),
+        GestureDetector(
+          onTap: () {
+            if (widget.dataService == null || widget.note == null) return;
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => NoteStatisticsPage(
+                  note: widget.note!,
+                  dataService: widget.dataService!,
+                ),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: Icon(Icons.bar_chart, size: statsIconSize, color: colors.secondary),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InteractionButton extends StatelessWidget {
+  final String noteId;
+  final String currentUserNpub;
+  final String iconPath;
+  final Color color;
+  final bool isGlowing;
+  final bool isLarge;
+  final bool isLikeButton;
+  final void Function()? onTap;
+  final Future<bool> Function(bool)? onLikeTap;
+  final int Function(InteractionsProvider provider) getInteractionCount;
+  final bool Function(InteractionsProvider provider, String npub, String noteId) hasUserInteracted;
+
+  const _InteractionButton({
+    required this.noteId,
+    required this.currentUserNpub,
+    required this.iconPath,
+    required this.color,
+    this.isGlowing = false,
+    this.isLarge = false,
+    this.isLikeButton = false,
+    this.onTap,
+    this.onLikeTap,
+    required this.getInteractionCount,
+    required this.hasUserInteracted,
+  });
 
   String _formatCount(int count) {
     if (count >= 1000) {
@@ -91,351 +218,91 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   @override
-  void didUpdateWidget(covariant InteractionBar oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.noteId != oldWidget.noteId || widget.currentUserNpub != oldWidget.currentUserNpub) {
-      setState(() {
-        _updateInteractionData();
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    InteractionsProvider.instance.removeListener(_onInteractionsChanged);
-    super.dispose();
-  }
-
-  void _onInteractionsChanged() {
-    if (_actualLoggedInUserNpub == null) return;
-
-    final provider = InteractionsProvider.instance;
-    if (provider.getReactionCount(widget.noteId) != _reactionCount ||
-        provider.getReplyCount(widget.noteId) != _replyCount ||
-        provider.getRepostCount(widget.noteId) != _repostCount ||
-        provider.getZapAmount(widget.noteId) != _zapAmount ||
-        provider.hasUserReacted(_actualLoggedInUserNpub!, widget.noteId) != _hasReacted ||
-        provider.hasUserReplied(_actualLoggedInUserNpub!, widget.noteId) != _hasReplied ||
-        provider.hasUserReposted(_actualLoggedInUserNpub!, widget.noteId) != _hasReposted ||
-        provider.hasUserZapped(_actualLoggedInUserNpub!, widget.noteId) != _hasZapped) {
-      if (mounted) {
-        setState(_updateInteractionData);
-      }
-    }
-  }
-
-  void _updateInteractionData() {
-    final provider = InteractionsProvider.instance;
-    _reactionCount = provider.getReactionCount(widget.noteId);
-    _replyCount = provider.getReplyCount(widget.noteId);
-    _repostCount = provider.getRepostCount(widget.noteId);
-    _zapAmount = provider.getZapAmount(widget.noteId);
-
-    if (_actualLoggedInUserNpub != null) {
-      _hasReacted = provider.hasUserReacted(_actualLoggedInUserNpub!, widget.noteId);
-      _hasReplied = provider.hasUserReplied(_actualLoggedInUserNpub!, widget.noteId);
-      _hasReposted = provider.hasUserReposted(_actualLoggedInUserNpub!, widget.noteId);
-      _hasZapped = provider.hasUserZapped(_actualLoggedInUserNpub!, widget.noteId);
-    } else {
-      _hasReacted = false;
-      _hasReplied = false;
-      _hasReposted = false;
-      _hasZapped = false;
-    }
-  }
-
-  Future<bool> _handleReactionTap(bool isCurrentlyLiked) async {
-    if (widget.dataService == null || _actualLoggedInUserNpub == null) {
-      return false;
-    }
-
-    if (isCurrentlyLiked) {
-      return false;
-    }
-
-    setState(() {
-      _reactionCount++;
-      _hasReacted = true;
-    });
-
-    widget.dataService!.sendReactionInstantly(widget.noteId, '+').catchError((e) {
-      debugPrint('Error sending reaction: $e');
-    });
-    return true;
-  }
-
-  void _handleReplyTap() {
-    if (widget.dataService == null || _actualLoggedInUserNpub == null) return;
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ShareNotePage(
-          dataService: widget.dataService!,
-          replyToNoteId: widget.noteId,
-        ),
-      ),
-    );
-  }
-
-  void _handleRepostTap() {
-    if (widget.dataService == null || widget.note == null || _actualLoggedInUserNpub == null) return;
-
-    final hasReposted = InteractionsProvider.instance.hasUserReposted(_actualLoggedInUserNpub!, widget.noteId);
-    if (hasReposted) return;
-
-    showRepostDialog(
-      context: context,
-      dataService: widget.dataService!,
-      note: widget.note!,
-    );
-  }
-
-  void _handleZapTap() {
-    if (widget.dataService == null || widget.note == null || _actualLoggedInUserNpub == null) return;
-
-    showZapDialog(
-      context: context,
-      dataService: widget.dataService!,
-      note: widget.note!,
-    );
-  }
-
-  void _handleStatisticsTap() {
-    if (widget.dataService == null || widget.note == null) return;
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => NoteStatisticsPage(
-          note: widget.note!,
-          dataService: widget.dataService!,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildReactionButton(BuildContext context, int reactionCount, bool hasReacted) {
-    final textScaleFactor = MediaQuery.of(context).textScaleFactor;
-    final colors = context.colors;
-    final double iconSize = widget.isLarge ? 16.5 : 15.5;
-    final double fontSize = widget.isLarge ? 15.5 : 15;
-    final double spacing = widget.isLarge ? 7 : 6.5;
-
-    return Row(
-      children: [
-        LikeButton(
-          key: _reactionButtonKey,
-          size: iconSize * textScaleFactor,
-          isLiked: hasReacted,
-          animationDuration: const Duration(milliseconds: 1000),
-          likeBuilder: (bool isLiked) {
-            return SvgPicture.asset(
-              'assets/reaction_button.svg',
-              width: iconSize * textScaleFactor,
-              height: iconSize * textScaleFactor,
-              colorFilter: ColorFilter.mode(
-                (widget.isReactionGlowing || isLiked) ? colors.reaction : colors.secondary,
-                BlendMode.srcIn,
-              ),
-            );
-          },
-          onTap: (bool isLiked) async {
-            return await _handleReactionTap(isLiked);
-          },
-          circleColor: CircleColor(
-            start: colors.reaction.withOpacity(0.3),
-            end: colors.reaction,
-          ),
-          bubblesColor: BubblesColor(
-            dotPrimaryColor: colors.reaction,
-            dotSecondaryColor: colors.reaction.withOpacity(0.7),
-          ),
-        ),
-        SizedBox(width: spacing),
-        Opacity(
-          opacity: reactionCount > 0 ? 1.0 : 0.0,
-          child: Text(
-            _formatCount(reactionCount),
-            style: TextStyle(fontSize: fontSize, color: colors.secondary),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildReplyButton(BuildContext context, int replyCount, bool hasReplied) {
-    final textScaleFactor = MediaQuery.of(context).textScaleFactor;
-    final colors = context.colors;
-    final double iconSize = widget.isLarge ? 16 : 15;
-    final double fontSize = widget.isLarge ? 15 : 14.5;
-    final double spacing = widget.isLarge ? 6 : 5.5;
-
-    return Row(
-      children: [
-        LikeButton(
-          key: _replyButtonKey,
-          size: iconSize * textScaleFactor,
-          isLiked: hasReplied,
-          animationDuration: const Duration(milliseconds: 1000),
-          likeBuilder: (bool isLiked) {
-            return SvgPicture.asset(
-              'assets/reply_button.svg',
-              width: iconSize * textScaleFactor,
-              height: iconSize * textScaleFactor,
-              colorFilter: ColorFilter.mode(
-                (widget.isReplyGlowing || isLiked) ? colors.reply : colors.secondary,
-                BlendMode.srcIn,
-              ),
-            );
-          },
-          onTap: (bool isLiked) async {
-            _handleReplyTap();
-            return false;
-          },
-          circleColor: CircleColor(
-            start: colors.reply.withOpacity(0.3),
-            end: colors.reply,
-          ),
-          bubblesColor: BubblesColor(
-            dotPrimaryColor: colors.reply,
-            dotSecondaryColor: colors.reply.withOpacity(0.7),
-          ),
-        ),
-        SizedBox(width: spacing),
-        Opacity(
-          opacity: replyCount > 0 ? 1.0 : 0.0,
-          child: Text(
-            _formatCount(replyCount),
-            style: TextStyle(fontSize: fontSize, color: colors.secondary),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRepostButton(BuildContext context, int repostCount, bool hasReposted) {
-    final textScaleFactor = MediaQuery.of(context).textScaleFactor;
-    final colors = context.colors;
-    final double iconSize = widget.isLarge ? 16 : 15;
-    final double fontSize = widget.isLarge ? 15 : 14.5;
-    final double spacing = widget.isLarge ? 6 : 5.5;
-
-    return Row(
-      children: [
-        LikeButton(
-          key: _repostButtonKey,
-          size: iconSize * textScaleFactor,
-          isLiked: hasReposted,
-          animationDuration: const Duration(milliseconds: 1000),
-          likeBuilder: (bool isLiked) {
-            return SvgPicture.asset(
-              'assets/repost_button.svg',
-              width: iconSize * textScaleFactor,
-              height: iconSize * textScaleFactor,
-              colorFilter: ColorFilter.mode(
-                (widget.isRepostGlowing || isLiked) ? colors.repost : colors.secondary,
-                BlendMode.srcIn,
-              ),
-            );
-          },
-          onTap: (bool isLiked) async {
-            if (!isLiked) {
-              _handleRepostTap();
-            }
-            return !isLiked;
-          },
-          circleColor: CircleColor(
-            start: colors.repost.withOpacity(0.3),
-            end: colors.repost,
-          ),
-          bubblesColor: BubblesColor(
-            dotPrimaryColor: colors.repost,
-            dotSecondaryColor: colors.repost.withOpacity(0.7),
-          ),
-        ),
-        SizedBox(width: spacing),
-        Opacity(
-          opacity: repostCount > 0 ? 1.0 : 0.0,
-          child: Text(
-            _formatCount(repostCount),
-            style: TextStyle(fontSize: fontSize, color: colors.secondary),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildZapButton(BuildContext context, int zapAmount, bool hasZapped) {
-    final textScaleFactor = MediaQuery.of(context).textScaleFactor;
-    final colors = context.colors;
-    final double iconSize = widget.isLarge ? 16 : 15;
-    final double fontSize = widget.isLarge ? 15 : 14.5;
-    final double spacing = widget.isLarge ? 6 : 5.5;
-
-    return Row(
-      children: [
-        LikeButton(
-          key: _zapButtonKey,
-          size: iconSize * textScaleFactor,
-          isLiked: hasZapped,
-          animationDuration: const Duration(milliseconds: 1000),
-          likeBuilder: (bool isLiked) {
-            return SvgPicture.asset(
-              'assets/zap_button.svg',
-              width: iconSize * textScaleFactor,
-              height: iconSize * textScaleFactor,
-              colorFilter: ColorFilter.mode(
-                (widget.isZapGlowing || isLiked) ? colors.zap : colors.secondary,
-                BlendMode.srcIn,
-              ),
-            );
-          },
-          onTap: (bool isLiked) async {
-            _handleZapTap();
-            return !isLiked;
-          },
-          circleColor: CircleColor(
-            start: colors.zap.withOpacity(0.3),
-            end: colors.zap,
-          ),
-          bubblesColor: BubblesColor(
-            dotPrimaryColor: colors.zap,
-            dotSecondaryColor: colors.zap.withOpacity(0.7),
-          ),
-        ),
-        SizedBox(width: spacing),
-        Opacity(
-          opacity: zapAmount > 0 ? 1.0 : 0.0,
-          child: Text(
-            _formatCount(zapAmount),
-            style: TextStyle(fontSize: fontSize, color: colors.secondary),
-          ),
-        ),
-      ],
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final colors = context.colors;
-    final double statsIconSize = widget.isLarge ? 22 : 21;
+    return ListenableBuilder(
+      listenable: InteractionsProvider.instance,
+      builder: (context, child) {
+        final provider = InteractionsProvider.instance;
+        final count = getInteractionCount(provider);
+        final hasInteracted = hasUserInteracted(provider, currentUserNpub, noteId);
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        _buildReplyButton(context, _replyCount, _hasReplied),
-        _buildRepostButton(context, _repostCount, _hasReposted),
-        _buildReactionButton(context, _reactionCount, _hasReacted),
-        _buildZapButton(context, _zapAmount, _hasZapped),
-        GestureDetector(
-          onTap: _handleStatisticsTap,
-          child: Padding(
-            padding: const EdgeInsets.only(left: 6),
-            child: Icon(Icons.bar_chart, size: statsIconSize, color: colors.secondary),
-          ),
-        ),
-      ],
+        final textScaleFactor = MediaQuery.of(context).textScaleFactor;
+        final colors = context.colors;
+        final double iconSize = isLarge ? 16.5 : 15.5;
+        final double fontSize = isLarge ? 15.5 : 15;
+        final double spacing = isLarge ? 7 : 6.5;
+
+        return Row(
+          children: [
+            if (isLikeButton)
+              LikeButton(
+                size: iconSize * textScaleFactor,
+                isLiked: hasInteracted,
+                animationDuration: const Duration(milliseconds: 1000),
+                likeBuilder: (bool isLiked) {
+                  return SvgPicture.asset(
+                    iconPath,
+                    width: iconSize * textScaleFactor,
+                    height: iconSize * textScaleFactor,
+                    colorFilter: ColorFilter.mode(
+                      (isGlowing || isLiked) ? color : colors.secondary,
+                      BlendMode.srcIn,
+                    ),
+                  );
+                },
+                onTap: onLikeTap,
+                circleColor: CircleColor(
+                  start: color.withOpacity(0.3),
+                  end: color,
+                ),
+                bubblesColor: BubblesColor(
+                  dotPrimaryColor: color,
+                  dotSecondaryColor: color.withOpacity(0.7),
+                ),
+              )
+            else
+              GestureDetector(
+                onTap: onTap,
+                child: LikeButton(
+                  size: iconSize * textScaleFactor,
+                  isLiked: hasInteracted,
+                  animationDuration: const Duration(milliseconds: 1000),
+                  likeBuilder: (bool isLiked) {
+                    return SvgPicture.asset(
+                      iconPath,
+                      width: iconSize * textScaleFactor,
+                      height: iconSize * textScaleFactor,
+                      colorFilter: ColorFilter.mode(
+                        (isGlowing || isLiked) ? color : colors.secondary,
+                        BlendMode.srcIn,
+                      ),
+                    );
+                  },
+                  onTap: (isLiked) async {
+                    onTap?.call();
+                    return false;
+                  },
+                  circleColor: CircleColor(
+                    start: color.withOpacity(0.3),
+                    end: color,
+                  ),
+                  bubblesColor: BubblesColor(
+                    dotPrimaryColor: color,
+                    dotSecondaryColor: color.withOpacity(0.7),
+                  ),
+                ),
+              ),
+            SizedBox(width: spacing),
+            Opacity(
+              opacity: count > 0 ? 1.0 : 0.0,
+              child: Text(
+                _formatCount(count),
+                style: TextStyle(fontSize: fontSize, color: colors.secondary),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

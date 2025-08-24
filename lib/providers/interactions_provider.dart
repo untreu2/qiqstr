@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import '../models/reaction_model.dart';
@@ -5,11 +6,23 @@ import '../models/reply_model.dart';
 import '../models/repost_model.dart';
 import '../models/zap_model.dart';
 
+import 'package:rxdart/rxdart.dart';
+
 class InteractionsProvider extends ChangeNotifier {
   static InteractionsProvider? _instance;
   static InteractionsProvider get instance => _instance ??= InteractionsProvider._internal();
 
   InteractionsProvider._internal();
+
+  final _reactionStreamController = StreamController<String>.broadcast();
+  final _replyStreamController = StreamController<String>.broadcast();
+  final _repostStreamController = StreamController<String>.broadcast();
+  final _zapStreamController = StreamController<String>.broadcast();
+
+  Stream<String> get reactionsStream => _reactionStreamController.stream.debounceTime(const Duration(milliseconds: 300));
+  Stream<String> get repliesStream => _replyStreamController.stream.debounceTime(const Duration(milliseconds: 300));
+  Stream<String> get repostsStream => _repostStreamController.stream.debounceTime(const Duration(milliseconds: 300));
+  Stream<String> get zapsStream => _zapStreamController.stream.debounceTime(const Duration(milliseconds: 300));
 
   final Map<String, List<ReactionModel>> _reactionsByNote = {};
   final Map<String, List<ReplyModel>> _repliesByNote = {};
@@ -114,133 +127,73 @@ class InteractionsProvider extends ChangeNotifier {
     }
   }
 
-  List<ReactionModel> getReactionsForNote(String noteId) {
-    return _reactionsByNote[noteId] ?? [];
-  }
-
-  List<ReplyModel> getRepliesForNote(String noteId) {
-    return _repliesByNote[noteId] ?? [];
-  }
-
-  List<RepostModel> getRepostsForNote(String noteId) {
-    return _repostsByNote[noteId] ?? [];
-  }
-
-  List<ZapModel> getZapsForNote(String noteId) {
-    return _zapsByNote[noteId] ?? [];
-  }
-
-  int getReactionCount(String noteId) {
-    return _reactionsByNote[noteId]?.length ?? 0;
-  }
-
-  int getReplyCount(String noteId) {
-    return _repliesByNote[noteId]?.length ?? 0;
-  }
-
-  int getRepostCount(String noteId) {
-    return _repostsByNote[noteId]?.length ?? 0;
-  }
-
-  int getZapAmount(String noteId) {
-    return _zapsByNote[noteId]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
-  }
-
-  bool hasUserReacted(String userId, String noteId) {
-    return _userReactions[userId]?.contains(noteId) ?? false;
-  }
-
-  bool hasUserReplied(String userId, String noteId) {
-    return _userReplies[userId]?.contains(noteId) ?? false;
-  }
-
-  bool hasUserReposted(String userId, String noteId) {
-    return _userReposts[userId]?.contains(noteId) ?? false;
-  }
-
-  bool hasUserZapped(String userId, String noteId) {
-    return _userZaps[userId]?.contains(noteId) ?? false;
-  }
+  List<ReactionModel> getReactionsForNote(String noteId) => _reactionsByNote[noteId] ?? [];
+  List<ReplyModel> getRepliesForNote(String noteId) => _repliesByNote[noteId] ?? [];
+  List<RepostModel> getRepostsForNote(String noteId) => _repostsByNote[noteId] ?? [];
+  List<ZapModel> getZapsForNote(String noteId) => _zapsByNote[noteId] ?? [];
+  int getReactionCount(String noteId) => _reactionsByNote[noteId]?.length ?? 0;
+  int getReplyCount(String noteId) => _repliesByNote[noteId]?.length ?? 0;
+  int getRepostCount(String noteId) => _repostsByNote[noteId]?.length ?? 0;
+  int getZapAmount(String noteId) => _zapsByNote[noteId]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
+  bool hasUserReacted(String userId, String noteId) => _userReactions[userId]?.contains(noteId) ?? false;
+  bool hasUserReplied(String userId, String noteId) => _userReplies[userId]?.contains(noteId) ?? false;
+  bool hasUserReposted(String userId, String noteId) => _userReposts[userId]?.contains(noteId) ?? false;
+  bool hasUserZapped(String userId, String noteId) => _userZaps[userId]?.contains(noteId) ?? false;
 
   Future<void> addReaction(ReactionModel reaction) async {
     if (!reaction.id.startsWith('optimistic_')) {
       _reactionsByNote[reaction.targetEventId]?.removeWhere((r) => r.author == reaction.author && r.id.startsWith('optimistic_'));
     }
-
     _addReactionToCache(reaction);
-
     try {
       await _reactionsBox?.put(reaction.id, reaction);
+      _reactionStreamController.add(reaction.targetEventId);
     } catch (e) {
       debugPrint('[InteractionsProvider] Error saving reaction: $e');
     }
-
-    notifyListeners();
   }
 
   Future<void> addReply(ReplyModel reply) async {
     _addReplyToCache(reply);
-
     try {
       await _repliesBox?.put(reply.id, reply);
+      _replyStreamController.add(reply.parentEventId);
     } catch (e) {
       debugPrint('[InteractionsProvider] Error saving reply: $e');
     }
-
-    notifyListeners();
   }
 
   Future<void> addRepost(RepostModel repost) async {
     if (!repost.id.startsWith('optimistic_')) {
       _repostsByNote[repost.originalNoteId]?.removeWhere((r) => r.repostedBy == repost.repostedBy && r.id.startsWith('optimistic_'));
     }
-
     _addRepostToCache(repost);
-
     try {
       await _repostsBox?.put(repost.id, repost);
+      _repostStreamController.add(repost.originalNoteId);
     } catch (e) {
       debugPrint('[InteractionsProvider] Error saving repost: $e');
     }
-
-    notifyListeners();
   }
 
   Future<void> addZap(ZapModel zap) async {
     _addZapToCache(zap);
-
     try {
       await _zapsBox?.put(zap.id, zap);
+      _zapStreamController.add(zap.targetEventId);
     } catch (e) {
       debugPrint('[InteractionsProvider] Error saving zap: $e');
     }
-
-    notifyListeners();
   }
 
   Future<void> addReactions(List<ReactionModel> reactions) async {
     if (reactions.isEmpty) return;
 
-    final groupedReactions = <String, List<ReactionModel>>{};
+    final noteIdsToUpdate = <String>{};
     for (final reaction in reactions) {
-      groupedReactions.putIfAbsent(reaction.targetEventId, () => []).add(reaction);
+      _addReactionToCache(reaction);
+      noteIdsToUpdate.add(reaction.targetEventId);
     }
-
-    groupedReactions.forEach((noteId, newReactions) {
-      final newAuthors = newReactions.map((r) => r.author).toSet();
-      _reactionsByNote[noteId]?.removeWhere((r) => r.id.startsWith('optimistic_') && newAuthors.contains(r.author));
-
-      _reactionsByNote.putIfAbsent(noteId, () => []);
-      final existingIds = _reactionsByNote[noteId]!.map((r) => r.id).toSet();
-
-      for (final reaction in newReactions) {
-        if (existingIds.add(reaction.id)) {
-          _reactionsByNote[noteId]!.add(reaction);
-          _userReactions.putIfAbsent(reaction.author, () => {});
-          _userReactions[reaction.author]!.add(noteId);
-        }
-      }
-    });
 
     try {
       final reactionsMap = {for (var r in reactions) r.id: r};
@@ -248,158 +201,110 @@ class InteractionsProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('[InteractionsProvider] Error batch saving reactions: $e');
     }
-    notifyListeners();
+
+    for (var id in noteIdsToUpdate) {
+      _reactionStreamController.add(id);
+    }
   }
 
   Future<void> addReplies(List<ReplyModel> replies) async {
     if (replies.isEmpty) return;
-
-    final groupedReplies = <String, List<ReplyModel>>{};
+    final noteIdsToUpdate = <String>{};
     for (final reply in replies) {
-      groupedReplies.putIfAbsent(reply.parentEventId, () => []).add(reply);
+      _addReplyToCache(reply);
+      noteIdsToUpdate.add(reply.parentEventId);
     }
-
-    groupedReplies.forEach((noteId, newReplies) {
-      _repliesByNote.putIfAbsent(noteId, () => []);
-      final existingIds = _repliesByNote[noteId]!.map((r) => r.id).toSet();
-
-      for (final reply in newReplies) {
-        if (existingIds.add(reply.id)) {
-          _repliesByNote[noteId]!.add(reply);
-          _userReplies.putIfAbsent(reply.author, () => {});
-          _userReplies[reply.author]!.add(noteId);
-        }
-      }
-    });
-
     try {
       final repliesMap = {for (var r in replies) r.id: r};
       await _repliesBox?.putAll(repliesMap);
     } catch (e) {
       debugPrint('[InteractionsProvider] Error batch saving replies: $e');
     }
-    notifyListeners();
+    for (var id in noteIdsToUpdate) {
+      _replyStreamController.add(id);
+    }
   }
 
   Future<void> addReposts(List<RepostModel> reposts) async {
     if (reposts.isEmpty) return;
-
-    final groupedReposts = <String, List<RepostModel>>{};
+    final noteIdsToUpdate = <String>{};
     for (final repost in reposts) {
-      groupedReposts.putIfAbsent(repost.originalNoteId, () => []).add(repost);
+      _addRepostToCache(repost);
+      noteIdsToUpdate.add(repost.originalNoteId);
     }
-
-    groupedReposts.forEach((noteId, newReposts) {
-      final newAuthors = newReposts.map((r) => r.repostedBy).toSet();
-      _repostsByNote[noteId]?.removeWhere((r) => r.id.startsWith('optimistic_') && newAuthors.contains(r.repostedBy));
-
-      _repostsByNote.putIfAbsent(noteId, () => []);
-      final existingIds = _repostsByNote[noteId]!.map((r) => r.id).toSet();
-
-      for (final repost in newReposts) {
-        if (existingIds.add(repost.id)) {
-          _repostsByNote[noteId]!.add(repost);
-          _userReposts.putIfAbsent(repost.repostedBy, () => {});
-          _userReposts[repost.repostedBy]!.add(noteId);
-        }
-      }
-    });
-
     try {
       final repostsMap = {for (var r in reposts) r.id: r};
       await _repostsBox?.putAll(repostsMap);
     } catch (e) {
       debugPrint('[InteractionsProvider] Error batch saving reposts: $e');
     }
-    notifyListeners();
+    for (var id in noteIdsToUpdate) {
+      _repostStreamController.add(id);
+    }
   }
 
   Future<void> addZaps(List<ZapModel> zaps) async {
     if (zaps.isEmpty) return;
-
-    final groupedZaps = <String, List<ZapModel>>{};
+    final noteIdsToUpdate = <String>{};
     for (final zap in zaps) {
-      groupedZaps.putIfAbsent(zap.targetEventId, () => []).add(zap);
+      _addZapToCache(zap);
+      noteIdsToUpdate.add(zap.targetEventId);
     }
-
-    groupedZaps.forEach((noteId, newZaps) {
-      _zapsByNote.putIfAbsent(noteId, () => []);
-      final existingIds = _zapsByNote[noteId]!.map((z) => z.id).toSet();
-
-      for (final zap in newZaps) {
-        if (existingIds.add(zap.id)) {
-          _zapsByNote[noteId]!.add(zap);
-          _userZaps.putIfAbsent(zap.sender, () => {});
-          _userZaps[zap.sender]!.add(noteId);
-        }
-      }
-    });
-
     try {
       final zapsMap = {for (var z in zaps) z.id: z};
       await _zapsBox?.putAll(zapsMap);
     } catch (e) {
       debugPrint('[InteractionsProvider] Error batch saving zaps: $e');
     }
-    notifyListeners();
+    for (var id in noteIdsToUpdate) {
+      _zapStreamController.add(id);
+    }
   }
 
   void updateReactions(String noteId, List<ReactionModel> reactions) {
     _reactionsByNote[noteId] = reactions;
-
     for (final reaction in reactions) {
-      _userReactions.putIfAbsent(reaction.author, () => {});
-      _userReactions[reaction.author]!.add(reaction.targetEventId);
+      _userReactions.putIfAbsent(reaction.author, () => {}).add(reaction.targetEventId);
     }
-
-    notifyListeners();
+    _reactionStreamController.add(noteId);
   }
 
   void updateReplies(String noteId, List<ReplyModel> replies) {
     _repliesByNote[noteId] = replies;
-
     for (final reply in replies) {
-      _userReplies.putIfAbsent(reply.author, () => {});
-      _userReplies[reply.author]!.add(reply.parentEventId);
+      _userReplies.putIfAbsent(reply.author, () => {}).add(reply.parentEventId);
     }
-
-    notifyListeners();
+    _replyStreamController.add(noteId);
   }
 
   void updateReposts(String noteId, List<RepostModel> reposts) {
     _repostsByNote[noteId] = reposts;
-
     for (final repost in reposts) {
-      _userReposts.putIfAbsent(repost.repostedBy, () => {});
-      _userReposts[repost.repostedBy]!.add(repost.originalNoteId);
+      _userReposts.putIfAbsent(repost.repostedBy, () => {}).add(repost.originalNoteId);
     }
-
-    notifyListeners();
+    _repostStreamController.add(noteId);
   }
 
   void updateZaps(String noteId, List<ZapModel> zaps) {
     _zapsByNote[noteId] = zaps;
-
     for (final zap in zaps) {
-      _userZaps.putIfAbsent(zap.sender, () => {});
-      _userZaps[zap.sender]!.add(zap.targetEventId);
+      _userZaps.putIfAbsent(zap.sender, () => {}).add(zap.targetEventId);
     }
-
-    notifyListeners();
+    _zapStreamController.add(noteId);
   }
 
   void removeReaction(String reactionId, String noteId, String userId) {
     _reactionsByNote[noteId]?.removeWhere((r) => r.id == reactionId);
     _userReactions[userId]?.remove(noteId);
     _reactionsBox?.delete(reactionId);
-    notifyListeners();
+    _reactionStreamController.add(noteId);
   }
 
   void removeRepost(String repostId, String noteId, String userId) {
     _repostsByNote[noteId]?.removeWhere((r) => r.id == repostId);
     _userReposts[userId]?.remove(noteId);
     _repostsBox?.delete(repostId);
-    notifyListeners();
+    _repostStreamController.add(noteId);
   }
 
   void addOptimisticReaction(String noteId, String userId) {
@@ -411,9 +316,8 @@ class InteractionsProvider extends ChangeNotifier {
       timestamp: DateTime.now(),
       fetchedAt: DateTime.now(),
     );
-
     _addReactionToCache(optimisticReaction);
-    notifyListeners();
+    _reactionStreamController.add(noteId);
   }
 
   void addOptimisticRepost(String noteId, String userId) {
@@ -423,21 +327,20 @@ class InteractionsProvider extends ChangeNotifier {
       repostedBy: userId,
       repostTimestamp: DateTime.now(),
     );
-
     _addRepostToCache(optimisticRepost);
-    notifyListeners();
+    _repostStreamController.add(noteId);
   }
 
   void removeOptimisticReaction(String noteId, String userId) {
     _reactionsByNote[noteId]?.removeWhere((r) => r.author == userId && r.id.startsWith('optimistic_'));
     _userReactions[userId]?.remove(noteId);
-    notifyListeners();
+    _reactionStreamController.add(noteId);
   }
 
   void removeOptimisticRepost(String noteId, String userId) {
     _repostsByNote[noteId]?.removeWhere((r) => r.repostedBy == userId && r.id.startsWith('optimistic_'));
     _userReposts[userId]?.remove(noteId);
-    notifyListeners();
+    _repostStreamController.add(noteId);
   }
 
   void clearCache() {
@@ -468,6 +371,10 @@ class InteractionsProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _reactionStreamController.close();
+    _replyStreamController.close();
+    _repostStreamController.close();
+    _zapStreamController.close();
     _reactionsBox?.close();
     _repliesBox?.close();
     _repostsBox?.close();

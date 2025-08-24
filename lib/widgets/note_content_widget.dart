@@ -10,21 +10,12 @@ import '../theme/theme_manager.dart';
 
 enum NoteContentType { small, big }
 
-class NoteContentWidget extends StatelessWidget {
+class NoteContentWidget extends StatefulWidget {
   final Map<String, dynamic> parsedContent;
   final DataService dataService;
   final void Function(String mentionId) onNavigateToMentionProfile;
   final void Function(String noteId)? onShowMoreTap;
   final NoteContentType type;
-
-  double get _fontSize {
-    switch (type) {
-      case NoteContentType.small:
-        return 16.0;
-      case NoteContentType.big:
-        return 18.0;
-    }
-  }
 
   const NoteContentWidget({
     super.key,
@@ -33,6 +24,103 @@ class NoteContentWidget extends StatelessWidget {
     required this.onNavigateToMentionProfile,
     this.onShowMoreTap,
     this.type = NoteContentType.small,
+  });
+
+  @override
+  State<NoteContentWidget> createState() => _NoteContentWidgetState();
+}
+
+class _NoteContentWidgetState extends State<NoteContentWidget> {
+  late final Future<Map<String, String>> _mentionsFuture;
+
+  double get _fontSize {
+    switch (widget.type) {
+      case NoteContentType.small:
+        return 16.0;
+      case NoteContentType.big:
+        return 18.0;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final mentionIds = (widget.parsedContent['textParts'] as List<dynamic>?)
+            ?.where((p) => p['type'] == 'mention')
+            .map((p) => p['id'] as String)
+            .toList() ??
+        [];
+    _mentionsFuture = widget.dataService.resolveMentions(mentionIds);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final textParts = (widget.parsedContent['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+    final mediaUrls = (widget.parsedContent['mediaUrls'] as List<dynamic>?)?.cast<String>() ?? [];
+    final linkUrls = (widget.parsedContent['linkUrls'] as List<dynamic>?)?.cast<String>() ?? [];
+    final quoteIds = (widget.parsedContent['quoteIds'] as List<dynamic>?)?.cast<String>() ?? [];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (textParts.isNotEmpty)
+          FutureBuilder<Map<String, String>>(
+            future: _mentionsFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const SizedBox.shrink();
+              }
+              final mentionsMap = snapshot.data ?? {};
+              return _RichTextContent(
+                parsedContent: widget.parsedContent,
+                mentions: mentionsMap,
+                fontSize: _fontSize,
+                onNavigateToMentionProfile: widget.onNavigateToMentionProfile,
+                onShowMoreTap: widget.onShowMoreTap,
+              );
+            },
+          ),
+        if (mediaUrls.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: MediaPreviewWidget(mediaUrls: mediaUrls),
+          ),
+        if (linkUrls.isNotEmpty && mediaUrls.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: linkUrls.map((u) => LinkPreviewWidget(url: u)).toList(),
+            ),
+          ),
+        if (quoteIds.isNotEmpty)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: quoteIds
+                .map((q) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: QuoteWidget(bech32: q, dataService: widget.dataService),
+                    ))
+                .toList(),
+          ),
+      ],
+    );
+  }
+}
+
+class _RichTextContent extends StatelessWidget {
+  final Map<String, dynamic> parsedContent;
+  final Map<String, String> mentions;
+  final double fontSize;
+  final void Function(String mentionId) onNavigateToMentionProfile;
+  final void Function(String noteId)? onShowMoreTap;
+
+  const _RichTextContent({
+    required this.parsedContent,
+    required this.mentions,
+    required this.fontSize,
+    required this.onNavigateToMentionProfile,
+    this.onShowMoreTap,
   });
 
   Future<void> _onOpenLink(BuildContext context, LinkableElement link) async {
@@ -54,14 +142,12 @@ class NoteContentWidget extends StatelessWidget {
     );
   }
 
-  Widget _buildRichTextContent(
-    BuildContext context,
-    Map<String, String> mentions,
-  ) {
+  @override
+  Widget build(BuildContext context) {
     final parts = (parsedContent['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     final spans = <InlineSpan>[];
-    final currentFontSize = _fontSize * textScaleFactor;
+    final currentFontSize = fontSize * textScaleFactor;
     final colors = context.colors;
 
     for (var p in parts) {
@@ -129,53 +215,6 @@ class NoteContentWidget extends StatelessWidget {
         applyHeightToFirstAscent: false,
         applyHeightToLastDescent: false,
       ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final textParts = (parsedContent['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
-    final mediaUrls = (parsedContent['mediaUrls'] as List<dynamic>?)?.cast<String>() ?? [];
-    final linkUrls = (parsedContent['linkUrls'] as List<dynamic>?)?.cast<String>() ?? [];
-    final quoteIds = (parsedContent['quoteIds'] as List<dynamic>?)?.cast<String>() ?? [];
-
-    final mentionIds = textParts.where((p) => p['type'] == 'mention').map((p) => p['id'] as String).toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (textParts.isNotEmpty)
-          FutureBuilder<Map<String, String>>(
-            future: dataService.resolveMentions(mentionIds),
-            builder: (context, snapshot) {
-              final mentionsMap = snapshot.data ?? {};
-              return _buildRichTextContent(context, mentionsMap);
-            },
-          ),
-        if (mediaUrls.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: MediaPreviewWidget(mediaUrls: mediaUrls),
-          ),
-        if (linkUrls.isNotEmpty && mediaUrls.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: linkUrls.map((u) => LinkPreviewWidget(url: u)).toList(),
-            ),
-          ),
-        if (quoteIds.isNotEmpty)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: quoteIds
-                .map((q) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: QuoteWidget(bech32: q, dataService: dataService),
-                    ))
-                .toList(),
-          ),
-      ],
     );
   }
 }
