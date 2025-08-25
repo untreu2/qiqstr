@@ -1886,6 +1886,11 @@ class DataService {
 
       currentFollowing.add(followNpub);
 
+      if (currentFollowing.isEmpty) {
+        print('[DataService] Cannot publish an empty follow list. Follow operation aborted.');
+        return;
+      }
+
       currentFollowing.map((pubkey) => ['p', pubkey, '']).toList();
 
       final event = NostrService.createFollowEvent(
@@ -1927,6 +1932,11 @@ class DataService {
       }
 
       currentFollowing.remove(unfollowNpub);
+
+      if (currentFollowing.isEmpty) {
+        print('[DataService] Cannot publish an empty follow list. Unfollow operation aborted.');
+        return;
+      }
 
       currentFollowing.map((pubkey) => ['p', pubkey, '']).toList();
 
