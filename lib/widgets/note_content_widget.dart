@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:collection/collection.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/widgets/link_preview_widget.dart';
@@ -33,6 +34,30 @@ class NoteContentWidget extends StatefulWidget {
 class _NoteContentWidgetState extends State<NoteContentWidget> {
   late final Future<Map<String, String>> _mentionsFuture;
 
+  @override
+  void initState() {
+    super.initState();
+    _mentionsFuture = _resolveMentions();
+  }
+
+  @override
+  void didUpdateWidget(NoteContentWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!const DeepCollectionEquality().equals(widget.parsedContent, oldWidget.parsedContent)) {
+      setState(() {
+        _mentionsFuture = _resolveMentions();
+      });
+    }
+  }
+
+  Future<Map<String, String>> _resolveMentions() {
+    final mentionIds = (widget.parsedContent['textParts'] as List<dynamic>? ?? [])
+        .where((p) => p['type'] == 'mention')
+        .map((p) => p['id'] as String)
+        .toList();
+    return widget.dataService.resolveMentions(mentionIds);
+  }
+
   double get _fontSize {
     switch (widget.type) {
       case NoteContentType.small:
@@ -40,17 +65,6 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
       case NoteContentType.big:
         return 18.0;
     }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    final mentionIds = (widget.parsedContent['textParts'] as List<dynamic>?)
-            ?.where((p) => p['type'] == 'mention')
-            .map((p) => p['id'] as String)
-            .toList() ??
-        [];
-    _mentionsFuture = widget.dataService.resolveMentions(mentionIds);
   }
 
   @override
@@ -108,7 +122,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
   }
 }
 
-class _RichTextContent extends StatelessWidget {
+class _RichTextContent extends StatefulWidget {
   final Map<String, dynamic> parsedContent;
   final Map<String, String> mentions;
   final double fontSize;
@@ -123,6 +137,11 @@ class _RichTextContent extends StatelessWidget {
     this.onShowMoreTap,
   });
 
+  @override
+  State<_RichTextContent> createState() => _RichTextContentState();
+}
+
+class _RichTextContentState extends State<_RichTextContent> {
   Future<void> _onOpenLink(BuildContext context, LinkableElement link) async {
     final url = Uri.parse(link.url);
     if (await canLaunchUrl(url)) {
@@ -142,12 +161,35 @@ class _RichTextContent extends StatelessWidget {
     );
   }
 
+  late List<InlineSpan> _spans;
+
   @override
-  Widget build(BuildContext context) {
-    final parts = (parsedContent['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+  void initState() {
+    super.initState();
+    _spans = [];
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _spans = _buildSpans();
+  }
+
+  @override
+  void didUpdateWidget(_RichTextContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!const DeepCollectionEquality().equals(widget.parsedContent, oldWidget.parsedContent) ||
+        !const DeepCollectionEquality().equals(widget.mentions, oldWidget.mentions) ||
+        widget.fontSize != oldWidget.fontSize) {
+      _spans = _buildSpans();
+    }
+  }
+
+  List<InlineSpan> _buildSpans() {
+    final parts = (widget.parsedContent['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
     final textScaleFactor = MediaQuery.of(context).textScaleFactor;
     final spans = <InlineSpan>[];
-    final currentFontSize = fontSize * textScaleFactor;
+    final currentFontSize = widget.fontSize * textScaleFactor;
     final colors = context.colors;
 
     for (var p in parts) {
@@ -191,11 +233,11 @@ class _RichTextContent extends StatelessWidget {
           ));
         }
       } else if (p['type'] == 'mention') {
-        final display_name = mentions[p['id']] ?? '${(p['id'] as String).substring(0, 8)}...';
+        final displayName = widget.mentions[p['id']] ?? '${(p['id'] as String).substring(0, 8)}...';
         spans.add(TextSpan(
-          text: '@$display_name',
+          text: '@$displayName',
           style: TextStyle(color: colors.accent, fontSize: currentFontSize, fontWeight: FontWeight.w500),
-          recognizer: TapGestureRecognizer()..onTap = () => onNavigateToMentionProfile(p['id'] as String),
+          recognizer: TapGestureRecognizer()..onTap = () => widget.onNavigateToMentionProfile(p['id'] as String),
         ));
       } else if (p['type'] == 'show_more') {
         spans.add(TextSpan(
@@ -205,12 +247,17 @@ class _RichTextContent extends StatelessWidget {
             fontSize: currentFontSize,
             fontWeight: FontWeight.w500,
           ),
-          recognizer: TapGestureRecognizer()..onTap = () => onShowMoreTap?.call(p['noteId'] as String),
+          recognizer: TapGestureRecognizer()..onTap = () => widget.onShowMoreTap?.call(p['noteId'] as String),
         ));
       }
     }
+    return spans;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return RichText(
-      text: TextSpan(children: spans),
+      text: TextSpan(children: _spans),
       textHeightBehavior: const TextHeightBehavior(
         applyHeightToFirstAscent: false,
         applyHeightToLastDescent: false,
