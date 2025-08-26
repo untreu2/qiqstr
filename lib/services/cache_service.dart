@@ -9,15 +9,27 @@ import '../models/repost_model.dart';
 import '../models/zap_model.dart';
 import '../models/following_model.dart';
 import '../models/notification_model.dart';
+import 'hive_manager.dart';
 
 class CacheService {
-  Box<UserModel>? usersBox;
-  Box<NoteModel>? notesBox;
-  Box<ReactionModel>? reactionsBox;
-  Box<ReplyModel>? repliesBox;
-  Box<RepostModel>? repostsBox;
-  Box<FollowingModel>? followingBox;
-  Box<ZapModel>? zapsBox;
+  static CacheService? _instance;
+  static CacheService get instance => _instance ??= CacheService._internal();
+
+  CacheService._internal() {
+    _startBasicCleanup();
+  }
+
+  final HiveManager _hiveManager = HiveManager.instance;
+
+  Box<UserModel>? get usersBox => _hiveManager.usersBox;
+  Box<NoteModel>? get notesBox => _hiveManager.notesBox;
+  Box<ReactionModel>? get reactionsBox => _hiveManager.reactionsBox;
+  Box<ReplyModel>? get repliesBox => _hiveManager.repliesBox;
+  Box<RepostModel>? get repostsBox => _hiveManager.repostsBox;
+  Box<FollowingModel>? get followingBox => _hiveManager.followingBox;
+  Box<ZapModel>? get zapsBox => _hiveManager.zapsBox;
+  Box<NotificationModel>? getNotificationBox(String npub) => _hiveManager.getNotificationBox(npub);
+
   Box<NotificationModel>? notificationsBox;
 
   final Map<String, List<ReactionModel>> reactionsMap = {};
@@ -27,10 +39,6 @@ class CacheService {
 
   Timer? _cleanupTimer;
   static const int _maxCacheEntries = 2000;
-
-  CacheService() {
-    _startBasicCleanup();
-  }
 
   void _startBasicCleanup() {
     _cleanupTimer = Timer.periodic(const Duration(hours: 1), (_) {
@@ -59,14 +67,11 @@ class CacheService {
 
   Future<void> initializeBoxes(String npub, String dataType) async {
     try {
-      notesBox = await _openHiveBox<NoteModel>('notes_${dataType}_$npub');
-      usersBox = await _openHiveBox<UserModel>('users');
-      followingBox = await _openHiveBox<FollowingModel>('followingBox');
-      reactionsBox = await _openHiveBox<ReactionModel>('reactions_${dataType}_$npub');
-      repliesBox = await _openHiveBox<ReplyModel>('replies_${dataType}_$npub');
-      repostsBox = await _openHiveBox<RepostModel>('reposts_${dataType}_$npub');
-      zapsBox = await _openHiveBox<ZapModel>('zaps_${dataType}_$npub');
-      notificationsBox = await _openHiveBox<NotificationModel>('notifications_$npub');
+      if (!_hiveManager.isInitialized) {
+        await _hiveManager.initializeBoxes();
+      }
+
+      await _hiveManager.initializeNotificationBox(npub);
 
       await Future.wait([
         loadReactionsFromCache(),
@@ -76,14 +81,6 @@ class CacheService {
       ], eagerError: false);
     } catch (e) {
       debugPrint('[CacheService] Initialization error: $e');
-    }
-  }
-
-  Future<Box<T>> _openHiveBox<T>(String boxName) async {
-    if (Hive.isBoxOpen(boxName)) {
-      return Hive.box<T>(boxName);
-    } else {
-      return await Hive.openBox<T>(boxName);
     }
   }
 

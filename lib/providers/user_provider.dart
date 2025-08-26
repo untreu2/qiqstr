@@ -11,7 +11,7 @@ class UserProvider extends ChangeNotifier {
 
   UserProvider._internal();
 
-  final ProfileService _profileService = ProfileService();
+  final ProfileService _profileService = ProfileService.instance;
 
   final Map<String, UserModel> _users = {};
   final Map<String, String> _npubToHexMap = {};
@@ -27,10 +27,6 @@ class UserProvider extends ChangeNotifier {
   bool get isInitialized => _isInitialized;
   UserModel? get currentUser => _currentUser;
   String? get currentUserNpub => _currentUserNpub;
-
-  void setUsersBox(Box<UserModel> box) {
-    _profileService.setUsersBox(box);
-  }
 
   Future<void> initialize() async {
     if (_isInitialized) return;

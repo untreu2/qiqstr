@@ -148,9 +148,6 @@ class _SplashScreenState extends State<SplashScreen> {
 
       await _openCriticalBoxes(npub);
 
-      final usersBox = Hive.box<UserModel>('users');
-      UserProvider.instance.setUsersBox(usersBox);
-
       await Future.wait([
         UserProvider.instance.initialize(),
         NotesProvider.instance.initialize(npub),

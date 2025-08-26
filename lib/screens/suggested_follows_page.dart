@@ -40,7 +40,7 @@ class _SuggestedFollowsPageState extends State<SuggestedFollowsPage> {
   Future<void> _loadSuggestedUsers() async {
     setState(() => _isLoading = true);
 
-    final profileService = ProfileService();
+    final profileService = ProfileService.instance;
     final List<UserModel> users = [];
 
     for (String pubkeyHex in suggestedUsers) {

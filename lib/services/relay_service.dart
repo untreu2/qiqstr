@@ -519,16 +519,21 @@ class WebSocketManager {
 }
 
 class PrimalCacheClient {
+  static PrimalCacheClient? _instance;
+  static PrimalCacheClient get instance => _instance ??= PrimalCacheClient._internal();
+
+  PrimalCacheClient._internal();
+
   static const Duration _timeout = Duration(seconds: 5);
-  static final Map<String, Map<String, String>> _profileCache = {};
-  static final Map<String, DateTime> _cacheTimestamps = {};
+  final Map<String, Map<String, String>> _profileCache = {};
+  final Map<String, DateTime> _cacheTimestamps = {};
   static const Duration _cacheTTL = Duration(minutes: 20);
   static const int _maxCacheSize = 2000;
 
-  static int _cacheHits = 0;
-  static int _cacheMisses = 0;
-  static int _requestsSent = 0;
-  static int _requestsFailed = 0;
+  int _cacheHits = 0;
+  int _cacheMisses = 0;
+  int _requestsSent = 0;
+  int _requestsFailed = 0;
 
   Future<Map<String, String>?> fetchUserProfile(String pubkey) async {
     final now = DateTime.now();
@@ -595,7 +600,7 @@ class PrimalCacheClient {
     }
   }
 
-  static void _cleanupCache() {
+  void _cleanupCache() {
     final now = DateTime.now();
     final expiredKeys = <String>[];
 
@@ -620,7 +625,7 @@ class PrimalCacheClient {
     }
   }
 
-  static Map<String, dynamic> getCacheStats() {
+  Map<String, dynamic> getCacheStats() {
     final hitRate = _cacheHits + _cacheMisses > 0 ? (_cacheHits / (_cacheHits + _cacheMisses) * 100).toStringAsFixed(1) : '0.0';
 
     final successRate = _requestsSent > 0 ? ((_requestsSent - _requestsFailed) / _requestsSent * 100).toStringAsFixed(1) : '0.0';

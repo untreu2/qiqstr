@@ -134,7 +134,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
         return;
       }
 
-      final profileService = ProfileService();
+      final profileService = ProfileService.instance;
       final profileData = await profileService.getCachedUserProfile(pubkeyHex);
 
       if (profileData['name'] != 'Anonymous' || profileData['about']!.isNotEmpty) {

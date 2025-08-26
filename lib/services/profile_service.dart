@@ -4,20 +4,29 @@ import 'dart:io';
 import 'package:hive/hive.dart';
 import '../models/user_model.dart';
 import '../constants/relays.dart';
+import 'hive_manager.dart';
 
 class ProfileService {
+  static ProfileService? _instance;
+  static ProfileService get instance => _instance ??= ProfileService._internal();
+
+  ProfileService._internal();
+
+  final HiveManager _hiveManager = HiveManager.instance;
   final Map<String, Map<String, String>> _profileCache = {};
   final Map<String, DateTime> _cacheTimestamps = {};
   final Map<String, Completer<Map<String, String>>> _pendingRequests = {};
 
   final Duration _cacheTTL = const Duration(minutes: 30);
   final int _maxCacheSize = 1000;
-  Box<UserModel>? _usersBox;
 
-  Future<void> initialize() async {}
+  Box<UserModel>? get _usersBox => _hiveManager.usersBox;
 
-  void setUsersBox(Box<UserModel> box) {
-    _usersBox = box;
+  Future<void> initialize() async {
+    // HiveManager handles initialization
+    if (!_hiveManager.isInitialized) {
+      await _hiveManager.initializeBoxes();
+    }
   }
 
   Future<Map<String, String>> getCachedUserProfile(String npub) async {

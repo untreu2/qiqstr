@@ -5,6 +5,7 @@ import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
 import '../models/repost_model.dart';
 import '../models/zap_model.dart';
+import '../services/hive_manager.dart';
 
 import 'package:rxdart/rxdart.dart';
 
@@ -35,11 +36,12 @@ class InteractionsProvider extends ChangeNotifier {
   final Map<String, Set<String>> _userZaps = {};
 
   bool _isInitialized = false;
+  final HiveManager _hiveManager = HiveManager.instance;
 
-  Box<ReactionModel>? _reactionsBox;
-  Box<ReplyModel>? _repliesBox;
-  Box<RepostModel>? _repostsBox;
-  Box<ZapModel>? _zapsBox;
+  Box<ReactionModel>? get _reactionsBox => _hiveManager.reactionsBox;
+  Box<ReplyModel>? get _repliesBox => _hiveManager.repliesBox;
+  Box<RepostModel>? get _repostsBox => _hiveManager.repostsBox;
+  Box<ZapModel>? get _zapsBox => _hiveManager.zapsBox;
 
   bool get isInitialized => _isInitialized;
 
@@ -47,10 +49,10 @@ class InteractionsProvider extends ChangeNotifier {
     if (_isInitialized) return;
 
     try {
-      _reactionsBox = await Hive.openBox<ReactionModel>('reactions');
-      _repliesBox = await Hive.openBox<ReplyModel>('replies');
-      _repostsBox = await Hive.openBox<RepostModel>('reposts');
-      _zapsBox = await Hive.openBox<ZapModel>('zaps');
+      // HiveManager singleton handles all box initialization
+      if (!_hiveManager.isInitialized) {
+        await _hiveManager.initializeBoxes();
+      }
 
       await _loadInteractionsFromHive();
 
@@ -375,10 +377,7 @@ class InteractionsProvider extends ChangeNotifier {
     _replyStreamController.close();
     _repostStreamController.close();
     _zapStreamController.close();
-    _reactionsBox?.close();
-    _repliesBox?.close();
-    _repostsBox?.close();
-    _zapsBox?.close();
+    // Boxes are managed by HiveManager singleton, don't close them here
     super.dispose();
   }
 }

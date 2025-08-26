@@ -31,7 +31,7 @@ class NetworkProvider extends ChangeNotifier {
     if (_isInitialized) return;
 
     try {
-      _networkService = NetworkService(relayUrls: relaySetMainSockets);
+      _networkService = NetworkService.instance;
       _isInitialized = true;
       _errorMessage = null;
       notifyListeners();

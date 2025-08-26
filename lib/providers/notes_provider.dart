@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import '../models/note_model.dart';
 import '../services/data_service.dart';
+import '../services/hive_manager.dart';
 
 class NoteNotifier extends ChangeNotifier {
   NoteModel _note;
@@ -60,6 +61,8 @@ class NotesProvider extends ChangeNotifier {
   final Map<String, List<String>> _repliesByParent = {};
   final Set<String> _loadingNotes = {};
   bool _isInitialized = false;
+  final HiveManager _hiveManager = HiveManager.instance;
+  String? _currentNpub;
 
   bool get isInitialized => _isInitialized;
 
@@ -70,9 +73,15 @@ class NotesProvider extends ChangeNotifier {
   ValueListenable<int> get newNoteCountNotifier => _newNoteCountNotifier;
 
   Future<void> initialize(String npub) async {
-    if (_isInitialized) return;
+    if (_isInitialized && _currentNpub == npub) return;
 
     try {
+      // HiveManager singleton handles main boxes
+      if (!_hiveManager.isInitialized) {
+        await _hiveManager.initializeBoxes();
+      }
+
+      // Open user-specific boxes for notes (Feed and Profile)
       final boxFutures = [
         Hive.openBox<NoteModel>('notes_Feed_$npub'),
         Hive.openBox<NoteModel>('notes_Profile_$npub'),
@@ -84,10 +93,13 @@ class NotesProvider extends ChangeNotifier {
 
       await _loadNotesFromHiveOptimized();
 
+      _currentNpub = npub;
       _isInitialized = true;
 
       notifyListeners();
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('[NotesProvider] Initialization error: $e');
+    }
   }
 
   Future<void> _loadNotesFromHiveOptimized() async {
@@ -240,6 +252,7 @@ class NotesProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    // Close user-specific boxes, but don't close HiveManager boxes
     _feedNotesBox?.close();
     _profileNotesBox?.close();
 

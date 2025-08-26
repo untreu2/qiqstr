@@ -1,260 +1,137 @@
-import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-import 'dart:async';
-import '../models/note_model.dart';
 import '../models/user_model.dart';
+import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
 import '../models/repost_model.dart';
+import '../models/following_model.dart';
 import '../models/zap_model.dart';
+import '../models/notification_model.dart';
 
-// Simplified Hive manager - removed over-engineered batch processing
 class HiveManager {
   static HiveManager? _instance;
   static HiveManager get instance => _instance ??= HiveManager._internal();
 
-  HiveManager._internal() {}
+  HiveManager._internal();
 
-  final Map<String, Box> _openBoxes = {};
-  final Set<String> _pendingBoxes = {};
+  Box<UserModel>? _usersBox;
+  Box<NoteModel>? _notesBox;
+  Box<ReactionModel>? _reactionsBox;
+  Box<ReplyModel>? _repliesBox;
+  Box<RepostModel>? _repostsBox;
+  Box<FollowingModel>? _followingBox;
+  Box<ZapModel>? _zapsBox;
 
-  Timer? _cleanupTimer;
-  static const Duration _cleanupInterval = Duration(hours: 6);
-  static const int _maxBoxSize = 10000;
+  final Map<String, Box<NotificationModel>> _notificationBoxes = {};
 
-  bool _isInitialized = false;
+  Box<UserModel>? get usersBox => _usersBox;
+  Box<NoteModel>? get notesBox => _notesBox;
+  Box<ReactionModel>? get reactionsBox => _reactionsBox;
+  Box<ReplyModel>? get repliesBox => _repliesBox;
+  Box<RepostModel>? get repostsBox => _repostsBox;
+  Box<FollowingModel>? get followingBox => _followingBox;
+  Box<ZapModel>? get zapsBox => _zapsBox;
 
-  void _startBasicCleanup() {
-    _cleanupTimer ??= Timer.periodic(_cleanupInterval, (_) {
-      _performBasicCleanup();
-    });
+  Box<NotificationModel>? getNotificationBox(String npub) {
+    return _notificationBoxes['notifications_$npub'];
   }
 
-  Future<void> _performBasicCleanup() async {
+  Future<void> initializeBoxes() async {
     try {
-      final boxNames = _openBoxes.keys.toList();
+      print('[HiveManager] Initializing singleton Hive boxes...');
 
-      for (final boxName in boxNames) {
-        final box = _openBoxes[boxName];
-        if (box != null && box.length > _maxBoxSize) {
-          // Simple cleanup - remove oldest 20% of entries
-          final allKeys = box.keys.toList();
-          final removeCount = (allKeys.length * 0.2).round();
-          final keysToRemove = allKeys.take(removeCount);
+      _usersBox = await _openHiveBox<UserModel>('users');
+      _notesBox = await _openHiveBox<NoteModel>('notes');
+      _reactionsBox = await _openHiveBox<ReactionModel>('reactions');
+      _repliesBox = await _openHiveBox<ReplyModel>('replies');
+      _repostsBox = await _openHiveBox<RepostModel>('reposts');
+      _followingBox = await _openHiveBox<FollowingModel>('followingBox');
+      _zapsBox = await _openHiveBox<ZapModel>('zaps');
 
-          for (final key in keysToRemove) {
-            await box.delete(key);
-          }
-          debugPrint('[HiveManager] Basic cleanup: removed $removeCount entries from $boxName');
-        }
-      }
+      print('[HiveManager] Singleton Hive boxes initialized successfully');
     } catch (e) {
-      debugPrint('[HiveManager] Basic cleanup error: $e');
-    }
-  }
-
-  Future<void> initialize() async {
-    if (_isInitialized) return;
-
-    try {
-      await Hive.initFlutter();
-      _isInitialized = true;
-      _startBasicCleanup();
-      debugPrint('[HiveManager] Initialized successfully');
-    } catch (e) {
-      debugPrint('[HiveManager] Initialization error: $e');
+      print('[HiveManager] Error initializing boxes: $e');
       rethrow;
     }
   }
 
-  Future<Box<T>> getBox<T>(String boxName) async {
-    if (_openBoxes.containsKey(boxName)) {
-      return _openBoxes[boxName] as Box<T>;
-    }
+  Future<Box<NotificationModel>> initializeNotificationBox(String npub) async {
+    final boxKey = 'notifications_$npub';
 
-    if (_pendingBoxes.contains(boxName)) {
-      while (_pendingBoxes.contains(boxName)) {
-        await Future.delayed(const Duration(milliseconds: 10));
-      }
-      return _openBoxes[boxName] as Box<T>;
+    if (_notificationBoxes.containsKey(boxKey)) {
+      return _notificationBoxes[boxKey]!;
     }
-
-    _pendingBoxes.add(boxName);
 
     try {
-      final box = await Hive.openBox<T>(boxName);
-      _openBoxes[boxName] = box;
-      _pendingBoxes.remove(boxName);
-
-      debugPrint('[HiveManager] Opened box: $boxName');
+      final box = await _openHiveBox<NotificationModel>(boxKey);
+      _notificationBoxes[boxKey] = box;
+      print('[HiveManager] Notification box initialized for user: $npub');
       return box;
     } catch (e) {
-      _pendingBoxes.remove(boxName);
-      debugPrint('[HiveManager] Error opening box $boxName: $e');
+      print('[HiveManager] Error initializing notification box for $npub: $e');
       rethrow;
     }
   }
 
-  // Simplified batch operations - direct execution
-  Future<void> batchPut<T>(String boxName, Map<String, T> items) async {
-    if (items.isEmpty) return;
-
-    try {
-      final box = await getBox(boxName);
-      await box.putAll(items);
-      debugPrint('[HiveManager] Put ${items.length} items to $boxName');
-    } catch (e) {
-      debugPrint('[HiveManager] Batch put error for $boxName: $e');
+  Future<Box<T>> _openHiveBox<T>(String boxName) async {
+    if (Hive.isBoxOpen(boxName)) {
+      return Hive.box<T>(boxName);
+    } else {
+      return await Hive.openBox<T>(boxName);
     }
   }
 
-  Future<void> batchDelete(String boxName, List<String> keys) async {
-    if (keys.isEmpty) return;
-
+  Future<void> closeAllBoxes() async {
     try {
-      final box = await getBox(boxName);
-      await box.deleteAll(keys);
-      debugPrint('[HiveManager] Deleted ${keys.length} items from $boxName');
-    } catch (e) {
-      debugPrint('[HiveManager] Batch delete error for $boxName: $e');
-    }
-  }
+      print('[HiveManager] Closing all singleton Hive boxes...');
 
-  // Simplified helper methods
-  Future<List<T>> getRange<T>(String boxName, int start, int length) async {
-    final box = await getBox<T>(boxName);
-    final keys = box.keys.skip(start).take(length);
-    return keys.map((key) => box.get(key)).whereType<T>().toList();
-  }
+      await _usersBox?.close();
+      await _notesBox?.close();
+      await _reactionsBox?.close();
+      await _repliesBox?.close();
+      await _repostsBox?.close();
+      await _followingBox?.close();
+      await _zapsBox?.close();
 
-  Future<List<T>> getWhere<T>(String boxName, bool Function(T) predicate) async {
-    final box = await getBox<T>(boxName);
-    return box.values.where(predicate).toList();
-  }
-
-  Future<Map<String, T>> getMultiple<T>(String boxName, List<String> keys) async {
-    final box = await getBox<T>(boxName);
-    final result = <String, T>{};
-
-    for (final key in keys) {
-      final value = box.get(key);
-      if (value != null) {
-        result[key] = value;
+      for (final box in _notificationBoxes.values) {
+        await box.close();
       }
-    }
+      _notificationBoxes.clear();
 
-    return result;
-  }
+      _usersBox = null;
+      _notesBox = null;
+      _reactionsBox = null;
+      _repliesBox = null;
+      _repostsBox = null;
+      _followingBox = null;
+      _zapsBox = null;
 
-  Future<void> compactBox(String boxName) async {
-    try {
-      final box = await getBox(boxName);
-      await box.compact();
-      debugPrint('[HiveManager] Compacted box: $boxName');
+      print('[HiveManager] All singleton Hive boxes closed successfully');
     } catch (e) {
-      debugPrint('[HiveManager] Error compacting box $boxName: $e');
+      print('[HiveManager] Error closing boxes: $e');
     }
   }
 
-  Future<void> clearBox(String boxName) async {
-    try {
-      final box = await getBox(boxName);
-      await box.clear();
-      debugPrint('[HiveManager] Cleared box: $boxName');
-    } catch (e) {
-      debugPrint('[HiveManager] Error clearing box $boxName: $e');
-    }
+  bool get isInitialized {
+    return _usersBox != null &&
+        _notesBox != null &&
+        _reactionsBox != null &&
+        _repliesBox != null &&
+        _repostsBox != null &&
+        _followingBox != null &&
+        _zapsBox != null;
   }
 
-  // Simplified cleanup - just remove old entries
-  Future<void> cleanupOldData(String boxName, Duration maxAge) async {
-    try {
-      final box = await getBox(boxName);
-      final cutoffTime = DateTime.now().subtract(maxAge);
-      final keysToDelete = <String>[];
-
-      for (final key in box.keys) {
-        final value = box.get(key);
-        DateTime? timestamp;
-
-        if (value is NoteModel) {
-          timestamp = value.timestamp;
-        } else if (value is ReactionModel) {
-          timestamp = value.fetchedAt;
-        } else if (value is ReplyModel) {
-          timestamp = value.fetchedAt;
-        } else if (value is RepostModel) {
-          timestamp = value.repostTimestamp;
-        } else if (value is ZapModel) {
-          timestamp = value.timestamp;
-        } else if (value is UserModel) {
-          timestamp = value.updatedAt;
-        }
-
-        if (timestamp != null && timestamp.isBefore(cutoffTime)) {
-          keysToDelete.add(key.toString());
-        }
-      }
-
-      if (keysToDelete.isNotEmpty) {
-        await batchDelete(boxName, keysToDelete);
-        debugPrint('[HiveManager] Cleaned up ${keysToDelete.length} old entries from $boxName');
-      }
-    } catch (e) {
-      debugPrint('[HiveManager] Error cleaning up $boxName: $e');
-    }
-  }
-
-  // Simplified stats
-  Map<String, dynamic> getStats() {
+  Map<String, dynamic> getBoxStatus() {
     return {
-      'openBoxes': _openBoxes.length,
-      'pendingBoxes': _pendingBoxes.length,
-      'isInitialized': _isInitialized,
+      'usersBox': _usersBox?.isOpen ?? false,
+      'notesBox': _notesBox?.isOpen ?? false,
+      'reactionsBox': _reactionsBox?.isOpen ?? false,
+      'repliesBox': _repliesBox?.isOpen ?? false,
+      'repostsBox': _repostsBox?.isOpen ?? false,
+      'followingBox': _followingBox?.isOpen ?? false,
+      'zapsBox': _zapsBox?.isOpen ?? false,
+      'notificationBoxes': _notificationBoxes.length,
     };
-  }
-
-  // Simplified memory handling
-  Future<void> handleMemoryPressure() async {
-    try {
-      await _performBasicCleanup();
-      debugPrint('[HiveManager] Memory pressure handling completed');
-    } catch (e) {
-      debugPrint('[HiveManager] Memory pressure handling error: $e');
-    }
-  }
-
-  Map<String, dynamic> getMemoryStats() {
-    int totalEntries = 0;
-    final boxStats = <String, int>{};
-
-    for (final entry in _openBoxes.entries) {
-      final boxName = entry.key;
-      final box = entry.value;
-      final entryCount = box.length;
-
-      boxStats[boxName] = entryCount;
-      totalEntries += entryCount;
-    }
-
-    return {
-      'openBoxes': _openBoxes.length,
-      'totalEntries': totalEntries,
-      'boxStats': boxStats,
-      'pendingBoxes': _pendingBoxes.length,
-    };
-  }
-
-  Future<void> dispose() async {
-    _cleanupTimer?.cancel();
-
-    for (final box in _openBoxes.values) {
-      await box.close();
-    }
-    _openBoxes.clear();
-    _pendingBoxes.clear();
-
-    debugPrint('[HiveManager] Disposed successfully');
   }
 }

@@ -27,6 +27,7 @@ import 'package:crypto/crypto.dart';
 import 'nostr_service.dart';
 import 'cache_service.dart';
 import 'profile_service.dart';
+import 'hive_manager.dart';
 import '../providers/interactions_provider.dart';
 
 enum DataType { feed, profile, note }
@@ -156,14 +157,7 @@ class DataService {
 
   final Map<String, CachedProfile> profileCache = {};
 
-  Box<UserModel>? usersBox;
-  Box<NoteModel>? notesBox;
-  Box<ReactionModel>? reactionsBox;
-  Box<ReplyModel>? repliesBox;
-  Box<RepostModel>? repostsBox;
-  Box<FollowingModel>? followingBox;
-  Box<ZapModel>? zapsBox;
-  Box<NotificationModel>? notificationsBox;
+  final HiveManager _hiveManager = HiveManager.instance;
 
   final List<Map<String, dynamic>> _pendingEvents = [];
   Timer? _batchTimer;
@@ -205,6 +199,15 @@ class DataService {
   late CacheService _cacheService;
   late ProfileService _profileService;
 
+  Box<NoteModel>? get notesBox => _hiveManager.notesBox;
+  Box<UserModel>? get usersBox => _hiveManager.usersBox;
+  Box<ReactionModel>? get reactionsBox => _hiveManager.reactionsBox;
+  Box<ReplyModel>? get repliesBox => _hiveManager.repliesBox;
+  Box<RepostModel>? get repostsBox => _hiveManager.repostsBox;
+  Box<FollowingModel>? get followingBox => _hiveManager.followingBox;
+  Box<ZapModel>? get zapsBox => _hiveManager.zapsBox;
+  Box<NotificationModel>? getNotificationBox(String npub) => _hiveManager.getNotificationBox(npub);
+
   DataService({
     required this.npub,
     required this.dataType,
@@ -235,18 +238,13 @@ class DataService {
     try {
       _isInitialized = true;
 
-      notesBox = await _openHiveBox<NoteModel>('notes');
-      usersBox = await _openHiveBox<UserModel>('users');
-
-      _cacheService = CacheService();
-      _cacheService.notesBox = notesBox;
-
-      _profileService = ProfileService();
-      if (usersBox != null) {
-        _profileService.setUsersBox(usersBox!);
-
-        await _profileService.initialize();
+      if (!_hiveManager.isInitialized) {
+        await _hiveManager.initializeBoxes();
       }
+
+      _cacheService = CacheService.instance;
+      _profileService = ProfileService.instance;
+      await _profileService.initialize();
 
       await loadNotesFromCache((loadedNotes) {});
 
@@ -263,17 +261,7 @@ class DataService {
     try {
       _socketManager = WebSocketManager.instance;
 
-      reactionsBox = await _openHiveBox<ReactionModel>('reactions');
-      repliesBox = await _openHiveBox<ReplyModel>('replies');
-      repostsBox = await _openHiveBox<RepostModel>('reposts');
-      zapsBox = await _openHiveBox<ZapModel>('zaps');
-      followingBox = await _openHiveBox<FollowingModel>('followingBox');
-      notificationsBox = await _openHiveBox<NotificationModel>('notifications_$npub');
-
-      _cacheService.reactionsBox = reactionsBox;
-      _cacheService.repliesBox = repliesBox;
-      _cacheService.repostsBox = repostsBox;
-      _cacheService.zapsBox = zapsBox;
+      await _hiveManager.initializeNotificationBox(npub);
 
       await _initializeEventProcessorIsolate();
       await _initializeFetchProcessorIsolate();
@@ -469,14 +457,6 @@ class DataService {
     });
   }
 
-  Future<Box<T>> _openHiveBox<T>(String boxName) async {
-    if (Hive.isBoxOpen(boxName)) {
-      return Hive.box<T>(boxName);
-    } else {
-      return await Hive.openBox<T>(boxName);
-    }
-  }
-
   Future<void> _initializeIsolate() async {
     _receivePort = ReceivePort();
 
@@ -592,8 +572,8 @@ class DataService {
       UserModel user;
       if (profileCache.containsKey(pubHex)) {
         user = UserModel.fromCachedProfile(pubHex, profileCache[pubHex]!.data);
-      } else if (usersBox?.get(pubHex) != null) {
-        user = usersBox!.get(pubHex)!;
+      } else if (_hiveManager.usersBox?.get(pubHex) != null) {
+        user = _hiveManager.usersBox!.get(pubHex)!;
       } else {
         user = UserModel(
           npub: pubHex,
@@ -980,7 +960,7 @@ class DataService {
         }
       }
 
-      final user = usersBox?.get(pub);
+      final user = _hiveManager.usersBox?.get(pub);
       if (user != null && now.difference(user.updatedAt) < profileCacheTTL) {
         final data = {
           'name': user.name,
@@ -1072,9 +1052,9 @@ class DataService {
           }
         }
       }
-      if (followingBox != null && followingBox!.isOpen) {
+      if (_hiveManager.followingBox != null && _hiveManager.followingBox!.isOpen) {
         final model = FollowingModel(pubkeys: newFollowing, updatedAt: DateTime.now(), npub: npub);
-        await followingBox!.put('following', model);
+        await _hiveManager.followingBox!.put('following', model);
         print('[DataService] Following model updated with new event.');
       }
     } catch (e) {
@@ -1109,7 +1089,7 @@ class DataService {
 
         InteractionsProvider.instance.updateReactions(targetEventId, reactionsMap[targetEventId]!);
 
-        reactionsBox?.put(reaction.id, reaction).catchError((e) {/* silent */});
+        _hiveManager.reactionsBox?.put(reaction.id, reaction).catchError((e) {/* silent */});
         fetchProfilesBatch([reaction.author]);
 
         _hasPendingUiUpdate = true;
@@ -1140,7 +1120,7 @@ class DataService {
 
         InteractionsProvider.instance.updateReposts(originalNoteId, repostsMap[originalNoteId]!);
 
-        repostsBox?.put(repost.id, repost).catchError((e) {/* silent */});
+        _hiveManager.repostsBox?.put(repost.id, repost).catchError((e) {/* silent */});
         fetchProfilesBatch([repost.repostedBy]);
 
         _hasPendingUiUpdate = true;
@@ -1181,8 +1161,8 @@ class DataService {
           notesNotifier.addNoteQuietly(noteModel);
         }
 
-        repliesBox?.put(reply.id, reply).catchError((e) {/* silent */});
-        notesBox?.put(noteModel.id, noteModel).catchError((e) {/* silent */});
+        _hiveManager.repliesBox?.put(reply.id, reply).catchError((e) {/* silent */});
+        _hiveManager.notesBox?.put(noteModel.id, noteModel).catchError((e) {/* silent */});
         fetchProfilesBatch([reply.author]);
 
         _hasPendingUiUpdate = true;
@@ -1222,9 +1202,9 @@ class DataService {
 
       profileCache[author] = CachedProfile(dataToCache, createdAt);
 
-      if (usersBox != null && usersBox!.isOpen) {
+      if (_hiveManager.usersBox != null && _hiveManager.usersBox!.isOpen) {
         final userModel = UserModel.fromCachedProfile(author, dataToCache);
-        usersBox!.put(author, userModel);
+        _hiveManager.usersBox!.put(author, userModel);
       }
 
       if (_pendingProfileRequests.containsKey(author)) {
@@ -1257,9 +1237,9 @@ class DataService {
         }
       }
 
-      if (usersBox != null && usersBox!.isOpen) {
+      if (_hiveManager.usersBox != null && _hiveManager.usersBox!.isOpen) {
         try {
-          final user = usersBox!.get(npub);
+          final user = _hiveManager.usersBox!.get(npub);
           if (user != null && now.difference(user.updatedAt) < profileCacheTTL) {
             final data = {
               'name': user.name,
@@ -1298,8 +1278,8 @@ class DataService {
     final inMemory = notes.firstWhereOrNull((n) => n.id == eventIdHex);
     if (inMemory != null) return inMemory;
 
-    if (notesBox != null && notesBox!.isOpen) {
-      final inHive = notesBox!.get(eventIdHex);
+    if (_hiveManager.notesBox != null && _hiveManager.notesBox!.isOpen) {
+      final inHive = _hiveManager.notesBox!.get(eventIdHex);
       if (inHive != null) {
         if (!eventIds.contains(inHive.id)) {
           inHive.hasMedia = inHive.hasMediaLazy;
@@ -1320,8 +1300,8 @@ class DataService {
       return [];
     }
 
-    if (followingBox != null && followingBox!.isOpen) {
-      final cachedFollowing = followingBox!.get('following_$targetNpub');
+    if (_hiveManager.followingBox != null && _hiveManager.followingBox!.isOpen) {
+      final cachedFollowing = _hiveManager.followingBox!.get('following_$targetNpub');
       if (cachedFollowing != null) {
         print('[DataService] Using cached following list for $targetNpub.');
         return cachedFollowing.pubkeys;
@@ -1392,9 +1372,9 @@ class DataService {
 
     following = following.toSet().toList();
 
-    if (followingBox != null && followingBox!.isOpen) {
+    if (_hiveManager.followingBox != null && _hiveManager.followingBox!.isOpen) {
       final newFollowingModel = FollowingModel(pubkeys: following, updatedAt: DateTime.now(), npub: targetNpub);
-      await followingBox!.put('following_$targetNpub', newFollowingModel);
+      await _hiveManager.followingBox!.put('following_$targetNpub', newFollowingModel);
       print('[DataService] Updated Hive following model for $targetNpub.');
     }
     return following;
@@ -1853,8 +1833,8 @@ class DataService {
         updatedAt,
       );
 
-      if (usersBox != null && usersBox!.isOpen) {
-        await usersBox!.put(eventJson['pubkey'], userModel);
+      if (_hiveManager.usersBox != null && _hiveManager.usersBox!.isOpen) {
+        await _hiveManager.usersBox!.put(eventJson['pubkey'], userModel);
       }
 
       profilesNotifier.value = {
@@ -1907,7 +1887,7 @@ class DataService {
         updatedAt: DateTime.now(),
         npub: npub,
       );
-      await followingBox?.put('following_$npub', updatedFollowingModel);
+      await _hiveManager.followingBox?.put('following_$npub', updatedFollowingModel);
 
       print('[DataService] Follow event sent and following list updated.');
     } catch (e) {
@@ -1953,7 +1933,7 @@ class DataService {
         updatedAt: DateTime.now(),
         npub: npub,
       );
-      await followingBox?.put('following_$npub', updatedFollowingModel);
+      await _hiveManager.followingBox?.put('following_$npub', updatedFollowingModel);
 
       print('[DataService] Unfollow event sent and following list updated.');
     } catch (e) {
@@ -2077,8 +2057,8 @@ class DataService {
       reactionsMap.putIfAbsent(targetEventId, () => []);
       reactionsMap[targetEventId]!.add(reaction);
 
-      if (reactionsBox != null) {
-        reactionsBox!.put(reaction.id, reaction).catchError((error) {
+      if (_hiveManager.reactionsBox != null) {
+        _hiveManager.reactionsBox!.put(reaction.id, reaction).catchError((error) {
           print('[DataService] Error saving optimistic reaction to cache: $error');
         });
       }
@@ -2152,8 +2132,8 @@ class DataService {
       repliesMap.putIfAbsent(parentEventId, () => []);
       repliesMap[parentEventId]!.add(reply);
 
-      if (repliesBox != null) {
-        repliesBox!.put(reply.id, reply).catchError((error) {
+      if (_hiveManager.repliesBox != null) {
+        _hiveManager.repliesBox!.put(reply.id, reply).catchError((error) {
           print('[DataService] Error saving reply to cache: $error');
         });
       }
@@ -2174,8 +2154,8 @@ class DataService {
       if (!eventIds.contains(replyNoteModel.id)) {
         notes.add(replyNoteModel);
         eventIds.add(replyNoteModel.id);
-        if (notesBox != null) {
-          notesBox!.put(replyNoteModel.id, replyNoteModel).catchError((error) {
+        if (_hiveManager.notesBox != null) {
+          _hiveManager.notesBox!.put(replyNoteModel.id, replyNoteModel).catchError((error) {
             print('[DataService] Error saving reply note to cache: $error');
           });
         }
@@ -2248,8 +2228,8 @@ class DataService {
       repostsMap.putIfAbsent(note.id, () => []);
       repostsMap[note.id]!.add(repost);
 
-      if (repostsBox != null) {
-        repostsBox!.put(repost.id, repost).catchError((error) {
+      if (_hiveManager.repostsBox != null) {
+        _hiveManager.repostsBox!.put(repost.id, repost).catchError((error) {
           print('[DataService] Error saving repost to cache: $error');
         });
       }
@@ -2306,8 +2286,8 @@ class DataService {
       notes.add(newNote);
       eventIds.add(newNote.id);
 
-      if (notesBox != null) {
-        notesBox!.put(newNote.id, newNote).catchError((error) {
+      if (_hiveManager.notesBox != null) {
+        _hiveManager.notesBox!.put(newNote.id, newNote).catchError((error) {
           print('[DataService] Error saving note to cache: $error');
         });
       }
@@ -2323,7 +2303,7 @@ class DataService {
   }
 
   Future<void> saveNotesToCache() async {
-    if (notesBox?.isOpen != true || notes.isEmpty) return;
+    if (_hiveManager.notesBox?.isOpen != true || notes.isEmpty) return;
 
     try {
       final notesToSave = notes.take(150).toList();
@@ -2333,16 +2313,16 @@ class DataService {
         notesMap[note.id] = note;
       }
 
-      await notesBox!.clear();
-      await notesBox!.putAll(notesMap);
+      await _hiveManager.notesBox!.clear();
+      await _hiveManager.notesBox!.putAll(notesMap);
     } catch (e) {}
   }
 
   Future<void> loadNotesFromCache(Function(List<NoteModel>) onLoad) async {
-    if (notesBox?.isOpen != true) return;
+    if (_hiveManager.notesBox?.isOpen != true) return;
 
     try {
-      final allNotes = notesBox!.values.cast<NoteModel>().toList();
+      final allNotes = _hiveManager.notesBox!.values.cast<NoteModel>().toList();
       if (allNotes.isEmpty) return;
 
       List<NoteModel> filteredNotes;
@@ -2408,9 +2388,9 @@ class DataService {
   }
 
   Future<void> loadZapsFromCache() async {
-    if (zapsBox == null || !zapsBox!.isOpen) return;
+    if (_hiveManager.zapsBox == null || !_hiveManager.zapsBox!.isOpen) return;
     try {
-      final allZaps = zapsBox!.values.cast<ZapModel>().toList();
+      final allZaps = _hiveManager.zapsBox!.values.cast<ZapModel>().toList();
       if (allZaps.isEmpty) return;
 
       for (var zap in allZaps) {
@@ -2446,7 +2426,7 @@ class DataService {
       if (zapsMap[key]!.any((z) => z.id == zap.id)) return;
 
       zapsMap[key]!.add(zap);
-      await zapsBox?.put(zap.id, zap);
+      await _hiveManager.zapsBox?.put(zap.id, zap);
 
       await _updateInteractionsProvider();
       InteractionsProvider.instance.updateZaps(key, zapsMap[key]!);
@@ -2476,9 +2456,9 @@ class DataService {
   }
 
   Future<void> loadReactionsFromCache() async {
-    if (reactionsBox == null || !reactionsBox!.isOpen) return;
+    if (_hiveManager.reactionsBox == null || !_hiveManager.reactionsBox!.isOpen) return;
     try {
-      final allReactions = reactionsBox!.values.cast<ReactionModel>().toList();
+      final allReactions = _hiveManager.reactionsBox!.values.cast<ReactionModel>().toList();
       if (allReactions.isEmpty) return;
 
       const batchSize = 100;
@@ -2519,9 +2499,9 @@ class DataService {
   }
 
   Future<void> loadRepliesFromCache() async {
-    if (repliesBox == null || !repliesBox!.isOpen) return;
+    if (_hiveManager.repliesBox == null || !_hiveManager.repliesBox!.isOpen) return;
     try {
-      final allReplies = repliesBox!.values.cast<ReplyModel>().toList();
+      final allReplies = _hiveManager.repliesBox!.values.cast<ReplyModel>().toList();
       if (allReplies.isEmpty) return;
 
       const batchSize = 100;
@@ -2586,9 +2566,9 @@ class DataService {
   }
 
   Future<void> loadRepostsFromCache() async {
-    if (repostsBox == null || !repostsBox!.isOpen) return;
+    if (_hiveManager.repostsBox == null || !_hiveManager.repostsBox!.isOpen) return;
     try {
-      final allReposts = repostsBox!.values.cast<RepostModel>().toList();
+      final allReposts = _hiveManager.repostsBox!.values.cast<RepostModel>().toList();
       if (allReposts.isEmpty) return;
 
       const batchSize = 100;
@@ -2629,9 +2609,10 @@ class DataService {
   }
 
   Future<void> _loadNotificationsFromCache() async {
-    if (notificationsBox == null || !notificationsBox!.isOpen) return;
+    final notificationsBox = _hiveManager.getNotificationBox(npub);
+    if (notificationsBox == null || !notificationsBox.isOpen) return;
     try {
-      final allNotifications = notificationsBox!.values.toList();
+      final allNotifications = notificationsBox.values.toList();
       allNotifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       notificationsNotifier.value = allNotifications;
       _updateUnreadNotificationCount();
@@ -2643,8 +2624,9 @@ class DataService {
   }
 
   void _updateUnreadNotificationCount() {
-    if (notificationsBox != null && notificationsBox!.isOpen) {
-      final unreadCount = notificationsBox!.values.where((n) => !n.isRead).length;
+    final notificationsBox = _hiveManager.getNotificationBox(npub);
+    if (notificationsBox != null && notificationsBox.isOpen) {
+      final unreadCount = notificationsBox.values.where((n) => !n.isRead).length;
       unreadNotificationsCountNotifier.value = unreadCount;
     }
   }
@@ -2654,12 +2636,13 @@ class DataService {
   }
 
   Future<void> markAllUserNotificationsAsRead() async {
-    if (notificationsBox == null || !notificationsBox!.isOpen) return;
+    final notificationsBox = _hiveManager.getNotificationBox(npub);
+    if (notificationsBox == null || !notificationsBox.isOpen) return;
 
     List<Future<void>> saveFutures = [];
     bool madeChanges = false;
 
-    final relevantNotifications = notificationsBox!.values.where((n) => ['mention', 'reaction', 'repost', 'zap'].contains(n.type)).toList();
+    final relevantNotifications = notificationsBox.values.where((n) => ['mention', 'reaction', 'repost', 'zap'].contains(n.type)).toList();
 
     for (final notification in relevantNotifications) {
       if (!notification.isRead) {
@@ -2677,19 +2660,20 @@ class DataService {
     _updateUnreadNotificationCount();
 
     if (madeChanges) {
-      final allNotifications = notificationsBox!.values.toList();
+      final allNotifications = notificationsBox.values.toList();
       allNotifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       notificationsNotifier.value = allNotifications;
     }
   }
 
   Future<void> _subscribeToNotifications() async {
-    if (_isClosed || npub.isEmpty || notificationsBox == null || !notificationsBox!.isOpen) return;
+    final notificationsBox = _hiveManager.getNotificationBox(npub);
+    if (_isClosed || npub.isEmpty || notificationsBox == null || !notificationsBox.isOpen) return;
 
     int? sinceTimestamp;
     try {
-      if (notificationsBox!.isNotEmpty) {
-        final List<NotificationModel> sortedNotifications = notificationsBox!.values.toList()
+      if (notificationsBox.isNotEmpty) {
+        final List<NotificationModel> sortedNotifications = notificationsBox.values.toList()
           ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
         sinceTimestamp = (sortedNotifications.first.timestamp.millisecondsSinceEpoch ~/ 1000) + 1;
       }
@@ -2732,7 +2716,7 @@ class DataService {
             eventIds.add(note.id);
             newNoteIds.add(note.id);
 
-            await notesBox?.put(note.id, note);
+            await _hiveManager.notesBox?.put(note.id, note);
             addNote(note);
           }
         }
@@ -2810,9 +2794,10 @@ class DataService {
             return;
 
           final notification = NotificationModel.fromEvent(eventData, notificationType);
-          if (notificationsBox != null && notificationsBox!.isOpen) {
-            if (!notificationsBox!.containsKey(notification.id)) {
-              notificationsBox!.put(notification.id, notification);
+          final notificationBox = _hiveManager.getNotificationBox(npub);
+          if (notificationBox != null && notificationBox.isOpen) {
+            if (!notificationBox.containsKey(notification.id)) {
+              notificationBox.put(notification.id, notification);
               print("[DataService] New $notificationType notification stored: ${notification.id}");
               _hasPendingUiUpdate = true;
             }
@@ -2870,8 +2855,9 @@ class DataService {
           for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
         };
 
-        if (notificationsBox != null && notificationsBox!.isOpen) {
-          final allNotifications = notificationsBox!.values.toList();
+        final notificationsBox = _hiveManager.getNotificationBox(npub);
+        if (notificationsBox != null && notificationsBox.isOpen) {
+          final allNotifications = notificationsBox.values.toList();
           allNotifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
           notificationsNotifier.value = allNotifications;
           _updateUnreadNotificationCount();

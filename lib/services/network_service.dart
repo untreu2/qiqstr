@@ -9,11 +9,14 @@ import 'relay_service.dart';
 import 'nostr_service.dart';
 
 class NetworkService {
+  static NetworkService? _instance;
+  static NetworkService get instance => _instance ??= NetworkService._internal();
+
+  NetworkService._internal() : _socketManager = WebSocketManager.instance;
+
   final WebSocketManager _socketManager;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   bool _isClosed = false;
-
-  NetworkService({required List<String> relayUrls}) : _socketManager = WebSocketManager.instance;
 
   Future<void> initializeConnections(List<String> targetNpubs) async {
     await _socketManager.connectRelays(

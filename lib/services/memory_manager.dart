@@ -13,7 +13,7 @@ class MemoryManager {
       final mediaService = MediaService();
       mediaService.clearCache(clearFailed: true);
 
-      final cacheService = CacheService();
+      final cacheService = CacheService.instance;
       await cacheService.optimizeMemoryUsage();
 
       debugPrint('[MemoryManager] Memory cleanup completed');

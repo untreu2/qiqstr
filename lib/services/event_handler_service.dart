@@ -12,7 +12,7 @@ import 'cache_service.dart';
 import 'profile_service.dart';
 
 class EventHandlerService {
-  final CacheService _cacheService;
+  final CacheService _cacheService = CacheService.instance;
   final ProfileService _profileService;
   final String npub;
 
@@ -24,15 +24,13 @@ class EventHandlerService {
   final Set<String> _processedEventIds = {};
 
   EventHandlerService({
-    required CacheService cacheService,
     required ProfileService profileService,
     required this.npub,
     this.onReactionsUpdated,
     this.onRepliesUpdated,
     this.onRepostsUpdated,
     this.onNewNote,
-  })  : _cacheService = cacheService,
-        _profileService = profileService;
+  }) : _profileService = profileService;
 
   Future<void> processEvent(Map<String, dynamic> eventData) async {
     final eventId = eventData['id'] as String?;
@@ -290,9 +288,10 @@ class EventHandlerService {
     try {
       final notification = NotificationModel.fromEvent(eventData, notificationType);
 
-      if (_cacheService.notificationsBox != null && _cacheService.notificationsBox!.isOpen) {
-        if (!_cacheService.notificationsBox!.containsKey(notification.id)) {
-          _saveAsync(() => _cacheService.notificationsBox!.put(notification.id, notification));
+      final notificationsBox = _cacheService.getNotificationBox(npub);
+      if (notificationsBox != null && notificationsBox.isOpen) {
+        if (!notificationsBox.containsKey(notification.id)) {
+          _saveAsync(() => notificationsBox.put(notification.id, notification));
         }
       }
     } catch (e) {
