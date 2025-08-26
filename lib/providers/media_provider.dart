@@ -7,6 +7,7 @@ class MediaProvider extends ChangeNotifier {
 
   MediaProvider._internal() {
     _mediaService = MediaService();
+    _schedulePeriodicCleanup();
   }
 
   late final MediaService _mediaService;
@@ -15,6 +16,7 @@ class MediaProvider extends ChangeNotifier {
 
   bool _isProcessing = false;
   int _queueSize = 0;
+  DateTime _lastCleanup = DateTime.now();
 
   bool get isInitialized => _isInitialized;
   bool get isProcessing => _isProcessing;
@@ -28,10 +30,14 @@ class MediaProvider extends ChangeNotifier {
 
   void cacheMediaUrls(List<String> urls, {int priority = 1}) {
     try {
-      _mediaService.cacheMediaUrls(urls, priority: priority);
+      final validUrls = urls.where((url) => url.isNotEmpty).toSet().toList();
+      if (validUrls.isEmpty) return;
+
+      _mediaService.cacheMediaUrls(validUrls, priority: priority);
       _updateQueueSize();
       _errorMessage = null;
-      notifyListeners();
+
+      _scheduleNotification();
     } catch (e) {
       _errorMessage = 'Failed to cache media URLs: $e';
       debugPrint('[MediaProvider] Cache error: $e');
@@ -52,16 +58,20 @@ class MediaProvider extends ChangeNotifier {
   }
 
   void cacheImagesFromNotes(List<Map<String, dynamic>> notes) {
-    final imageUrls = <String>[];
+    final imageUrls = <String>{};
 
     for (final note in notes) {
       final content = note['content'] as String? ?? '';
+      if (content.length > 10000) continue;
+
       final images = _extractImageUrls(content);
       imageUrls.addAll(images);
+
+      if (imageUrls.length > 200) break;
     }
 
     if (imageUrls.isNotEmpty) {
-      cacheMediaUrls(imageUrls, priority: 2);
+      cacheMediaUrls(imageUrls.toList(), priority: 2);
     }
   }
 
@@ -127,11 +137,61 @@ class MediaProvider extends ChangeNotifier {
   void optimizeForLowMemory() {
     try {
       _mediaService.clearCache(clearFailed: false);
+      _performAggressiveCleanup();
     } catch (e) {
       _errorMessage = 'Failed to optimize for low memory: $e';
       debugPrint('[MediaProvider] Low memory optimization error: $e');
       notifyListeners();
     }
+  }
+
+  void _performAggressiveCleanup() {
+    try {
+      _mediaService.handleMemoryPressure();
+      debugPrint('[MediaProvider] Aggressive cleanup performed');
+    } catch (e) {
+      debugPrint('[MediaProvider] Aggressive cleanup error: $e');
+    }
+  }
+
+  void _schedulePeriodicCleanup() {
+    Future.delayed(const Duration(minutes: 5), () {
+      if (_isInitialized) {
+        _performPeriodicCleanup();
+        _schedulePeriodicCleanup();
+      }
+    });
+  }
+
+  void _performPeriodicCleanup() {
+    final now = DateTime.now();
+    if (now.difference(_lastCleanup).inMinutes < 3) return;
+
+    _lastCleanup = now;
+
+    try {
+      final stats = getCacheStats();
+      final memoryUsage = stats['memoryUsage'] as Map<String, dynamic>?;
+      final isUnderPressure = memoryUsage?['memoryPressure'] as bool? ?? false;
+
+      if (isUnderPressure || _queueSize > 100) {
+        _performAggressiveCleanup();
+      }
+    } catch (e) {
+      debugPrint('[MediaProvider] Periodic cleanup error: $e');
+    }
+  }
+
+  bool _notificationScheduled = false;
+
+  void _scheduleNotification() {
+    if (_notificationScheduled) return;
+
+    _notificationScheduled = true;
+    Future.microtask(() {
+      _notificationScheduled = false;
+      notifyListeners();
+    });
   }
 
   void optimizeForSlowNetwork() {
@@ -152,10 +212,14 @@ class MediaProvider extends ChangeNotifier {
 
   void batchCacheOperations(List<Map<String, dynamic>> operations) {
     try {
-      for (final operation in operations) {
+      final limitedOps = operations.take(50).toList();
+
+      for (final operation in limitedOps) {
         final type = operation['type'] as String;
-        final urls = operation['urls'] as List<String>;
+        final urls = (operation['urls'] as List<String>).where((url) => url.isNotEmpty).toSet().toList();
         final priority = operation['priority'] as int? ?? 1;
+
+        if (urls.isEmpty) continue;
 
         switch (type) {
           case 'cache':
@@ -168,7 +232,7 @@ class MediaProvider extends ChangeNotifier {
       }
 
       _updateQueueSize();
-      notifyListeners();
+      _scheduleNotification();
     } catch (e) {
       _errorMessage = 'Failed to perform batch operations: $e';
       debugPrint('[MediaProvider] Batch operation error: $e');
@@ -247,8 +311,32 @@ class MediaProvider extends ChangeNotifier {
     }
   }
 
+  Map<String, dynamic> getDetailedStats() {
+    try {
+      final baseStats = getCacheStats();
+      final memoryUsage = getMemoryUsage();
+
+      return {
+        ...baseStats,
+        'detailedMemoryUsage': memoryUsage,
+        'isUnderMemoryPressure': isUnderMemoryPressure(),
+        'lastCleanup': _lastCleanup.toIso8601String(),
+        'timeSinceLastCleanup': DateTime.now().difference(_lastCleanup).inMinutes,
+      };
+    } catch (e) {
+      debugPrint('[MediaProvider] Detailed stats error: $e');
+      return {
+        'error': e.toString(),
+        'cachedUrls': 0,
+        'failedUrls': 0,
+        'queueSize': _queueSize,
+      };
+    }
+  }
+
   @override
   void dispose() {
+    _isInitialized = false;
     _mediaService.dispose();
     super.dispose();
   }

@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import '../services/network_service.dart';
-import '../constants/relays.dart';
 
 class NetworkProvider extends ChangeNotifier {
   static NetworkProvider? _instance;

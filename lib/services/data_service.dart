@@ -25,7 +25,6 @@ import 'package:http/http.dart' as http;
 import 'package:qiqstr/services/note_processor.dart';
 import 'package:crypto/crypto.dart';
 import 'nostr_service.dart';
-import 'cache_service.dart';
 import 'profile_service.dart';
 import 'hive_manager.dart';
 import '../providers/interactions_provider.dart';
@@ -196,7 +195,6 @@ class DataService {
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
-  late CacheService _cacheService;
   late ProfileService _profileService;
 
   Box<NoteModel>? get notesBox => _hiveManager.notesBox;
@@ -242,7 +240,6 @@ class DataService {
         await _hiveManager.initializeBoxes();
       }
 
-      _cacheService = CacheService.instance;
       _profileService = ProfileService.instance;
       await _profileService.initialize();
 

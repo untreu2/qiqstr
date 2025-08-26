@@ -9,24 +9,27 @@ class ContentCacheProvider extends ChangeNotifier {
 
   final Map<String, Map<String, dynamic>> _parsedContentCache = {};
   final Map<String, DateTime> _cacheTimestamps = {};
-  final Duration _cacheTTL = const Duration(minutes: 30);
-  final int _maxCacheSize = 200;
+  final Duration _cacheTTL = const Duration(minutes: 15);
+  final int _maxCacheSize = 150;
 
   final LinkedHashMap<String, int> _accessOrder = LinkedHashMap();
   int _accessCounter = 0;
 
   final Map<String, Map<String, double>> _imageDimensionsCache = {};
-  final int _maxImageCacheSize = 500;
+  final int _maxImageCacheSize = 300;
 
   final Map<String, Map<String, dynamic>> _linkPreviewCache = {};
-  final int _maxLinkCacheSize = 100;
+  final int _maxLinkCacheSize = 50;
 
   DateTime _lastImageCleanup = DateTime.now();
   DateTime _lastLinkCleanup = DateTime.now();
+  DateTime _lastGeneralCleanup = DateTime.now();
 
   bool get isInitialized => true;
 
   Map<String, dynamic>? getParsedContent(String contentHash) {
+    _performPeriodicCleanup();
+
     final now = DateTime.now();
 
     if (_parsedContentCache.containsKey(contentHash)) {
@@ -65,9 +68,19 @@ class ContentCacheProvider extends ChangeNotifier {
     if (_parsedContentCache.length >= _maxCacheSize) {
       final sortedKeys = _accessOrder.keys.toList()..sort((a, b) => _accessOrder[a]!.compareTo(_accessOrder[b]!));
 
-      final keysToRemove = sortedKeys.take(_maxCacheSize ~/ 2).toList();
+      final keysToRemove = sortedKeys.take((_maxCacheSize * 0.6).round()).toList();
       for (final key in keysToRemove) {
         _removeParsedContent(key);
+      }
+
+      if (_accessCounter > 100000) {
+        _accessCounter = 0;
+        final entries = _accessOrder.entries.toList()..sort((a, b) => a.value.compareTo(b.value));
+        _accessOrder.clear();
+        for (var i = 0; i < entries.length; i++) {
+          _accessOrder[entries[i].key] = i;
+        }
+        _accessCounter = entries.length;
       }
     }
   }
@@ -88,12 +101,12 @@ class ContentCacheProvider extends ChangeNotifier {
 
   void _cleanupImageCache() {
     final now = DateTime.now();
-    if (now.difference(_lastImageCleanup).inMinutes < 10) return;
+    if (now.difference(_lastImageCleanup).inMinutes < 5) return;
 
     _lastImageCleanup = now;
 
     if (_imageDimensionsCache.length > _maxImageCacheSize) {
-      final keysToRemove = _imageDimensionsCache.keys.take(_imageDimensionsCache.length ~/ 3).toList();
+      final keysToRemove = _imageDimensionsCache.keys.take(_imageDimensionsCache.length ~/ 2).toList();
       for (final key in keysToRemove) {
         _imageDimensionsCache.remove(key);
       }
@@ -112,12 +125,12 @@ class ContentCacheProvider extends ChangeNotifier {
 
   void _cleanupLinkCache() {
     final now = DateTime.now();
-    if (now.difference(_lastLinkCleanup).inMinutes < 15) return;
+    if (now.difference(_lastLinkCleanup).inMinutes < 10) return;
 
     _lastLinkCleanup = now;
 
     if (_linkPreviewCache.length > _maxLinkCacheSize) {
-      final keysToRemove = _linkPreviewCache.keys.take(_linkPreviewCache.length * 2 ~/ 5).toList();
+      final keysToRemove = _linkPreviewCache.keys.take(_linkPreviewCache.length ~/ 2).toList();
       for (final key in keysToRemove) {
         _linkPreviewCache.remove(key);
       }
@@ -145,6 +158,56 @@ class ContentCacheProvider extends ChangeNotifier {
     if (expiredKeys.isNotEmpty) {
       debugPrint('[ContentCache] Removed ${expiredKeys.length} expired entries');
     }
+  }
+
+  void _performPeriodicCleanup() {
+    final now = DateTime.now();
+    if (now.difference(_lastGeneralCleanup).inMinutes < 2) return;
+
+    _lastGeneralCleanup = now;
+
+    clearExpiredEntries();
+
+    _cleanupImageCache();
+    _cleanupLinkCache();
+
+    if (_getTotalCacheSize() > 1000) {
+      _performAggressiveCleanup();
+    }
+  }
+
+  int _getTotalCacheSize() {
+    return _parsedContentCache.length + _imageDimensionsCache.length + _linkPreviewCache.length;
+  }
+
+  void _performAggressiveCleanup() {
+    final sortedKeys = _accessOrder.keys.toList()..sort((a, b) => _accessOrder[a]!.compareTo(_accessOrder[b]!));
+    final keysToRemove = sortedKeys.take((_parsedContentCache.length * 0.7).round()).toList();
+
+    for (final key in keysToRemove) {
+      _removeParsedContent(key);
+    }
+
+    final imageKeysToRemove = _imageDimensionsCache.keys.take((_imageDimensionsCache.length * 0.7).round()).toList();
+    for (final key in imageKeysToRemove) {
+      _imageDimensionsCache.remove(key);
+    }
+
+    final linkKeysToRemove = _linkPreviewCache.keys.take((_linkPreviewCache.length * 0.7).round()).toList();
+    for (final key in linkKeysToRemove) {
+      _linkPreviewCache.remove(key);
+    }
+
+    debugPrint('[ContentCache] Aggressive cleanup performed - Total size: ${_getTotalCacheSize()}');
+  }
+
+  Map<String, int> getMemoryStats() {
+    return {
+      'parsedContentCache': _parsedContentCache.length,
+      'imageDimensionsCache': _imageDimensionsCache.length,
+      'linkPreviewCache': _linkPreviewCache.length,
+      'totalCacheSize': _getTotalCacheSize(),
+    };
   }
 
   void clearCache() {

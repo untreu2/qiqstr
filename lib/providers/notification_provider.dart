@@ -36,6 +36,10 @@ class NotificationProvider extends ChangeNotifier {
   bool _isLoading = true;
   int _unreadCount = 0;
 
+  DateTime _lastCleanup = DateTime.now();
+  bool _processingUpdate = false;
+  final Map<String, DateTime> _profileLoadTimes = {};
+
   bool get isInitialized => _isInitialized;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -96,7 +100,9 @@ class NotificationProvider extends ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      _notifications = _notificationsBox!.values.toList()..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      final allNotifications = _notificationsBox!.values.toList()..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+      _notifications = allNotifications.take(500).toList();
 
       await _updateDisplayData(_notifications, isInitialLoad: true);
 
@@ -118,11 +124,17 @@ class NotificationProvider extends ChangeNotifier {
   }
 
   Future<void> _updateDisplayData(List<NotificationModel> notificationsFromSource, {bool isInitialLoad = false}) async {
+    if (_processingUpdate) return;
+
     try {
+      _processingUpdate = true;
+
+      _performPeriodicCleanup();
+
       final filtered = notificationsFromSource.where((n) => ['mention', 'reaction', 'repost', 'zap'].contains(n.type)).toList()
         ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-      final limited = filtered.take(100).toList();
+      final limited = filtered.take(75).toList();
 
       await _loadUserProfiles(limited, isInitialLoad);
 
@@ -169,20 +181,39 @@ class NotificationProvider extends ChangeNotifier {
       _updateUnreadCount();
 
       if (isInitialLoad) _isLoading = false;
-      notifyListeners();
+
+      Future.microtask(() => notifyListeners());
     } catch (e) {
       _errorMessage = 'Failed to update display data: $e';
       debugPrint('[NotificationProvider] Update display data error: $e');
       notifyListeners();
+    } finally {
+      _processingUpdate = false;
     }
   }
 
   Future<void> _loadUserProfiles(List<NotificationModel> notifications, bool isInitialLoad) async {
     final npubs = notifications.map((n) => n.author).toSet();
     final loadedProfiles = <String, UserModel?>{};
+    final now = DateTime.now();
 
-    await Future.wait(npubs.map((npub) async {
-      if (!_userProfiles.containsKey(npub) || isInitialLoad) {
+    final npubsToLoad = npubs.where((npub) {
+      if (_userProfiles.containsKey(npub) && !isInitialLoad) {
+        final lastLoadTime = _profileLoadTimes[npub];
+        if (lastLoadTime != null && now.difference(lastLoadTime).inMinutes < 10) {
+          return false;
+        }
+      }
+      return true;
+    }).toList();
+
+    final chunks = <List<String>>[];
+    for (int i = 0; i < npubsToLoad.length; i += 10) {
+      chunks.add(npubsToLoad.skip(i).take(10).toList());
+    }
+
+    for (final chunk in chunks) {
+      await Future.wait(chunk.map((npub) async {
         try {
           UserModel? profile;
 
@@ -197,16 +228,45 @@ class NotificationProvider extends ChangeNotifier {
           }
 
           loadedProfiles[npub] = profile;
+          _profileLoadTimes[npub] = now;
         } catch (e) {
           debugPrint('[NotificationProvider] Error loading profile for $npub: $e');
           loadedProfiles[npub] = null;
         }
-      } else {
-        loadedProfiles[npub] = _userProfiles[npub];
-      }
-    }));
+      }));
+    }
 
     _userProfiles = {..._userProfiles, ...loadedProfiles};
+  }
+
+  void _performPeriodicCleanup() {
+    final now = DateTime.now();
+    if (now.difference(_lastCleanup).inMinutes < 5) return;
+
+    _lastCleanup = now;
+
+    final oldLoadTimes = <String>[];
+    for (final entry in _profileLoadTimes.entries) {
+      if (now.difference(entry.value).inHours > 1) {
+        oldLoadTimes.add(entry.key);
+      }
+    }
+    for (final key in oldLoadTimes) {
+      _profileLoadTimes.remove(key);
+    }
+
+    if (_userProfiles.length > 200) {
+      final sortedByTime = _profileLoadTimes.entries.toList()..sort((a, b) => a.value.compareTo(b.value));
+
+      final keysToRemove = sortedByTime.take(_userProfiles.length - 150).map((e) => e.key).toList();
+
+      for (final key in keysToRemove) {
+        _userProfiles.remove(key);
+        _profileLoadTimes.remove(key);
+      }
+    }
+
+    debugPrint('[NotificationProvider] Periodic cleanup completed');
   }
 
   void _updateUnreadCount() {
@@ -323,7 +383,33 @@ class NotificationProvider extends ChangeNotifier {
   }
 
   Future<void> refresh() async {
+    if (_processingUpdate) return;
     await _loadNotifications();
+  }
+
+  void optimizeMemory() {
+    if (_notifications.length > 300) {
+      _notifications = _notifications.take(300).toList();
+    }
+
+    if (_userProfiles.length > 100) {
+      final sortedByTime = _profileLoadTimes.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+
+      final keysToKeep = sortedByTime.take(100).map((e) => e.key).toSet();
+      _userProfiles.removeWhere((key, value) => !keysToKeep.contains(key));
+      _profileLoadTimes.removeWhere((key, value) => !keysToKeep.contains(key));
+    }
+
+    debugPrint('[NotificationProvider] Memory optimization completed');
+  }
+
+  Map<String, int> getMemoryStats() {
+    return {
+      'notifications': _notifications.length,
+      'displayNotifications': _displayNotifications.length,
+      'userProfiles': _userProfiles.length,
+      'profileLoadTimes': _profileLoadTimes.length,
+    };
   }
 
   @override
