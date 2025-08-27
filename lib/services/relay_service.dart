@@ -49,7 +49,45 @@ class WebSocketManager {
     this.maxBackoffDelay = const Duration(minutes: 2),
     this.healthCheckInterval = const Duration(minutes: 1),
   }) {
-    _initializeWithRelays(relaySetMainSockets);
+    _initializeWithDefaultRelays();
+  }
+
+  void _initializeWithDefaultRelays() {
+    if (relayUrls.isEmpty) {
+      relayUrls.addAll(relaySetMainSockets);
+      _initializeStats();
+      _startMessageProcessing();
+      _startHealthMonitoring();
+
+      _loadCustomRelays();
+    }
+  }
+
+  Future<void> _loadCustomRelays() async {
+    try {
+      final customRelays = await getRelaySetMainSockets();
+      if (customRelays.isNotEmpty && !_listEquals(relayUrls, customRelays)) {
+        print('[WebSocketManager] Loading custom relays: $customRelays');
+
+        relayUrls.clear();
+        _connectionStats.clear();
+
+        relayUrls.addAll(customRelays);
+        _initializeStats();
+
+        print('[WebSocketManager] Updated to use ${relayUrls.length} custom relays');
+      }
+    } catch (e) {
+      print('[WebSocketManager] Error loading custom relays: $e');
+    }
+  }
+
+  bool _listEquals(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   void _initializeWithRelays(List<String> urls) {
@@ -515,6 +553,35 @@ class WebSocketManager {
 
   void flushMessageQueue() {
     _processMessageQueue();
+  }
+
+  Future<void> reloadCustomRelays() async {
+    try {
+      final customRelays = await getRelaySetMainSockets();
+      if (!_listEquals(relayUrls, customRelays)) {
+        print('[WebSocketManager] Reloading custom relays: $customRelays');
+
+        final closeFutures = _webSockets.values.map((ws) async {
+          try {
+            if (ws.readyState == WebSocket.open || ws.readyState == WebSocket.connecting) {
+              await ws.close();
+            }
+          } catch (e) {}
+        });
+        await Future.wait(closeFutures, eagerError: false);
+        _webSockets.clear();
+
+        relayUrls.clear();
+        _connectionStats.clear();
+
+        relayUrls.addAll(customRelays);
+        _initializeStats();
+
+        print('[WebSocketManager] Relay list updated to use ${relayUrls.length} custom relays');
+      }
+    } catch (e) {
+      print('[WebSocketManager] Error reloading custom relays: $e');
+    }
   }
 }
 

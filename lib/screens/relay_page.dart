@@ -6,6 +6,7 @@ import '../theme/theme_manager.dart';
 import '../constants/relays.dart';
 import '../services/data_service.dart';
 import '../services/nostr_service.dart';
+import '../services/relay_service.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
@@ -408,6 +409,8 @@ class _RelayPageState extends State<RelayPage> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList('custom_main_relays', _relays);
 
+      await WebSocketManager.instance.reloadCustomRelays();
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Relays saved successfully')),
@@ -683,52 +686,78 @@ class _RelayPageState extends State<RelayPage> {
           Row(
             children: [
               Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _isFetchingUserRelays ? null : _fetchUserRelays,
-                  icon: _isFetchingUserRelays
-                      ? SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
+                child: GestureDetector(
+                  onTap: _isFetchingUserRelays ? null : _fetchUserRelays,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _isFetchingUserRelays ? context.colors.surface.withOpacity(0.5) : context.colors.overlayLight,
+                      borderRadius: BorderRadius.circular(25),
+                      border: Border.all(color: context.colors.borderAccent),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _isFetchingUserRelays
+                            ? SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
+                                ),
+                              )
+                            : Icon(Icons.download, size: 18, color: context.colors.textPrimary),
+                        const SizedBox(width: 8),
+                        Text(
+                          _isFetchingUserRelays ? 'Fetching...' : 'Fetch',
+                          style: TextStyle(
+                            color: context.colors.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
                           ),
-                        )
-                      : const Icon(Icons.download, size: 18),
-                  label: Text(_isFetchingUserRelays ? 'Fetching...' : 'Fetch'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: context.colors.surface,
-                    foregroundColor: context.colors.textPrimary,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: context.colors.border),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _isPublishingRelays ? null : _publishRelays,
-                  icon: _isPublishingRelays
-                      ? SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
+                child: GestureDetector(
+                  onTap: _isPublishingRelays ? null : _publishRelays,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: _isPublishingRelays ? context.colors.surface.withOpacity(0.5) : context.colors.overlayLight,
+                      borderRadius: BorderRadius.circular(25),
+                      border: Border.all(color: context.colors.borderAccent),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _isPublishingRelays
+                            ? SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
+                                ),
+                              )
+                            : Icon(Icons.upload, size: 18, color: context.colors.textPrimary),
+                        const SizedBox(width: 8),
+                        Text(
+                          _isPublishingRelays ? 'Publishing...' : 'Publish',
+                          style: TextStyle(
+                            color: context.colors.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
                           ),
-                        )
-                      : const Icon(Icons.upload, size: 18),
-                  label: Text(_isPublishingRelays ? 'Publishing...' : 'Publish'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: context.colors.surface,
-                    foregroundColor: context.colors.textPrimary,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(color: context.colors.border),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -739,32 +768,59 @@ class _RelayPageState extends State<RelayPage> {
           Row(
             children: [
               Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _showAddRelayDialog,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add Relay'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: context.colors.accent,
-                    foregroundColor: context.colors.background,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                child: GestureDetector(
+                  onTap: _showAddRelayDialog,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: context.colors.buttonPrimary,
+                      borderRadius: BorderRadius.circular(25),
+                      border: Border.all(color: context.colors.borderAccent),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.add, size: 18, color: context.colors.background),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Add Relay',
+                          style: TextStyle(
+                            color: context.colors.background,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: 12),
-              ElevatedButton.icon(
-                onPressed: _resetToDefaults,
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Reset'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: context.colors.surface,
-                  foregroundColor: context.colors.textPrimary,
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(color: context.colors.border),
+              GestureDetector(
+                onTap: _resetToDefaults,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: context.colors.overlayLight,
+                    borderRadius: BorderRadius.circular(25),
+                    border: Border.all(color: context.colors.borderAccent),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.refresh, size: 18, color: context.colors.textPrimary),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Reset',
+                        style: TextStyle(
+                          color: context.colors.textPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
