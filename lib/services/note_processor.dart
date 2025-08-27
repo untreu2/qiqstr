@@ -82,16 +82,24 @@ class NoteProcessor {
 
     try {
       final batch = <Map<String, dynamic>>[];
-      while (_processingQueue.isNotEmpty && batch.length < 5) {
+      while (_processingQueue.isNotEmpty && batch.length < 3) {
         batch.add(_processingQueue.removeFirst());
       }
 
-      await Future.wait(batch.map((item) => _processNoteEventInternal(
-            item['dataService'] as DataService,
-            item['eventData'] as Map<String, dynamic>,
-            List<String>.from(item['targetNpubs']),
-            rawWs: item['rawWs'] as String?,
-          )));
+      for (int i = 0; i < batch.length; i++) {
+        final item = batch[i];
+
+        Future.microtask(() => _processNoteEventInternal(
+              item['dataService'] as DataService,
+              item['eventData'] as Map<String, dynamic>,
+              List<String>.from(item['targetNpubs']),
+              rawWs: item['rawWs'] as String?,
+            ));
+
+        if (i % 2 == 0) {
+          await Future.delayed(Duration.zero);
+        }
+      }
 
       print('[NoteProcessor] Processed batch of ${batch.length} events in ${stopwatch.elapsedMilliseconds}ms');
     } finally {
@@ -109,119 +117,121 @@ class NoteProcessor {
     List<String> targetNpubs, {
     String? rawWs,
   }) async {
-    final processingStopwatch = Stopwatch()..start();
+    return Future.microtask(() async {
+      final processingStopwatch = Stopwatch()..start();
 
-    try {
-      int kind = eventData['kind'] as int;
-      final String outerEventAuthor = eventData['pubkey'] as String;
-      bool isOuterEventRepost = kind == 6;
-      Map<String, dynamic>? innerEventData;
-      DateTime? repostTimestamp;
-      String? repostedEventJsonString;
+      try {
+        int kind = eventData['kind'] as int;
+        final String outerEventAuthor = eventData['pubkey'] as String;
+        bool isOuterEventRepost = kind == 6;
+        Map<String, dynamic>? innerEventData;
+        DateTime? repostTimestamp;
+        String? repostedEventJsonString;
 
-      if (isOuterEventRepost) {
-        _metrics.repostsProcessed++;
-        repostTimestamp = DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000);
-        repostedEventJsonString = eventData['content'] as String?;
+        if (isOuterEventRepost) {
+          _metrics.repostsProcessed++;
+          repostTimestamp = DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000);
+          repostedEventJsonString = eventData['content'] as String?;
 
-        if (repostedEventJsonString != null && repostedEventJsonString.isNotEmpty) {
-          try {
-            innerEventData = jsonDecode(repostedEventJsonString) as Map<String, dynamic>;
-          } catch (e) {
-            print('[NoteProcessor] Error decoding repost content: $e');
-            _metrics.recordSkip('repost_decode_error');
-            return;
+          if (repostedEventJsonString != null && repostedEventJsonString.isNotEmpty) {
+            try {
+              innerEventData = jsonDecode(repostedEventJsonString) as Map<String, dynamic>;
+            } catch (e) {
+              print('[NoteProcessor] Error decoding repost content');
+              _metrics.recordSkip('repost_decode_error');
+              return;
+            }
           }
-        }
 
-        if (innerEventData == null) {
-          innerEventData = await _fetchOriginalEventData(dataService, eventData);
           if (innerEventData == null) {
-            _metrics.recordSkip('repost_original_not_found');
-            return;
+            innerEventData = await _fetchOriginalEventData(dataService, eventData);
+            if (innerEventData == null) {
+              _metrics.recordSkip('repost_original_not_found');
+              return;
+            }
           }
+
+          eventData = innerEventData;
+          kind = eventData['kind'] as int? ?? 1;
         }
 
-        eventData = innerEventData;
-        kind = eventData['kind'] as int? ?? 1;
+        final eventId = eventData['id'] as String?;
+        if (eventId == null) {
+          _metrics.recordSkip('missing_event_id');
+          return;
+        }
+
+        _recentlyProcessed.add(eventId);
+
+        final String noteAuthor = eventData['pubkey'] as String;
+        final noteContentRaw = eventData['content'];
+        String noteContent = noteContentRaw is String ? noteContentRaw : jsonEncode(noteContentRaw);
+        final tags = eventData['tags'] as List<dynamic>? ?? [];
+
+        if (dataService.eventIds.contains(eventId)) {
+          _metrics.recordSkip('already_exists');
+          return;
+        }
+
+        if (noteContent.trim().isEmpty) {
+          _metrics.recordSkip('empty_content');
+          return;
+        }
+
+        if (!_isValidTarget(dataService, targetNpubs, outerEventAuthor, noteAuthor, isOuterEventRepost)) {
+          _metrics.recordSkip('invalid_target');
+          return;
+        }
+
+        final timestamp = DateTime.fromMillisecondsSinceEpoch((eventData['created_at'] as int) * 1000);
+
+        final tagInfo = await _parseReplyTagsAsync(tags);
+        final bool isActualReply = tagInfo['isReply'] as bool;
+        final String? rootId = tagInfo['rootId'] as String?;
+        final String? parentId = tagInfo['parentId'] as String?;
+
+        if (isActualReply) {
+          _metrics.repliesProcessed++;
+        }
+
+        final newNote = NoteModel(
+          id: eventId,
+          content: noteContent,
+          author: noteAuthor,
+          timestamp: timestamp,
+          isRepost: isOuterEventRepost,
+          repostedBy: isOuterEventRepost ? outerEventAuthor : null,
+          repostTimestamp: isOuterEventRepost ? repostTimestamp : null,
+          rawWs: isOuterEventRepost ? repostedEventJsonString : rawWs,
+          isReply: isActualReply,
+          rootId: rootId,
+          parentId: parentId,
+        );
+
+        newNote.hasMedia = newNote.hasMediaLazy;
+
+        if (!dataService.eventIds.contains(newNote.id)) {
+          _fetchProfilesOptimizedAsync(dataService, noteAuthor, isOuterEventRepost ? outerEventAuthor : null);
+
+          dataService.notes.add(newNote);
+          dataService.eventIds.add(newNote.id);
+
+          _saveNoteAsync(dataService, newNote);
+
+          dataService.addNote(newNote);
+          dataService.onNewNote?.call(newNote);
+
+          _metrics.notesProcessed++;
+
+          _fetchInteractionsAsync(dataService, newNote.id);
+        }
+
+        print('[NoteProcessor] Processed note ${eventId} in ${processingStopwatch.elapsedMilliseconds}ms');
+      } catch (e) {
+        print('[NoteProcessor] Error processing note event');
+        _metrics.recordSkip('processing_error');
       }
-
-      final eventId = eventData['id'] as String?;
-      if (eventId == null) {
-        _metrics.recordSkip('missing_event_id');
-        return;
-      }
-
-      _recentlyProcessed.add(eventId);
-
-      final String noteAuthor = eventData['pubkey'] as String;
-      final noteContentRaw = eventData['content'];
-      String noteContent = noteContentRaw is String ? noteContentRaw : jsonEncode(noteContentRaw);
-      final tags = eventData['tags'] as List<dynamic>? ?? [];
-
-      if (dataService.eventIds.contains(eventId)) {
-        _metrics.recordSkip('already_exists');
-        return;
-      }
-
-      if (noteContent.trim().isEmpty) {
-        _metrics.recordSkip('empty_content');
-        return;
-      }
-
-      if (!_isValidTarget(dataService, targetNpubs, outerEventAuthor, noteAuthor, isOuterEventRepost)) {
-        _metrics.recordSkip('invalid_target');
-        return;
-      }
-
-      final timestamp = DateTime.fromMillisecondsSinceEpoch((eventData['created_at'] as int) * 1000);
-
-      final tagInfo = _parseReplyTags(tags);
-      final bool isActualReply = tagInfo['isReply'] as bool;
-      final String? rootId = tagInfo['rootId'] as String?;
-      final String? parentId = tagInfo['parentId'] as String?;
-
-      if (isActualReply) {
-        _metrics.repliesProcessed++;
-      }
-
-      final newNote = NoteModel(
-        id: eventId,
-        content: noteContent,
-        author: noteAuthor,
-        timestamp: timestamp,
-        isRepost: isOuterEventRepost,
-        repostedBy: isOuterEventRepost ? outerEventAuthor : null,
-        repostTimestamp: isOuterEventRepost ? repostTimestamp : null,
-        rawWs: isOuterEventRepost ? repostedEventJsonString : rawWs,
-        isReply: isActualReply,
-        rootId: rootId,
-        parentId: parentId,
-      );
-
-      newNote.hasMedia = newNote.hasMediaLazy;
-
-      if (!dataService.eventIds.contains(newNote.id)) {
-        await _fetchProfilesOptimized(dataService, noteAuthor, isOuterEventRepost ? outerEventAuthor : null);
-
-        dataService.notes.add(newNote);
-        dataService.eventIds.add(newNote.id);
-
-        _saveNoteAsync(dataService, newNote);
-
-        dataService.addNote(newNote);
-        dataService.onNewNote?.call(newNote);
-
-        _metrics.notesProcessed++;
-
-        _fetchInteractionsAsync(dataService, newNote.id);
-      }
-
-      print('[NoteProcessor] Processed note ${eventId} in ${processingStopwatch.elapsedMilliseconds}ms');
-    } catch (e) {
-      print('[NoteProcessor] Error processing note event: $e');
-      _metrics.recordSkip('processing_error');
-    }
+    });
   }
 
   static Future<Map<String, dynamic>?> _fetchOriginalEventData(DataService dataService, Map<String, dynamic> eventData) async {
@@ -245,7 +255,7 @@ class NoteProcessor {
               return decodedRawWs;
             }
           } catch (e) {
-            print("[NoteProcessor] Error decoding fetchedNote.rawWs: $e");
+            print("[NoteProcessor] Error decoding fetchedNote.rawWs");
           }
         }
 
@@ -318,19 +328,25 @@ class NoteProcessor {
     };
   }
 
-  static Future<void> _fetchProfilesOptimized(
+  static Future<Map<String, dynamic>> _parseReplyTagsAsync(List<dynamic> tags) async {
+    return Future.microtask(() => _parseReplyTags(tags));
+  }
+
+  static void _fetchProfilesOptimizedAsync(
     DataService dataService,
     String noteAuthor,
     String? repostedBy,
-  ) async {
-    final authorsToFetch = <String>{noteAuthor};
-    if (repostedBy != null) {
-      authorsToFetch.add(repostedBy);
-    }
+  ) {
+    Future.microtask(() async {
+      final authorsToFetch = <String>{noteAuthor};
+      if (repostedBy != null) {
+        authorsToFetch.add(repostedBy);
+      }
 
-    _metrics.profilesFetched += authorsToFetch.length;
+      _metrics.profilesFetched += authorsToFetch.length;
 
-    await dataService.fetchProfilesBatch(authorsToFetch.toList());
+      await dataService.fetchProfilesBatch(authorsToFetch.toList());
+    });
   }
 
   static void _saveNoteAsync(DataService dataService, NoteModel note) {
@@ -339,7 +355,7 @@ class NoteProcessor {
         try {
           await dataService.notesBox!.put(note.id, note);
         } catch (e) {
-          print('[NoteProcessor] Error saving note: $e');
+          print('[NoteProcessor] Error saving note');
         }
       });
     }
@@ -350,7 +366,7 @@ class NoteProcessor {
       try {
         await dataService.fetchInteractionsForEvents([noteId]);
       } catch (e) {
-        print('[NoteProcessor] Error fetching interactions: $e');
+        print('[NoteProcessor] Error fetching interactions');
       }
     });
   }

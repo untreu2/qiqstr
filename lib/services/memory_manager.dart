@@ -9,21 +9,41 @@ class MemoryManager {
   MemoryManager._internal();
 
   Future<void> cleanupMemory() async {
-    try {
-      final mediaService = MediaService();
-      mediaService.clearCache(clearFailed: true);
+    Future.microtask(() async {
+      try {
+        final mediaService = MediaService();
 
-      final cacheService = CacheService.instance;
-      await cacheService.optimizeMemoryUsage();
+        Future.microtask(() => mediaService.clearCache(clearFailed: true));
 
-      debugPrint('[MemoryManager] Memory cleanup completed');
-    } catch (e) {
-      debugPrint('[MemoryManager] Memory cleanup error: $e');
-    }
+        await Future.delayed(Duration.zero);
+
+        final cacheService = CacheService.instance;
+        await cacheService.optimizeMemoryUsage();
+
+        debugPrint('[MemoryManager] Memory cleanup completed');
+      } catch (e) {
+        debugPrint('[MemoryManager] Memory cleanup error: $e');
+      }
+    });
   }
 
   void handleMemoryPressure() {
-    cleanupMemory();
+    Future.microtask(() async {
+      try {
+        final mediaService = MediaService();
+
+        mediaService.handleMemoryPressure();
+
+        await Future.delayed(Duration.zero);
+
+        final cacheService = CacheService.instance;
+        Future.microtask(() => cacheService.optimizeMemoryUsage());
+
+        debugPrint('[MemoryManager] Memory pressure handling completed');
+      } catch (e) {
+        debugPrint('[MemoryManager] Memory pressure handling error: $e');
+      }
+    });
   }
 
   Map<String, dynamic> getMemoryStats() {

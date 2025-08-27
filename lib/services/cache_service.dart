@@ -73,12 +73,14 @@ class CacheService {
 
       await _hiveManager.initializeNotificationBox(npub);
 
-      await Future.wait([
-        loadReactionsFromCache(),
-        loadRepliesFromCache(),
-        loadRepostsFromCache(),
-        loadZapsFromCache(),
-      ], eagerError: false);
+      Future.microtask(() async {
+        await Future.wait([
+          loadReactionsFromCache(),
+          loadRepliesFromCache(),
+          loadRepostsFromCache(),
+          loadZapsFromCache(),
+        ], eagerError: false);
+      });
     } catch (e) {
       debugPrint('[CacheService] Initialization error: $e');
     }
@@ -87,93 +89,142 @@ class CacheService {
   Future<void> loadReactionsFromCache() async {
     if (reactionsBox == null || !reactionsBox!.isOpen) return;
 
-    try {
-      final allReactions = reactionsBox!.values.cast<ReactionModel>().toList();
-      if (allReactions.isEmpty) return;
+    Future.microtask(() async {
+      try {
+        final allReactions = reactionsBox!.values.cast<ReactionModel>().toList();
+        if (allReactions.isEmpty) return;
 
-      for (var reaction in allReactions) {
-        reactionsMap.putIfAbsent(reaction.targetEventId, () => []).add(reaction);
+        const batchSize = 100;
+        for (int i = 0; i < allReactions.length; i += batchSize) {
+          final batch = allReactions.skip(i).take(batchSize);
+
+          for (var reaction in batch) {
+            reactionsMap.putIfAbsent(reaction.targetEventId, () => []).add(reaction);
+          }
+
+          await Future.delayed(Duration.zero);
+        }
+
+        print('[CacheService] Loaded ${allReactions.length} reactions');
+      } catch (e) {
+        print('Error loading reactions from cache: $e');
       }
-
-      print('[CacheService] Loaded ${allReactions.length} reactions');
-    } catch (e) {
-      print('Error loading reactions from cache: $e');
-    }
+    });
   }
 
   Future<void> loadRepliesFromCache() async {
     if (repliesBox == null || !repliesBox!.isOpen) return;
 
-    try {
-      final allReplies = repliesBox!.values.cast<ReplyModel>().toList();
-      if (allReplies.isEmpty) return;
+    Future.microtask(() async {
+      try {
+        final allReplies = repliesBox!.values.cast<ReplyModel>().toList();
+        if (allReplies.isEmpty) return;
 
-      for (var reply in allReplies) {
-        repliesMap.putIfAbsent(reply.parentEventId, () => []).add(reply);
+        const batchSize = 100;
+        for (int i = 0; i < allReplies.length; i += batchSize) {
+          final batch = allReplies.skip(i).take(batchSize);
+
+          for (var reply in batch) {
+            repliesMap.putIfAbsent(reply.parentEventId, () => []).add(reply);
+          }
+
+          await Future.delayed(Duration.zero);
+        }
+
+        print('[CacheService] Loaded ${allReplies.length} replies');
+      } catch (e) {
+        print('Error loading replies from cache: $e');
       }
-
-      print('[CacheService] Loaded ${allReplies.length} replies');
-    } catch (e) {
-      print('Error loading replies from cache: $e');
-    }
+    });
   }
 
   Future<void> loadRepostsFromCache() async {
     if (repostsBox == null || !repostsBox!.isOpen) return;
 
-    try {
-      final allReposts = repostsBox!.values.cast<RepostModel>().toList();
-      if (allReposts.isEmpty) return;
+    Future.microtask(() async {
+      try {
+        final allReposts = repostsBox!.values.cast<RepostModel>().toList();
+        if (allReposts.isEmpty) return;
 
-      for (var repost in allReposts) {
-        repostsMap.putIfAbsent(repost.originalNoteId, () => []);
-        if (!repostsMap[repost.originalNoteId]!.any((r) => r.id == repost.id)) {
-          repostsMap[repost.originalNoteId]!.add(repost);
+        const batchSize = 100;
+        for (int i = 0; i < allReposts.length; i += batchSize) {
+          final batch = allReposts.skip(i).take(batchSize);
+
+          for (var repost in batch) {
+            repostsMap.putIfAbsent(repost.originalNoteId, () => []);
+            if (!repostsMap[repost.originalNoteId]!.any((r) => r.id == repost.id)) {
+              repostsMap[repost.originalNoteId]!.add(repost);
+            }
+          }
+
+          await Future.delayed(Duration.zero);
         }
-      }
 
-      print('[CacheService] Loaded ${allReposts.length} reposts');
-    } catch (e) {
-      print('Error loading reposts from cache: $e');
-    }
+        print('[CacheService] Loaded ${allReposts.length} reposts');
+      } catch (e) {
+        print('Error loading reposts from cache: $e');
+      }
+    });
   }
 
   Future<void> loadZapsFromCache() async {
     if (zapsBox == null || !zapsBox!.isOpen) return;
 
-    try {
-      final allZaps = zapsBox!.values.cast<ZapModel>().toList();
-      if (allZaps.isEmpty) return;
+    Future.microtask(() async {
+      try {
+        final allZaps = zapsBox!.values.cast<ZapModel>().toList();
+        if (allZaps.isEmpty) return;
 
-      for (var zap in allZaps) {
-        zapsMap.putIfAbsent(zap.targetEventId, () => []);
-        if (!zapsMap[zap.targetEventId]!.any((r) => r.id == zap.id)) {
-          zapsMap[zap.targetEventId]!.add(zap);
+        const batchSize = 100;
+        for (int i = 0; i < allZaps.length; i += batchSize) {
+          final batch = allZaps.skip(i).take(batchSize);
+
+          for (var zap in batch) {
+            zapsMap.putIfAbsent(zap.targetEventId, () => []);
+            if (!zapsMap[zap.targetEventId]!.any((r) => r.id == zap.id)) {
+              zapsMap[zap.targetEventId]!.add(zap);
+            }
+          }
+
+          await Future.delayed(Duration.zero);
         }
-      }
 
-      print('[CacheService] Loaded ${allZaps.length} zaps');
-    } catch (e) {
-      print('Error loading zaps from cache: $e');
-    }
+        print('[CacheService] Loaded ${allZaps.length} zaps');
+      } catch (e) {
+        print('Error loading zaps from cache: $e');
+      }
+    });
   }
 
   Future<void> batchSaveNotes(List<NoteModel> notes) async {
     if (notesBox?.isOpen != true || notes.isEmpty) return;
 
-    try {
-      final notesToSave = notes.take(300).toList();
-      final notesMap = <String, NoteModel>{};
+    Future.microtask(() async {
+      try {
+        final notesToSave = notes.take(300).toList();
+        final notesMap = <String, NoteModel>{};
 
-      for (final note in notesToSave) {
-        notesMap[note.id] = note;
+        const batchSize = 50;
+        for (int i = 0; i < notesToSave.length; i += batchSize) {
+          final batch = notesToSave.skip(i).take(batchSize);
+
+          for (final note in batch) {
+            notesMap[note.id] = note;
+          }
+
+          if (notesMap.isNotEmpty) {
+            await notesBox!.putAll(Map.from(notesMap));
+            notesMap.clear();
+          }
+
+          await Future.delayed(Duration.zero);
+        }
+
+        print('[CacheService] Saved ${notesToSave.length} notes');
+      } catch (e) {
+        print('Error batch saving notes: $e');
       }
-
-      await notesBox!.putAll(notesMap);
-      print('[CacheService] Saved ${notesToSave.length} notes');
-    } catch (e) {
-      print('Error batch saving notes: $e');
-    }
+    });
   }
 
   Future<void> clearMemoryCache() async {

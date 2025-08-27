@@ -19,11 +19,13 @@ class NetworkService {
   bool _isClosed = false;
 
   Future<void> initializeConnections(List<String> targetNpubs) async {
-    await _socketManager.connectRelays(
-      targetNpubs,
-      onEvent: (event, relayUrl) => _handleEvent(event, targetNpubs),
-      onDisconnected: (relayUrl) => _socketManager.reconnectRelay(relayUrl, targetNpubs),
-    );
+    Future.microtask(() async {
+      await _socketManager.connectRelays(
+        targetNpubs,
+        onEvent: (event, relayUrl) => _handleEvent(event, targetNpubs),
+        onDisconnected: (relayUrl) => _socketManager.reconnectRelay(relayUrl, targetNpubs),
+      );
+    });
   }
 
   Future<void> _handleEvent(dynamic event, List<String> targetNpubs) async {}
@@ -33,7 +35,7 @@ class NetworkService {
     try {
       await _socketManager.broadcast(message);
     } catch (e) {
-      print('[NetworkService ERROR] Broadcast failed: $e');
+      print('[NetworkService ERROR] Broadcast failed');
       rethrow;
     }
   }
@@ -41,103 +43,111 @@ class NetworkService {
   Future<void> sendReaction(String targetEventId, String reactionContent) async {
     if (_isClosed) return;
 
-    try {
-      final privateKey = await _secureStorage.read(key: 'privateKey');
-      if (privateKey == null || privateKey.isEmpty) {
-        throw Exception('Private key not found.');
+    Future.microtask(() async {
+      try {
+        final privateKey = await _secureStorage.read(key: 'privateKey');
+        if (privateKey == null || privateKey.isEmpty) {
+          throw Exception('Private key not found.');
+        }
+
+        final event = NostrService.createReactionEvent(
+          targetEventId: targetEventId,
+          content: reactionContent,
+          privateKey: privateKey,
+        );
+
+        await broadcast(NostrService.serializeEvent(event));
+      } catch (e) {
+        print('[NetworkService ERROR] Error sending reaction');
+        rethrow;
       }
-
-      final event = NostrService.createReactionEvent(
-        targetEventId: targetEventId,
-        content: reactionContent,
-        privateKey: privateKey,
-      );
-
-      await broadcast(NostrService.serializeEvent(event));
-    } catch (e) {
-      print('[NetworkService ERROR] Error sending reaction: $e');
-      rethrow;
-    }
+    });
   }
 
   Future<void> sendReply(String parentEventId, String replyContent, String parentAuthor) async {
     if (_isClosed) return;
 
-    try {
-      final privateKey = await _secureStorage.read(key: 'privateKey');
-      if (privateKey == null || privateKey.isEmpty) {
-        throw Exception('Private key not found.');
+    Future.microtask(() async {
+      try {
+        final privateKey = await _secureStorage.read(key: 'privateKey');
+        if (privateKey == null || privateKey.isEmpty) {
+          throw Exception('Private key not found.');
+        }
+
+        final tags = NostrService.createReplyTags(
+          rootId: parentEventId,
+          parentAuthor: parentAuthor,
+          relayUrls: relaySetMainSockets,
+        );
+
+        final event = NostrService.createReplyEvent(
+          content: replyContent,
+          privateKey: privateKey,
+          tags: tags,
+        );
+
+        await broadcast(NostrService.serializeEvent(event));
+      } catch (e) {
+        print('[NetworkService ERROR] Error sending reply');
+        rethrow;
       }
-
-      final tags = NostrService.createReplyTags(
-        rootId: parentEventId,
-        parentAuthor: parentAuthor,
-        relayUrls: relaySetMainSockets,
-      );
-
-      final event = NostrService.createReplyEvent(
-        content: replyContent,
-        privateKey: privateKey,
-        tags: tags,
-      );
-
-      await broadcast(NostrService.serializeEvent(event));
-    } catch (e) {
-      print('[NetworkService ERROR] Error sending reply: $e');
-      rethrow;
-    }
+    });
   }
 
   Future<void> sendRepost(String noteId, String noteAuthor, String? rawContent) async {
     if (_isClosed) return;
 
-    try {
-      final privateKey = await _secureStorage.read(key: 'privateKey');
-      if (privateKey == null || privateKey.isEmpty) {
-        throw Exception('Private key not found.');
+    Future.microtask(() async {
+      try {
+        final privateKey = await _secureStorage.read(key: 'privateKey');
+        if (privateKey == null || privateKey.isEmpty) {
+          throw Exception('Private key not found.');
+        }
+
+        final content = rawContent ??
+            jsonEncode({
+              'id': noteId,
+              'pubkey': noteAuthor,
+              'kind': 1,
+              'tags': [],
+            });
+
+        final event = NostrService.createRepostEvent(
+          noteId: noteId,
+          noteAuthor: noteAuthor,
+          content: content,
+          privateKey: privateKey,
+        );
+
+        await broadcast(NostrService.serializeEvent(event));
+      } catch (e) {
+        print('[NetworkService ERROR] Error sending repost');
+        rethrow;
       }
-
-      final content = rawContent ??
-          jsonEncode({
-            'id': noteId,
-            'pubkey': noteAuthor,
-            'kind': 1,
-            'tags': [],
-          });
-
-      final event = NostrService.createRepostEvent(
-        noteId: noteId,
-        noteAuthor: noteAuthor,
-        content: content,
-        privateKey: privateKey,
-      );
-
-      await broadcast(NostrService.serializeEvent(event));
-    } catch (e) {
-      print('[NetworkService ERROR] Error sending repost: $e');
-      rethrow;
-    }
+    });
   }
 
   Future<void> sendNote(String noteContent) async {
     if (_isClosed) return;
 
-    try {
-      final privateKey = await _secureStorage.read(key: 'privateKey');
-      if (privateKey == null || privateKey.isEmpty) {
-        throw Exception('Private key not found.');
+    Future.microtask(() async {
+      try {
+        final privateKey = await _secureStorage.read(key: 'privateKey');
+        if (privateKey == null || privateKey.isEmpty) {
+          throw Exception('Private key not found.');
+        }
+
+        final event = NostrService.createNoteEvent(
+          content: noteContent,
+          privateKey: privateKey,
+        );
+
+        await broadcast(NostrService.serializeEvent(event));
+      } catch (e) {
+        print('[NetworkService ERROR] Error sending note');
+        rethrow;
       }
-
-      final event = NostrService.createNoteEvent(
-        content: noteContent,
-        privateKey: privateKey,
-      );
-
-      await broadcast(NostrService.serializeEvent(event));
-    } catch (e) {
-      print('[NetworkService ERROR] Error sending note: $e');
-      rethrow;
-    }
+    });
   }
 
   Future<String> sendZap({

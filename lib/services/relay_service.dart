@@ -107,32 +107,45 @@ class WebSocketManager {
 
   void _startMessageProcessing() {
     _messageProcessingTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
-      _processMessageQueue();
+      Future.microtask(() => _processMessageQueue());
     });
   }
 
   void _startHealthMonitoring() {
     _healthCheckTimer = Timer.periodic(healthCheckInterval, (_) {
-      _performHealthCheck();
+      Future.microtask(() => _performHealthCheck());
     });
   }
 
   void _performHealthCheck() {
-    final now = DateTime.now();
-    for (final entry in _connectionStats.entries) {
-      final url = entry.key;
-      final stats = entry.value;
+    Future.microtask(() async {
+      final now = DateTime.now();
 
-      if (!stats.isHealthy && !_webSockets.containsKey(url)) {
-        unawaited(_attemptReconnection(url));
-      }
+      final entries = _connectionStats.entries.toList();
+      const batchSize = 3;
 
-      if (_webSockets.containsKey(url) && stats.connectionStartTime != null) {
-        final uptime = now.difference(stats.connectionStartTime!);
-        stats.totalUptime = stats.totalUptime + uptime;
-        stats.connectionStartTime = now;
+      for (int i = 0; i < entries.length; i += batchSize) {
+        final end = (i + batchSize > entries.length) ? entries.length : i + batchSize;
+        final batch = entries.sublist(i, end);
+
+        for (final entry in batch) {
+          final url = entry.key;
+          final stats = entry.value;
+
+          if (!stats.isHealthy && !_webSockets.containsKey(url)) {
+            unawaited(_attemptReconnection(url));
+          }
+
+          if (_webSockets.containsKey(url) && stats.connectionStartTime != null) {
+            final uptime = now.difference(stats.connectionStartTime!);
+            stats.totalUptime = stats.totalUptime + uptime;
+            stats.connectionStartTime = now;
+          }
+        }
+
+        await Future.delayed(Duration.zero);
       }
-    }
+    });
   }
 
   Future<void> _attemptReconnection(String url) async {
@@ -342,12 +355,16 @@ class WebSocketManager {
     Future.microtask(() async {
       try {
         final messagesToSend = <String>[];
-        while (_messageQueue.isNotEmpty && messagesToSend.length < 5) {
+        while (_messageQueue.isNotEmpty && messagesToSend.length < 3) {
           messagesToSend.add(_messageQueue.removeFirst());
         }
 
-        for (final message in messagesToSend) {
-          await _broadcastMessage(message);
+        for (int i = 0; i < messagesToSend.length; i++) {
+          await _broadcastMessage(messagesToSend[i]);
+
+          if (i % 2 == 0) {
+            await Future.delayed(Duration.zero);
+          }
         }
       } finally {
         _isProcessingMessages = false;
@@ -556,32 +573,37 @@ class WebSocketManager {
   }
 
   Future<void> reloadCustomRelays() async {
-    try {
-      final customRelays = await getRelaySetMainSockets();
-      if (!_listEquals(relayUrls, customRelays)) {
-        print('[WebSocketManager] Reloading custom relays: $customRelays');
+    Future.microtask(() async {
+      try {
+        final customRelays = await getRelaySetMainSockets();
+        if (!_listEquals(relayUrls, customRelays)) {
+          print('[WebSocketManager] Reloading custom relays: $customRelays');
 
-        final closeFutures = _webSockets.values.map((ws) async {
-          try {
-            if (ws.readyState == WebSocket.open || ws.readyState == WebSocket.connecting) {
-              await ws.close();
-            }
-          } catch (e) {}
-        });
-        await Future.wait(closeFutures, eagerError: false);
-        _webSockets.clear();
+          final closeFutures = _webSockets.values.map((ws) async {
+            try {
+              if (ws.readyState == WebSocket.open || ws.readyState == WebSocket.connecting) {
+                await ws.close();
+              }
+            } catch (e) {}
+          });
+          await Future.wait(closeFutures, eagerError: false);
 
-        relayUrls.clear();
-        _connectionStats.clear();
+          await Future.delayed(Duration.zero);
 
-        relayUrls.addAll(customRelays);
-        _initializeStats();
+          _webSockets.clear();
 
-        print('[WebSocketManager] Relay list updated to use ${relayUrls.length} custom relays');
+          relayUrls.clear();
+          _connectionStats.clear();
+
+          relayUrls.addAll(customRelays);
+          _initializeStats();
+
+          print('[WebSocketManager] Relay list updated to use ${relayUrls.length} custom relays');
+        }
+      } catch (e) {
+        print('[WebSocketManager] Error reloading custom relays: $e');
       }
-    } catch (e) {
-      print('[WebSocketManager] Error reloading custom relays: $e');
-    }
+    });
   }
 }
 
@@ -668,28 +690,47 @@ class PrimalCacheClient {
   }
 
   void _cleanupCache() {
-    final now = DateTime.now();
-    final expiredKeys = <String>[];
+    Future.microtask(() async {
+      final now = DateTime.now();
+      final expiredKeys = <String>[];
 
-    for (final entry in _cacheTimestamps.entries) {
-      if (now.difference(entry.value) > _cacheTTL) {
-        expiredKeys.add(entry.key);
+      final entries = _cacheTimestamps.entries.toList();
+      const batchSize = 50;
+
+      for (int i = 0; i < entries.length; i += batchSize) {
+        final end = (i + batchSize > entries.length) ? entries.length : i + batchSize;
+        final batch = entries.sublist(i, end);
+
+        for (final entry in batch) {
+          if (now.difference(entry.value) > _cacheTTL) {
+            expiredKeys.add(entry.key);
+          }
+        }
+
+        await Future.delayed(Duration.zero);
       }
-    }
 
-    if (_profileCache.length - expiredKeys.length > _maxCacheSize * 0.8) {
-      final sortedEntries = _cacheTimestamps.entries.toList()..sort((a, b) => a.value.compareTo(b.value));
+      if (_profileCache.length - expiredKeys.length > _maxCacheSize * 0.8) {
+        final sortedEntries = _cacheTimestamps.entries.toList()..sort((a, b) => a.value.compareTo(b.value));
 
-      final toRemove = (_profileCache.length - (_maxCacheSize * 0.7).toInt()).clamp(0, sortedEntries.length);
-      for (int i = 0; i < toRemove; i++) {
-        expiredKeys.add(sortedEntries[i].key);
+        final toRemove = (_profileCache.length - (_maxCacheSize * 0.7).toInt()).clamp(0, sortedEntries.length);
+        for (int i = 0; i < toRemove; i++) {
+          expiredKeys.add(sortedEntries[i].key);
+        }
       }
-    }
 
-    for (final key in expiredKeys) {
-      _profileCache.remove(key);
-      _cacheTimestamps.remove(key);
-    }
+      for (int i = 0; i < expiredKeys.length; i += batchSize) {
+        final end = (i + batchSize > expiredKeys.length) ? expiredKeys.length : i + batchSize;
+        final batch = expiredKeys.sublist(i, end);
+
+        for (final key in batch) {
+          _profileCache.remove(key);
+          _cacheTimestamps.remove(key);
+        }
+
+        await Future.delayed(Duration.zero);
+      }
+    });
   }
 
   Map<String, dynamic> getCacheStats() {

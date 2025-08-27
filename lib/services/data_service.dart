@@ -225,9 +225,11 @@ class DataService {
 
   Future<void> initialize() async {
     await initializeLightweight();
-    await initializeHeavyOperations();
 
-    await _ensureConnectionsReady();
+    Future.microtask(() async {
+      await initializeHeavyOperations();
+      await _ensureConnectionsReady();
+    });
   }
 
   Future<void> initializeLightweight() async {
@@ -243,13 +245,14 @@ class DataService {
       _profileService = ProfileService.instance;
       await _profileService.initialize();
 
-      await loadNotesFromCache((loadedNotes) {});
-
-      await _loadProfilesForNotes();
+      Future.microtask(() async {
+        await loadNotesFromCache((loadedNotes) {});
+        await _loadProfilesForNotes();
+      });
 
       print('[DataService] Lightweight initialization completed in ${stopwatch.elapsedMilliseconds}ms');
     } catch (e) {
-      print('[DataService] Lightweight initialization error: $e');
+      print('[DataService] Lightweight initialization error');
       rethrow;
     }
   }
@@ -270,7 +273,7 @@ class DataService {
 
       print('[DataService] Heavy initialization completed');
     } catch (e) {
-      print('[DataService] Heavy initialization error: $e');
+      print('[DataService] Heavy initialization error');
     }
   }
 
@@ -369,7 +372,7 @@ class DataService {
 
       print('[DataService] Basic cache loading completed');
     } catch (e) {
-      print('[DataService] Error in basic cache loading: $e');
+      print('[DataService] Error in basic cache loading');
     }
   }
 
@@ -478,7 +481,7 @@ class DataService {
             _handleCacheLoad(message.data);
             break;
           case MessageType.error:
-            print('[DataService ERROR] Isolate error: ${message.data}');
+            print('[DataService ERROR] Isolate error');
             break;
           case MessageType.close:
             print('[DataService] Isolate received close message.');
@@ -604,12 +607,12 @@ class DataService {
               pubHex: fullUser,
             };
           } catch (e) {
-            print('[DataService] Background profile fetch error: $e');
+            print('[DataService] Background profile fetch error');
           }
         });
       }
     } catch (e) {
-      print('[DataService] Error in openUserProfile: $e');
+      print('[DataService] Error in openUserProfile');
     }
   }
 
@@ -2498,155 +2501,164 @@ class DataService {
 
   Future<void> loadReactionsFromCache() async {
     if (_hiveManager.reactionsBox == null || !_hiveManager.reactionsBox!.isOpen) return;
-    try {
-      final allReactions = _hiveManager.reactionsBox!.values.cast<ReactionModel>().toList();
-      if (allReactions.isEmpty) return;
 
-      const batchSize = 100;
-      final Map<String, List<ReactionModel>> tempMap = {};
+    Future.microtask(() async {
+      try {
+        final allReactions = _hiveManager.reactionsBox!.values.cast<ReactionModel>().toList();
+        if (allReactions.isEmpty) return;
 
-      for (int i = 0; i < allReactions.length; i += batchSize) {
-        final batch = allReactions.skip(i).take(batchSize);
+        const batchSize = 50;
+        final Map<String, List<ReactionModel>> tempMap = {};
 
-        for (var reaction in batch) {
-          tempMap.putIfAbsent(reaction.targetEventId, () => []);
-          if (!tempMap[reaction.targetEventId]!.any((r) => r.id == reaction.id)) {
-            tempMap[reaction.targetEventId]!.add(reaction);
+        for (int i = 0; i < allReactions.length; i += batchSize) {
+          final batch = allReactions.skip(i).take(batchSize);
+
+          for (var reaction in batch) {
+            tempMap.putIfAbsent(reaction.targetEventId, () => []);
+            if (!tempMap[reaction.targetEventId]!.any((r) => r.id == reaction.id)) {
+              tempMap[reaction.targetEventId]!.add(reaction);
+            }
           }
-        }
 
-        if (i % (batchSize * 5) == 0) {
           await Future.delayed(Duration.zero);
         }
-      }
 
-      for (final entry in tempMap.entries) {
-        reactionsMap.putIfAbsent(entry.key, () => []);
-        for (final reaction in entry.value) {
-          if (!reactionsMap[entry.key]!.any((r) => r.id == reaction.id)) {
-            reactionsMap[entry.key]!.add(reaction);
+        for (final entry in tempMap.entries) {
+          reactionsMap.putIfAbsent(entry.key, () => []);
+          for (final reaction in entry.value) {
+            if (!reactionsMap[entry.key]!.any((r) => r.id == reaction.id)) {
+              reactionsMap[entry.key]!.add(reaction);
+            }
           }
+
+          Future.microtask(() async {
+            await _updateInteractionsProvider();
+            InteractionsProvider.instance.updateReactions(entry.key, reactionsMap[entry.key]!);
+            onReactionsUpdated?.call(entry.key, reactionsMap[entry.key]!);
+          });
         }
 
-        await _updateInteractionsProvider();
-        InteractionsProvider.instance.updateReactions(entry.key, reactionsMap[entry.key]!);
-        onReactionsUpdated?.call(entry.key, reactionsMap[entry.key]!);
+        print('[DataService] Reactions cache loaded with ${allReactions.length} reactions.');
+      } catch (e) {
+        print('[DataService ERROR] Error loading reactions from cache: $e');
       }
-
-      print('[DataService] Reactions cache loaded with ${allReactions.length} reactions.');
-    } catch (e) {
-      print('[DataService ERROR] Error loading reactions from cache: $e');
-    }
+    });
   }
 
   Future<void> loadRepliesFromCache() async {
     if (_hiveManager.repliesBox == null || !_hiveManager.repliesBox!.isOpen) return;
-    try {
-      final allReplies = _hiveManager.repliesBox!.values.cast<ReplyModel>().toList();
-      if (allReplies.isEmpty) return;
 
-      const batchSize = 100;
-      final Map<String, List<ReplyModel>> tempMap = {};
-      final List<NoteModel> replyNotes = [];
+    Future.microtask(() async {
+      try {
+        final allReplies = _hiveManager.repliesBox!.values.cast<ReplyModel>().toList();
+        if (allReplies.isEmpty) return;
 
-      for (int i = 0; i < allReplies.length; i += batchSize) {
-        final batch = allReplies.skip(i).take(batchSize);
+        const batchSize = 50;
+        final Map<String, List<ReplyModel>> tempMap = {};
+        final List<NoteModel> replyNotes = [];
 
-        for (var reply in batch) {
-          tempMap.putIfAbsent(reply.parentEventId, () => []);
-          if (!tempMap[reply.parentEventId]!.any((r) => r.id == reply.id)) {
-            tempMap[reply.parentEventId]!.add(reply);
+        for (int i = 0; i < allReplies.length; i += batchSize) {
+          final batch = allReplies.skip(i).take(batchSize);
 
-            if (!eventIds.contains(reply.id)) {
-              final replyNoteModel = NoteModel(
-                id: reply.id,
-                content: reply.content,
-                author: reply.author,
-                timestamp: reply.timestamp,
-                isReply: true,
-                parentId: reply.parentEventId,
-                rootId: reply.rootEventId,
-                rawWs: '',
-              );
+          for (var reply in batch) {
+            tempMap.putIfAbsent(reply.parentEventId, () => []);
+            if (!tempMap[reply.parentEventId]!.any((r) => r.id == reply.id)) {
+              tempMap[reply.parentEventId]!.add(reply);
 
-              replyNoteModel.hasMedia = replyNoteModel.hasMediaLazy;
-              replyNotes.add(replyNoteModel);
-              notes.add(replyNoteModel);
-              eventIds.add(replyNoteModel.id);
-              addNote(replyNoteModel);
+              if (!eventIds.contains(reply.id)) {
+                final replyNoteModel = NoteModel(
+                  id: reply.id,
+                  content: reply.content,
+                  author: reply.author,
+                  timestamp: reply.timestamp,
+                  isReply: true,
+                  parentId: reply.parentEventId,
+                  rootId: reply.rootEventId,
+                  rawWs: '',
+                );
+
+                replyNoteModel.hasMedia = replyNoteModel.hasMediaLazy;
+                replyNotes.add(replyNoteModel);
+                notes.add(replyNoteModel);
+                eventIds.add(replyNoteModel.id);
+                addNote(replyNoteModel);
+              }
             }
           }
-        }
 
-        if (i % (batchSize * 5) == 0) {
           await Future.delayed(Duration.zero);
         }
-      }
 
-      for (final entry in tempMap.entries) {
-        repliesMap.putIfAbsent(entry.key, () => []);
-        for (final reply in entry.value) {
-          if (!repliesMap[entry.key]!.any((r) => r.id == reply.id)) {
-            repliesMap[entry.key]!.add(reply);
+        for (final entry in tempMap.entries) {
+          repliesMap.putIfAbsent(entry.key, () => []);
+          for (final reply in entry.value) {
+            if (!repliesMap[entry.key]!.any((r) => r.id == reply.id)) {
+              repliesMap[entry.key]!.add(reply);
+            }
           }
+
+          Future.microtask(() async {
+            await _updateInteractionsProvider();
+            InteractionsProvider.instance.updateReplies(entry.key, repliesMap[entry.key]!);
+          });
         }
 
-        await _updateInteractionsProvider();
-        InteractionsProvider.instance.updateReplies(entry.key, repliesMap[entry.key]!);
-      }
+        print('[DataService] Replies cache loaded with ${allReplies.length} replies, ${replyNotes.length} added as notes.');
 
-      print('[DataService] Replies cache loaded with ${allReplies.length} replies, ${replyNotes.length} added as notes.');
-
-      final replyIds = allReplies.map((r) => r.id).toList();
-      if (replyIds.isNotEmpty) {
-        Future.microtask(() => _fetchBasicInteractions(replyIds));
+        final replyIds = allReplies.map((r) => r.id).toList();
+        if (replyIds.isNotEmpty) {
+          Future.microtask(() => _fetchBasicInteractions(replyIds));
+        }
+      } catch (e) {
+        print('[DataService ERROR] Error loading replies from cache: $e');
       }
-    } catch (e) {
-      print('[DataService ERROR] Error loading replies from cache: $e');
-    }
+    });
   }
 
   Future<void> loadRepostsFromCache() async {
     if (_hiveManager.repostsBox == null || !_hiveManager.repostsBox!.isOpen) return;
-    try {
-      final allReposts = _hiveManager.repostsBox!.values.cast<RepostModel>().toList();
-      if (allReposts.isEmpty) return;
 
-      const batchSize = 100;
-      final Map<String, List<RepostModel>> tempMap = {};
+    Future.microtask(() async {
+      try {
+        final allReposts = _hiveManager.repostsBox!.values.cast<RepostModel>().toList();
+        if (allReposts.isEmpty) return;
 
-      for (int i = 0; i < allReposts.length; i += batchSize) {
-        final batch = allReposts.skip(i).take(batchSize);
+        const batchSize = 50;
+        final Map<String, List<RepostModel>> tempMap = {};
 
-        for (var repost in batch) {
-          tempMap.putIfAbsent(repost.originalNoteId, () => []);
-          if (!tempMap[repost.originalNoteId]!.any((r) => r.id == repost.id)) {
-            tempMap[repost.originalNoteId]!.add(repost);
+        for (int i = 0; i < allReposts.length; i += batchSize) {
+          final batch = allReposts.skip(i).take(batchSize);
+
+          for (var repost in batch) {
+            tempMap.putIfAbsent(repost.originalNoteId, () => []);
+            if (!tempMap[repost.originalNoteId]!.any((r) => r.id == repost.id)) {
+              tempMap[repost.originalNoteId]!.add(repost);
+            }
           }
-        }
 
-        if (i % (batchSize * 5) == 0) {
           await Future.delayed(Duration.zero);
         }
-      }
 
-      for (final entry in tempMap.entries) {
-        repostsMap.putIfAbsent(entry.key, () => []);
-        for (final repost in entry.value) {
-          if (!repostsMap[entry.key]!.any((r) => r.id == repost.id)) {
-            repostsMap[entry.key]!.add(repost);
+        for (final entry in tempMap.entries) {
+          repostsMap.putIfAbsent(entry.key, () => []);
+          for (final repost in entry.value) {
+            if (!repostsMap[entry.key]!.any((r) => r.id == repost.id)) {
+              repostsMap[entry.key]!.add(repost);
+            }
           }
+
+          Future.microtask(() async {
+            await _updateInteractionsProvider();
+            InteractionsProvider.instance.updateReposts(entry.key, repostsMap[entry.key]!);
+            onRepostsUpdated?.call(entry.key, repostsMap[entry.key]!);
+          });
         }
 
-        await _updateInteractionsProvider();
-        InteractionsProvider.instance.updateReposts(entry.key, repostsMap[entry.key]!);
-        onRepostsUpdated?.call(entry.key, repostsMap[entry.key]!);
+        print('[DataService] Reposts cache loaded with ${allReposts.length} reposts.');
+      } catch (e) {
+        print('[DataService ERROR] Error loading reposts from cache: $e');
       }
-
-      print('[DataService] Reposts cache loaded with ${allReposts.length} reposts.');
-    } catch (e) {
-      print('[DataService ERROR] Error loading reposts from cache: $e');
-    }
+    });
   }
 
   Future<void> _loadNotificationsFromCache() async {
@@ -3124,7 +3136,7 @@ class DataService {
       if (npub.isEmpty) return false;
       return await isUserFollowing(targetNpub, npub);
     } catch (e) {
-      print('[DataService] Error checking if $targetNpub follows current user: $e');
+      print('[DataService] Error checking if target follows current user');
       return false;
     }
   }

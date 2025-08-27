@@ -13,55 +13,67 @@ class MediaService {
   static const int _maxFailedUrls = 200;
 
   void cacheMediaUrls(List<String> urls, {int priority = 1}) {
-    final newUrls = urls.where((url) => !_cachedUrls.contains(url) && !_failedUrls.contains(url) && _isValidMediaUrl(url)).toList();
+    Future.microtask(() async {
+      final newUrls = urls.where((url) => !_cachedUrls.contains(url) && !_failedUrls.contains(url) && _isValidMediaUrl(url)).toList();
 
-    if (newUrls.isEmpty) return;
+      if (newUrls.isEmpty) return;
 
-    for (final url in newUrls) {
-      _cacheSingleUrl(url);
-    }
+      const batchSize = 5;
+      for (int i = 0; i < newUrls.length; i += batchSize) {
+        final end = (i + batchSize > newUrls.length) ? newUrls.length : i + batchSize;
+        final batch = newUrls.sublist(i, end);
 
-    _performSimpleCleanup();
+        for (final url in batch) {
+          _cacheSingleUrl(url);
+        }
+
+        await Future.delayed(Duration.zero);
+      }
+
+      _performSimpleCleanupAsync();
+    });
   }
 
   Future<void> _cacheSingleUrl(String url) async {
-    try {
-      if (_cachedUrls.contains(url) || _failedUrls.contains(url)) {
-        return;
-      }
+    Future.microtask(() async {
+      try {
+        if (_cachedUrls.contains(url) || _failedUrls.contains(url)) {
+          return;
+        }
 
-      if (!_isValidMediaUrl(url)) {
+        if (!_isValidMediaUrl(url)) {
+          _failedUrls.add(url);
+          return;
+        }
+
+        final imageProvider = CachedNetworkImageProvider(url);
+        final imageStream = imageProvider.resolve(const ImageConfiguration());
+
+        bool completed = false;
+        late ImageStreamListener listener;
+
+        listener = ImageStreamListener(
+          (ImageInfo info, bool synchronousCall) {
+            if (!completed) {
+              completed = true;
+              _cachedUrls.add(url);
+              imageStream.removeListener(listener);
+            }
+          },
+          onError: (exception, stackTrace) {
+            if (!completed) {
+              completed = true;
+              _failedUrls.add(url);
+              imageStream.removeListener(listener);
+            }
+          },
+        );
+
+        imageStream.addListener(listener);
+      } catch (e) {
         _failedUrls.add(url);
-        return;
       }
-
-      final imageProvider = CachedNetworkImageProvider(url);
-      final imageStream = imageProvider.resolve(const ImageConfiguration());
-
-      bool completed = false;
-      late ImageStreamListener listener;
-
-      listener = ImageStreamListener(
-        (ImageInfo info, bool synchronousCall) {
-          if (!completed) {
-            completed = true;
-            _cachedUrls.add(url);
-            imageStream.removeListener(listener);
-          }
-        },
-        onError: (exception, stackTrace) {
-          if (!completed) {
-            completed = true;
-            _failedUrls.add(url);
-            imageStream.removeListener(listener);
-          }
-        },
-      );
-
-      imageStream.addListener(listener);
-    } catch (e) {
-      _failedUrls.add(url);
-    }
+    });
   }
 
   void _performSimpleCleanup() {
@@ -76,6 +88,38 @@ class MediaService {
       final urlsToRemove = _failedUrls.take(removeCount).toList();
       _failedUrls.removeAll(urlsToRemove);
     }
+  }
+
+  void _performSimpleCleanupAsync() {
+    Future.microtask(() async {
+      if (_cachedUrls.length > _maxCachedUrls) {
+        final removeCount = _cachedUrls.length - _maxCachedUrls;
+        final urlsToRemove = _cachedUrls.take(removeCount).toList();
+
+        const batchSize = 50;
+        for (int i = 0; i < urlsToRemove.length; i += batchSize) {
+          final end = (i + batchSize > urlsToRemove.length) ? urlsToRemove.length : i + batchSize;
+          final batch = urlsToRemove.sublist(i, end);
+          _cachedUrls.removeAll(batch);
+
+          await Future.delayed(Duration.zero);
+        }
+      }
+
+      if (_failedUrls.length > _maxFailedUrls) {
+        final removeCount = _failedUrls.length - _maxFailedUrls;
+        final urlsToRemove = _failedUrls.take(removeCount).toList();
+
+        const batchSize = 50;
+        for (int i = 0; i < urlsToRemove.length; i += batchSize) {
+          final end = (i + batchSize > urlsToRemove.length) ? urlsToRemove.length : i + batchSize;
+          final batch = urlsToRemove.sublist(i, end);
+          _failedUrls.removeAll(batch);
+
+          await Future.delayed(Duration.zero);
+        }
+      }
+    });
   }
 
   bool _isValidMediaUrl(String url) {
@@ -102,7 +146,7 @@ class MediaService {
   }
 
   void preloadCriticalImages(List<String> urls) {
-    cacheMediaUrls(urls);
+    Future.microtask(() => cacheMediaUrls(urls));
   }
 
   void clearFailedUrls() {
@@ -123,14 +167,24 @@ class MediaService {
   }
 
   void handleMemoryPressure() {
-    if (_cachedUrls.length > 100) {
-      final removeCount = (_cachedUrls.length * 0.3).round();
-      final urlsToRemove = _cachedUrls.take(removeCount).toList();
-      _cachedUrls.removeAll(urlsToRemove);
-    }
-    if (_failedUrls.length > 50) {
-      _failedUrls.clear();
-    }
+    Future.microtask(() async {
+      if (_cachedUrls.length > 100) {
+        final removeCount = (_cachedUrls.length * 0.3).round();
+        final urlsToRemove = _cachedUrls.take(removeCount).toList();
+
+        const batchSize = 25;
+        for (int i = 0; i < urlsToRemove.length; i += batchSize) {
+          final end = (i + batchSize > urlsToRemove.length) ? urlsToRemove.length : i + batchSize;
+          final batch = urlsToRemove.sublist(i, end);
+          _cachedUrls.removeAll(batch);
+
+          await Future.delayed(Duration.zero);
+        }
+      }
+      if (_failedUrls.length > 50) {
+        _failedUrls.clear();
+      }
+    });
   }
 
   Map<String, int> getMemoryUsage() {
@@ -142,9 +196,19 @@ class MediaService {
   }
 
   void retryFailedUrls() {
-    final failedUrls = List<String>.from(_failedUrls);
-    _failedUrls.clear();
-    cacheMediaUrls(failedUrls);
+    Future.microtask(() async {
+      final failedUrls = List<String>.from(_failedUrls);
+      _failedUrls.clear();
+
+      const batchSize = 3;
+      for (int i = 0; i < failedUrls.length; i += batchSize) {
+        final end = (i + batchSize > failedUrls.length) ? failedUrls.length : i + batchSize;
+        final batch = failedUrls.sublist(i, end);
+        cacheMediaUrls(batch);
+
+        await Future.delayed(Duration.zero);
+      }
+    });
   }
 
   bool isCached(String url) {
