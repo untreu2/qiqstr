@@ -41,6 +41,10 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   bool _copiedToClipboard = false;
   bool _isInitialized = false;
 
+  int _followingCount = 0;
+  bool _isLoadingCounts = true;
+  bool? _doesUserFollowMe;
+
   void _navigateToProfile(String npub) {
     if (_dataService != null) {
       _dataService!.openUserProfile(context, npub);
@@ -104,6 +108,12 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     Future.delayed(const Duration(milliseconds: 100), () {
       if (mounted) {
         _initFollowStatusAsync();
+      }
+    });
+
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (mounted) {
+        _loadFollowerCounts();
       }
     });
 
@@ -173,6 +183,36 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     }
   }
 
+  Future<void> _loadFollowerCounts() async {
+    if (_dataService == null) return;
+
+    try {
+      final followingCount = await _dataService!.getFollowingCount(widget.user.npub);
+
+      bool? doesUserFollowMe;
+      if (_currentUserNpub != null && _currentUserNpub != widget.user.npub) {
+        print('[ProfileInfoWidget] Checking if ${widget.user.npub} follows $_currentUserNpub');
+        doesUserFollowMe = await _dataService!.isUserFollowing(widget.user.npub, _currentUserNpub!);
+        print('[ProfileInfoWidget] Result: $doesUserFollowMe');
+      }
+
+      if (mounted) {
+        setState(() {
+          _followingCount = followingCount;
+          _doesUserFollowMe = doesUserFollowMe;
+          _isLoadingCounts = false;
+        });
+      }
+    } catch (e) {
+      print('[ProfileInfoWidget] Error loading following count: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingCounts = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -210,6 +250,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                         padding: const EdgeInsets.only(top: 12.0),
                         child: MiniLinkPreviewWidget(url: websiteUrl),
                       ),
+                    _buildFollowerInfo(context),
                     const SizedBox(height: 16),
                   ],
                 ),
@@ -509,6 +550,58 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildFollowerInfo(BuildContext context) {
+    if (_isLoadingCounts) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 12.0),
+        child: SizedBox(
+          height: 16,
+          width: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12.0),
+      child: Row(
+        children: [
+          Text(
+            '$_followingCount',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: context.colors.textPrimary,
+            ),
+          ),
+          Text(
+            ' following',
+            style: TextStyle(
+              fontSize: 14,
+              color: context.colors.textSecondary,
+            ),
+          ),
+          if (_doesUserFollowMe == true && _currentUserNpub != null && _currentUserNpub != widget.user.npub) ...[
+            Text(
+              ' • ',
+              style: TextStyle(
+                fontSize: 14,
+                color: context.colors.textSecondary,
+              ),
+            ),
+            Text(
+              'Following you',
+              style: TextStyle(
+                fontSize: 14,
+                color: context.colors.textSecondary,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

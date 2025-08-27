@@ -1292,11 +1292,6 @@ class DataService {
   }
 
   Future<List<String>> getFollowingList(String targetNpub) async {
-    if (targetNpub != npub) {
-      print('[DataService] Skipping following fetch for non-logged-in user: $targetNpub');
-      return [];
-    }
-
     if (_hiveManager.followingBox != null && _hiveManager.followingBox!.isOpen) {
       final cachedFollowing = _hiveManager.followingBox!.get('following_$targetNpub');
       if (cachedFollowing != null) {
@@ -1377,20 +1372,28 @@ class DataService {
     return following;
   }
 
-  Future<List<String>> getGlobalFollowers(String targetNpub) async {
+  Future<List<String>> getFollowersList(String targetNpub) async {
+    if (_hiveManager.followingBox != null && _hiveManager.followingBox!.isOpen) {
+      final cachedFollowers = _hiveManager.followingBox!.get('followers_$targetNpub');
+      if (cachedFollowers != null) {
+        print('[DataService] Using cached followers list for $targetNpub.');
+        return cachedFollowers.pubkeys;
+      }
+    }
+
     if (_isClosed) {
-      print('[DataService] Service is closed. Skipping global follower fetch.');
+      print('[DataService] Service is closed. Skipping follower fetch.');
       return [];
     }
 
     List<String> followers = [];
-    final allRelays = _socketManager.relayUrls;
+    final limitedRelays = _socketManager.relayUrls.take(3).toList();
 
-    await Future.wait(allRelays.map((relayUrl) async {
+    await Future.wait(limitedRelays.map((relayUrl) async {
       WebSocket? ws;
       StreamSubscription? sub;
       try {
-        ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 2));
+        ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 3));
 
         if (_isClosed) {
           try {
@@ -1400,8 +1403,8 @@ class DataService {
         }
 
         final filter = NostrService.createFollowingFilter(
-          authors: [targetNpub],
-          limit: 1000,
+          authors: [],
+          limit: 500,
         );
 
         final request = NostrService.serializeRequest(NostrService.createRequest(filter));
@@ -1413,7 +1416,14 @@ class DataService {
             final decoded = jsonDecode(event);
             if (decoded[0] == 'EVENT') {
               final author = decoded[2]['pubkey'];
-              followers.add(author);
+              final tags = decoded[2]['tags'] as List<dynamic>? ?? [];
+
+              for (var tag in tags) {
+                if (tag is List && tag.length >= 2 && tag[0] == 'p' && tag[1] == targetNpub) {
+                  followers.add(author);
+                  break;
+                }
+              }
             }
             if (decoded[0] == 'EOSE') {
               completer.complete();
@@ -1431,7 +1441,7 @@ class DataService {
           ws.add(request);
         }
 
-        await completer.future.timeout(const Duration(seconds: 3), onTimeout: () {});
+        await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {});
 
         try {
           await sub.cancel();
@@ -1452,7 +1462,17 @@ class DataService {
 
     followers = followers.toSet().toList();
 
+    if (_hiveManager.followingBox != null && _hiveManager.followingBox!.isOpen) {
+      final followersModel = FollowingModel(pubkeys: followers, updatedAt: DateTime.now(), npub: targetNpub);
+      await _hiveManager.followingBox!.put('followers_$targetNpub', followersModel);
+      print('[DataService] Cached followers list for $targetNpub with ${followers.length} followers.');
+    }
+
     return followers;
+  }
+
+  Future<List<String>> getGlobalFollowers(String targetNpub) async {
+    return await getFollowersList(targetNpub);
   }
 
   bool _isLoadingMore = false;
@@ -3023,5 +3043,65 @@ class DataService {
 
   Future<void> fetchInteractionsForEvents(List<String> eventIds) async {
     return await _fetchBasicInteractions(eventIds);
+  }
+
+  Future<int> getFollowingCount(String targetNpub) async {
+    try {
+      final followingList = await getFollowingList(targetNpub);
+      return followingList.length;
+    } catch (e) {
+      print('[DataService] Error getting following count for $targetNpub: $e');
+      return 0;
+    }
+  }
+
+  Future<int> getFollowerCount(String targetNpub) async {
+    try {
+      final followersList = await getFollowersList(targetNpub);
+      return followersList.length;
+    } catch (e) {
+      print('[DataService] Error getting follower count for $targetNpub: $e');
+      return 0;
+    }
+  }
+
+  Future<bool> isUserFollowing(String userA, String userB) async {
+    try {
+      final followingList = await getFollowingList(userA);
+      return followingList.contains(userB);
+    } catch (e) {
+      print('[DataService] Error checking if $userA follows $userB: $e');
+      return false;
+    }
+  }
+
+  Future<Map<String, int>> getFollowCounts(String targetNpub) async {
+    try {
+      final results = await Future.wait([
+        getFollowingCount(targetNpub),
+        getFollowerCount(targetNpub),
+      ]);
+
+      return {
+        'following': results[0],
+        'followers': results[1],
+      };
+    } catch (e) {
+      print('[DataService] Error getting follow counts for $targetNpub: $e');
+      return {
+        'following': 0,
+        'followers': 0,
+      };
+    }
+  }
+
+  Future<bool> doesUserFollowMe(String targetNpub) async {
+    try {
+      if (npub.isEmpty) return false;
+      return await isUserFollowing(targetNpub, npub);
+    } catch (e) {
+      print('[DataService] Error checking if $targetNpub follows current user: $e');
+      return false;
+    }
   }
 }
