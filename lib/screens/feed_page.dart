@@ -17,10 +17,10 @@ class FeedPage extends StatefulWidget {
   const FeedPage({Key? key, required this.npub, this.dataService}) : super(key: key);
 
   @override
-  _FeedPageState createState() => _FeedPageState();
+  FeedPageState createState() => FeedPageState();
 }
 
-class _FeedPageState extends State<FeedPage> {
+class FeedPageState extends State<FeedPage> {
   late DataService dataService;
   bool isLoading = true;
   String? errorMessage;
@@ -108,6 +108,22 @@ class _FeedPageState extends State<FeedPage> {
     if (!alreadyOpened) {
       isFirstOpen = true;
       await prefs.setBool('feed_page_opened', true);
+    }
+  }
+
+  void scrollToTop() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+    
+    if (mounted) {
+      setState(() {
+        _showAppBar = true;
+      });
     }
   }
 
@@ -210,6 +226,7 @@ class _FeedPageState extends State<FeedPage> {
                 await dataService.refreshNotes();
               },
               child: CustomScrollView(
+                key: const PageStorageKey<String>('feed_scroll'),
                 controller: _scrollController,
                 physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                 cacheExtent: 1500,

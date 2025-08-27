@@ -3,12 +3,13 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import '../theme/theme_manager.dart';
 import '../models/note_model.dart';
+import '../models/user_model.dart';
 import '../screens/thread_page.dart';
 import '../services/data_service.dart';
 import '../providers/user_provider.dart';
 import 'note_content_widget.dart';
 
-class QuoteWidget extends StatelessWidget {
+class QuoteWidget extends StatefulWidget {
   final String bech32;
   final DataService dataService;
 
@@ -18,6 +19,43 @@ class QuoteWidget extends StatelessWidget {
     required this.dataService,
   });
 
+  @override
+  State<QuoteWidget> createState() => _QuoteWidgetState();
+}
+
+class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  late final Future<NoteModel?> _noteFuture;
+  UserModel? _cachedUser;
+  String? _cachedUserNpub;
+
+  @override
+  void initState() {
+    super.initState();
+    _noteFuture = _fetchNote();
+  }
+
+  @override
+  void dispose() {
+    if (_cachedUserNpub != null) {
+      UserProvider.instance.removeListener(_onUserDataChange);
+    }
+    super.dispose();
+  }
+
+  void _onUserDataChange() {
+    if (!mounted || _cachedUserNpub == null) return;
+
+    final newUser = UserProvider.instance.getUserOrDefault(_cachedUserNpub!);
+    if (_cachedUser?.profileImage != newUser.profileImage || _cachedUser?.name != newUser.name) {
+      setState(() {
+        _cachedUser = newUser;
+      });
+    }
+  }
+
   String _formatTimestamp(DateTime ts) {
     final d = DateTime.now().difference(ts);
     if (d.inMinutes < 60) return '${d.inMinutes}m';
@@ -26,7 +64,7 @@ class QuoteWidget extends StatelessWidget {
     return '${(d.inDays / 7).floor()}w';
   }
 
-  void _navigateToMentionProfile(BuildContext context, String id) => dataService.openUserProfile(context, id);
+  void _navigateToMentionProfile(BuildContext context, String id) => widget.dataService.openUserProfile(context, id);
 
   Map<String, dynamic> _createTruncatedParsedContentWithShowMore(Map<String, dynamic> originalParsed, int characterLimit, NoteModel note) {
     final textParts = (originalParsed['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
@@ -90,7 +128,7 @@ class QuoteWidget extends StatelessWidget {
 
     return NoteContentWidget(
       parsedContent: shouldTruncate ? _createTruncatedParsedContentWithShowMore(parsed, characterLimit, note) : parsed,
-      dataService: dataService,
+      dataService: widget.dataService,
       onNavigateToMentionProfile: (id) => _navigateToMentionProfile(context, id),
       onShowMoreTap: shouldTruncate
           ? (noteId) => Navigator.push(
@@ -98,7 +136,7 @@ class QuoteWidget extends StatelessWidget {
                 MaterialPageRoute(
                   builder: (context) => ThreadPage(
                     rootNoteId: noteId,
-                    dataService: dataService,
+                    dataService: widget.dataService,
                   ),
                 ),
               )
@@ -108,77 +146,83 @@ class QuoteWidget extends StatelessWidget {
 
   Future<NoteModel?> _fetchNote() async {
     String? hex;
-    if (bech32.startsWith('note1')) {
-      hex = decodeBasicBech32(bech32, 'note');
-    } else if (bech32.startsWith('nevent1')) {
-      hex = decodeTlvBech32Full(bech32, 'nevent')['type_0_main'];
+    if (widget.bech32.startsWith('note1')) {
+      hex = decodeBasicBech32(widget.bech32, 'note');
+    } else if (widget.bech32.startsWith('nevent1')) {
+      hex = decodeTlvBech32Full(widget.bech32, 'nevent')['type_0_main'];
     }
     if (hex == null) return null;
-    return await dataService.getCachedNote(hex);
+    return await widget.dataService.getCachedNote(hex);
   }
 
   Widget _authorInfo(BuildContext context, String npub) {
-    return ListenableBuilder(
-      listenable: UserProvider.instance,
-      builder: (context, _) {
-        final user = UserProvider.instance.getUserOrDefault(npub);
+    if (_cachedUserNpub != npub) {
+      if (_cachedUserNpub != null) {
+        UserProvider.instance.removeListener(_onUserDataChange);
+      }
+      _cachedUserNpub = npub;
+      _cachedUser = UserProvider.instance.getUserOrDefault(npub);
+      UserProvider.instance.addListener(_onUserDataChange);
 
-        if (UserProvider.instance.getUser(npub) == null) {
-          UserProvider.instance.loadUser(npub);
-        }
+      if (UserProvider.instance.getUser(npub) == null) {
+        UserProvider.instance.loadUser(npub);
+      }
+    }
 
-        return GestureDetector(
-          onTap: () => dataService.openUserProfile(context, npub),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: user.profileImage.isNotEmpty ? context.colors.surfaceTransparent : context.colors.secondary,
-                backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
-                child: user.profileImage.isEmpty
-                    ? Icon(
-                        Icons.person,
-                        size: 14,
-                        color: context.colors.textPrimary,
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                user.name.length > 25 ? user.name.substring(0, 25) : user.name,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: context.colors.textPrimary,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+    final user = _cachedUser ?? UserProvider.instance.getUserOrDefault(npub);
+
+    return GestureDetector(
+      onTap: () => widget.dataService.openUserProfile(context, npub),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 14,
+            backgroundColor: user.profileImage.isNotEmpty ? context.colors.surfaceTransparent : context.colors.secondary,
+            backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
+            child: user.profileImage.isEmpty
+                ? Icon(
+                    Icons.person,
+                    size: 14,
+                    color: context.colors.textPrimary,
+                  )
+                : null,
           ),
-        );
-      },
+          const SizedBox(width: 8),
+          Text(
+            user.name.length > 25 ? user.name.substring(0, 25) : user.name,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: context.colors.textPrimary,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
+
     return GestureDetector(
         onTap: () async {
-          final note = await _fetchNote();
+          final note = await _noteFuture;
           if (note != null) {
             Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => ThreadPage(
                   rootNoteId: note.id,
-                  dataService: dataService,
+                  dataService: widget.dataService,
                 ),
               ),
             );
           }
         },
         child: FutureBuilder<NoteModel?>(
-          future: _fetchNote(),
+          future: _noteFuture,
           builder: (_, snap) {
             if (!snap.hasData || snap.data == null) {
               return Container(

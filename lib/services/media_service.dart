@@ -76,20 +76,6 @@ class MediaService {
     });
   }
 
-  void _performSimpleCleanup() {
-    if (_cachedUrls.length > _maxCachedUrls) {
-      final removeCount = _cachedUrls.length - _maxCachedUrls;
-      final urlsToRemove = _cachedUrls.take(removeCount).toList();
-      _cachedUrls.removeAll(urlsToRemove);
-    }
-
-    if (_failedUrls.length > _maxFailedUrls) {
-      final removeCount = _failedUrls.length - _maxFailedUrls;
-      final urlsToRemove = _failedUrls.take(removeCount).toList();
-      _failedUrls.removeAll(urlsToRemove);
-    }
-  }
-
   void _performSimpleCleanupAsync() {
     Future.microtask(() async {
       if (_cachedUrls.length > _maxCachedUrls) {

@@ -1089,7 +1089,7 @@ class DataService {
 
         InteractionsProvider.instance.updateReactions(targetEventId, reactionsMap[targetEventId]!);
 
-        _hiveManager.reactionsBox?.put(reaction.id, reaction).catchError((e) {/* silent */});
+        _hiveManager.reactionsBox?.put(reaction.id, reaction).catchError((e) {});
         fetchProfilesBatch([reaction.author]);
 
         _hasPendingUiUpdate = true;
@@ -1120,7 +1120,7 @@ class DataService {
 
         InteractionsProvider.instance.updateReposts(originalNoteId, repostsMap[originalNoteId]!);
 
-        _hiveManager.repostsBox?.put(repost.id, repost).catchError((e) {/* silent */});
+        _hiveManager.repostsBox?.put(repost.id, repost).catchError((e) {});
         fetchProfilesBatch([repost.repostedBy]);
 
         _hasPendingUiUpdate = true;
@@ -1161,8 +1161,8 @@ class DataService {
           notesNotifier.addNoteQuietly(noteModel);
         }
 
-        _hiveManager.repliesBox?.put(reply.id, reply).catchError((e) {/* silent */});
-        _hiveManager.notesBox?.put(noteModel.id, noteModel).catchError((e) {/* silent */});
+        _hiveManager.repliesBox?.put(reply.id, reply).catchError((e) {});
+        _hiveManager.notesBox?.put(noteModel.id, noteModel).catchError((e) {});
         fetchProfilesBatch([reply.author]);
 
         _hasPendingUiUpdate = true;

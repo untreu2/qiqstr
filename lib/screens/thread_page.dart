@@ -595,6 +595,7 @@ class _ThreadPageState extends State<ThreadPage> {
                   : Stack(
                       children: [
                         SingleChildScrollView(
+                          key: PageStorageKey<String>('thread_${widget.rootNoteId}'),
                           controller: _scrollController,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,

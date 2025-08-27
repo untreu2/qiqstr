@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/note_model.dart';
 import '../services/data_service.dart';
@@ -15,6 +16,9 @@ class NotesListProvider extends ChangeNotifier {
   bool _isLoadingMore = false;
   bool _hasError = false;
   String? _errorMessage;
+
+  Timer? _periodicTimer;
+  bool _isInitialized = false;
 
   NotesListProvider({
     required this.npub,
@@ -42,6 +46,14 @@ class NotesListProvider extends ChangeNotifier {
   void _initialize() {
     dataService.notesNotifier.addListener(_onNotesChanged);
     _onNotesChanged();
+
+    if (!_isInitialized) {
+      Timer(const Duration(seconds: 1), () {
+        _isInitialized = true;
+        notifyListeners();
+        _startPeriodicUpdates();
+      });
+    }
   }
 
   void _onNotesChanged() {
@@ -51,8 +63,16 @@ class NotesListProvider extends ChangeNotifier {
 
   void _updateFilteredNotes() {
     _filteredNotes = _notes.where((n) => !n.isReply || n.isRepost).toList();
-    notifyListeners();
+    if (_isInitialized) {
+      notifyListeners();
+    }
     _loadUserProfiles();
+  }
+
+  void _startPeriodicUpdates() {
+    _periodicTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      notifyListeners();
+    });
   }
 
   Future<void> fetchInitialNotes() async {
@@ -142,6 +162,7 @@ class NotesListProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _periodicTimer?.cancel();
     dataService.notesNotifier.removeListener(_onNotesChanged);
     DataServiceManager.instance.releaseService(npub: npub, dataType: dataType);
     super.dispose();

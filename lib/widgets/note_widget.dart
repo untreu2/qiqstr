@@ -46,6 +46,11 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   late final String _formattedTimestamp;
   late final Map<String, dynamic> _parsedContent;
 
+  UserModel? _cachedAuthorUser;
+  UserModel? _cachedReposterUser;
+  String? _cachedAuthorId;
+  String? _cachedReposterId;
+
   bool _isReactionGlowing = false;
   bool _isReplyGlowing = false;
   bool _isRepostGlowing = false;
@@ -57,10 +62,40 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   void initState() {
     super.initState();
     _formattedTimestamp = _formatTimestamp(widget.note.timestamp);
-
     _parsedContent = _parseContentOnce();
-
     _scheduleUserLoading();
+
+    _cachedAuthorId = widget.note.author;
+    _cachedReposterId = widget.note.repostedBy;
+
+    
+    UserProvider.instance.addListener(_onUserDataChange);
+  }
+
+  void _onUserDataChange() {
+    if (!mounted || _isDisposed) return;
+
+    
+    final authorUser = UserProvider.instance.getUserOrDefault(widget.note.author);
+    final reposterUser = widget.note.repostedBy != null ? UserProvider.instance.getUserOrDefault(widget.note.repostedBy!) : null;
+
+    if (_cachedAuthorUser?.profileImage != authorUser.profileImage ||
+        _cachedAuthorUser?.name != authorUser.name ||
+        _cachedAuthorUser?.nip05 != authorUser.nip05 ||
+        (_cachedReposterUser?.profileImage != reposterUser?.profileImage) ||
+        (_cachedReposterUser?.name != reposterUser?.name)) {
+      setState(() {
+        _cachedAuthorUser = authorUser;
+        _cachedReposterUser = reposterUser;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    UserProvider.instance.removeListener(_onUserDataChange);
+    super.dispose();
   }
 
   Map<String, dynamic> _parseContentOnce() {
@@ -84,12 +119,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
 
       UserProvider.instance.loadUsers(usersToLoad);
     });
-  }
-
-  @override
-  void dispose() {
-    _isDisposed = true;
-    super.dispose();
   }
 
   String _formatTimestamp(DateTime timestamp) {
@@ -267,151 +296,147 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     super.build(context);
     final colors = context.colors;
 
-    return ListenableBuilder(
-      listenable: UserProvider.instance,
-      builder: (context, _) {
-        final authorUser = UserProvider.instance.getUserOrDefault(widget.note.author);
+    
+    final authorUser = _cachedAuthorUser ?? UserProvider.instance.getUserOrDefault(widget.note.author);
+    final reposterUser = widget.note.isRepost && widget.note.repostedBy != null
+        ? (_cachedReposterUser ?? UserProvider.instance.getUserOrDefault(widget.note.repostedBy!))
+        : null;
 
-        UserModel? reposterUser;
-        if (widget.note.isRepost && widget.note.repostedBy != null) {
-          reposterUser = UserProvider.instance.getUserOrDefault(widget.note.repostedBy!);
-        }
+    
+    if (_cachedAuthorUser == null) {
+      _cachedAuthorUser = authorUser;
+    }
+    if (_cachedReposterUser == null && reposterUser != null) {
+      _cachedReposterUser = reposterUser;
+    }
 
-        return GestureDetector(
-          onTap: () => _navigateToThreadPage(widget.note),
-          child: Container(
-            color: widget.containerColor ?? colors.background,
-            padding: const EdgeInsets.only(bottom: 2),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+    return GestureDetector(
+      onTap: () => _navigateToThreadPage(widget.note),
+      child: Container(
+        color: widget.containerColor ?? colors.background,
+        padding: const EdgeInsets.only(bottom: 2),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Stack(
                     children: [
-                      Stack(
-                        children: [
-                          GestureDetector(
-                            onTap: () => _navigateToProfile(widget.note.author),
-                            child: Padding(
-                              padding: widget.note.isRepost ? const EdgeInsets.only(top: 8, left: 10) : const EdgeInsets.only(top: 8),
-                              child: SizedBox(
-                                width: 44,
-                                height: 44,
-                                child: CircleAvatar(
-                                  radius: 22,
-                                  backgroundColor: colors.surfaceTransparent,
-                                  child: authorUser.profileImage.isNotEmpty
-                                      ? CachedNetworkImage(
-                                          imageUrl: authorUser.profileImage,
-                                          memCacheWidth: 88,
-                                          memCacheHeight: 88,
-                                          maxWidthDiskCache: 88,
-                                          maxHeightDiskCache: 88,
-                                          fadeInDuration: Duration.zero,
-                                          imageBuilder: (context, imageProvider) {
-                                            return Container(
-                                              decoration: BoxDecoration(
-                                                shape: BoxShape.circle,
-                                                image: DecorationImage(
-                                                  image: imageProvider,
-                                                  fit: BoxFit.cover,
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                          placeholder: (context, url) => Icon(
-                                            Icons.person,
-                                            size: 24,
-                                            color: colors.textSecondary,
+                      GestureDetector(
+                        onTap: () => _navigateToProfile(widget.note.author),
+                        child: Padding(
+                          padding: widget.note.isRepost ? const EdgeInsets.only(top: 8, left: 10) : const EdgeInsets.only(top: 8),
+                          child: SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: CircleAvatar(
+                              radius: 22,
+                              backgroundColor: colors.surfaceTransparent,
+                              child: authorUser.profileImage.isNotEmpty
+                                  ? CachedNetworkImage(
+                                      key: ValueKey('author_${authorUser.npub}'),
+                                      imageUrl: authorUser.profileImage,
+                                      fadeInDuration: Duration.zero,
+                                      imageBuilder: (context, imageProvider) {
+                                        return Container(
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            image: DecorationImage(
+                                              image: imageProvider,
+                                              fit: BoxFit.cover,
+                                            ),
                                           ),
-                                          errorWidget: (context, url, error) => Icon(
-                                            Icons.person,
-                                            size: 24,
-                                            color: colors.textSecondary,
+                                        );
+                                      },
+                                      placeholder: (context, url) => Icon(
+                                        Icons.person,
+                                        size: 24,
+                                        color: colors.textSecondary,
+                                      ),
+                                      errorWidget: (context, url, error) => Icon(
+                                        Icons.person,
+                                        size: 24,
+                                        color: colors.textSecondary,
+                                      ),
+                                    )
+                                  : Icon(
+                                      Icons.person,
+                                      size: 24,
+                                      color: colors.textSecondary,
+                                    ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (widget.note.isRepost && reposterUser != null)
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          child: GestureDetector(
+                            onTap: () => _navigateToProfile(reposterUser!.npub),
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircleAvatar(
+                                radius: 12,
+                                backgroundColor: colors.surface,
+                                child: reposterUser.profileImage.isNotEmpty
+                                    ? CachedNetworkImage(
+                                        key: ValueKey('reposter_${reposterUser.npub}'),
+                                        imageUrl: reposterUser.profileImage,
+                                        fadeInDuration: Duration.zero,
+                                        imageBuilder: (context, imageProvider) => Container(
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                                           ),
-                                        )
-                                      : Icon(
-                                          Icons.person,
-                                          size: 24,
-                                          color: colors.textSecondary,
                                         ),
-                                ),
+                                        placeholder: (context, url) => Icon(Icons.person, size: 12, color: colors.textSecondary),
+                                        errorWidget: (context, url, error) => Icon(Icons.person, size: 12, color: colors.textSecondary),
+                                      )
+                                    : Icon(Icons.person, size: 12, color: colors.textSecondary),
                               ),
                             ),
                           ),
-                          if (widget.note.isRepost && reposterUser != null)
-                            Positioned(
-                              top: 0,
-                              left: 0,
-                              child: GestureDetector(
-                                onTap: () => _navigateToProfile(reposterUser!.npub),
-                                child: SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircleAvatar(
-                                    radius: 12,
-                                    backgroundColor: colors.surface,
-                                    child: reposterUser.profileImage.isNotEmpty
-                                        ? CachedNetworkImage(
-                                            imageUrl: reposterUser.profileImage,
-                                            memCacheWidth: 48,
-                                            memCacheHeight: 48,
-                                            maxWidthDiskCache: 48,
-                                            maxHeightDiskCache: 48,
-                                            fadeInDuration: Duration.zero,
-                                            imageBuilder: (context, imageProvider) => Container(
-                                              decoration: BoxDecoration(
-                                                shape: BoxShape.circle,
-                                                image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
-                                              ),
-                                            ),
-                                            placeholder: (context, url) => Icon(Icons.person, size: 12, color: colors.textSecondary),
-                                            errorWidget: (context, url, error) => Icon(Icons.person, size: 12, color: colors.textSecondary),
-                                          )
-                                        : Icon(Icons.person, size: 12, color: colors.textSecondary),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        ),
+                    ],
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildUserInfoWithReply(context, authorUser, colors),
+                        _buildNoteContent(context, _parsedContent, widget.note),
+                        const SizedBox(height: 10),
+                        Row(
                           children: [
-                            _buildUserInfoWithReply(context, authorUser, colors),
-                            _buildNoteContent(context, _parsedContent, widget.note),
-                            const SizedBox(height: 10),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: InteractionBar(
-                                    noteId: widget.note.id,
-                                    currentUserNpub: widget.currentUserNpub,
-                                    dataService: widget.dataService,
-                                    note: widget.note,
-                                    isReactionGlowing: _isReactionGlowing,
-                                    isReplyGlowing: _isReplyGlowing,
-                                    isRepostGlowing: _isRepostGlowing,
-                                    isZapGlowing: _isZapGlowing,
-                                  ),
-                                ),
-                              ],
+                            Expanded(
+                              child: InteractionBar(
+                                noteId: widget.note.id,
+                                currentUserNpub: widget.currentUserNpub,
+                                dataService: widget.dataService,
+                                note: widget.note,
+                                isReactionGlowing: _isReactionGlowing,
+                                isReplyGlowing: _isReplyGlowing,
+                                isRepostGlowing: _isRepostGlowing,
+                                isZapGlowing: _isZapGlowing,
+                              ),
                             ),
                           ],
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
   }
 }

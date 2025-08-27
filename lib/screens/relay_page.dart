@@ -441,9 +441,7 @@ class _RelayPageState extends State<RelayPage> {
     }
 
     if (!_isValidRelayUrl(url)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid WebSocket URL (wss:// or ws://)')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid WebSocket URL (wss:// or ws://)')));
       return;
     }
 

@@ -15,6 +15,8 @@ class InteractionsProvider extends ChangeNotifier {
 
   InteractionsProvider._internal();
 
+  Timer? _periodicTimer;
+
   final _reactionStreamController = StreamController<String>.broadcast();
   final _replyStreamController = StreamController<String>.broadcast();
   final _repostStreamController = StreamController<String>.broadcast();
@@ -49,7 +51,6 @@ class InteractionsProvider extends ChangeNotifier {
     if (_isInitialized) return;
 
     try {
-      // HiveManager singleton handles all box initialization
       if (!_hiveManager.isInitialized) {
         await _hiveManager.initializeBoxes();
       }
@@ -57,7 +58,10 @@ class InteractionsProvider extends ChangeNotifier {
       await _loadInteractionsFromHive();
 
       _isInitialized = true;
-      notifyListeners();
+      Timer(const Duration(seconds: 1), () {
+        notifyListeners();
+        _startPeriodicUpdates();
+      });
     } catch (e) {
       debugPrint('[InteractionsProvider] Initialization error: $e');
     }
@@ -371,13 +375,20 @@ class InteractionsProvider extends ChangeNotifier {
     };
   }
 
+  void _startPeriodicUpdates() {
+    _periodicTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+      notifyListeners();
+    });
+  }
+
   @override
   void dispose() {
+    _periodicTimer?.cancel();
     _reactionStreamController.close();
     _replyStreamController.close();
     _repostStreamController.close();
     _zapStreamController.close();
-    // Boxes are managed by HiveManager singleton, don't close them here
+
     super.dispose();
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
@@ -11,6 +12,7 @@ class UserProvider extends ChangeNotifier {
   UserProvider._internal();
 
   final ProfileService _profileService = ProfileService.instance;
+  Timer? _periodicTimer;
 
   final Map<String, UserModel> _users = {};
   final Map<String, String> _npubToHexMap = {};
@@ -33,7 +35,17 @@ class UserProvider extends ChangeNotifier {
     await _profileService.initialize();
     await _loadCurrentUser();
     _isInitialized = true;
-    notifyListeners();
+
+    Timer(const Duration(seconds: 1), () {
+      notifyListeners();
+      _startPeriodicUpdates();
+    });
+  }
+
+  void _startPeriodicUpdates() {
+    _periodicTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      notifyListeners();
+    });
   }
 
   Future<void> _loadCurrentUser() async {
@@ -338,6 +350,7 @@ class UserProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _periodicTimer?.cancel();
     _profileService.dispose();
     super.dispose();
   }

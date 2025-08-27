@@ -4,32 +4,39 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/photo_viewer_widget.dart';
 import 'video_preview.dart';
 
-class MediaPreviewWidget extends StatelessWidget {
+class MediaPreviewWidget extends StatefulWidget {
   final List<String> mediaUrls;
 
-  const MediaPreviewWidget({Key? key, required this.mediaUrls})
-      : super(key: key);
+  const MediaPreviewWidget({Key? key, required this.mediaUrls}) : super(key: key);
 
   static const double borderRadius = 12.0;
 
   @override
-  Widget build(BuildContext context) {
-    if (mediaUrls.isEmpty) return const SizedBox.shrink();
+  State<MediaPreviewWidget> createState() => _MediaPreviewWidgetState();
+}
 
-    final videoUrls = mediaUrls.where((url) {
+class _MediaPreviewWidgetState extends State<MediaPreviewWidget> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  late final List<String> _videoUrls;
+  late final List<String> _imageUrls;
+  late final bool _hasVideo;
+  late final bool _hasImages;
+
+  @override
+  void initState() {
+    super.initState();
+    _processUrls();
+  }
+
+  void _processUrls() {
+    _videoUrls = widget.mediaUrls.where((url) {
       final lower = url.toLowerCase();
-      return lower.endsWith('.mp4') ||
-          lower.endsWith('.mkv') ||
-          lower.endsWith('.mov');
+      return lower.endsWith('.mp4') || lower.endsWith('.mkv') || lower.endsWith('.mov');
     }).toList();
 
-    if (videoUrls.isNotEmpty) {
-      final videoUrl = videoUrls.first;
-
-      return VP(url: videoUrl);
-    }
-
-    final imageUrls = mediaUrls.where((url) {
+    _imageUrls = widget.mediaUrls.where((url) {
       final lower = url.toLowerCase();
       return lower.endsWith('.jpg') ||
           lower.endsWith('.jpeg') ||
@@ -38,11 +45,25 @@ class MediaPreviewWidget extends StatelessWidget {
           lower.endsWith('.gif');
     }).toList();
 
-    if (imageUrls.isEmpty) return const SizedBox.shrink();
+    _hasVideo = _videoUrls.isNotEmpty;
+    _hasImages = _imageUrls.isNotEmpty;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+
+    if (widget.mediaUrls.isEmpty) return const SizedBox.shrink();
+
+    if (_hasVideo) {
+      return VP(url: _videoUrls.first);
+    }
+
+    if (!_hasImages) return const SizedBox.shrink();
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(borderRadius),
-      child: _buildMediaGrid(context, imageUrls),
+      borderRadius: BorderRadius.circular(MediaPreviewWidget.borderRadius),
+      child: _buildMediaGrid(context, _imageUrls),
     );
   }
 
@@ -171,13 +192,13 @@ class MediaPreviewWidget extends StatelessWidget {
     bool useAspectRatio = true,
   }) {
     Widget image = CachedNetworkImage(
+      key: ValueKey('media_${url}_$index'),
       imageUrl: url,
       fit: fit,
-      placeholder: (context, url) =>
-          const Center(child: CircularProgressIndicator()),
+      fadeInDuration: Duration.zero,
+      placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
       errorWidget: (context, url, error) => const Icon(Icons.error),
     );
-
     if (useAspectRatio && aspectRatio != null) {
       image = AspectRatio(aspectRatio: aspectRatio, child: image);
     }

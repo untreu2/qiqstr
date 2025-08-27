@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import '../models/note_model.dart';
@@ -56,6 +57,8 @@ class NotesProvider extends ChangeNotifier {
 
   NotesProvider._internal();
 
+  Timer? _periodicTimer;
+
   final Map<String, NoteNotifier> _notifiers = {};
   final Map<String, List<String>> _notesByAuthor = {};
   final Map<String, List<String>> _repliesByParent = {};
@@ -76,12 +79,10 @@ class NotesProvider extends ChangeNotifier {
     if (_isInitialized && _currentNpub == npub) return;
 
     try {
-      // HiveManager singleton handles main boxes
       if (!_hiveManager.isInitialized) {
         await _hiveManager.initializeBoxes();
       }
 
-      // Open user-specific boxes for notes (Feed and Profile)
       final boxFutures = [
         Hive.openBox<NoteModel>('notes_Feed_$npub'),
         Hive.openBox<NoteModel>('notes_Profile_$npub'),
@@ -96,7 +97,10 @@ class NotesProvider extends ChangeNotifier {
       _currentNpub = npub;
       _isInitialized = true;
 
-      notifyListeners();
+      Timer(const Duration(seconds: 1), () {
+        notifyListeners();
+        _startPeriodicUpdates();
+      });
     } catch (e) {
       debugPrint('[NotesProvider] Initialization error: $e');
     }
@@ -250,9 +254,16 @@ class NotesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _startPeriodicUpdates() {
+    _periodicTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
+      notifyListeners();
+    });
+  }
+
   @override
   void dispose() {
-    // Close user-specific boxes, but don't close HiveManager boxes
+    _periodicTimer?.cancel();
+
     _feedNotesBox?.close();
     _profileNotesBox?.close();
 

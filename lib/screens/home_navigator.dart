@@ -26,9 +26,10 @@ class HomeNavigator extends StatefulWidget {
 
 class _HomeNavigatorState extends State<HomeNavigator> {
   int _currentIndex = 0;
+  final GlobalKey<FeedPageState> _feedPageKey = GlobalKey<FeedPageState>();
 
   late final List<Widget> _pages = [
-    FeedPage(npub: widget.npub, dataService: widget.dataService),
+    FeedPage(key: _feedPageKey, npub: widget.npub, dataService: widget.dataService),
     const UserSearchPage(),
     const SizedBox(),
     NotificationPage(dataService: widget.dataService),
@@ -41,165 +42,195 @@ class _HomeNavigatorState extends State<HomeNavigator> {
   }
 
   Widget _buildCustomBottomBar() {
-    List<Map<String, dynamic>> items = [
+    const items = [
       {'icon': 'assets/home_gap.svg', 'index': 0},
       {'icon': 'assets/search_button.svg', 'index': 1},
       {'icon': 'assets/dm_button.svg', 'index': 2},
       {'icon': 'assets/notification_button.svg', 'index': 3},
     ];
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 30.0),
-      child: Row(
-        children: [
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(35.0),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
-                child: Container(
-                  height: 70,
-                  decoration: BoxDecoration(
-                    color: context.colors.surface.withOpacity(0.6),
-                    border: Border.all(
-                      color: context.colors.borderLight,
-                      width: 1.5,
-                    ),
-                    borderRadius: BorderRadius.circular(35.0),
-                  ),
-                  child: Row(
-                    children: items.map((item) {
-                      final bool isSelected = _currentIndex == item['index'];
-                      final index = item['index'];
-
-                      return Expanded(
-                        child: Bounce(
-                          scaleFactor: 0.85,
-                          onTap: () {
-                            if (index == 2) {
-                              _handleAction("Designing: DMs");
-                            } else if (index == 3) {
-                              widget.dataService.markAllUserNotificationsAsRead().then((_) {
-                                if (mounted) setState(() => _currentIndex = index);
-                              });
-                            } else {
-                              if (mounted) {
-                                setState(() {
-                                  _currentIndex = index;
-                                });
-                              }
-                            }
-                          },
-                          behavior: HitTestBehavior.opaque,
-                          child: SizedBox.expand(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                if (index == 3)
-                                  Stack(
-                                    clipBehavior: Clip.none,
-                                    children: [
-                                      SvgPicture.asset(
-                                        item['icon'],
-                                        width: 20,
-                                        height: 20,
-                                        color: isSelected ? context.colors.accent : context.colors.textPrimary,
-                                      ),
-                                      ValueListenableBuilder<int>(
-                                        valueListenable: widget.dataService.unreadNotificationsCountNotifier,
-                                        builder: (context, count, child) {
-                                          if (count == 0) {
-                                            return const SizedBox.shrink();
-                                          }
-                                          return Positioned(
-                                            top: -4,
-                                            right: -5,
-                                            child: Container(
-                                              padding: const EdgeInsets.all(1),
-                                              decoration: BoxDecoration(
-                                                color: context.colors.surface,
-                                                shape: BoxShape.circle,
-                                                border: Border.all(color: context.colors.textPrimary, width: 0.5),
-                                              ),
-                                              constraints: const BoxConstraints(
-                                                minWidth: 14,
-                                                minHeight: 14,
-                                              ),
-                                              child: Text('$count',
-                                                  style: TextStyle(
-                                                    color: context.colors.textPrimary,
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                  textAlign: TextAlign.center),
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ],
-                                  )
-                                else
-                                  SvgPicture.asset(
-                                    item['icon'],
-                                    width: 20,
-                                    height: 20,
-                                    color: isSelected ? context.colors.accent : context.colors.textPrimary,
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(35.0),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
-              child: Container(
-                width: 70,
-                height: 70,
-                decoration: BoxDecoration(
-                  color: context.colors.surface.withOpacity(0.6),
-                  border: Border.all(
-                    color: context.colors.borderLight,
-                    width: 1.5,
-                  ),
+    return RepaintBoundary(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 30.0),
+        child: Row(
+          children: [
+            Expanded(
+              child: RepaintBoundary(
+                child: ClipRRect(
                   borderRadius: BorderRadius.circular(35.0),
-                ),
-                child: Bounce(
-                  scaleFactor: 0.85,
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => ShareNotePage(dataService: widget.dataService),
-                      ),
-                    );
-                  },
-                  behavior: HitTestBehavior.opaque,
-                  child: SizedBox.expand(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SvgPicture.asset(
-                          'assets/new_post_button.svg',
-                          width: 24,
-                          height: 24,
-                          color: context.colors.textPrimary,
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                    child: Container(
+                      height: 70,
+                      decoration: BoxDecoration(
+                        color: context.colors.surface.withOpacity(0.6),
+                        border: Border.all(
+                          color: context.colors.borderLight,
+                          width: 1.5,
                         ),
-                      ],
+                        borderRadius: BorderRadius.circular(35.0),
+                      ),
+                      child: Row(
+                        children: items.map((item) {
+                          final bool isSelected = _currentIndex == item['index'] as int;
+                          final index = item['index'] as int;
+
+                          return Expanded(
+                            child: RepaintBoundary(
+                              key: ValueKey('nav_item_$index'),
+                              child: Bounce(
+                                scaleFactor: 0.85,
+                                onTap: () {
+                                  if (index == 2) {
+                                    _handleAction("Designing: DMs");
+                                  } else if (index == 3) {
+                                    widget.dataService.markAllUserNotificationsAsRead().then((_) {
+                                      if (mounted) setState(() => _currentIndex = index);
+                                    });
+                                  } else if (index == 0) {
+                                    
+                                    if (_currentIndex == 0) {
+                                      
+                                      _feedPageKey.currentState?.scrollToTop();
+                                    } else {
+                                      
+                                      if (mounted) {
+                                        setState(() {
+                                          _currentIndex = index;
+                                        });
+                                      }
+                                    }
+                                  } else {
+                                    if (mounted) {
+                                      setState(() {
+                                        _currentIndex = index;
+                                      });
+                                    }
+                                  }
+                                },
+                                behavior: HitTestBehavior.opaque,
+                                child: SizedBox.expand(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      if (index == 3)
+                                        RepaintBoundary(
+                                          child: Stack(
+                                            clipBehavior: Clip.none,
+                                            children: [
+                                              SvgPicture.asset(
+                                                item['icon'] as String,
+                                                width: 20,
+                                                height: 20,
+                                                color: isSelected ? context.colors.accent : context.colors.textPrimary,
+                                              ),
+                                              ValueListenableBuilder<int>(
+                                                valueListenable: widget.dataService.unreadNotificationsCountNotifier,
+                                                builder: (context, count, child) {
+                                                  if (count == 0) {
+                                                    return const SizedBox.shrink();
+                                                  }
+                                                  return Positioned(
+                                                    top: -4,
+                                                    right: -5,
+                                                    child: RepaintBoundary(
+                                                      child: Container(
+                                                        padding: const EdgeInsets.all(1),
+                                                        decoration: BoxDecoration(
+                                                          color: context.colors.surface,
+                                                          shape: BoxShape.circle,
+                                                          border: Border.all(color: context.colors.textPrimary, width: 0.5),
+                                                        ),
+                                                        constraints: const BoxConstraints(
+                                                          minWidth: 14,
+                                                          minHeight: 14,
+                                                        ),
+                                                        child: Text('$count',
+                                                            style: TextStyle(
+                                                              color: context.colors.textPrimary,
+                                                              fontSize: 9,
+                                                              fontWeight: FontWeight.bold,
+                                                            ),
+                                                            textAlign: TextAlign.center),
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                            ],
+                                          ),
+                                        )
+                                      else
+                                        RepaintBoundary(
+                                          child: SvgPicture.asset(
+                                            item['icon'] as String,
+                                            width: 20,
+                                            height: 20,
+                                            color: isSelected ? context.colors.accent : context.colors.textPrimary,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 8),
+            RepaintBoundary(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(35.0),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+                  child: Container(
+                    width: 70,
+                    height: 70,
+                    decoration: BoxDecoration(
+                      color: context.colors.surface.withOpacity(0.6),
+                      border: Border.all(
+                        color: context.colors.borderLight,
+                        width: 1.5,
+                      ),
+                      borderRadius: BorderRadius.circular(35.0),
+                    ),
+                    child: Bounce(
+                      scaleFactor: 0.85,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ShareNotePage(dataService: widget.dataService),
+                          ),
+                        );
+                      },
+                      behavior: HitTestBehavior.opaque,
+                      child: SizedBox.expand(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            RepaintBoundary(
+                              child: SvgPicture.asset(
+                                'assets/new_post_button.svg',
+                                width: 24,
+                                height: 24,
+                                color: context.colors.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -210,9 +241,12 @@ class _HomeNavigatorState extends State<HomeNavigator> {
       builder: (context, themeManager, child) {
         return Scaffold(
           extendBody: true,
-          body: IndexedStack(
-            index: _currentIndex,
-            children: _pages,
+          body: PageStorage(
+            bucket: PageStorageBucket(),
+            child: IndexedStack(
+              index: _currentIndex,
+              children: _pages,
+            ),
           ),
           bottomNavigationBar: _buildCustomBottomBar(),
         );

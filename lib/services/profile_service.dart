@@ -23,7 +23,7 @@ class ProfileService {
   Box<UserModel>? get _usersBox => _hiveManager.usersBox;
 
   Future<void> initialize() async {
-    // HiveManager handles initialization
+    
     if (!_hiveManager.isInitialized) {
       await _hiveManager.initializeBoxes();
     }

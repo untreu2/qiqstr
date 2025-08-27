@@ -128,6 +128,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     _preserveScrollPosition();
 
     return SliverList.builder(
+      key: const PageStorageKey<String>('notes_list'),
       itemCount: itemCount,
       itemBuilder: (context, index) {
         if (isLoadingMore && index == itemCount - 1) {
