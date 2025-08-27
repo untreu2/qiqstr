@@ -1051,8 +1051,8 @@ class DataService {
       }
       if (_hiveManager.followingBox != null && _hiveManager.followingBox!.isOpen) {
         final model = FollowingModel(pubkeys: newFollowing, updatedAt: DateTime.now(), npub: npub);
-        await _hiveManager.followingBox!.put('following', model);
-        print('[DataService] Following model updated with new event.');
+        await _hiveManager.followingBox!.put('following_$npub', model);
+        print('[DataService] Following model updated with new event for $npub.');
       }
     } catch (e) {
       print('[DataService ERROR] Error handling following event: $e');
@@ -1875,7 +1875,21 @@ class DataService {
         throw Exception('Private key not found.');
       }
 
-      final currentFollowing = await getFollowingList(npub);
+      final currentUserNpub = await _secureStorage.read(key: 'npub');
+      if (currentUserNpub == null || currentUserNpub.isEmpty) {
+        throw Exception('Current user npub not found.');
+      }
+
+      String currentUserHex = currentUserNpub;
+      try {
+        if (currentUserNpub.startsWith('npub1')) {
+          currentUserHex = decodeBasicBech32(currentUserNpub, 'npub');
+        }
+      } catch (e) {
+        print('[DataService] Error converting current user npub to hex: $e');
+      }
+
+      final currentFollowing = await getFollowingList(currentUserHex);
       if (currentFollowing.contains(followNpub)) {
         print('[DataService] Already following $followNpub');
         return;
@@ -1887,8 +1901,6 @@ class DataService {
         print('[DataService] Cannot publish an empty follow list. Follow operation aborted.');
         return;
       }
-
-      currentFollowing.map((pubkey) => ['p', pubkey, '']).toList();
 
       final event = NostrService.createFollowEvent(
         followingPubkeys: currentFollowing,
@@ -1902,9 +1914,9 @@ class DataService {
       final updatedFollowingModel = FollowingModel(
         pubkeys: currentFollowing,
         updatedAt: DateTime.now(),
-        npub: npub,
+        npub: currentUserHex,
       );
-      await _hiveManager.followingBox?.put('following_$npub', updatedFollowingModel);
+      await _hiveManager.followingBox?.put('following_$currentUserHex', updatedFollowingModel);
 
       print('[DataService] Follow event sent and following list updated.');
     } catch (e) {
@@ -1922,7 +1934,21 @@ class DataService {
         throw Exception('Private key not found.');
       }
 
-      final currentFollowing = await getFollowingList(npub);
+      final currentUserNpub = await _secureStorage.read(key: 'npub');
+      if (currentUserNpub == null || currentUserNpub.isEmpty) {
+        throw Exception('Current user npub not found.');
+      }
+
+      String currentUserHex = currentUserNpub;
+      try {
+        if (currentUserNpub.startsWith('npub1')) {
+          currentUserHex = decodeBasicBech32(currentUserNpub, 'npub');
+        }
+      } catch (e) {
+        print('[DataService] Error converting current user npub to hex: $e');
+      }
+
+      final currentFollowing = await getFollowingList(currentUserHex);
       if (!currentFollowing.contains(unfollowNpub)) {
         print('[DataService] Not following $unfollowNpub');
         return;
@@ -1935,8 +1961,6 @@ class DataService {
         return;
       }
 
-      currentFollowing.map((pubkey) => ['p', pubkey, '']).toList();
-
       final event = NostrService.createFollowEvent(
         followingPubkeys: currentFollowing,
         privateKey: privateKey,
@@ -1948,9 +1972,9 @@ class DataService {
       final updatedFollowingModel = FollowingModel(
         pubkeys: currentFollowing,
         updatedAt: DateTime.now(),
-        npub: npub,
+        npub: currentUserHex,
       );
-      await _hiveManager.followingBox?.put('following_$npub', updatedFollowingModel);
+      await _hiveManager.followingBox?.put('following_$currentUserHex', updatedFollowingModel);
 
       print('[DataService] Unfollow event sent and following list updated.');
     } catch (e) {

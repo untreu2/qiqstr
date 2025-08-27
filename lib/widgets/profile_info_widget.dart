@@ -14,6 +14,7 @@ import '../models/following_model.dart';
 import '../screens/edit_profile.dart';
 import '../services/data_service.dart';
 import '../providers/user_provider.dart';
+import '../screens/following_page.dart';
 import 'mini_link_preview_widget.dart';
 import 'photo_viewer_widget.dart';
 
@@ -44,6 +45,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   int _followingCount = 0;
   bool _isLoadingCounts = true;
   bool? _doesUserFollowMe;
+
+  String? _userHexKey;
 
   void _navigateToProfile(String npub) {
     if (_dataService != null) {
@@ -85,6 +88,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     if (widget.sharedDataService != null) {
       _dataService = widget.sharedDataService;
     }
+
+    _userHexKey = _convertToHex(widget.user.npub);
 
     _startProgressiveInitialization();
   }
@@ -143,11 +148,15 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         setState(() {});
       }
 
-      if (_currentUserNpub == null || _currentUserNpub == widget.user.npub) return;
+      if (_currentUserNpub == null || _userHexKey == null) return;
+
+      String? currentUserHex = _convertToHex(_currentUserNpub!);
+      if (currentUserHex == _userHexKey) return;
 
       _followingBox = await Hive.openBox<FollowingModel>('followingBox');
-      final model = _followingBox.get('following_$_currentUserNpub');
-      final isFollowing = model?.pubkeys.contains(widget.user.npub) ?? false;
+      final model = _followingBox.get('following_$currentUserHex');
+
+      final isFollowing = model?.pubkeys.contains(_userHexKey!) ?? false;
 
       if (mounted) {
         setState(() {
@@ -163,20 +172,44 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     }
   }
 
+  bool _isValidHex(String value) {
+    if (value.isEmpty || value.length != 64) return false;
+    return RegExp(r'^[0-9a-fA-F]+$').hasMatch(value);
+  }
+
+  String? _convertToHex(String npub) {
+    try {
+      if (npub.startsWith('npub1')) {
+        return decodeBasicBech32(npub, 'npub');
+      } else if (_isValidHex(npub)) {
+        return npub;
+      }
+    } catch (e) {
+      print('[ProfileInfoWidget] Error converting npub to hex: $e');
+    }
+    return npub;
+  }
+
   Future<void> _toggleFollow() async {
-    if (_currentUserNpub == null || _dataService == null) return;
+    if (_currentUserNpub == null || _dataService == null || _userHexKey == null) return;
 
     setState(() {
       _isFollowing = !_isFollowing!;
     });
 
     try {
+      print('[ProfileInfoWidget] Toggle follow for hex: $_userHexKey');
+      print('[ProfileInfoWidget] Current follow state: $_isFollowing');
+
       if (_isFollowing!) {
-        await _dataService!.sendFollow(widget.user.npub);
+        await _dataService!.sendFollow(_userHexKey!);
+        print('[ProfileInfoWidget] Sent follow request');
       } else {
-        await _dataService!.sendUnfollow(widget.user.npub);
+        await _dataService!.sendUnfollow(_userHexKey!);
+        print('[ProfileInfoWidget] Sent unfollow request');
       }
     } catch (e) {
+      print('[ProfileInfoWidget] Follow toggle error: $e');
       setState(() {
         _isFollowing = !_isFollowing!;
       });
@@ -187,12 +220,13 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     if (_dataService == null) return;
 
     try {
-      final followingCount = await _dataService!.getFollowingCount(widget.user.npub);
+      final dataServiceNpub = _dataService!.npub;
+      final followingCount = await _dataService!.getFollowingCount(dataServiceNpub);
 
       bool? doesUserFollowMe;
-      if (_currentUserNpub != null && _currentUserNpub != widget.user.npub) {
-        print('[ProfileInfoWidget] Checking if ${widget.user.npub} follows $_currentUserNpub');
-        doesUserFollowMe = await _dataService!.isUserFollowing(widget.user.npub, _currentUserNpub!);
+      if (_currentUserNpub != null && _currentUserNpub != dataServiceNpub) {
+        print('[ProfileInfoWidget] Checking if $dataServiceNpub follows $_currentUserNpub');
+        doesUserFollowMe = await _dataService!.isUserFollowing(dataServiceNpub, _currentUserNpub!);
         print('[ProfileInfoWidget] Result: $doesUserFollowMe');
       }
 
@@ -413,44 +447,10 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   }
 
   bool _isCurrentUserProfile() {
-    if (_currentUserNpub == null) return false;
+    if (_currentUserNpub == null || _userHexKey == null) return false;
 
-    final currentUserNpub = _currentUserNpub!;
-    final viewingUserNpub = widget.user.npub;
-
-    if (currentUserNpub == viewingUserNpub) return true;
-
-    try {
-      String currentUserHex = currentUserNpub;
-      String viewingUserHex = viewingUserNpub;
-
-      if (currentUserNpub.startsWith('npub1')) {
-        currentUserHex = decodeBasicBech32(currentUserNpub, 'npub');
-      }
-
-      if (viewingUserNpub.startsWith('npub1')) {
-        viewingUserHex = decodeBasicBech32(viewingUserNpub, 'npub');
-      }
-
-      if (currentUserHex == viewingUserHex) return true;
-
-      String currentUserNpubFormat = currentUserNpub;
-      String viewingUserNpubFormat = viewingUserNpub;
-
-      if (!currentUserNpub.startsWith('npub1') && currentUserNpub.length == 64) {
-        currentUserNpubFormat = encodeBasicBech32(currentUserNpub, 'npub');
-      }
-
-      if (!viewingUserNpub.startsWith('npub1') && viewingUserNpub.length == 64) {
-        viewingUserNpubFormat = encodeBasicBech32(viewingUserNpub, 'npub');
-      }
-
-      if (currentUserNpubFormat == viewingUserNpubFormat) return true;
-    } catch (e) {
-      print('[ProfileInfoWidget] Error comparing npub formats: $e');
-    }
-
-    return false;
+    String? currentUserHex = _convertToHex(_currentUserNpub!);
+    return currentUserHex == _userHexKey;
   }
 
   Widget _buildEditProfileButton(BuildContext context) {
@@ -570,19 +570,37 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       padding: const EdgeInsets.only(top: 12.0),
       child: Row(
         children: [
-          Text(
-            '$_followingCount',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: context.colors.textPrimary,
-            ),
-          ),
-          Text(
-            ' following',
-            style: TextStyle(
-              fontSize: 14,
-              color: context.colors.textSecondary,
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => FollowingPage(
+                    user: widget.user,
+                    dataService: _dataService,
+                  ),
+                ),
+              );
+            },
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '$_followingCount',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: context.colors.textPrimary,
+                  ),
+                ),
+                Text(
+                  ' following',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: context.colors.textSecondary,
+                  ),
+                ),
+              ],
             ),
           ),
           if (_doesUserFollowMe == true && _currentUserNpub != null && _currentUserNpub != widget.user.npub) ...[
