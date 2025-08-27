@@ -41,7 +41,7 @@ class NoteWidget extends StatefulWidget {
 
 class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMixin {
   @override
-  bool get wantKeepAlive => false;
+  bool get wantKeepAlive => true;
 
   late final String _formattedTimestamp;
   late final Map<String, dynamic> _parsedContent;
@@ -296,44 +296,48 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                             onTap: () => _navigateToProfile(widget.note.author),
                             child: Padding(
                               padding: widget.note.isRepost ? const EdgeInsets.only(top: 8, left: 10) : const EdgeInsets.only(top: 8),
-                              child: CircleAvatar(
-                                radius: 22,
-                                backgroundColor: colors.surfaceTransparent,
-                                child: authorUser.profileImage.isNotEmpty
-                                    ? CachedNetworkImage(
-                                        imageUrl: authorUser.profileImage,
-                                        memCacheWidth: 88,
-                                        memCacheHeight: 88,
-                                        maxWidthDiskCache: 88,
-                                        maxHeightDiskCache: 88,
-                                        fadeInDuration: const Duration(milliseconds: 200),
-                                        imageBuilder: (context, imageProvider) {
-                                          return Container(
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              image: DecorationImage(
-                                                image: imageProvider,
-                                                fit: BoxFit.cover,
+                              child: SizedBox(
+                                width: 44,
+                                height: 44,
+                                child: CircleAvatar(
+                                  radius: 22,
+                                  backgroundColor: colors.surfaceTransparent,
+                                  child: authorUser.profileImage.isNotEmpty
+                                      ? CachedNetworkImage(
+                                          imageUrl: authorUser.profileImage,
+                                          memCacheWidth: 88,
+                                          memCacheHeight: 88,
+                                          maxWidthDiskCache: 88,
+                                          maxHeightDiskCache: 88,
+                                          fadeInDuration: Duration.zero,
+                                          imageBuilder: (context, imageProvider) {
+                                            return Container(
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                image: DecorationImage(
+                                                  image: imageProvider,
+                                                  fit: BoxFit.cover,
+                                                ),
                                               ),
-                                            ),
-                                          );
-                                        },
-                                        placeholder: (context, url) => Icon(
+                                            );
+                                          },
+                                          placeholder: (context, url) => Icon(
+                                            Icons.person,
+                                            size: 24,
+                                            color: colors.textSecondary,
+                                          ),
+                                          errorWidget: (context, url, error) => Icon(
+                                            Icons.person,
+                                            size: 24,
+                                            color: colors.textSecondary,
+                                          ),
+                                        )
+                                      : Icon(
                                           Icons.person,
                                           size: 24,
                                           color: colors.textSecondary,
                                         ),
-                                        errorWidget: (context, url, error) => Icon(
-                                          Icons.person,
-                                          size: 24,
-                                          color: colors.textSecondary,
-                                        ),
-                                      )
-                                    : Icon(
-                                        Icons.person,
-                                        size: 24,
-                                        color: colors.textSecondary,
-                                      ),
+                                ),
                               ),
                             ),
                           ),
@@ -343,27 +347,31 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                               left: 0,
                               child: GestureDetector(
                                 onTap: () => _navigateToProfile(reposterUser!.npub),
-                                child: CircleAvatar(
-                                  radius: 12,
-                                  backgroundColor: colors.surface,
-                                  child: reposterUser.profileImage.isNotEmpty
-                                      ? CachedNetworkImage(
-                                          imageUrl: reposterUser.profileImage,
-                                          memCacheWidth: 48,
-                                          memCacheHeight: 48,
-                                          maxWidthDiskCache: 48,
-                                          maxHeightDiskCache: 48,
-                                          fadeInDuration: const Duration(milliseconds: 200),
-                                          imageBuilder: (context, imageProvider) => Container(
-                                            decoration: BoxDecoration(
-                                              shape: BoxShape.circle,
-                                              image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircleAvatar(
+                                    radius: 12,
+                                    backgroundColor: colors.surface,
+                                    child: reposterUser.profileImage.isNotEmpty
+                                        ? CachedNetworkImage(
+                                            imageUrl: reposterUser.profileImage,
+                                            memCacheWidth: 48,
+                                            memCacheHeight: 48,
+                                            maxWidthDiskCache: 48,
+                                            maxHeightDiskCache: 48,
+                                            fadeInDuration: Duration.zero,
+                                            imageBuilder: (context, imageProvider) => Container(
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
+                                              ),
                                             ),
-                                          ),
-                                          placeholder: (context, url) => Icon(Icons.person, size: 12, color: colors.textSecondary),
-                                          errorWidget: (context, url, error) => Icon(Icons.person, size: 12, color: colors.textSecondary),
-                                        )
-                                      : Icon(Icons.person, size: 12, color: colors.textSecondary),
+                                            placeholder: (context, url) => Icon(Icons.person, size: 12, color: colors.textSecondary),
+                                            errorWidget: (context, url, error) => Icon(Icons.person, size: 12, color: colors.textSecondary),
+                                          )
+                                        : Icon(Icons.person, size: 12, color: colors.textSecondary),
+                                  ),
                                 ),
                               ),
                             ),

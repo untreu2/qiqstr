@@ -14,11 +14,13 @@ class NoteListWidget extends StatefulWidget {
 
 class _NoteListWidgetState extends State<NoteListWidget> {
   late final ScrollController _scrollController;
+  double _savedScrollPosition = 0.0;
+  bool _isUserScrolling = false;
 
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController();
+    _scrollController = ScrollController(keepScrollOffset: false);
     _setupScrollListener();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -29,6 +31,11 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   void _setupScrollListener() {
     _scrollController.addListener(() {
+      if (_scrollController.position.isScrollingNotifier.value) {
+        _isUserScrolling = true;
+        _savedScrollPosition = _scrollController.position.pixels;
+      }
+
       if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent * 0.9) {
         final provider = context.read<NotesListProvider>();
         if (!provider.isLoadingMore) {
@@ -36,6 +43,17 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         }
       }
     });
+  }
+
+  void _preserveScrollPosition() {
+    if (_scrollController.hasClients && !_isUserScrolling) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_scrollController.hasClients && _savedScrollPosition > 0) {
+          _scrollController.jumpTo(_savedScrollPosition.clamp(0.0, _scrollController.position.maxScrollExtent));
+        }
+      });
+    }
+    _isUserScrolling = false;
   }
 
   @override
@@ -48,16 +66,12 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   Widget build(BuildContext context) {
     return Consumer<NotesListProvider>(
       builder: (context, provider, child) {
-        if (provider.isLoading && provider.notes.isEmpty) {
-          return _buildLoadingState();
-        }
-
         if (provider.hasError) {
           return _buildErrorState(provider.errorMessage ?? 'Unknown error');
         }
 
-        if (provider.isEmpty) {
-          return _buildEmptyState();
+        if (provider.notes.isEmpty) {
+          return _buildLoadingState();
         }
 
         return _buildNotesList(provider.notes, provider.isLoadingMore);
@@ -101,20 +115,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     );
   }
 
-  Widget _buildEmptyState() {
-    Theme.of(context);
-    return SliverToBoxAdapter(
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildNotesList(List<dynamic> notes, bool isLoadingMore) {
     final noteCount = notes.length;
 
@@ -124,6 +124,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     } else if (itemCount > 0) {
       itemCount--;
     }
+
+    _preserveScrollPosition();
 
     return SliverList.builder(
       itemCount: itemCount,
