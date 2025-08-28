@@ -2720,14 +2720,20 @@ class DataService {
   }
 
   Future<void> _subscribeToNotifications() async {
+    if (dataType == DataType.profile) {
+      return;
+    }
+
     final notificationsBox = _hiveManager.getNotificationBox(npub);
-    if (_isClosed || npub.isEmpty || notificationsBox == null || !notificationsBox.isOpen) return;
+    if (_isClosed || npub.isEmpty || notificationsBox == null || !notificationsBox.isOpen) {
+      return;
+    }
 
     int? sinceTimestamp;
     try {
       if (notificationsBox.isNotEmpty) {
         final List<NotificationModel> sortedNotifications = notificationsBox.values.toList()
-          ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+          ..sort((a, b) => b.timestamp.compareTo(a.timestamp)); // Sort descending by time
         sinceTimestamp = (sortedNotifications.first.timestamp.millisecondsSinceEpoch ~/ 1000) + 1;
       }
     } catch (e) {
@@ -2738,7 +2744,12 @@ class DataService {
 
     final filter = NostrService.createNotificationFilter(
       pubkeys: [npub],
-      kinds: [1, 6, 7, 9735],
+      kinds: [
+        1,
+        6,
+        7,
+        9735,
+      ],
       since: sinceTimestamp,
       limit: 50,
     );
@@ -2747,7 +2758,7 @@ class DataService {
 
     try {
       await _broadcastRequest(request);
-      print('[DataService] Subscribed to notifications for $npub since $sinceTimestamp with filter: ${filter.toJson()}');
+      print('[DataService] Subscribed to notifications for $npub since $sinceTimestamp.');
     } catch (e) {
       print('[DataService ERROR] Failed to subscribe to notifications: $e');
     }
