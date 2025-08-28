@@ -22,7 +22,6 @@ class InteractionBar extends StatefulWidget {
   final bool isReplyGlowing;
   final bool isRepostGlowing;
   final bool isZapGlowing;
-  final bool isLarge;
 
   const InteractionBar({
     super.key,
@@ -34,7 +33,6 @@ class InteractionBar extends StatefulWidget {
     this.isReplyGlowing = false,
     this.isRepostGlowing = false,
     this.isZapGlowing = false,
-    this.isLarge = false,
   });
 
   @override
@@ -50,7 +48,6 @@ class _InteractionBarState extends State<InteractionBar> with AutomaticKeepAlive
   static bool _isLoading = false;
 
   String? _localUserNpub;
-  bool _isLoadingLocal = false;
 
   @override
   void initState() {
@@ -74,7 +71,6 @@ class _InteractionBarState extends State<InteractionBar> with AutomaticKeepAlive
 
     if (_isLoading) return;
     _isLoading = true;
-    _isLoadingLocal = true;
 
     try {
       final npub = await _secureStorage.read(key: 'npub');
@@ -93,7 +89,6 @@ class _InteractionBarState extends State<InteractionBar> with AutomaticKeepAlive
       }
     } finally {
       _isLoading = false;
-      _isLoadingLocal = false;
     }
   }
 
@@ -107,7 +102,7 @@ class _InteractionBarState extends State<InteractionBar> with AutomaticKeepAlive
     }
 
     final colors = context.colors;
-    final double statsIconSize = widget.isLarge ? 22 : 21;
+    final double statsIconSize = 21;
 
     return RepaintBoundary(
       child: Row(
@@ -119,7 +114,6 @@ class _InteractionBarState extends State<InteractionBar> with AutomaticKeepAlive
             iconPath: 'assets/reply_button.svg',
             color: colors.reply,
             isGlowing: widget.isReplyGlowing,
-            isLarge: widget.isLarge,
             onTap: () {
               if (widget.dataService == null) return;
               Navigator.push(
@@ -141,7 +135,6 @@ class _InteractionBarState extends State<InteractionBar> with AutomaticKeepAlive
             iconPath: 'assets/repost_button.svg',
             color: colors.repost,
             isGlowing: widget.isRepostGlowing,
-            isLarge: widget.isLarge,
             onTap: () {
               if (widget.dataService == null || widget.note == null) return;
               final hasReposted = InteractionsProvider.instance.hasUserReposted(effectiveUserNpub, widget.noteId);
@@ -161,7 +154,6 @@ class _InteractionBarState extends State<InteractionBar> with AutomaticKeepAlive
             iconPath: 'assets/reaction_button.svg',
             color: colors.reaction,
             isGlowing: widget.isReactionGlowing,
-            isLarge: widget.isLarge,
             isLikeButton: true,
             onLikeTap: (isCurrentlyLiked) async {
               if (widget.dataService == null) return false;
@@ -182,7 +174,6 @@ class _InteractionBarState extends State<InteractionBar> with AutomaticKeepAlive
             iconPath: 'assets/zap_button.svg',
             color: colors.zap,
             isGlowing: widget.isZapGlowing,
-            isLarge: widget.isLarge,
             onTap: () {
               if (widget.dataService == null || widget.note == null) return;
               showZapDialog(
@@ -226,7 +217,6 @@ class _InteractionButton extends StatefulWidget {
   final String iconPath;
   final Color color;
   final bool isGlowing;
-  final bool isLarge;
   final bool isLikeButton;
   final void Function()? onTap;
   final Future<bool> Function(bool)? onLikeTap;
@@ -239,7 +229,6 @@ class _InteractionButton extends StatefulWidget {
     required this.iconPath,
     required this.color,
     this.isGlowing = false,
-    this.isLarge = false,
     this.isLikeButton = false,
     this.onTap,
     this.onLikeTap,
@@ -272,9 +261,9 @@ class _InteractionButtonState extends State<_InteractionButton> with AutomaticKe
   @override
   void initState() {
     super.initState();
-    _iconSize = widget.isLarge ? 16.5 : 15.5;
-    _fontSize = widget.isLarge ? 15.5 : 15;
-    _spacing = widget.isLarge ? 7 : 6.5;
+    _iconSize = 15.5;
+    _fontSize = 15;
+    _spacing = 6.5;
     _effectiveSize = _iconSize * _globalTextScale;
 
     _loadInitialState();

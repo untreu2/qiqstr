@@ -76,7 +76,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         parsedContent: parsedBioContent,
         dataService: _dataService!,
         onNavigateToMentionProfile: _navigateToProfile,
-        type: NoteContentType.small,
       ),
     );
   }

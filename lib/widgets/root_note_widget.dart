@@ -30,7 +30,7 @@ class RootNoteWidget extends StatelessWidget {
   }) : super(key: key);
   @override
   Widget build(BuildContext context) {
-    final parsedContent = dataService.parseContent(note.content);
+    final parsedContent = note.parsedContentLazy;
     String formatTimestamp(DateTime timestamp) {
       final d = DateTime.now().difference(timestamp);
       if (d.inSeconds < 5) return 'now';
@@ -124,7 +124,6 @@ class RootNoteWidget extends StatelessWidget {
                   parsedContent: parsedContent,
                   dataService: dataService,
                   onNavigateToMentionProfile: onNavigateToMentionProfile,
-                  type: NoteContentType.big,
                 ),
                 const SizedBox(height: 12),
                 InteractionBar(
@@ -136,7 +135,6 @@ class RootNoteWidget extends StatelessWidget {
                   isReplyGlowing: isReplyGlowing,
                   isRepostGlowing: isRepostGlowing,
                   isZapGlowing: isZapGlowing,
-                  isLarge: true,
                 ),
               ],
             ),

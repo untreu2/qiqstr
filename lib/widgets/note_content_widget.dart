@@ -9,14 +9,11 @@ import 'package:qiqstr/widgets/quote_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/theme_manager.dart';
 
-enum NoteContentType { small, big }
-
 class NoteContentWidget extends StatefulWidget {
   final Map<String, dynamic> parsedContent;
   final DataService dataService;
   final void Function(String mentionId) onNavigateToMentionProfile;
   final void Function(String noteId)? onShowMoreTap;
-  final NoteContentType type;
 
   const NoteContentWidget({
     super.key,
@@ -24,7 +21,6 @@ class NoteContentWidget extends StatefulWidget {
     required this.dataService,
     required this.onNavigateToMentionProfile,
     this.onShowMoreTap,
-    this.type = NoteContentType.small,
   });
 
   @override
@@ -71,14 +67,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> with AutomaticKee
     return widget.dataService.resolveMentions(mentionIds);
   }
 
-  double get _fontSize {
-    switch (widget.type) {
-      case NoteContentType.small:
-        return 16.0;
-      case NoteContentType.big:
-        return 18.0;
-    }
-  }
+  double get _fontSize => 16.0;
 
   @override
   Widget build(BuildContext context) {
@@ -169,10 +158,10 @@ class _RichTextContentState extends State<_RichTextContent> with AutomaticKeepAl
   static final Map<String, TextStyle> _textStyleCache = <String, TextStyle>{};
   static final Map<String, TapGestureRecognizer> _recognizerCache = <String, TapGestureRecognizer>{};
 
-  late final double _currentFontSize;
+  late double _currentFontSize;
   late List<InlineSpan> _spans;
-  late final Map<String, dynamic> _cachedContent;
-  late final Map<String, String> _cachedMentions;
+  late Map<String, dynamic> _cachedContent;
+  late Map<String, String> _cachedMentions;
   @override
   void initState() {
     super.initState();
@@ -188,6 +177,7 @@ class _RichTextContentState extends State<_RichTextContent> with AutomaticKeepAl
     if (!const DeepCollectionEquality().equals(widget.parsedContent, _cachedContent) ||
         !const DeepCollectionEquality().equals(widget.mentions, _cachedMentions) ||
         widget.fontSize != oldWidget.fontSize) {
+      _currentFontSize = widget.fontSize * _globalTextScaleFactor;
       _cachedContent.clear();
       _cachedContent.addAll(widget.parsedContent);
       _cachedMentions.clear();

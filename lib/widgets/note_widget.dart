@@ -48,8 +48,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
 
   UserModel? _cachedAuthorUser;
   UserModel? _cachedReposterUser;
-  String? _cachedAuthorId;
-  String? _cachedReposterId;
 
   bool _isReactionGlowing = false;
   bool _isReplyGlowing = false;
@@ -65,17 +63,12 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     _parsedContent = _parseContentOnce();
     _scheduleUserLoading();
 
-    _cachedAuthorId = widget.note.author;
-    _cachedReposterId = widget.note.repostedBy;
-
-    
     UserProvider.instance.addListener(_onUserDataChange);
   }
 
   void _onUserDataChange() {
     if (!mounted || _isDisposed) return;
 
-    
     final authorUser = UserProvider.instance.getUserOrDefault(widget.note.author);
     final reposterUser = widget.note.repostedBy != null ? UserProvider.instance.getUserOrDefault(widget.note.repostedBy!) : null;
 
@@ -296,13 +289,11 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     super.build(context);
     final colors = context.colors;
 
-    
     final authorUser = _cachedAuthorUser ?? UserProvider.instance.getUserOrDefault(widget.note.author);
     final reposterUser = widget.note.isRepost && widget.note.repostedBy != null
         ? (_cachedReposterUser ?? UserProvider.instance.getUserOrDefault(widget.note.repostedBy!))
         : null;
 
-    
     if (_cachedAuthorUser == null) {
       _cachedAuthorUser = authorUser;
     }
@@ -376,7 +367,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                           top: 0,
                           left: 0,
                           child: GestureDetector(
-                            onTap: () => _navigateToProfile(reposterUser!.npub),
+                            onTap: () => _navigateToProfile(reposterUser.npub),
                             child: SizedBox(
                               width: 24,
                               height: 24,
