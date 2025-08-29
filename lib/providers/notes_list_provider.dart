@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import '../models/note_model.dart';
 import '../services/data_service.dart';
 import '../services/data_service_manager.dart';
+import '../services/batch_processing_service.dart';
+import '../services/network_service.dart';
 import '../providers/user_provider.dart';
 
 class NotesListProvider extends ChangeNotifier {
@@ -117,8 +119,11 @@ class NotesListProvider extends ChangeNotifier {
   void _loadUserProfiles() {
     if (_filteredNotes.isEmpty) return;
 
+    // Only load profiles for first batch of notes to avoid loading too many at once
+    final firstBatchNotes = _filteredNotes.take(20).toList(); // Load profiles for first 20 notes only
+
     final userNpubs = <String>{};
-    for (final note in _filteredNotes) {
+    for (final note in firstBatchNotes) {
       userNpubs.add(note.author);
       if (note.repostedBy != null) {
         userNpubs.add(note.repostedBy!);
@@ -129,6 +134,57 @@ class NotesListProvider extends ChangeNotifier {
       UserProvider.instance.loadUsers(userNpubs.toList()).catchError((e) {
         debugPrint('[NotesListProvider] User profiles error: $e');
       });
+      debugPrint('[NotesListProvider] Initial profile load for ${userNpubs.length} users from ${firstBatchNotes.length} notes');
+    }
+  }
+
+  Future<void> fetchInteractionsForNotes(List<String> noteIds) async {
+    if (noteIds.isEmpty) return;
+
+    try {
+      // Use both the optimized DataService method and batch processing for maximum efficiency
+      final futures = <Future>[];
+
+      // Use DataService for cached interaction checking and fetching
+      futures.add(dataService.fetchInteractionsForEvents(noteIds));
+
+      // Use BatchProcessingService for prioritized visible notes processing
+      final batchProcessor = BatchProcessingService(networkService: NetworkService.instance);
+      futures.add(batchProcessor.processVisibleNotesInteractions(noteIds));
+
+      await Future.wait(futures, eagerError: false);
+
+      debugPrint('[NotesListProvider] Fetched interactions for ${noteIds.length} visible notes using optimized batch processing');
+    } catch (e) {
+      debugPrint('[NotesListProvider] Error fetching interactions for visible notes: $e');
+    }
+  }
+
+  Future<void> fetchProfilesForVisibleNotes(List<String> visibleNoteIds) async {
+    if (visibleNoteIds.isEmpty) return;
+
+    try {
+      // Get the notes that correspond to visible note IDs
+      final visibleNotes = _filteredNotes.where((note) => visibleNoteIds.contains(note.id)).toList();
+
+      if (visibleNotes.isEmpty) return;
+
+      // Extract unique author NPUBs from visible notes only
+      final authorNpubs = <String>{};
+      for (final note in visibleNotes) {
+        authorNpubs.add(note.author);
+        if (note.repostedBy != null) {
+          authorNpubs.add(note.repostedBy!);
+        }
+      }
+
+      if (authorNpubs.isNotEmpty) {
+        // Load profiles only for authors of visible notes
+        await UserProvider.instance.loadUsers(authorNpubs.toList());
+        debugPrint('[NotesListProvider] Loaded profiles for ${authorNpubs.length} authors of ${visibleNotes.length} visible notes');
+      }
+    } catch (e) {
+      debugPrint('[NotesListProvider] Error fetching profiles for visible notes: $e');
     }
   }
 

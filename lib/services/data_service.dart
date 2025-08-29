@@ -643,38 +643,51 @@ class DataService {
   }
 
   void _startRealTimeInteractionSubscription() {
-    if (notesNotifier.notes.isEmpty) return;
+    // Reduced initial subscription - will be updated with visible notes
+    final initialNotes = notesNotifier.notes.take(20).toList();
+    if (initialNotes.isNotEmpty) {
+      _subscribeToInteractionsForNotes(initialNotes.map((n) => n.id).toList());
+    }
+  }
 
-    const int limit = 100;
-    final latestNotes = notesNotifier.notes.take(limit).toList();
-    final allEventIds = latestNotes.map((note) => note.id).toList();
+  void _subscribeToInteractionsForNotes(List<String> noteIds) {
+    if (noteIds.isEmpty) return;
+
     final sinceTimestamp = DateTime.now().subtract(const Duration(minutes: 5)).millisecondsSinceEpoch ~/ 1000;
 
-    if (allEventIds.isEmpty) return;
+    // Batch requests for better efficiency
+    const batchSize = 30;
+    for (int i = 0; i < noteIds.length; i += batchSize) {
+      final batch = noteIds.skip(i).take(batchSize).toList();
 
-    final reactionFilter = NostrService.createReactionFilter(
-      eventIds: allEventIds,
-      since: sinceTimestamp,
-    );
-    _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(reactionFilter)));
+      final reactionFilter = NostrService.createReactionFilter(
+        eventIds: batch,
+        since: sinceTimestamp,
+        limit: 100,
+      );
+      _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(reactionFilter)));
 
-    final replyFilter = NostrService.createReplyFilter(
-      eventIds: allEventIds,
-      since: sinceTimestamp,
-    );
-    _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(replyFilter)));
+      final replyFilter = NostrService.createReplyFilter(
+        eventIds: batch,
+        since: sinceTimestamp,
+        limit: 100,
+      );
+      _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(replyFilter)));
 
-    final repostFilter = NostrService.createRepostFilter(
-      eventIds: allEventIds,
-      since: sinceTimestamp,
-    );
-    _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(repostFilter)));
+      final repostFilter = NostrService.createRepostFilter(
+        eventIds: batch,
+        since: sinceTimestamp,
+        limit: 100,
+      );
+      _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(repostFilter)));
 
-    final zapFilter = NostrService.createZapFilter(
-      eventIds: allEventIds,
-      since: sinceTimestamp,
-    );
-    _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(zapFilter)));
+      final zapFilter = NostrService.createZapFilter(
+        eventIds: batch,
+        since: sinceTimestamp,
+        limit: 100,
+      );
+      _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(zapFilter)));
+    }
   }
 
   Future<void> _subscribeToFollowing() async {
@@ -2490,10 +2503,23 @@ class DataService {
     if (_isClosed || eventIds.isEmpty) return;
 
     try {
-      await _fetchReactionsForBatch(eventIds);
-      await _fetchRepliesForBatch(eventIds);
-      await _fetchRepostsForBatch(eventIds);
-      await _fetchZapsForBatch(eventIds);
+      // Batch process in smaller chunks for visible notes
+      const batchSize = 20;
+      for (int i = 0; i < eventIds.length; i += batchSize) {
+        final batch = eventIds.skip(i).take(batchSize).toList();
+
+        await Future.wait([
+          _fetchReactionsForBatch(batch),
+          _fetchRepliesForBatch(batch),
+          _fetchRepostsForBatch(batch),
+          _fetchZapsForBatch(batch),
+        ], eagerError: false);
+
+        // Small delay between batches to prevent overwhelming
+        if (i + batchSize < eventIds.length) {
+          await Future.delayed(const Duration(milliseconds: 50));
+        }
+      }
     } catch (e) {
       print('[DataService] Error fetching interactions: $e');
     }
@@ -3089,7 +3115,35 @@ class DataService {
   }
 
   Future<void> fetchInteractionsForEvents(List<String> eventIds) async {
-    return await _fetchBasicInteractions(eventIds);
+    if (_isClosed || eventIds.isEmpty) return;
+
+    // Prioritize visible notes for interaction fetching
+    print('[DataService] Fetching interactions for ${eventIds.length} visible notes');
+
+    // Filter out notes that already have recent interaction data
+    final noteIdsToFetch = <String>[];
+    final now = DateTime.now();
+
+    for (final eventId in eventIds) {
+      // Check if we have recent interaction data for this note
+      final hasRecentReactions = reactionsMap[eventId]?.isNotEmpty == true;
+      final hasRecentReplies = repliesMap[eventId]?.isNotEmpty == true;
+      final hasRecentReposts = repostsMap[eventId]?.isNotEmpty == true;
+      final hasRecentZaps = zapsMap[eventId]?.isNotEmpty == true;
+
+      // Only fetch if we don't have complete interaction data
+      if (!(hasRecentReactions && hasRecentReplies && hasRecentReposts && hasRecentZaps)) {
+        noteIdsToFetch.add(eventId);
+      }
+    }
+
+    if (noteIdsToFetch.isNotEmpty) {
+      await _fetchBasicInteractions(noteIdsToFetch);
+      print(
+          '[DataService] Fetched interactions for ${noteIdsToFetch.length} notes (${eventIds.length - noteIdsToFetch.length} already cached)');
+    } else {
+      print('[DataService] All requested notes already have cached interactions');
+    }
   }
 
   Future<int> getFollowingCount(String targetNpub) async {

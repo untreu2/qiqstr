@@ -53,23 +53,27 @@ class BatchProcessingService {
     if (_isClosed || eventIds.isEmpty) return;
 
     try {
-      for (final eventId in eventIds) {
+      // Process in batches for better efficiency
+      const batchSize = 25;
+      for (int i = 0; i < eventIds.length; i += batchSize) {
+        final batch = eventIds.skip(i).take(batchSize).toList();
+
         String request;
         switch (interactionType) {
           case 'reaction':
-            final filter = NostrService.createReactionFilter(eventIds: [eventId], limit: 100);
+            final filter = NostrService.createReactionFilter(eventIds: batch, limit: 100);
             request = NostrService.serializeRequest(NostrService.createRequest(filter));
             break;
           case 'reply':
-            final filter = NostrService.createReplyFilter(eventIds: [eventId], limit: 100);
+            final filter = NostrService.createReplyFilter(eventIds: batch, limit: 100);
             request = NostrService.serializeRequest(NostrService.createRequest(filter));
             break;
           case 'repost':
-            final filter = NostrService.createRepostFilter(eventIds: [eventId], limit: 100);
+            final filter = NostrService.createRepostFilter(eventIds: batch, limit: 100);
             request = NostrService.serializeRequest(NostrService.createRequest(filter));
             break;
           case 'zap':
-            final filter = NostrService.createZapFilter(eventIds: [eventId], limit: 100);
+            final filter = NostrService.createZapFilter(eventIds: batch, limit: 100);
             request = NostrService.serializeRequest(NostrService.createRequest(filter));
             break;
           default:
@@ -77,11 +81,78 @@ class BatchProcessingService {
         }
 
         await _networkService.broadcastRequest(request);
+
+        // Small delay between batches to prevent overwhelming the network
+        if (i + batchSize < eventIds.length) {
+          await Future.delayed(const Duration(milliseconds: 50));
+        }
       }
 
-      print('[BatchProcessingService] $interactionType processed for ${eventIds.length} events');
+      print('[BatchProcessingService] $interactionType processed for ${eventIds.length} events in batches');
     } catch (e) {
       print('[BatchProcessingService] Error processing interaction: $e');
+    }
+  }
+
+  /// Process interactions specifically for visible notes with priority
+  Future<void> processVisibleNotesInteractions(List<String> visibleEventIds) async {
+    if (_isClosed || visibleEventIds.isEmpty) return;
+
+    try {
+      print('[BatchProcessingService] Processing interactions for ${visibleEventIds.length} visible notes');
+
+      // Fetch all interaction types for visible notes in parallel
+      final futures = <Future>[];
+
+      // Split into smaller batches to avoid overwhelming the network
+      const batchSize = 15;
+      for (int i = 0; i < visibleEventIds.length; i += batchSize) {
+        final batch = visibleEventIds.skip(i).take(batchSize).toList();
+
+        futures.addAll([
+          _processBatchInteraction(batch, 'reaction'),
+          _processBatchInteraction(batch, 'reply'),
+          _processBatchInteraction(batch, 'repost'),
+          _processBatchInteraction(batch, 'zap'),
+        ]);
+      }
+
+      await Future.wait(futures, eagerError: false);
+      print('[BatchProcessingService] Completed processing visible notes interactions');
+    } catch (e) {
+      print('[BatchProcessingService] Error processing visible notes interactions: $e');
+    }
+  }
+
+  Future<void> _processBatchInteraction(List<String> eventIds, String interactionType) async {
+    if (_isClosed || eventIds.isEmpty) return;
+
+    try {
+      String request;
+      switch (interactionType) {
+        case 'reaction':
+          final filter = NostrService.createReactionFilter(eventIds: eventIds, limit: 50);
+          request = NostrService.serializeRequest(NostrService.createRequest(filter));
+          break;
+        case 'reply':
+          final filter = NostrService.createReplyFilter(eventIds: eventIds, limit: 50);
+          request = NostrService.serializeRequest(NostrService.createRequest(filter));
+          break;
+        case 'repost':
+          final filter = NostrService.createRepostFilter(eventIds: eventIds, limit: 50);
+          request = NostrService.serializeRequest(NostrService.createRequest(filter));
+          break;
+        case 'zap':
+          final filter = NostrService.createZapFilter(eventIds: eventIds, limit: 50);
+          request = NostrService.serializeRequest(NostrService.createRequest(filter));
+          break;
+        default:
+          return;
+      }
+
+      await _networkService.broadcastRequest(request);
+    } catch (e) {
+      print('[BatchProcessingService] Error in _processBatchInteraction for $interactionType: $e');
     }
   }
 
