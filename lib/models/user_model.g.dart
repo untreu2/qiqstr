@@ -26,13 +26,14 @@ class UserModelAdapter extends TypeAdapter<UserModel> {
       lud16: fields[6] as String,
       updatedAt: fields[7] as DateTime,
       website: fields[8] as String,
+      nip05Verified: fields[9] as bool? ?? false,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserModel obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.npub)
       ..writeByte(1)
@@ -50,7 +51,9 @@ class UserModelAdapter extends TypeAdapter<UserModel> {
       ..writeByte(7)
       ..write(obj.updatedAt)
       ..writeByte(8)
-      ..write(obj.website);
+      ..write(obj.website)
+      ..writeByte(9)
+      ..write(obj.nip05Verified);
   }
 
   @override
@@ -58,8 +61,5 @@ class UserModelAdapter extends TypeAdapter<UserModel> {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is UserModelAdapter &&
-          runtimeType == other.runtimeType &&
-          typeId == other.typeId;
+      identical(this, other) || other is UserModelAdapter && runtimeType == other.runtimeType && typeId == other.typeId;
 }

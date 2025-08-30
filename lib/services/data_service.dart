@@ -28,6 +28,7 @@ import 'nostr_service.dart';
 import 'profile_service.dart';
 import 'hive_manager.dart';
 import '../providers/interactions_provider.dart';
+import 'nip05_verification_service.dart';
 
 enum DataType { feed, profile, note }
 
@@ -203,6 +204,7 @@ class DataService {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
   late ProfileService _profileService;
+  final Nip05VerificationService _nip05Service = Nip05VerificationService.instance;
 
   Box<NoteModel>? get notesBox => _hiveManager.notesBox;
   Box<UserModel>? get usersBox => _hiveManager.usersBox;
@@ -717,6 +719,7 @@ class DataService {
           lud16: '',
           website: '',
           updatedAt: DateTime.now(),
+          nip05Verified: false,
         );
       }
 
@@ -1141,6 +1144,7 @@ class DataService {
           'banner': user.banner,
           'lud16': user.lud16,
           'website': user.website,
+          'nip05Verified': user.nip05Verified.toString(),
         };
         profileCache[pub] = CachedProfile(data, user.updatedAt);
         continue;
@@ -1361,14 +1365,29 @@ class DataService {
         profileContent = {};
       }
 
+      final nip05 = profileContent['nip05'] as String? ?? '';
+      bool nip05Verified = false;
+
+      // Perform NIP-05 verification if nip05 is present
+      if (nip05.isNotEmpty) {
+        try {
+          nip05Verified = await _nip05Service.verifyNip05(nip05, author);
+          print('[DataService] NIP-05 verification for $nip05: $nip05Verified');
+        } catch (e) {
+          print('[DataService] NIP-05 verification error for $nip05: $e');
+          nip05Verified = false;
+        }
+      }
+
       final dataToCache = {
         'name': profileContent['name'] as String? ?? 'Anonymous',
         'profileImage': profileContent['picture'] as String? ?? '',
         'about': profileContent['about'] as String? ?? '',
-        'nip05': profileContent['nip05'] as String? ?? '',
+        'nip05': nip05,
         'banner': profileContent['banner'] as String? ?? '',
         'lud16': profileContent['lud16'] as String? ?? '',
         'website': profileContent['website'] as String? ?? '',
+        'nip05Verified': nip05Verified.toString(),
       };
 
       profileCache[author] = CachedProfile(dataToCache, createdAt);
@@ -1420,6 +1439,7 @@ class DataService {
               'banner': user.banner,
               'lud16': user.lud16,
               'website': user.website,
+              'nip05Verified': user.nip05Verified.toString(),
             };
             profileCache[npub] = CachedProfile(data, user.updatedAt);
             return data;
@@ -1442,6 +1462,7 @@ class DataService {
       'banner': '',
       'lud16': '',
       'website': '',
+      'nip05Verified': 'false',
     };
   }
 
@@ -2039,6 +2060,7 @@ class DataService {
         lud16: lud16,
         website: website,
         updatedAt: updatedAt,
+        nip05Verified: false, // Will be verified asynchronously
       );
 
       profileCache[eventJson['pubkey']] = CachedProfile(

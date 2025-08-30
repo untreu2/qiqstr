@@ -10,10 +10,12 @@ import '../models/following_model.dart';
 import '../models/user_model.dart';
 import 'cache_service.dart';
 import 'profile_service.dart';
+import 'nip05_verification_service.dart';
 
 class EventHandlerService {
   final CacheService _cacheService = CacheService.instance;
   final ProfileService _profileService;
+  final Nip05VerificationService _nip05Service = Nip05VerificationService.instance;
   final String npub;
 
   final Function(String, List<ReactionModel>)? onReactionsUpdated;
@@ -233,14 +235,29 @@ class EventHandlerService {
         }
       }
 
+      final nip05 = profileContent['nip05'] as String? ?? '';
+      bool nip05Verified = false;
+
+      // Perform NIP-05 verification if nip05 is present
+      if (nip05.isNotEmpty) {
+        try {
+          nip05Verified = await _nip05Service.verifyNip05(nip05, author);
+          print('[EventHandler] NIP-05 verification for $nip05: $nip05Verified');
+        } catch (e) {
+          print('[EventHandler] NIP-05 verification error for $nip05: $e');
+          nip05Verified = false;
+        }
+      }
+
       final profileData = {
         'name': profileContent['name'] as String? ?? 'Anonymous',
         'profileImage': profileContent['picture'] as String? ?? '',
         'about': profileContent['about'] as String? ?? '',
-        'nip05': profileContent['nip05'] as String? ?? '',
+        'nip05': nip05,
         'banner': profileContent['banner'] as String? ?? '',
         'lud16': profileContent['lud16'] as String? ?? '',
         'website': profileContent['website'] as String? ?? '',
+        'nip05Verified': nip05Verified.toString(),
       };
 
       if (_cacheService.usersBox != null && _cacheService.usersBox!.isOpen) {
@@ -254,6 +271,7 @@ class EventHandlerService {
           lud16: profileData['lud16']!,
           website: profileData['website']!,
           updatedAt: createdAt,
+          nip05Verified: nip05Verified,
         );
         _saveAsync(() => _cacheService.usersBox!.put(author, userModel));
       }

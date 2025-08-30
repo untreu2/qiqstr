@@ -31,6 +31,9 @@ class UserModel extends HiveObject {
   @HiveField(8)
   final String website;
 
+  @HiveField(9)
+  final bool nip05Verified;
+
   UserModel({
     required this.npub,
     required this.name,
@@ -41,6 +44,7 @@ class UserModel extends HiveObject {
     required this.lud16,
     required this.updatedAt,
     required this.website,
+    this.nip05Verified = false,
   });
 
   factory UserModel.fromCachedProfile(String npub, Map<String, String> data) {
@@ -54,6 +58,7 @@ class UserModel extends HiveObject {
       lud16: data['lud16'] ?? '',
       website: data['website'] ?? '',
       updatedAt: DateTime.now(),
+      nip05Verified: data.containsKey('nip05Verified') ? data['nip05Verified'] == 'true' : false,
     );
   }
 
@@ -68,6 +73,7 @@ class UserModel extends HiveObject {
       lud16: json['lud16'] as String? ?? '',
       website: json['website'] as String? ?? '',
       updatedAt: DateTime.parse(json['updatedAt'] as String),
+      nip05Verified: json.containsKey('nip05Verified') ? (json['nip05Verified'] as bool? ?? false) : false,
     );
   }
 
@@ -81,5 +87,6 @@ class UserModel extends HiveObject {
         'lud16': lud16,
         'website': website,
         'updatedAt': updatedAt.toIso8601String(),
+        'nip05Verified': nip05Verified,
       };
 }

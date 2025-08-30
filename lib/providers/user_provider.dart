@@ -159,6 +159,7 @@ class UserProvider extends ChangeNotifier {
           lud16: cachedUser.lud16,
           website: cachedUser.website,
           updatedAt: cachedUser.updatedAt,
+          nip05Verified: cachedUser.nip05Verified,
         );
 
         _users[npubKey] = updatedUser;
@@ -201,6 +202,7 @@ class UserProvider extends ChangeNotifier {
           lud16: defaultUser.lud16,
           website: defaultUser.website,
           updatedAt: defaultUser.updatedAt,
+          nip05Verified: defaultUser.nip05Verified,
         );
         return correctedUser;
       }
@@ -337,6 +339,7 @@ class UserProvider extends ChangeNotifier {
       lud16: '',
       website: '',
       updatedAt: DateTime.now(),
+      nip05Verified: false,
     );
   }
 

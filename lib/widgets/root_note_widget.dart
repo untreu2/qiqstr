@@ -88,14 +88,29 @@ class RootNoteWidget extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Flexible(
-                              child: Text(
-                                authorProfile.name.isNotEmpty ? authorProfile.name : note.author.substring(0, 8),
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: context.colors.textPrimary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                overflow: TextOverflow.ellipsis,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      authorProfile.name.isNotEmpty ? authorProfile.name : note.author.substring(0, 8),
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: context.colors.textPrimary,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (authorProfile.nip05.isNotEmpty && authorProfile.nip05Verified) ...[
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      Icons.verified,
+                                      size: 16,
+                                      color: context.colors.accent,
+                                    ),
+                                  ],
+                                ],
                               ),
                             ),
                             if (authorProfile.nip05.isNotEmpty)

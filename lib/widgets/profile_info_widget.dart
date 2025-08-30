@@ -71,7 +71,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     final parsedBioContent = tempNote.parsedContentLazy;
 
     return Padding(
-      padding: const EdgeInsets.only(top: 8.0),
+      padding: const EdgeInsets.symmetric(vertical: 2.0),
       child: NoteContentWidget(
         parsedContent: parsedBioContent,
         dataService: _dataService!,
@@ -271,20 +271,20 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildAvatarAndActionsRow(context, user),
-                    const SizedBox(height: 12),
                     _buildNameRow(context, user),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 1),
                     _buildNpubCopyButton(context, npubBech32),
-                    const SizedBox(height: 6),
-                    if (user.lud16.isNotEmpty) Text(user.lud16, style: TextStyle(fontSize: 13, color: context.colors.accent)),
-                    if (user.about.isNotEmpty) _buildBioContent(user),
-                    if (user.website.isNotEmpty && _isInitialized)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12.0),
-                        child: MiniLinkPreviewWidget(url: websiteUrl),
-                      ),
+                    if (user.about.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      _buildBioContent(user),
+                      const SizedBox(height: 6),
+                    ],
+                    if (user.website.isNotEmpty && _isInitialized) ...[
+                      const SizedBox(height: 8),
+                      MiniLinkPreviewWidget(url: websiteUrl),
+                    ],
+                    const SizedBox(height: 8),
                     _buildFollowerInfo(context),
-                    const SizedBox(height: 16),
                   ],
                 ),
               ),
@@ -342,31 +342,54 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     return Row(
       children: [
         Flexible(
-          child: RichText(
-            text: TextSpan(
-              style: const TextStyle(fontSize: 24),
-              children: [
-                TextSpan(
-                  text: user.name.isNotEmpty ? user.name : user.nip05.split('@').first,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  user.name.isNotEmpty ? user.name : (user.nip05.isNotEmpty ? user.nip05.split('@').first : 'Anonymous'),
                   style: TextStyle(
+                    fontSize: 24,
                     fontWeight: FontWeight.bold,
                     color: context.colors.textPrimary,
                   ),
+                  overflow: TextOverflow.ellipsis,
                 ),
-                if (user.nip05.isNotEmpty && user.nip05.contains('@')) const TextSpan(text: '\u200A'),
-                if (user.nip05.isNotEmpty && user.nip05.contains('@'))
-                  TextSpan(
-                    text: '@${user.nip05.split('@').last}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: context.colors.accent,
-                    ),
+              ),
+              if (user.nip05.isNotEmpty && user.nip05Verified) ...[
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: () => _showVerificationTooltip(context, user.nip05),
+                  child: Icon(
+                    Icons.verified,
+                    size: 22,
+                    color: context.colors.accent,
                   ),
+                ),
               ],
-            ),
+            ],
           ),
         ),
       ],
+    );
+  }
+
+  void _showVerificationTooltip(BuildContext context, String nip05) {
+    final domain = nip05.split('@').last;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'This user is verified by $domain',
+          style: TextStyle(color: context.colors.textPrimary),
+        ),
+        backgroundColor: context.colors.surface,
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
     );
   }
 
@@ -566,7 +589,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(top: 12.0),
+      padding: const EdgeInsets.only(top: 6.0),
       child: Row(
         children: [
           GestureDetector(

@@ -142,8 +142,24 @@ class _ThreadPageState extends State<ThreadPage> {
 
       _rootNote = allNotes.firstWhereOrNull((n) => n.id == widget.rootNoteId);
 
+      // If root note not found, try to fetch it directly
+      if (_rootNote == null) {
+        print('[ThreadPage] Root note not found in cache, fetching: ${widget.rootNoteId}');
+        await _fetchNotesById([widget.rootNoteId]);
+        final updatedNotes = widget.dataService.notesNotifier.value;
+        _rootNote = updatedNotes.firstWhereOrNull((n) => n.id == widget.rootNoteId);
+      }
+
       if (widget.focusedNoteId != null && widget.focusedNoteId != widget.rootNoteId) {
         _focusedNote = allNotes.firstWhereOrNull((n) => n.id == widget.focusedNoteId);
+
+        // If focused note not found, try to fetch it directly
+        if (_focusedNote == null) {
+          print('[ThreadPage] Focused note not found in cache, fetching: ${widget.focusedNoteId}');
+          await _fetchNotesById([widget.focusedNoteId!]);
+          final updatedNotes = widget.dataService.notesNotifier.value;
+          _focusedNote = updatedNotes.firstWhereOrNull((n) => n.id == widget.focusedNoteId);
+        }
       } else {
         _focusedNote = null;
       }
@@ -304,20 +320,31 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Future<void> _fetchNotesById(List<String> noteIds) async {
-    final futures = noteIds.map((noteId) async {
+    print('[ThreadPage] Fetching notes by ID: $noteIds');
+
+    for (final noteId in noteIds) {
       try {
-        final note = await widget.dataService.getCachedNote(noteId).timeout(const Duration(seconds: 2));
+        print('[ThreadPage] Attempting to fetch note: $noteId');
+
+        // Try multiple fetch strategies
+        var note = await widget.dataService.getCachedNote(noteId).timeout(const Duration(seconds: 3));
+
+        if (note == null) {
+          print('[ThreadPage] Note not in cache, trying relay broadcast: $noteId');
+          // Try to request note from relays by broadcasting a filter
+          await _requestNoteFromRelays(noteId).timeout(const Duration(seconds: 5));
+          note = await widget.dataService.getCachedNote(noteId).timeout(const Duration(seconds: 2));
+        }
+
         if (note != null) {
           print('[ThreadPage] Successfully fetched note: $noteId');
         } else {
-          print('[ThreadPage] Failed to fetch note: $noteId');
+          print('[ThreadPage] Failed to fetch note after all attempts: $noteId');
         }
       } catch (e) {
         print('[ThreadPage] Error fetching note $noteId: $e');
       }
-    });
-
-    await Future.wait(futures).timeout(const Duration(seconds: 5));
+    }
   }
 
   void _updateRelevantNoteIds() {
@@ -336,6 +363,39 @@ class _ThreadPageState extends State<ThreadPage> {
 
     if (_focusedNote != null) {
       _relevantNoteIds.add(_focusedNote!.id);
+    }
+  }
+
+  Future<void> _requestNoteFromRelays(String noteId) async {
+    print('[ThreadPage] Requesting note from relays: $noteId');
+    try {
+      // Use the existing fetchNotesById method which handles relay requests
+      await _fetchNotesById([noteId]);
+    } catch (e) {
+      print('[ThreadPage] Error requesting note from relays: $e');
+    }
+  }
+
+  Future<void> _retryFetchNote() async {
+    print('[ThreadPage] Retrying note fetch');
+    setState(() => _isLoading = true);
+
+    try {
+      // Try to fetch the root note again
+      await _fetchNotesById([widget.rootNoteId]);
+
+      // Try to fetch focused note if it exists
+      if (widget.focusedNoteId != null) {
+        await _fetchNotesById([widget.focusedNoteId!]);
+      }
+
+      // Reload the root note
+      await _loadRootNote();
+    } catch (e) {
+      print('[ThreadPage] Retry failed: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -591,7 +651,45 @@ class _ThreadPageState extends State<ThreadPage> {
           body: _isLoading
               ? Center(child: CircularProgressIndicator(color: context.colors.textPrimary))
               : displayRoot == null
-                  ? Center(child: Text('Note not found.', style: TextStyle(color: context.colors.textSecondary)))
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.search_off,
+                            size: 64,
+                            color: context.colors.textSecondary,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Note not found',
+                            style: TextStyle(
+                              color: context.colors.textSecondary,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'The note may have been deleted or is not available',
+                            style: TextStyle(
+                              color: context.colors.textSecondary,
+                              fontSize: 14,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 24),
+                          ElevatedButton(
+                            onPressed: () => _retryFetchNote(),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: context.colors.accent,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text('Retry'),
+                          ),
+                        ],
+                      ),
+                    )
                   : Stack(
                       children: [
                         SingleChildScrollView(

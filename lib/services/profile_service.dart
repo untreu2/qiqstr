@@ -5,6 +5,7 @@ import 'package:hive/hive.dart';
 import '../models/user_model.dart';
 import '../constants/relays.dart';
 import 'hive_manager.dart';
+import 'nip05_verification_service.dart';
 
 class ProfileService {
   static ProfileService? _instance;
@@ -13,6 +14,7 @@ class ProfileService {
   ProfileService._internal();
 
   final HiveManager _hiveManager = HiveManager.instance;
+  final Nip05VerificationService _nip05Service = Nip05VerificationService.instance;
   final Map<String, Map<String, String>> _profileCache = {};
   final Map<String, DateTime> _cacheTimestamps = {};
   final Map<String, Completer<Map<String, String>>> _pendingRequests = {};
@@ -23,7 +25,6 @@ class ProfileService {
   Box<UserModel>? get _usersBox => _hiveManager.usersBox;
 
   Future<void> initialize() async {
-    
     if (!_hiveManager.isInitialized) {
       await _hiveManager.initializeBoxes();
     }
@@ -93,6 +94,7 @@ class ProfileService {
       'banner': '',
       'lud16': '',
       'website': '',
+      'nip05Verified': 'false',
     };
   }
 
@@ -105,6 +107,7 @@ class ProfileService {
       'banner': user.banner,
       'lud16': user.lud16,
       'website': user.website,
+      'nip05Verified': user.nip05Verified.toString(),
     };
   }
 
@@ -194,14 +197,29 @@ class ProfileService {
           } catch (_) {}
         }
 
+        final nip05 = profileContent['nip05'] ?? '';
+        bool nip05Verified = false;
+
+        // Perform NIP-05 verification if nip05 is present
+        if (nip05.isNotEmpty) {
+          try {
+            nip05Verified = await _nip05Service.verifyNip05(nip05, npub);
+            print('[ProfileService] NIP-05 verification for $nip05: $nip05Verified');
+          } catch (e) {
+            print('[ProfileService] NIP-05 verification error for $nip05: $e');
+            nip05Verified = false;
+          }
+        }
+
         return {
           'name': profileContent['name'] ?? 'Anonymous',
           'profileImage': profileContent['picture'] ?? '',
           'about': profileContent['about'] ?? '',
-          'nip05': profileContent['nip05'] ?? '',
+          'nip05': nip05,
           'banner': profileContent['banner'] ?? '',
           'lud16': profileContent['lud16'] ?? '',
           'website': profileContent['website'] ?? '',
+          'nip05Verified': nip05Verified.toString(),
         };
       }
       return null;

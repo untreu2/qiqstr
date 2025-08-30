@@ -75,6 +75,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     if (_cachedAuthorUser?.profileImage != authorUser.profileImage ||
         _cachedAuthorUser?.name != authorUser.name ||
         _cachedAuthorUser?.nip05 != authorUser.nip05 ||
+        _cachedAuthorUser?.nip05Verified != authorUser.nip05Verified ||
         (_cachedReposterUser?.profileImage != reposterUser?.profileImage) ||
         (_cachedReposterUser?.name != reposterUser?.name)) {
       setState(() {
@@ -238,14 +239,29 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Flexible(
-              child: Text(
-                authorUser.name.length > 25 ? '${authorUser.name.substring(0, 25)}...' : authorUser.name,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: colors.textPrimary,
-                ),
-                overflow: TextOverflow.ellipsis,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      authorUser.name.length > 25 ? '${authorUser.name.substring(0, 25)}...' : authorUser.name,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: colors.textPrimary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (authorUser.nip05.isNotEmpty && authorUser.nip05Verified) ...[
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.verified,
+                      size: 16,
+                      color: colors.accent,
+                    ),
+                  ],
+                ],
               ),
             ),
             if (authorUser.nip05.isNotEmpty) ...[

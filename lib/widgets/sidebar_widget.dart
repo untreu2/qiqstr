@@ -74,14 +74,29 @@ class _UserProfileHeader extends StatelessWidget {
           ),
           const SizedBox(width: 16),
           Expanded(
-            child: Text(
-              user.name.isNotEmpty ? user.name : 'Anonymous',
-              style: TextStyle(
-                color: colors.textPrimary,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-              overflow: TextOverflow.ellipsis,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    user.name.isNotEmpty ? user.name : 'Anonymous',
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (user.nip05.isNotEmpty && user.nip05Verified) ...[
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.verified,
+                    size: 18,
+                    color: colors.accent,
+                  ),
+                ],
+              ],
             ),
           ),
         ],
