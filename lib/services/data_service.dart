@@ -87,7 +87,9 @@ class NoteListNotifier extends ValueNotifier<List<NoteModel>> {
 
   void _invalidateFilterCache() {
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 250), () {
+    // Faster invalidation for profiles to prevent lag
+    final debounceDelay = _dataType == DataType.profile ? const Duration(milliseconds: 100) : const Duration(milliseconds: 250);
+    _debounceTimer = Timer(debounceDelay, () {
       _filterCacheValid = false;
     });
   }
@@ -254,7 +256,10 @@ class DataService {
     _onRepostCountUpdated = onRepostCountUpdated;
 
     _notesNotifier = NoteListNotifier(_currentDataType, _currentNpub);
-    _isInitialized = false;
+    // Keep initialized state if already initialized to avoid reinitialization issues
+    if (!_isInitialized) {
+      _isInitialized = false;
+    }
     print('[DataService] Configured for feed: $npub');
   }
 
@@ -287,7 +292,10 @@ class DataService {
     _onRepostCountUpdated = onRepostCountUpdated;
 
     _notesNotifier = NoteListNotifier(_currentDataType, _currentNpub);
-    _isInitialized = false;
+    // Keep initialized state if already initialized to avoid reinitialization issues
+    if (!_isInitialized) {
+      _isInitialized = false;
+    }
     print('[DataService] Configured for profile: $npub');
   }
 
@@ -316,7 +324,8 @@ class DataService {
     _notesNotifier?.clearQuietly();
     _notesNotifier = null;
 
-    profileCache.clear();
+    // Don't clear profile cache completely - it can be reused
+    // profileCache.clear();
 
     profilesNotifier.value = {};
     unreadNotificationsCountNotifier.value = 0;
@@ -336,6 +345,9 @@ class DataService {
     _uiThrottleTimer = null;
     _scrollDebounceTimer?.cancel();
     _scrollDebounceTimer = null;
+
+    // Keep the service initialized to avoid reinitialization issues
+    // _isInitialized = false;
 
     print('[DataService] Data structures cleared for fresh configuration');
   }
@@ -371,8 +383,9 @@ class DataService {
       _profileService = ProfileService.instance;
       await _profileService.initialize();
 
+      // Load cache immediately for instant display
+      await loadNotesFromCache((loadedNotes) {});
       Future.microtask(() async {
-        await loadNotesFromCache((loadedNotes) {});
         await _loadProfilesForNotes();
       });
 
@@ -854,7 +867,10 @@ class DataService {
   }
 
   Future<void> initializeConnections() async {
-    if (!_isInitialized) return;
+    if (!_isInitialized) {
+      print('[DataService] Service not initialized, initializing now');
+      await initialize();
+    }
 
     const maxRetries = 2;
     const retryDelay = Duration(milliseconds: 500);
@@ -919,12 +935,8 @@ class DataService {
 
         try {
           if (dataType == DataType.profile) {
-            await _fetchProfileNotesOptimized([npub]).timeout(
-              const Duration(seconds: 5),
-              onTimeout: () {
-                print('[DataService] Profile notes fetch timed out, continuing with cached data');
-              },
-            );
+            // Start immediate aggressive profile fetch for instant display
+            Future.microtask(() => _fetchProfileNotesAggressively([npub]));
           } else {
             await fetchNotes(targetNpubs, initialLoad: true).timeout(
               const Duration(seconds: 8),
@@ -1011,7 +1023,14 @@ class DataService {
     );
 
     final request = NostrService.serializeRequest(NostrService.createRequest(filter));
-    await _safeBroadcast(request);
+
+    if (dataType == DataType.profile) {
+      // For profiles, broadcast to all relays immediately for faster response
+      await _socketManager.immediateBroadcastToAll(request);
+      print('[DataService] Immediate broadcast to all relays for ${noteLimit} profile notes');
+    } else {
+      await _safeBroadcast(request);
+    }
 
     if (dataType == DataType.profile) {
       print('[DataService] Fetched ${noteLimit} profile notes for instant display');
@@ -1197,10 +1216,14 @@ class DataService {
         'priority': 1,
       });
 
-      if (_pendingEvents.length >= 50) {
-        _flushPendingEvents();
+      // For profiles, process events more frequently with smaller batches to prevent lag
+      final batchThreshold = dataType == DataType.profile ? 20 : 50;
+      final batchDelay = dataType == DataType.profile ? const Duration(milliseconds: 15) : const Duration(milliseconds: 25);
+
+      if (_pendingEvents.length >= batchThreshold) {
+        Future.microtask(_flushPendingEvents);
       } else {
-        _batchTimer ??= Timer(const Duration(milliseconds: 25), _flushPendingEvents);
+        _batchTimer ??= Timer(batchDelay, _flushPendingEvents);
       }
     } catch (e) {}
   }
@@ -1721,6 +1744,40 @@ class DataService {
     print('[DataService] Profile notes optimization completed');
   }
 
+  Future<void> _fetchProfileNotesAggressively(List<String> authors) async {
+    if (_isClosed) return;
+
+    print('[DataService] Starting optimized profile notes fetch with anti-freeze protection');
+
+    // Staggered fetching to prevent UI freezing
+    Future.microtask(() async {
+      // First wave - small immediate batch
+      await _fetchNotes(authors, limit: 25);
+
+      // Small delay to allow UI to render
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      // Second wave - medium batch
+      await _fetchNotes(authors, limit: 75);
+
+      // Allow UI breathing room
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      // Third wave - larger batch
+      if (!_isClosed) {
+        await _fetchNotes(authors, limit: 150);
+      }
+
+      // Final wave with delay to prevent freezing
+      await Future.delayed(const Duration(milliseconds: 50));
+      if (!_isClosed) {
+        await _fetchNotes(authors, limit: 250);
+      }
+    });
+
+    print('[DataService] Optimized profile notes fetch initiated with anti-freeze protection');
+  }
+
   DateTime? _getOldestNoteTimestamp() {
     if (notes.isEmpty) return null;
     final sortedNotes = notes.toList()..sort((a, b) => a.timestamp.compareTo(b.timestamp));
@@ -1922,9 +1979,16 @@ class DataService {
   }
 
   void addNote(NoteModel note) {
-    _itemsTree.add(note);
-
-    notesNotifier.addNoteQuietly(note);
+    // Add note in microtask for profiles to prevent UI blocking
+    if (dataType == DataType.profile) {
+      Future.microtask(() {
+        _itemsTree.add(note);
+        notesNotifier.addNoteQuietly(note);
+      });
+    } else {
+      _itemsTree.add(note);
+      notesNotifier.addNoteQuietly(note);
+    }
   }
 
   void _invalidateFilterCache() => notesNotifier._invalidateFilterCache();
@@ -2599,10 +2663,13 @@ class DataService {
         return bTime.compareTo(aTime);
       });
 
-      final limitedNotes = filteredNotes.take(100).toList();
+      // For profiles, load more cached notes for instant display
+      // Limit cached notes to prevent UI freezing
+      final limitedNotes = filteredNotes.take(dataType == DataType.profile ? 100 : 80).toList();
       final newNotes = <NoteModel>[];
 
-      const batchSize = 25;
+      // Smaller batches to prevent UI freezing
+      final batchSize = dataType == DataType.profile ? 15 : 20;
       for (int i = 0; i < limitedNotes.length; i += batchSize) {
         final batch = limitedNotes.skip(i).take(batchSize);
 
@@ -2621,8 +2688,12 @@ class DataService {
           note.zapAmount = zapsMap[note.id]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
         }
 
-        if (i % (batchSize * 2) == 0) {
-          await Future.delayed(Duration.zero);
+        // Always yield to UI between batches to prevent freezing
+        await Future.delayed(Duration.zero);
+
+        // Additional micro-delay for profiles to ensure smooth UI
+        if (dataType == DataType.profile && i % (batchSize * 3) == 0) {
+          await Future.delayed(const Duration(milliseconds: 1));
         }
       }
 
@@ -2631,13 +2702,18 @@ class DataService {
         notesNotifier.value = notesNotifier.notes;
         onLoad(newNotes);
 
-        await _fetchProfilesForVisibleNotes(newNotes);
+        // Load profiles immediately for instant display
+        if (dataType == DataType.profile) {
+          _fetchProfilesForVisibleNotes(newNotes);
+        } else {
+          await _fetchProfilesForVisibleNotes(newNotes);
+        }
 
         profilesNotifier.value = {
           for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data),
         };
 
-        print('[DataService] Cached notes loaded - interactions will be fetched only when notes become visible');
+        print('[DataService] Cached notes loaded (${newNotes.length} notes) - ${dataType == DataType.profile ? "INSTANT" : "NORMAL"} mode');
       }
     } catch (e) {
       print('[DataService ERROR] Error loading notes from cache: $e');
@@ -2731,7 +2807,8 @@ class DataService {
         final allReactions = _hiveManager.reactionsBox!.values.cast<ReactionModel>().toList();
         if (allReactions.isEmpty) return;
 
-        const batchSize = 50;
+        // Smaller batches to prevent UI freezing
+        const batchSize = 25;
         final Map<String, List<ReactionModel>> tempMap = {};
 
         for (int i = 0; i < allReactions.length; i += batchSize) {
@@ -2744,7 +2821,13 @@ class DataService {
             }
           }
 
+          // Always yield to UI to prevent freezing
           await Future.delayed(Duration.zero);
+
+          // Additional micro-delay every few batches
+          if (i % (batchSize * 4) == 0) {
+            await Future.delayed(const Duration(milliseconds: 1));
+          }
         }
 
         for (final entry in tempMap.entries) {
@@ -2993,26 +3076,44 @@ class DataService {
     if (data is List<NoteModel> && data.isNotEmpty) {
       final newNoteIds = <String>[];
 
-      for (var note in data) {
-        if (!eventIds.contains(note.id)) {
-          bool shouldProcess = true;
+      // Process in smaller batches to prevent UI freezing
+      const maxBatchSize = 10;
+      for (int i = 0; i < data.length; i += maxBatchSize) {
+        final batch = data.skip(i).take(maxBatchSize);
 
-          shouldProcess = true;
+        for (var note in batch) {
+          if (!eventIds.contains(note.id)) {
+            bool shouldProcess = true;
 
-          if (shouldProcess) {
-            note.hasMedia = note.hasMediaLazy;
-            notes.add(note);
-            eventIds.add(note.id);
-            newNoteIds.add(note.id);
+            shouldProcess = true;
 
-            await _hiveManager.notesBox?.put(note.id, note);
-            addNote(note);
+            if (shouldProcess) {
+              note.hasMedia = note.hasMediaLazy;
+              notes.add(note);
+              eventIds.add(note.id);
+              newNoteIds.add(note.id);
+
+              // Always save to cache asynchronously to prevent UI blocking
+              Future.microtask(() => _hiveManager.notesBox?.put(note.id, note));
+
+              addNote(note);
+
+              // For profiles, trigger immediate UI update
+              if (dataType == DataType.profile) {
+                onNewNote?.call(note);
+              }
+            }
           }
+        }
+
+        // Yield to UI between batches to prevent freezing
+        if (i + maxBatchSize < data.length) {
+          await Future.delayed(Duration.zero);
         }
       }
 
       print(
-          '[DataService] Handled new notes: ${data.length} notes processed, ${newNoteIds.length} added (interactions will be fetched only when visible).');
+          '[DataService] Handled new notes: ${data.length} notes processed, ${newNoteIds.length} added - ${dataType == DataType.profile ? "INSTANT" : "NORMAL"} mode');
     }
   }
 
@@ -3096,26 +3197,36 @@ class DataService {
     }
 
     if (_hasPendingUiUpdate && (_uiThrottleTimer == null || !_uiThrottleTimer!.isActive)) {
-      _uiThrottleTimer = Timer(const Duration(milliseconds: 250), () {
+      // For profiles, update UI immediately without throttling for instant display
+      final throttleDelay = dataType == DataType.profile ? Duration.zero : const Duration(milliseconds: 250);
+
+      _uiThrottleTimer = Timer(throttleDelay, () {
         if (_isClosed) {
           return;
         }
 
-        print('[DataService] Throttled UI update executed for all pending changes.');
+        print('[DataService] ${dataType == DataType.profile ? "INSTANT" : "Throttled"} UI update executed for all pending changes.');
 
-        notesNotifier.value = notesNotifier._getFilteredNotesList();
+        // Update UI in microtasks to prevent blocking
+        Future.microtask(() {
+          notesNotifier.value = notesNotifier._getFilteredNotesList();
+        });
 
-        profilesNotifier.value = {
-          for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
-        };
+        Future.microtask(() {
+          profilesNotifier.value = {
+            for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
+          };
+        });
 
-        final notificationsBox = _hiveManager.getNotificationBox(_loggedInNpub);
-        if (notificationsBox != null && notificationsBox.isOpen) {
-          final allNotifications = notificationsBox.values.toList();
-          allNotifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-          notificationsNotifier.value = allNotifications;
-          _updateUnreadNotificationCount();
-        }
+        Future.microtask(() {
+          final notificationsBox = _hiveManager.getNotificationBox(_loggedInNpub);
+          if (notificationsBox != null && notificationsBox.isOpen) {
+            final allNotifications = notificationsBox.values.toList();
+            allNotifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+            notificationsNotifier.value = allNotifications;
+            _updateUnreadNotificationCount();
+          }
+        });
 
         _hasPendingUiUpdate = false;
       });

@@ -72,8 +72,9 @@ class DataServiceManager {
 
   void _closeActiveService() {
     if (_activeService != null) {
-      debugPrint('[DataServiceManager] Closing previous active service: $_activeServiceKey');
-      _activeService!.closeConnections();
+      debugPrint('[DataServiceManager] Releasing previous active service: $_activeServiceKey');
+      // Don't close connections immediately, just mark as inactive
+      // The DataService singleton will handle its own lifecycle
       _activeService = null;
       _activeServiceKey = null;
     }

@@ -35,7 +35,12 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void dispose() {
     _scrollController.dispose();
-    dataService?.closeConnections();
+
+    // Properly release the service instead of directly closing connections
+    if (_userHexKey != null || widget.user.npub.isNotEmpty) {
+      DataServiceManager.instance.releaseProfileService(_userHexKey ?? widget.user.npub);
+    }
+
     super.dispose();
   }
 
@@ -77,7 +82,8 @@ class _ProfilePageState extends State<ProfilePage> {
         _profileInfoLoaded = true;
       });
     }
-    Future.microtask(() => _startNotesLoading());
+    // Start notes loading immediately, not in microtask
+    _startNotesLoading();
   }
 
   Future<void> _createDataServiceEarly() async {
@@ -85,13 +91,27 @@ class _ProfilePageState extends State<ProfilePage> {
       dataService = DataServiceManager.instance.getOrCreateService(
         npub: _userHexKey ?? widget.user.npub,
         dataType: DataType.profile,
-        onNewNote: (_) {},
-        onReactionsUpdated: (_, __) {},
-        onRepliesUpdated: (_, __) {},
-        onRepostsUpdated: (_, __) {},
-        onReactionCountUpdated: (_, __) {},
-        onReplyCountUpdated: (_, __) {},
-        onRepostCountUpdated: (_, __) {},
+        onNewNote: (_) {
+          if (mounted) setState(() {});
+        },
+        onReactionsUpdated: (_, __) {
+          if (mounted) setState(() {});
+        },
+        onRepliesUpdated: (_, __) {
+          if (mounted) setState(() {});
+        },
+        onRepostsUpdated: (_, __) {
+          if (mounted) setState(() {});
+        },
+        onReactionCountUpdated: (_, __) {
+          if (mounted) setState(() {});
+        },
+        onReplyCountUpdated: (_, __) {
+          if (mounted) setState(() {});
+        },
+        onRepostCountUpdated: (_, __) {
+          if (mounted) setState(() {});
+        },
       );
       await dataService!.initializeLightweight();
       if (mounted) {
@@ -109,27 +129,41 @@ class _ProfilePageState extends State<ProfilePage> {
         dataService = DataServiceManager.instance.getOrCreateService(
           npub: _userHexKey ?? widget.user.npub,
           dataType: DataType.profile,
-          onNewNote: (_) {},
-          onReactionsUpdated: (_, __) {},
-          onRepliesUpdated: (_, __) {},
-          onRepostsUpdated: (_, __) {},
-          onReactionCountUpdated: (_, __) {},
-          onReplyCountUpdated: (_, __) {},
-          onRepostCountUpdated: (_, __) {},
+          onNewNote: (_) {
+            if (mounted) setState(() {});
+          },
+          onReactionsUpdated: (_, __) {
+            if (mounted) setState(() {});
+          },
+          onRepliesUpdated: (_, __) {
+            if (mounted) setState(() {});
+          },
+          onRepostsUpdated: (_, __) {
+            if (mounted) setState(() {});
+          },
+          onReactionCountUpdated: (_, __) {
+            if (mounted) setState(() {});
+          },
+          onReplyCountUpdated: (_, __) {
+            if (mounted) setState(() {});
+          },
+          onRepostCountUpdated: (_, __) {
+            if (mounted) setState(() {});
+          },
         );
         await dataService!.initializeLightweight();
       }
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (mounted && dataService != null) {
-          dataService!.initializeHeavyOperations().then((_) {
-            if (mounted && dataService != null) {
-              dataService!.initializeConnections();
-            }
-          }).catchError((e) {
-            print('[ProfilePage] Heavy operations error: $e');
-          });
-        }
-      });
+
+      // Start heavy operations immediately, not delayed
+      if (mounted && dataService != null) {
+        // Run heavy operations and connections in parallel for speed
+        Future.wait([
+          dataService!.initializeHeavyOperations(),
+          Future.delayed(const Duration(milliseconds: 50)).then((_) => dataService!.initializeConnections())
+        ]).catchError((e) {
+          print('[ProfilePage] Parallel initialization error: $e');
+        });
+      }
     } catch (e) {
       print('[ProfilePage] Notes loading error: $e');
     }
