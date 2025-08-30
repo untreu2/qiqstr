@@ -7,6 +7,7 @@ import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/profile_service.dart';
 import 'package:qiqstr/screens/home_navigator.dart';
 import 'package:qiqstr/services/data_service.dart';
+import 'package:qiqstr/services/data_service_manager.dart';
 import 'package:qiqstr/theme/theme_manager.dart';
 import 'package:nostr/nostr.dart';
 
@@ -134,7 +135,7 @@ class _SuggestedFollowsPageState extends State<SuggestedFollowsPage> {
       await Future.delayed(const Duration(milliseconds: 500));
 
       print('Creating new DataService for feed mode...');
-      final feedDataService = DataService(
+      final feedDataService = DataServiceManager.instance.getOrCreateService(
         npub: widget.npub,
         dataType: DataType.feed,
       );

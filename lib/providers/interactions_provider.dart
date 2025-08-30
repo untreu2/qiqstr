@@ -16,16 +16,17 @@ class InteractionsProvider extends ChangeNotifier {
   InteractionsProvider._internal();
 
   Timer? _periodicTimer;
+  Set<String> _visibleNoteIds = {};
 
   final _reactionStreamController = StreamController<String>.broadcast();
   final _replyStreamController = StreamController<String>.broadcast();
   final _repostStreamController = StreamController<String>.broadcast();
   final _zapStreamController = StreamController<String>.broadcast();
 
-  Stream<String> get reactionsStream => _reactionStreamController.stream.debounceTime(const Duration(milliseconds: 300));
-  Stream<String> get repliesStream => _replyStreamController.stream.debounceTime(const Duration(milliseconds: 300));
-  Stream<String> get repostsStream => _repostStreamController.stream.debounceTime(const Duration(milliseconds: 300));
-  Stream<String> get zapsStream => _zapStreamController.stream.debounceTime(const Duration(milliseconds: 300));
+  Stream<String> get reactionsStream => _reactionStreamController.stream.debounceTime(const Duration(milliseconds: 200));
+  Stream<String> get repliesStream => _replyStreamController.stream.debounceTime(const Duration(milliseconds: 200));
+  Stream<String> get repostsStream => _repostStreamController.stream.debounceTime(const Duration(milliseconds: 200));
+  Stream<String> get zapsStream => _zapStreamController.stream.debounceTime(const Duration(milliseconds: 200));
 
   final Map<String, List<ReactionModel>> _reactionsByNote = {};
   final Map<String, List<ReplyModel>> _repliesByNote = {};
@@ -153,7 +154,9 @@ class InteractionsProvider extends ChangeNotifier {
     _addReactionToCache(reaction);
     try {
       await _reactionsBox?.put(reaction.id, reaction);
-      _reactionStreamController.add(reaction.targetEventId);
+      if (_visibleNoteIds.contains(reaction.targetEventId)) {
+        _reactionStreamController.add(reaction.targetEventId);
+      }
     } catch (e) {
       debugPrint('[InteractionsProvider] Error saving reaction: $e');
     }
@@ -163,7 +166,9 @@ class InteractionsProvider extends ChangeNotifier {
     _addReplyToCache(reply);
     try {
       await _repliesBox?.put(reply.id, reply);
-      _replyStreamController.add(reply.parentEventId);
+      if (_visibleNoteIds.contains(reply.parentEventId)) {
+        _replyStreamController.add(reply.parentEventId);
+      }
     } catch (e) {
       debugPrint('[InteractionsProvider] Error saving reply: $e');
     }
@@ -176,7 +181,9 @@ class InteractionsProvider extends ChangeNotifier {
     _addRepostToCache(repost);
     try {
       await _repostsBox?.put(repost.id, repost);
-      _repostStreamController.add(repost.originalNoteId);
+      if (_visibleNoteIds.contains(repost.originalNoteId)) {
+        _repostStreamController.add(repost.originalNoteId);
+      }
     } catch (e) {
       debugPrint('[InteractionsProvider] Error saving repost: $e');
     }
@@ -186,7 +193,9 @@ class InteractionsProvider extends ChangeNotifier {
     _addZapToCache(zap);
     try {
       await _zapsBox?.put(zap.id, zap);
-      _zapStreamController.add(zap.targetEventId);
+      if (_visibleNoteIds.contains(zap.targetEventId)) {
+        _zapStreamController.add(zap.targetEventId);
+      }
     } catch (e) {
       debugPrint('[InteractionsProvider] Error saving zap: $e');
     }
@@ -267,12 +276,18 @@ class InteractionsProvider extends ChangeNotifier {
     }
   }
 
+  void updateVisibleNotes(Set<String> visibleNoteIds) {
+    _visibleNoteIds = visibleNoteIds;
+  }
+
   void updateReactions(String noteId, List<ReactionModel> reactions) {
     _reactionsByNote[noteId] = reactions;
     for (final reaction in reactions) {
       _userReactions.putIfAbsent(reaction.author, () => {}).add(reaction.targetEventId);
     }
-    _reactionStreamController.add(noteId);
+    if (_visibleNoteIds.contains(noteId)) {
+      _reactionStreamController.add(noteId);
+    }
   }
 
   void updateReplies(String noteId, List<ReplyModel> replies) {
@@ -280,7 +295,9 @@ class InteractionsProvider extends ChangeNotifier {
     for (final reply in replies) {
       _userReplies.putIfAbsent(reply.author, () => {}).add(reply.parentEventId);
     }
-    _replyStreamController.add(noteId);
+    if (_visibleNoteIds.contains(noteId)) {
+      _replyStreamController.add(noteId);
+    }
   }
 
   void updateReposts(String noteId, List<RepostModel> reposts) {
@@ -288,7 +305,9 @@ class InteractionsProvider extends ChangeNotifier {
     for (final repost in reposts) {
       _userReposts.putIfAbsent(repost.repostedBy, () => {}).add(repost.originalNoteId);
     }
-    _repostStreamController.add(noteId);
+    if (_visibleNoteIds.contains(noteId)) {
+      _repostStreamController.add(noteId);
+    }
   }
 
   void updateZaps(String noteId, List<ZapModel> zaps) {
@@ -296,7 +315,9 @@ class InteractionsProvider extends ChangeNotifier {
     for (final zap in zaps) {
       _userZaps.putIfAbsent(zap.sender, () => {}).add(zap.targetEventId);
     }
-    _zapStreamController.add(noteId);
+    if (_visibleNoteIds.contains(noteId)) {
+      _zapStreamController.add(noteId);
+    }
   }
 
   void removeReaction(String reactionId, String noteId, String userId) {

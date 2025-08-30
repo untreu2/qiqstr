@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:nostr/nostr.dart';
 import 'package:qiqstr/services/data_service.dart';
+import 'package:qiqstr/services/data_service_manager.dart';
 import 'package:qiqstr/screens/home_navigator.dart';
 import 'package:qiqstr/screens/edit_new_account_profile.dart';
 
@@ -71,7 +72,10 @@ class _LoginPageState extends State<LoginPage> {
       await _secureStorage.write(key: 'privateKey', value: nsecHex);
       await _secureStorage.write(key: 'npub', value: npubHex);
 
-      final dataService = DataService(npub: npubHex, dataType: DataType.feed);
+      final dataService = DataServiceManager.instance.getOrCreateService(
+        npub: npubHex,
+        dataType: DataType.feed,
+      );
       await dataService.initialize();
 
       if (mounted) {
@@ -103,7 +107,10 @@ class _LoginPageState extends State<LoginPage> {
       await _secureStorage.write(key: 'privateKey', value: nsecHex);
       await _secureStorage.write(key: 'npub', value: npubHex);
 
-      final dataService = DataService(npub: npubHex, dataType: DataType.feed);
+      final dataService = DataServiceManager.instance.getOrCreateService(
+        npub: npubHex,
+        dataType: DataType.feed,
+      );
       await dataService.initialize();
 
       if (mounted) {

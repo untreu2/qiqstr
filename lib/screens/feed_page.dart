@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/services/data_service.dart';
+import 'package:qiqstr/services/data_service_manager.dart';
 import 'package:qiqstr/providers/user_provider.dart';
 import '../theme/theme_manager.dart';
 
@@ -33,7 +34,11 @@ class FeedPageState extends State<FeedPage> {
   void initState() {
     super.initState();
 
-    dataService = widget.dataService ?? DataService(npub: widget.npub, dataType: DataType.feed);
+    dataService = widget.dataService ??
+        DataServiceManager.instance.getOrCreateService(
+          npub: widget.npub,
+          dataType: DataType.feed,
+        );
     _scrollController = ScrollController()..addListener(_scrollListener);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeProgressively();
@@ -119,7 +124,7 @@ class FeedPageState extends State<FeedPage> {
         curve: Curves.easeOut,
       );
     }
-    
+
     if (mounted) {
       setState(() {
         _showAppBar = true;

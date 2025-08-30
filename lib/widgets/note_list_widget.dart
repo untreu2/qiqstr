@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import '../providers/notes_list_provider.dart';
+import '../providers/interactions_provider.dart';
 import '../services/data_service.dart';
 import '../theme/theme_manager.dart';
 import 'note_widget.dart';
@@ -19,30 +20,33 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   double _savedScrollPosition = 0.0;
   bool _isUserScrolling = false;
 
-  // Track visible notes for selective interaction fetching
   final Set<String> _visibleNoteIds = {};
   Timer? _interactionFetchTimer;
-  final Duration _interactionFetchDelay = const Duration(milliseconds: 300);
+  Duration _interactionFetchDelay = const Duration(milliseconds: 300);
 
-  // Performance optimization caches
   Set<String>? _cachedVisibleNoteIds;
   double _lastCalculatedScrollPosition = -1;
   int _lastNotesLength = 0;
 
-  // Scroll optimization - reduced aggressive settings
   double _lastScrollPosition = 0;
   DateTime _lastScrollTime = DateTime.now();
-  static const double _scrollThreshold = 10.0; // Reduced threshold for smoother scrolling
-  static const Duration _scrollDebounceInterval = Duration(milliseconds: 33); // ~30fps for better UX
+  static const double _scrollThreshold = 10.0;
+  Duration _scrollDebounceInterval = const Duration(milliseconds: 33);
 
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController(keepScrollOffset: true); // Enable scroll offset preservation
+    _scrollController = ScrollController(keepScrollOffset: true);
     _setupScrollListener();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<NotesListProvider>();
+
+      if (provider.dataType == DataType.profile) {
+        _interactionFetchDelay = const Duration(milliseconds: 200);
+        _scrollDebounceInterval = const Duration(milliseconds: 25);
+      }
+
       provider.fetchInitialNotes();
     });
   }
@@ -52,31 +56,27 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       final currentPosition = _scrollController.position.pixels;
       final now = DateTime.now();
 
-      // Less aggressive throttling - only for interaction fetching, not scroll handling
       final shouldThrottle =
           (currentPosition - _lastScrollPosition).abs() < _scrollThreshold && now.difference(_lastScrollTime) < _scrollDebounceInterval;
 
-      // Always update scroll position tracking for smooth scrolling
       if (!shouldThrottle) {
         _lastScrollPosition = currentPosition;
         _lastScrollTime = now;
       }
 
-      // Track user scrolling for better UX
       if (_scrollController.position.isScrollingNotifier.value) {
         _isUserScrolling = true;
         _savedScrollPosition = currentPosition;
       }
 
-      // Load more notes when near bottom
-      if (currentPosition >= _scrollController.position.maxScrollExtent * 0.9) {
-        final provider = context.read<NotesListProvider>();
+      final provider = context.read<NotesListProvider>();
+      final threshold = provider.dataType == DataType.profile ? 0.8 : 0.9;
+      if (currentPosition >= _scrollController.position.maxScrollExtent * threshold) {
         if (!provider.isLoadingMore) {
           provider.fetchMoreNotes();
         }
       }
 
-      // Only throttle interaction fetching, not scroll handling
       if (!shouldThrottle) {
         _scheduleInteractionFetch();
       }
@@ -96,19 +96,15 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     final provider = context.read<NotesListProvider>();
     final visibleNoteIds = _getVisibleNoteIds();
 
-    // Only fetch interactions for newly visible notes
+    InteractionsProvider.instance.updateVisibleNotes(visibleNoteIds);
+
     final newVisibleNotes = visibleNoteIds.difference(_visibleNoteIds);
     if (newVisibleNotes.isNotEmpty) {
-      // Fetch interactions for visible notes
       provider.fetchInteractionsForNotes(newVisibleNotes.toList());
-
-      // Fetch profiles for visible note authors
       provider.fetchProfilesForVisibleNotes(newVisibleNotes.toList());
-
       _visibleNoteIds.addAll(newVisibleNotes);
     }
 
-    // Remove notes that are no longer visible from tracking
     _visibleNoteIds.retainWhere((id) => visibleNoteIds.contains(id));
   }
 
@@ -120,35 +116,29 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     if (notes.isEmpty) return {};
 
     final scrollPosition = _scrollController.position.pixels;
+    final cacheThreshold = provider.dataType == DataType.profile ? 30 : 50;
 
-    // Use cached result if scroll position and notes haven't changed significantly
-    // Reduced caching to prevent scroll jumps
     if (_cachedVisibleNoteIds != null &&
-        (scrollPosition - _lastCalculatedScrollPosition).abs() < 20 && // Smaller threshold
+        (scrollPosition - _lastCalculatedScrollPosition).abs() < cacheThreshold &&
         notes.length == _lastNotesLength) {
       return _cachedVisibleNoteIds!;
     }
 
     final viewportHeight = _scrollController.position.viewportDimension;
-    final bufferSize = viewportHeight * 0.5;
+    final bufferSize = provider.dataType == DataType.profile ? viewportHeight * 0.4 : viewportHeight * 0.3;
     final visibleStart = math.max(0, scrollPosition - bufferSize);
     final visibleEnd = scrollPosition + viewportHeight + bufferSize;
 
     final visibleNoteIds = <String>{};
-
-    // Dynamic item height estimation based on viewport
-    final estimatedItemHeight = viewportHeight / 5; // Assume ~5 notes per screen
-
+    final estimatedItemHeight = provider.dataType == DataType.profile ? viewportHeight / 7 : viewportHeight / 6;
     final startIndex = (visibleStart / estimatedItemHeight).floor().clamp(0, notes.length - 1);
     final endIndex = (visibleEnd / estimatedItemHeight).ceil().clamp(0, notes.length - 1);
 
-    // More efficient loop with bounds checking
     final maxIndex = math.min(endIndex, notes.length - 1);
     for (int i = startIndex; i <= maxIndex; i++) {
       visibleNoteIds.add(notes[i].id);
     }
 
-    // Cache the result
     _cachedVisibleNoteIds = visibleNoteIds;
     _lastCalculatedScrollPosition = scrollPosition;
     _lastNotesLength = notes.length;
@@ -157,20 +147,17 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   }
 
   void _preserveScrollPosition() {
-    // Only preserve scroll position when not actively scrolling and position is valid
     if (_scrollController.hasClients && !_isUserScrolling && !_scrollController.position.isScrollingNotifier.value) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients && _savedScrollPosition > 0) {
-          // Use animateTo instead of jumpTo for smoother transitions
           final targetPosition = _savedScrollPosition.clamp(0.0, _scrollController.position.maxScrollExtent);
           if ((targetPosition - _scrollController.position.pixels).abs() > 5) {
-            _scrollController.jumpTo(targetPosition); // Only jump if difference is significant
+            _scrollController.jumpTo(targetPosition);
           }
         }
       });
     }
 
-    // Reset user scrolling flag after a delay to allow natural scrolling
     Timer(const Duration(milliseconds: 100), () {
       _isUserScrolling = false;
     });
@@ -258,7 +245,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       itemCount--;
     }
 
-    // Only preserve scroll position when not loading more to prevent jumps
     if (!isLoadingMore) {
       _preserveScrollPosition();
     }
@@ -266,7 +252,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     return SliverList.builder(
       key: const PageStorageKey<String>('notes_list'),
       itemCount: itemCount,
-      addAutomaticKeepAlives: true, // Re-enable keep alives for better scroll experience
+      addAutomaticKeepAlives: true,
       addRepaintBoundaries: true,
       itemBuilder: (context, index) {
         if (isLoadingMore && index == itemCount - 1) {
@@ -290,7 +276,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   }
 }
 
-// Optimized stateless widgets for better performance
 class _LoadingIndicator extends StatelessWidget {
   const _LoadingIndicator();
 
@@ -338,7 +323,7 @@ class _OptimizedNoteItem extends StatelessWidget {
           dataService: data.dataService,
           currentUserNpub: data.npub,
           notesNotifier: data.dataService.notesNotifier,
-          profiles: const {}, // Empty profiles map for performance
+          profiles: const {},
           isSmallView: true,
         );
       },

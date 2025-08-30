@@ -13,6 +13,7 @@ import '../models/link_preview_model.dart';
 import '../models/zap_model.dart';
 import '../models/notification_model.dart';
 import '../services/data_service.dart';
+import '../services/data_service_manager.dart';
 import '../providers/user_provider.dart';
 import '../providers/notes_provider.dart';
 import '../providers/interactions_provider.dart';
@@ -93,7 +94,10 @@ class _SplashScreenState extends State<SplashScreen> {
       final npub = credentials[1];
 
       if (privateKey != null && npub != null) {
-        final dataService = DataService(npub: npub, dataType: DataType.feed);
+        final dataService = DataServiceManager.instance.getOrCreateService(
+          npub: npub,
+          dataType: DataType.feed,
+        );
         await _initializeMinimalForNavigation(npub, dataService);
         return {'npub': npub, 'dataService': dataService};
       } else {

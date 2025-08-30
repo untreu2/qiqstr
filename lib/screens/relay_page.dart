@@ -5,6 +5,7 @@ import 'package:nostr/nostr.dart';
 import '../theme/theme_manager.dart';
 import '../constants/relays.dart';
 import '../services/data_service.dart';
+import '../services/data_service_manager.dart';
 import '../services/nostr_service.dart';
 import '../services/relay_service.dart';
 import 'dart:convert';
@@ -113,7 +114,10 @@ class _RelayPageState extends State<RelayPage> {
         return;
       }
 
-      final dataService = DataService(npub: npub, dataType: DataType.profile);
+      final dataService = DataServiceManager.instance.getOrCreateService(
+        npub: npub,
+        dataType: DataType.profile,
+      );
       await dataService.initialize();
       await dataService.initializeConnections();
 
@@ -211,7 +215,10 @@ class _RelayPageState extends State<RelayPage> {
         throw Exception('User not logged in');
       }
 
-      final dataService = DataService(npub: npub, dataType: DataType.profile);
+      final dataService = DataServiceManager.instance.getOrCreateService(
+        npub: npub,
+        dataType: DataType.profile,
+      );
       await dataService.initialize();
 
       final userRelayList = await _fetchRelayListMetadata(dataService, npub);

@@ -3,6 +3,7 @@ import '../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/services/data_service.dart';
+import 'package:qiqstr/services/data_service_manager.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/providers/user_provider.dart';
 import 'package:hive/hive.dart';
@@ -60,7 +61,10 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
     final usersBox = await Hive.openBox<UserModel>('users');
     final user = usersBox.get(npub);
 
-    final dataService = DataService(npub: npub, dataType: DataType.profile);
+    final dataService = DataServiceManager.instance.getOrCreateService(
+      npub: npub,
+      dataType: DataType.profile,
+    );
     await dataService.initialize();
     await dataService.initializeConnections();
 

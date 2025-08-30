@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:bounce/bounce.dart';
 import 'package:qiqstr/services/data_service.dart';
+import 'package:qiqstr/services/data_service_manager.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/widgets/profile_info_widget.dart';
@@ -81,7 +82,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _createDataServiceEarly() async {
     try {
-      dataService = DataService(
+      dataService = DataServiceManager.instance.getOrCreateService(
         npub: _userHexKey ?? widget.user.npub,
         dataType: DataType.profile,
         onNewNote: (_) {},
@@ -105,7 +106,7 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       if (dataService == null) {
         print('[ProfilePage] DataService not found, creating new one');
-        dataService = DataService(
+        dataService = DataServiceManager.instance.getOrCreateService(
           npub: _userHexKey ?? widget.user.npub,
           dataType: DataType.profile,
           onNewNote: (_) {},

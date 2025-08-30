@@ -14,8 +14,8 @@ class DataServiceManager {
 
   static DataServiceManager get instance => _instance;
 
-  final Map<String, DataService> _services = {};
-  final Map<String, int> _referenceCount = {};
+  DataService? _activeService;
+  String? _activeServiceKey;
 
   DataService getOrCreateService({
     required String npub,
@@ -30,29 +30,53 @@ class DataServiceManager {
   }) {
     final key = _generateKey(npub, dataType);
 
-    if (_services.containsKey(key)) {
-      _referenceCount[key] = (_referenceCount[key] ?? 0) + 1;
-      debugPrint('[DataServiceManager] Reusing existing service for $key (refs: ${_referenceCount[key]})');
-      return _services[key]!;
+    if (_activeService != null && _activeServiceKey == key) {
+      debugPrint('[DataServiceManager] Reusing active service for $key');
+      return _activeService!;
     }
 
-    final service = DataService(
-      npub: npub,
-      dataType: dataType,
-      onNewNote: onNewNote,
-      onReactionsUpdated: onReactionsUpdated,
-      onRepliesUpdated: onRepliesUpdated,
-      onReactionCountUpdated: onReactionCountUpdated,
-      onReplyCountUpdated: onReplyCountUpdated,
-      onRepostsUpdated: onRepostsUpdated,
-      onRepostCountUpdated: onRepostCountUpdated,
-    );
+    _closeActiveService();
 
-    _services[key] = service;
-    _referenceCount[key] = 1;
+    final service = DataService.instance;
 
-    debugPrint('[DataServiceManager] Created new service for $key');
+    if (dataType == DataType.feed) {
+      service.configureForFeed(
+        npub: npub,
+        onNewNote: onNewNote,
+        onReactionsUpdated: onReactionsUpdated,
+        onRepliesUpdated: onRepliesUpdated,
+        onReactionCountUpdated: onReactionCountUpdated,
+        onReplyCountUpdated: onReplyCountUpdated,
+        onRepostsUpdated: onRepostsUpdated,
+        onRepostCountUpdated: onRepostCountUpdated,
+      );
+    } else {
+      service.configureForProfile(
+        npub: npub,
+        onNewNote: onNewNote,
+        onReactionsUpdated: onReactionsUpdated,
+        onRepliesUpdated: onRepliesUpdated,
+        onReactionCountUpdated: onReactionCountUpdated,
+        onReplyCountUpdated: onReplyCountUpdated,
+        onRepostsUpdated: onRepostsUpdated,
+        onRepostCountUpdated: onRepostCountUpdated,
+      );
+    }
+
+    _activeService = service;
+    _activeServiceKey = key;
+
+    debugPrint('[DataServiceManager] Configured singleton service for $key');
     return service;
+  }
+
+  void _closeActiveService() {
+    if (_activeService != null) {
+      debugPrint('[DataServiceManager] Closing previous active service: $_activeServiceKey');
+      _activeService!.closeConnections();
+      _activeService = null;
+      _activeServiceKey = null;
+    }
   }
 
   Future<void> releaseService({
@@ -61,23 +85,11 @@ class DataServiceManager {
   }) async {
     final key = _generateKey(npub, dataType);
 
-    if (!_services.containsKey(key)) {
-      debugPrint('[DataServiceManager] Warning: Trying to release non-existent service $key');
-      return;
-    }
-
-    _referenceCount[key] = (_referenceCount[key] ?? 1) - 1;
-
-    debugPrint('[DataServiceManager] Released reference for $key (refs: ${_referenceCount[key]})');
-
-    if (_referenceCount[key]! <= 0) {
-      final service = _services[key]!;
-      await service.closeConnections();
-
-      _services.remove(key);
-      _referenceCount.remove(key);
-
-      debugPrint('[DataServiceManager] Removed service for $key (WebSocket connections remain open)');
+    if (_activeServiceKey == key) {
+      debugPrint('[DataServiceManager] Releasing active service for $key');
+      _closeActiveService();
+    } else {
+      debugPrint('[DataServiceManager] Warning: Trying to release non-active service $key');
     }
   }
 
@@ -86,7 +98,7 @@ class DataServiceManager {
     required DataType dataType,
   }) {
     final key = _generateKey(npub, dataType);
-    return _services[key];
+    return _activeServiceKey == key ? _activeService : null;
   }
 
   bool hasService({
@@ -94,40 +106,22 @@ class DataServiceManager {
     required DataType dataType,
   }) {
     final key = _generateKey(npub, dataType);
-    return _services.containsKey(key);
+    return _activeServiceKey == key;
   }
 
-  int getReferenceCount({
-    required String npub,
-    required DataType dataType,
-  }) {
-    final key = _generateKey(npub, dataType);
-    return _referenceCount[key] ?? 0;
-  }
-
-  Map<String, DataService> get activeServices => Map.unmodifiable(_services);
+  DataService? get activeService => _activeService;
+  String? get activeServiceKey => _activeServiceKey;
 
   Map<String, dynamic> getStatistics() {
     return {
-      'totalServices': _services.length,
-      'serviceKeys': _services.keys.toList(),
-      'referenceCounts': Map.from(_referenceCount),
+      'activeService': _activeServiceKey ?? 'none',
+      'hasActiveService': _activeService != null,
     };
   }
 
   Future<void> closeAllServices() async {
-    debugPrint('[DataServiceManager] Force closing all ${_services.length} services');
-
-    final futures = <Future>[];
-    for (final service in _services.values) {
-      futures.add(service.closeConnections());
-    }
-
-    await Future.wait(futures);
-
-    _services.clear();
-    _referenceCount.clear();
-
+    debugPrint('[DataServiceManager] Closing active service');
+    _closeActiveService();
     debugPrint('[DataServiceManager] All services closed');
   }
 
@@ -146,6 +140,7 @@ class DataServiceManager {
   }
 
   Future<void> performMaintenanceCleanup() async {
+    _closeActiveService();
     debugPrint('[DataServiceManager] Maintenance cleanup completed');
   }
 }
