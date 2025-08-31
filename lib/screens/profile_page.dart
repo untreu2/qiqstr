@@ -82,12 +82,13 @@ class _ProfilePageState extends State<ProfilePage> {
         _profileInfoLoaded = true;
       });
     }
-    // Start notes loading immediately, not in microtask
+    // Start notes loading immediately with fresh initialization
     _startNotesLoading();
   }
 
   Future<void> _createDataServiceEarly() async {
     try {
+      // Create fresh service instance for this profile to ensure data reloading
       dataService = DataServiceManager.instance.getOrCreateService(
         npub: _userHexKey ?? widget.user.npub,
         dataType: DataType.profile,
@@ -113,10 +114,14 @@ class _ProfilePageState extends State<ProfilePage> {
           if (mounted) setState(() {});
         },
       );
+
+      // Initialize lightweight to prepare for data loading
       await dataService!.initializeLightweight();
       if (mounted) {
         setState(() {});
       }
+
+      print('[ProfilePage] Fresh service created for profile: ${_userHexKey ?? widget.user.npub}');
     } catch (e) {
       print('[ProfilePage] Early DataService creation error: $e');
     }
@@ -124,37 +129,37 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _startNotesLoading() async {
     try {
-      if (dataService == null) {
-        print('[ProfilePage] DataService not found, creating new one');
-        dataService = DataServiceManager.instance.getOrCreateService(
-          npub: _userHexKey ?? widget.user.npub,
-          dataType: DataType.profile,
-          onNewNote: (_) {
-            if (mounted) setState(() {});
-          },
-          onReactionsUpdated: (_, __) {
-            if (mounted) setState(() {});
-          },
-          onRepliesUpdated: (_, __) {
-            if (mounted) setState(() {});
-          },
-          onRepostsUpdated: (_, __) {
-            if (mounted) setState(() {});
-          },
-          onReactionCountUpdated: (_, __) {
-            if (mounted) setState(() {});
-          },
-          onReplyCountUpdated: (_, __) {
-            if (mounted) setState(() {});
-          },
-          onRepostCountUpdated: (_, __) {
-            if (mounted) setState(() {});
-          },
-        );
-        await dataService!.initializeLightweight();
-      }
+      // Always ensure we have the latest service, forcing fresh data loading
+      dataService = DataServiceManager.instance.getOrCreateService(
+        npub: _userHexKey ?? widget.user.npub,
+        dataType: DataType.profile,
+        onNewNote: (_) {
+          if (mounted) setState(() {});
+        },
+        onReactionsUpdated: (_, __) {
+          if (mounted) setState(() {});
+        },
+        onRepliesUpdated: (_, __) {
+          if (mounted) setState(() {});
+        },
+        onRepostsUpdated: (_, __) {
+          if (mounted) setState(() {});
+        },
+        onReactionCountUpdated: (_, __) {
+          if (mounted) setState(() {});
+        },
+        onReplyCountUpdated: (_, __) {
+          if (mounted) setState(() {});
+        },
+        onRepostCountUpdated: (_, __) {
+          if (mounted) setState(() {});
+        },
+      );
 
-      // Start heavy operations immediately, not delayed
+      // Force fresh initialization for this profile
+      await dataService!.initializeLightweight();
+
+      // Start heavy operations immediately with fresh data loading
       if (mounted && dataService != null) {
         // Run heavy operations and connections in parallel for speed
         Future.wait([

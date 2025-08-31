@@ -241,9 +241,8 @@ class DataService {
 
     _ensureLoggedInNpub();
 
-    if (_currentNpub != npub || _currentDataType != DataType.feed) {
-      _clearDataStructures();
-    }
+    // Always clear data structures when switching feeds to ensure fresh data loading
+    _clearDataStructures();
 
     _currentNpub = npub;
     _currentDataType = DataType.feed;
@@ -256,11 +255,9 @@ class DataService {
     _onRepostCountUpdated = onRepostCountUpdated;
 
     _notesNotifier = NoteListNotifier(_currentDataType, _currentNpub);
-    // Keep initialized state if already initialized to avoid reinitialization issues
-    if (!_isInitialized) {
-      _isInitialized = false;
-    }
-    print('[DataService] Configured for feed: $npub');
+    // Reset initialization state to force fresh loading
+    _isInitialized = false;
+    print('[DataService] Configured fresh feed service for: $npub');
   }
 
   void configureForProfile({
@@ -277,9 +274,9 @@ class DataService {
 
     _ensureLoggedInNpub();
 
-    if (_currentNpub != npub || _currentDataType != DataType.profile) {
-      _clearDataStructures();
-    }
+    // Always clear data structures when configuring for profile to ensure fresh data loading
+    // This fixes the issue where returning to a previously visited profile doesn't reload notes
+    _clearDataStructures();
 
     _currentNpub = npub;
     _currentDataType = DataType.profile;
@@ -292,11 +289,9 @@ class DataService {
     _onRepostCountUpdated = onRepostCountUpdated;
 
     _notesNotifier = NoteListNotifier(_currentDataType, _currentNpub);
-    // Keep initialized state if already initialized to avoid reinitialization issues
-    if (!_isInitialized) {
-      _isInitialized = false;
-    }
-    print('[DataService] Configured for profile: $npub');
+    // Reset initialization state to force fresh loading
+    _isInitialized = false;
+    print('[DataService] Configured fresh profile service for: $npub');
   }
 
   void _ensureLoggedInNpub() {

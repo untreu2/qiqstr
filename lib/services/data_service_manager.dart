@@ -30,11 +30,8 @@ class DataServiceManager {
   }) {
     final key = _generateKey(npub, dataType);
 
-    if (_activeService != null && _activeServiceKey == key) {
-      debugPrint('[DataServiceManager] Reusing active service for $key');
-      return _activeService!;
-    }
-
+    // Always close previous service when switching to a different profile/feed
+    // This ensures fresh data loading for each profile visit
     _closeActiveService();
 
     final service = DataService.instance;
@@ -66,7 +63,7 @@ class DataServiceManager {
     _activeService = service;
     _activeServiceKey = key;
 
-    debugPrint('[DataServiceManager] Configured singleton service for $key');
+    debugPrint('[DataServiceManager] Configured fresh singleton service for $key');
     return service;
   }
 
