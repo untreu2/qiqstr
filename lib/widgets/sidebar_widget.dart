@@ -4,12 +4,12 @@ import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/profile_page.dart';
 import 'package:qiqstr/screens/relay_page.dart';
 import 'package:qiqstr/utils/logout.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/theme_manager.dart';
 import '../providers/user_provider.dart';
 import 'package:qiqstr/screens/keys_page.dart';
 import 'package:carbon_icons/carbon_icons.dart';
+import 'profile_image_widget.dart';
 
 class SidebarWidget extends StatelessWidget {
   const SidebarWidget({super.key});
@@ -66,11 +66,11 @@ class _UserProfileHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 60, 16, 16),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 32,
+          ProfileImageWidget(
+            imageUrl: user.profileImage,
+            npub: user.npub,
+            size: ProfileImageSize.large,
             backgroundColor: colors.avatarPlaceholder,
-            backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
-            child: user.profileImage.isEmpty ? Icon(Icons.person, color: colors.iconPrimary, size: 32) : null,
           ),
           const SizedBox(width: 16),
           Expanded(

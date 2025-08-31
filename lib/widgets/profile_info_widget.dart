@@ -17,6 +17,7 @@ import '../providers/user_provider.dart';
 import '../screens/following_page.dart';
 import 'mini_link_preview_widget.dart';
 import 'photo_viewer_widget.dart';
+import 'profile_image_widget.dart';
 
 class ProfileInfoWidget extends StatefulWidget {
   final UserModel user;
@@ -296,45 +297,22 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   }
 
   Widget _buildAvatar(UserModel user) {
-    return Container(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: context.colors.background, width: 3),
-      ),
-      child: CircleAvatar(
-        radius: 40,
-        backgroundColor: context.colors.surfaceTransparent,
-        child: user.profileImage.isNotEmpty
-            ? CachedNetworkImage(
-                imageUrl: user.profileImage,
-                imageBuilder: (context, imageProvider) {
-                  return Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      image: DecorationImage(
-                        image: imageProvider,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  );
-                },
-                placeholder: (context, url) => Icon(
-                  Icons.person,
-                  size: 48,
-                  color: context.colors.textSecondary,
+    return ProfileImageHelper.large(
+      imageUrl: user.profileImage,
+      npub: user.npub,
+      backgroundColor: context.colors.surfaceTransparent,
+      borderWidth: 3,
+      borderColor: context.colors.background,
+      onTap: user.profileImage.isNotEmpty
+          ? () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => PhotoViewerWidget(imageUrls: [user.profileImage]),
                 ),
-                errorWidget: (context, url, error) => Icon(
-                  Icons.person,
-                  size: 48,
-                  color: context.colors.textSecondary,
-                ),
-              )
-            : Icon(
-                Icons.person,
-                size: 48,
-                color: context.colors.textSecondary,
-              ),
-      ),
+              );
+            }
+          : null,
     );
   }
 
@@ -407,10 +385,15 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       },
       child: user.banner.isNotEmpty
           ? CachedNetworkImage(
+              key: ValueKey('banner_image_${user.npub}_${user.banner.hashCode}'),
               imageUrl: user.banner,
               width: screenWidth,
               height: 130,
               fit: BoxFit.cover,
+              fadeInDuration: Duration.zero,
+              placeholderFadeInDuration: Duration.zero,
+              memCacheHeight: 260,
+              maxHeightDiskCache: 400,
               placeholder: (_, __) => Container(
                 height: 130,
                 width: screenWidth,
@@ -441,19 +424,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
     return Row(
       children: [
-        GestureDetector(
-          onTap: () {
-            if (user.profileImage.isNotEmpty) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => PhotoViewerWidget(imageUrls: [user.profileImage]),
-                ),
-              );
-            }
-          },
-          child: _buildAvatar(user),
-        ),
+        _buildAvatar(user),
         const Spacer(),
         if (_currentUserNpub != null)
           Padding(

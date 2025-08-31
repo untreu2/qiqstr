@@ -5,6 +5,7 @@ import '../providers/user_provider.dart';
 import '../theme/theme_manager.dart';
 import 'note_content_widget.dart';
 import 'interaction_bar_widget.dart';
+import 'profile_image_widget.dart';
 
 class RootNoteWidget extends StatelessWidget {
   final NoteModel note;
@@ -69,18 +70,11 @@ class RootNoteWidget extends StatelessWidget {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      CircleAvatar(
-                        radius: 21,
-                        backgroundImage: authorProfile.profileImage.isNotEmpty ? NetworkImage(authorProfile.profileImage) : null,
+                      ProfileImageHelper.xlarge(
+                        imageUrl: authorProfile.profileImage,
+                        npub: authorProfile.npub,
                         backgroundColor: context.colors.surfaceTransparent,
-                        onBackgroundImageError: (exception, stackTrace) {},
-                        child: authorProfile.profileImage.isEmpty
-                            ? Icon(
-                                Icons.person,
-                                size: 24,
-                                color: context.colors.textSecondary,
-                              )
-                            : null,
+                        onTap: () => dataService.openUserProfile(context, note.author),
                       ),
                       const SizedBox(width: 8),
                       Expanded(

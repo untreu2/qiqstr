@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../models/note_model.dart';
 import '../models/user_model.dart';
 import '../services/data_service.dart';
@@ -8,6 +7,7 @@ import '../screens/thread_page.dart';
 import '../providers/user_provider.dart';
 import 'interaction_bar_widget.dart';
 import 'note_content_widget.dart';
+import 'profile_image_widget.dart';
 
 class NoteWidget extends StatefulWidget {
   final NoteModel note;
@@ -346,80 +346,28 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                 children: [
                   Stack(
                     children: [
-                      GestureDetector(
-                        onTap: () => _navigateToProfile(widget.note.author),
-                        child: Padding(
-                          padding: widget.note.isRepost ? const EdgeInsets.only(top: 8, left: 10) : const EdgeInsets.only(top: 8),
-                          child: SizedBox(
-                            width: 44,
-                            height: 44,
-                            child: CircleAvatar(
-                              radius: 22,
-                              backgroundColor: colors.surfaceTransparent,
-                              child: authorUser.profileImage.isNotEmpty
-                                  ? CachedNetworkImage(
-                                      key: ValueKey('author_${authorUser.npub}'),
-                                      imageUrl: authorUser.profileImage,
-                                      fadeInDuration: Duration.zero,
-                                      imageBuilder: (context, imageProvider) {
-                                        return Container(
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            image: DecorationImage(
-                                              image: imageProvider,
-                                              fit: BoxFit.cover,
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                      placeholder: (context, url) => Icon(
-                                        Icons.person,
-                                        size: 24,
-                                        color: colors.textSecondary,
-                                      ),
-                                      errorWidget: (context, url, error) => Icon(
-                                        Icons.person,
-                                        size: 24,
-                                        color: colors.textSecondary,
-                                      ),
-                                    )
-                                  : Icon(
-                                      Icons.person,
-                                      size: 24,
-                                      color: colors.textSecondary,
-                                    ),
-                            ),
-                          ),
+                      Padding(
+                        padding: widget.note.isRepost ? const EdgeInsets.only(top: 8, left: 10) : const EdgeInsets.only(top: 8),
+                        child: ProfileImageHelper.medium(
+                          imageUrl: authorUser.profileImage,
+                          npub: authorUser.npub,
+                          backgroundColor: colors.surfaceTransparent,
+                          onTap: () => _navigateToProfile(widget.note.author),
                         ),
                       ),
                       if (widget.note.isRepost && reposterUser != null)
                         Positioned(
                           top: 0,
                           left: 0,
-                          child: GestureDetector(
-                            onTap: () => _navigateToProfile(reposterUser.npub),
-                            child: SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircleAvatar(
-                                radius: 12,
-                                backgroundColor: colors.surface,
-                                child: reposterUser.profileImage.isNotEmpty
-                                    ? CachedNetworkImage(
-                                        key: ValueKey('reposter_${reposterUser.npub}'),
-                                        imageUrl: reposterUser.profileImage,
-                                        fadeInDuration: Duration.zero,
-                                        imageBuilder: (context, imageProvider) => Container(
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
-                                          ),
-                                        ),
-                                        placeholder: (context, url) => Icon(Icons.person, size: 12, color: colors.textSecondary),
-                                        errorWidget: (context, url, error) => Icon(Icons.person, size: 12, color: colors.textSecondary),
-                                      )
-                                    : Icon(Icons.person, size: 12, color: colors.textSecondary),
-                              ),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: colors.surface,
+                            ),
+                            child: ProfileImageHelper.small(
+                              imageUrl: reposterUser.profileImage,
+                              npub: reposterUser.npub,
+                              onTap: () => _navigateToProfile(reposterUser.npub),
                             ),
                           ),
                         ),
