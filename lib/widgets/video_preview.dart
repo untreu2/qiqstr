@@ -1,7 +1,9 @@
 import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+import '../colors.dart';
 
 class VP extends StatefulWidget {
   final String url;
@@ -122,6 +124,8 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
   bool _isInitialized = false;
   Duration _position = Duration.zero;
   double _dragOffset = 0;
+  bool _showControls = true;
+  Timer? _hideTimer;
 
   @override
   void initState() {
@@ -132,6 +136,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
         _controller.setVolume(1);
         _controller.play();
         _controller.addListener(_updatePosition);
+        _startHideTimer();
       });
   }
 
@@ -142,8 +147,27 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
     });
   }
 
+  void _startHideTimer() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _showControls = false;
+        });
+      }
+    });
+  }
+
+  void _showControlsAndResetTimer() {
+    setState(() {
+      _showControls = true;
+    });
+    _startHideTimer();
+  }
+
   @override
   void dispose() {
+    _hideTimer?.cancel();
     _controller.removeListener(_updatePosition);
     _controller.dispose();
     super.dispose();
@@ -174,6 +198,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
     return Scaffold(
       backgroundColor: Colors.black.withOpacity(1.0 - (_dragOffset.abs() / 300).clamp(0.0, 1.0)),
       body: GestureDetector(
+        onTap: _showControlsAndResetTimer,
         onVerticalDragUpdate: _handleVerticalDragUpdate,
         onVerticalDragEnd: _handleVerticalDragEnd,
         child: Stack(
@@ -210,75 +235,83 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                 bottom: 80,
                 left: 0,
                 right: 0,
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(25.0),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.3),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.2),
-                            width: 1.5,
+                child: AnimatedOpacity(
+                  opacity: _showControls ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(25.0),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.3),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.2),
+                              width: 1.5,
+                            ),
+                            borderRadius: BorderRadius.circular(25.0),
                           ),
-                          borderRadius: BorderRadius.circular(25.0),
-                        ),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              icon: Icon(
-                                _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
-                                color: Colors.white,
+                          child: Row(
+                            children: [
+                              IconButton(
+                                icon: Icon(
+                                  _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
+                                  color: Colors.white,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    if (_controller.value.isPlaying) {
+                                      _controller.pause();
+                                    } else {
+                                      _controller.play();
+                                    }
+                                  });
+                                  _showControlsAndResetTimer();
+                                },
                               ),
-                              onPressed: () {
-                                setState(() {
-                                  if (_controller.value.isPlaying) {
-                                    _controller.pause();
-                                  } else {
-                                    _controller.play();
-                                  }
-                                });
-                              },
-                            ),
-                            Text(
-                              _formatDuration(_position),
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                            Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 12),
-                                child: SliderTheme(
-                                  data: SliderTheme.of(context).copyWith(
-                                    activeTrackColor: Colors.amber,
-                                    inactiveTrackColor: Colors.white24,
-                                    thumbColor: Colors.white,
-                                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                                    trackHeight: 3,
-                                  ),
-                                  child: Slider(
-                                    value: _controller.value.position.inMilliseconds.toDouble(),
-                                    max: _controller.value.duration.inMilliseconds.toDouble(),
-                                    onChanged: (value) {
-                                      final position = Duration(milliseconds: value.toInt());
-                                      _controller.seekTo(position);
-                                    },
+                              Text(
+                                _formatDuration(_position),
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  child: SliderTheme(
+                                    data: SliderTheme.of(context).copyWith(
+                                      activeTrackColor: AppColors.accent,
+                                      inactiveTrackColor: Colors.white24,
+                                      thumbColor: Colors.white,
+                                      thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                                      trackHeight: 3,
+                                    ),
+                                    child: Slider(
+                                      value: _controller.value.position.inMilliseconds.toDouble(),
+                                      max: _controller.value.duration.inMilliseconds.toDouble(),
+                                      onChanged: (value) {
+                                        final position = Duration(milliseconds: value.toInt());
+                                        _controller.seekTo(position);
+                                        _showControlsAndResetTimer();
+                                      },
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                            Text(
-                              _formatDuration(_controller.value.duration),
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close, color: Colors.white),
-                              onPressed: () => Navigator.pop(context),
-                            ),
-                          ],
+                              Text(
+                                _formatDuration(_controller.value.duration),
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close, color: Colors.white),
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                },
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
