@@ -507,21 +507,22 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   }
 
   Widget _buildFollowButton(BuildContext context) {
+    final isFollowing = _isFollowing!;
     return GestureDetector(
       onTap: _toggleFollow,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        width: 100,
         height: 34,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: context.colors.overlayLight,
+          color: isFollowing ? context.colors.overlayLight : context.colors.buttonPrimary,
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: context.colors.borderAccent),
         ),
         child: Text(
-          _isFollowing! ? 'Following' : 'Follow',
+          isFollowing ? 'Following' : 'Follow',
           style: TextStyle(
-            color: context.colors.textPrimary,
+            color: isFollowing ? context.colors.textPrimary : context.colors.background,
             fontSize: 13,
             fontWeight: FontWeight.w500,
           ),
