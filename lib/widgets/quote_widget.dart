@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
@@ -6,6 +9,8 @@ import '../models/note_model.dart';
 import '../models/user_model.dart';
 import '../screens/thread_page.dart';
 import '../services/data_service.dart';
+import '../services/nostr_service.dart';
+import '../constants/relays.dart';
 import '../providers/user_provider.dart';
 import 'note_content_widget.dart';
 
@@ -152,7 +157,110 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
       hex = decodeTlvBech32Full(widget.bech32, 'nevent')['type_0_main'];
     }
     if (hex == null) return null;
-    return await widget.dataService.getCachedNote(hex);
+
+    // First try to get from cache
+    var note = await widget.dataService.getCachedNote(hex);
+
+    // If not found in cache, try to fetch from network
+    if (note == null) {
+      try {
+        note = await _fetchNoteFromNetwork(hex);
+      } catch (e) {
+        print('[QuoteWidget] Error fetching note from network: $e');
+      }
+    }
+
+    return note;
+  }
+
+  Future<NoteModel?> _fetchNoteFromNetwork(String eventId) async {
+    final relayUrls = relaySetMainSockets.take(3).toList(); // Use first 3 relays
+
+    for (final relayUrl in relayUrls) {
+      try {
+        final note = await _fetchNoteFromRelay(relayUrl, eventId);
+        if (note != null) {
+          return note;
+        }
+      } catch (e) {
+        print('[QuoteWidget] Error fetching from relay $relayUrl: $e');
+        continue;
+      }
+    }
+
+    return null;
+  }
+
+  Future<NoteModel?> _fetchNoteFromRelay(String relayUrl, String eventId) async {
+    WebSocket? ws;
+    try {
+      ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
+
+      final filter = NostrService.createEventByIdFilter(eventIds: [eventId]);
+      final request = NostrService.createRequest(filter);
+      final serializedRequest = NostrService.serializeRequest(request);
+
+      final completer = Completer<Map<String, dynamic>?>();
+
+      late StreamSubscription sub;
+      sub = ws.listen((event) {
+        try {
+          if (completer.isCompleted) return;
+          final decoded = jsonDecode(event);
+          if (decoded is List && decoded.length >= 3) {
+            if (decoded[0] == 'EVENT') {
+              final eventData = decoded[2] as Map<String, dynamic>;
+              if (eventData['id'] == eventId) {
+                completer.complete(eventData);
+              }
+            } else if (decoded[0] == 'EOSE') {
+              if (!completer.isCompleted) {
+                completer.complete(null);
+              }
+            }
+          }
+        } catch (e) {
+          if (!completer.isCompleted) completer.complete(null);
+        }
+      }, onError: (error) {
+        if (!completer.isCompleted) completer.complete(null);
+      }, onDone: () {
+        if (!completer.isCompleted) completer.complete(null);
+      });
+
+      if (ws.readyState == WebSocket.open) {
+        ws.add(serializedRequest);
+      }
+
+      final eventData = await completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => null,
+      );
+
+      await sub.cancel();
+      await ws.close();
+
+      if (eventData != null) {
+        return NoteModel(
+          id: eventData['id'] as String,
+          content: eventData['content'] as String,
+          author: eventData['pubkey'] as String,
+          timestamp: DateTime.fromMillisecondsSinceEpoch(
+            (eventData['created_at'] as int) * 1000,
+          ),
+          isReply: false,
+          isRepost: false,
+          rawWs: jsonEncode(eventData),
+        );
+      }
+
+      return null;
+    } catch (e) {
+      try {
+        await ws?.close();
+      } catch (_) {}
+      rethrow;
+    }
   }
 
   Widget _authorInfo(BuildContext context, String npub) {
