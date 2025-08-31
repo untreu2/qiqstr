@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:bounce/bounce.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/services/data_service.dart';
+import 'package:qiqstr/services/nostr_service.dart';
+import 'package:qiqstr/constants/relays.dart';
 import 'package:qiqstr/widgets/root_note_widget.dart';
 import 'package:qiqstr/widgets/note_widget.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -138,27 +142,45 @@ class _ThreadPageState extends State<ThreadPage> {
 
     try {
       _currentUserNpub = await _secureStorage.read(key: 'npub');
-      final allNotes = widget.dataService.notesNotifier.value;
 
-      _rootNote = allNotes.firstWhereOrNull((n) => n.id == widget.rootNoteId);
+      // Check both notesNotifier.value and notes array
+      final allNotesFromNotifier = widget.dataService.notesNotifier.value;
+      final allNotesFromArray = widget.dataService.notes;
 
-      // If root note not found, try to fetch it directly
-      if (_rootNote == null) {
-        print('[ThreadPage] Root note not found in cache, fetching: ${widget.rootNoteId}');
+      print('[ThreadPage] Looking for root note: ${widget.rootNoteId}');
+      print('[ThreadPage] Notifier has ${allNotesFromNotifier.length} notes');
+      print('[ThreadPage] Array has ${allNotesFromArray.length} notes');
+
+      // Try both sources
+      _rootNote = allNotesFromNotifier.firstWhereOrNull((n) => n.id == widget.rootNoteId) ??
+          allNotesFromArray.firstWhereOrNull((n) => n.id == widget.rootNoteId);
+
+      if (_rootNote != null) {
+        print('[ThreadPage] Found root note in existing data: ${_rootNote!.id}');
+      } else {
+        print('[ThreadPage] Root note not found in existing data, trying network fetch: ${widget.rootNoteId}');
         await _fetchNotesById([widget.rootNoteId]);
-        final updatedNotes = widget.dataService.notesNotifier.value;
-        _rootNote = updatedNotes.firstWhereOrNull((n) => n.id == widget.rootNoteId);
+        final updatedNotesNotifier = widget.dataService.notesNotifier.value;
+        final updatedNotesArray = widget.dataService.notes;
+        _rootNote = updatedNotesNotifier.firstWhereOrNull((n) => n.id == widget.rootNoteId) ??
+            updatedNotesArray.firstWhereOrNull((n) => n.id == widget.rootNoteId);
       }
 
       if (widget.focusedNoteId != null && widget.focusedNoteId != widget.rootNoteId) {
-        _focusedNote = allNotes.firstWhereOrNull((n) => n.id == widget.focusedNoteId);
+        print('[ThreadPage] Looking for focused note: ${widget.focusedNoteId}');
 
-        // If focused note not found, try to fetch it directly
-        if (_focusedNote == null) {
-          print('[ThreadPage] Focused note not found in cache, fetching: ${widget.focusedNoteId}');
+        _focusedNote = allNotesFromNotifier.firstWhereOrNull((n) => n.id == widget.focusedNoteId) ??
+            allNotesFromArray.firstWhereOrNull((n) => n.id == widget.focusedNoteId);
+
+        if (_focusedNote != null) {
+          print('[ThreadPage] Found focused note in existing data: ${_focusedNote!.id}');
+        } else {
+          print('[ThreadPage] Focused note not found in existing data, trying network fetch: ${widget.focusedNoteId}');
           await _fetchNotesById([widget.focusedNoteId!]);
-          final updatedNotes = widget.dataService.notesNotifier.value;
-          _focusedNote = updatedNotes.firstWhereOrNull((n) => n.id == widget.focusedNoteId);
+          final updatedNotesNotifier = widget.dataService.notesNotifier.value;
+          final updatedNotesArray = widget.dataService.notes;
+          _focusedNote = updatedNotesNotifier.firstWhereOrNull((n) => n.id == widget.focusedNoteId) ??
+              updatedNotesArray.firstWhereOrNull((n) => n.id == widget.focusedNoteId);
         }
       } else {
         _focusedNote = null;
@@ -326,14 +348,29 @@ class _ThreadPageState extends State<ThreadPage> {
       try {
         print('[ThreadPage] Attempting to fetch note: $noteId');
 
-        // Try multiple fetch strategies
+        // Try cache first
         var note = await widget.dataService.getCachedNote(noteId).timeout(const Duration(seconds: 3));
 
         if (note == null) {
-          print('[ThreadPage] Note not in cache, trying relay broadcast: $noteId');
-          // Try to request note from relays by broadcasting a filter
-          await _requestNoteFromRelays(noteId).timeout(const Duration(seconds: 5));
-          note = await widget.dataService.getCachedNote(noteId).timeout(const Duration(seconds: 2));
+          print('[ThreadPage] Note not in cache, trying network fetch: $noteId');
+          // Try to fetch from network
+          note = await _fetchNoteFromNetwork(noteId).timeout(const Duration(seconds: 5));
+
+          if (note != null) {
+            // Add the fetched note to the data service
+            widget.dataService.notes.add(note);
+            widget.dataService.eventIds.add(note.id);
+            widget.dataService.addNote(note);
+
+            // Save to cache if possible
+            if (widget.dataService.notesBox != null && widget.dataService.notesBox!.isOpen) {
+              try {
+                await widget.dataService.notesBox!.put(note.id, note);
+              } catch (e) {
+                print('[ThreadPage] Error saving note to cache: $e');
+              }
+            }
+          }
         }
 
         if (note != null) {
@@ -366,11 +403,126 @@ class _ThreadPageState extends State<ThreadPage> {
     }
   }
 
+  Future<NoteModel?> _fetchNoteFromNetwork(String eventId) async {
+    final relayUrls = relaySetMainSockets.take(3).toList(); // Use first 3 relays
+
+    for (final relayUrl in relayUrls) {
+      try {
+        final note = await _fetchNoteFromRelay(relayUrl, eventId);
+        if (note != null) {
+          return note;
+        }
+      } catch (e) {
+        print('[ThreadPage] Error fetching from relay $relayUrl: $e');
+        continue;
+      }
+    }
+
+    return null;
+  }
+
+  Future<NoteModel?> _fetchNoteFromRelay(String relayUrl, String eventId) async {
+    WebSocket? ws;
+    try {
+      ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
+
+      final filter = NostrService.createEventByIdFilter(eventIds: [eventId]);
+      final request = NostrService.createRequest(filter);
+      final serializedRequest = NostrService.serializeRequest(request);
+
+      final completer = Completer<Map<String, dynamic>?>();
+
+      late StreamSubscription sub;
+      sub = ws.listen((event) {
+        try {
+          if (completer.isCompleted) return;
+          final decoded = jsonDecode(event);
+          if (decoded is List && decoded.length >= 3) {
+            if (decoded[0] == 'EVENT') {
+              final eventData = decoded[2] as Map<String, dynamic>;
+              if (eventData['id'] == eventId) {
+                completer.complete(eventData);
+              }
+            } else if (decoded[0] == 'EOSE') {
+              if (!completer.isCompleted) {
+                completer.complete(null);
+              }
+            }
+          }
+        } catch (e) {
+          if (!completer.isCompleted) completer.complete(null);
+        }
+      }, onError: (error) {
+        if (!completer.isCompleted) completer.complete(null);
+      }, onDone: () {
+        if (!completer.isCompleted) completer.complete(null);
+      });
+
+      if (ws.readyState == WebSocket.open) {
+        ws.add(serializedRequest);
+      }
+
+      final eventData = await completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => null,
+      );
+
+      await sub.cancel();
+      await ws.close();
+
+      if (eventData != null) {
+        // Parse reply info from tags
+        final tags = eventData['tags'] as List<dynamic>? ?? [];
+        String? rootId;
+        String? parentId;
+        bool isReply = false;
+
+        for (var tag in tags) {
+          if (tag is List && tag.length >= 4 && tag[0] == 'e') {
+            if (tag[3] == 'root') {
+              rootId = tag[1] as String?;
+              isReply = true;
+            } else if (tag[3] == 'reply') {
+              parentId = tag[1] as String?;
+            }
+          }
+        }
+
+        return NoteModel(
+          id: eventData['id'] as String,
+          content: eventData['content'] as String,
+          author: eventData['pubkey'] as String,
+          timestamp: DateTime.fromMillisecondsSinceEpoch(
+            (eventData['created_at'] as int) * 1000,
+          ),
+          isReply: isReply,
+          isRepost: (eventData['kind'] as int) == 6,
+          rootId: rootId,
+          parentId: parentId ?? (isReply ? rootId : null),
+          rawWs: jsonEncode(eventData),
+        );
+      }
+
+      return null;
+    } catch (e) {
+      try {
+        await ws?.close();
+      } catch (_) {}
+      rethrow;
+    }
+  }
+
   Future<void> _requestNoteFromRelays(String noteId) async {
     print('[ThreadPage] Requesting note from relays: $noteId');
     try {
-      // Use the existing fetchNotesById method which handles relay requests
-      await _fetchNotesById([noteId]);
+      final note = await _fetchNoteFromNetwork(noteId);
+      if (note != null) {
+        // Add the fetched note to the data service
+        widget.dataService.notes.add(note);
+        widget.dataService.eventIds.add(note.id);
+        widget.dataService.addNote(note);
+        print('[ThreadPage] Successfully fetched note from network: $noteId');
+      }
     } catch (e) {
       print('[ThreadPage] Error requesting note from relays: $e');
     }

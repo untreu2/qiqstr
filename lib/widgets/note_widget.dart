@@ -135,8 +135,22 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
 
   void _navigateToThreadPage(NoteModel note) {
     final String rootIdToShow = (note.isReply && note.rootId != null && note.rootId!.isNotEmpty) ? note.rootId! : note.id;
-
     final String? focusedNoteId = (note.isReply && rootIdToShow != note.id) ? note.id : null;
+
+    print('[NoteWidget] Navigating to thread');
+    print('[NoteWidget] Note ID: ${note.id}');
+    print('[NoteWidget] Note isReply: ${note.isReply}');
+    print('[NoteWidget] Note rootId: ${note.rootId}');
+    print('[NoteWidget] RootIdToShow: $rootIdToShow');
+    print('[NoteWidget] FocusedNoteId: $focusedNoteId');
+    print('[NoteWidget] DataService has ${widget.dataService.notes.length} notes in array');
+    print('[NoteWidget] DataService notifier has ${widget.dataService.notesNotifier.value.length} notes');
+
+    // Verify the note exists in the data service
+    final noteExistsInArray = widget.dataService.notes.any((n) => n.id == note.id);
+    final noteExistsInNotifier = widget.dataService.notesNotifier.value.any((n) => n.id == note.id);
+    print('[NoteWidget] Note exists in array: $noteExistsInArray');
+    print('[NoteWidget] Note exists in notifier: $noteExistsInNotifier');
 
     Navigator.push(
       context,
