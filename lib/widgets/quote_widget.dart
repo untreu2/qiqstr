@@ -263,21 +263,39 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
     }
   }
 
-  Widget _authorInfo(BuildContext context, String npub) {
+  Widget? _authorInfo(BuildContext context, String npub) {
     if (_cachedUserNpub != npub) {
       if (_cachedUserNpub != null) {
         UserProvider.instance.removeListener(_onUserDataChange);
       }
       _cachedUserNpub = npub;
-      _cachedUser = UserProvider.instance.getUserOrDefault(npub);
+      _cachedUser = UserProvider.instance.getUserIfExists(npub);
       UserProvider.instance.addListener(_onUserDataChange);
 
-      if (UserProvider.instance.getUser(npub) == null) {
-        UserProvider.instance.loadUser(npub);
+      // Try to load user only once, independently
+      if (_cachedUser == null) {
+        Future.microtask(() async {
+          try {
+            final loadedUser = await UserProvider.instance.loadUser(npub);
+            if (mounted && _cachedUserNpub == npub) {
+              setState(() {
+                _cachedUser = loadedUser;
+              });
+            }
+          } catch (e) {
+            print('[QuoteWidget] Failed to load user $npub: $e');
+            // User failed to load, will remain null
+          }
+        });
       }
     }
 
-    final user = _cachedUser ?? UserProvider.instance.getUserOrDefault(npub);
+    final user = _cachedUser ?? UserProvider.instance.getUserIfExists(npub);
+
+    // Return null if user couldn't be loaded - this will hide the user info
+    if (user == null || user.name == 'Anonymous') {
+      return null;
+    }
 
     return GestureDetector(
       onTap: () => widget.dataService.openUserProfile(context, npub),
@@ -355,6 +373,12 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
 
             final n = snap.data!;
 
+            // Check if user info is available - if not, don't show the quote
+            final authorWidget = _authorInfo(context, n.author);
+            if (authorWidget == null) {
+              return SizedBox.shrink(); // Hide the entire quote if user couldn't be loaded
+            }
+
             final parsed = n.parsedContentLazy;
             final hasText = (parsed['textParts'] as List).any((p) => p['type'] == 'text' && (p['text'] as String).trim().isNotEmpty);
             final hasMedia = (parsed['mediaUrls'] as List?)?.isNotEmpty ?? false;
@@ -371,7 +395,7 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
                 children: [
                   Row(
                     children: [
-                      _authorInfo(context, n.author),
+                      authorWidget,
                       const Spacer(),
                       Text(
                         _formatTimestamp(n.timestamp),

@@ -58,17 +58,24 @@ class ProfileService {
       }
 
       final profileData = await _fetchUserProfileFromRelay(npub);
-      final data = profileData ?? _getDefaultProfile();
 
-      _addToCache(npub, data);
+      // If we couldn't fetch from any relay, return default but don't cache it
+      if (profileData == null) {
+        final defaultData = _getDefaultProfile();
+        completer.complete(defaultData);
+        return defaultData;
+      }
+
+      // Only cache and save if we actually got real data
+      _addToCache(npub, profileData);
 
       if (_usersBox != null && _usersBox!.isOpen) {
-        final userModel = UserModel.fromCachedProfile(npub, data);
+        final userModel = UserModel.fromCachedProfile(npub, profileData);
         _saveToHiveAsync(npub, userModel);
       }
 
-      completer.complete(data);
-      return data;
+      completer.complete(profileData);
+      return profileData;
     } catch (e) {
       final defaultData = _getDefaultProfile();
       completer.complete(defaultData);
@@ -127,14 +134,24 @@ class ProfileService {
       return null;
     }
 
-    final relayUrl = relaySetMainSockets.first;
+    // Try multiple relays to ensure we really can't fetch the user
+    final relaysToTry = relaySetMainSockets.take(3).toList();
 
-    try {
-      return await _fetchProfileFromSingleRelay(relayUrl, npub);
-    } catch (e) {
-      print('[ProfileService] Error fetching from relay $relayUrl: $e');
-      return null;
+    for (final relayUrl in relaysToTry) {
+      try {
+        final result = await _fetchProfileFromSingleRelay(relayUrl, npub);
+        if (result != null) {
+          return result;
+        }
+      } catch (e) {
+        print('[ProfileService] Error fetching from relay $relayUrl: $e');
+        continue;
+      }
     }
+
+    // If we tried all relays and couldn't fetch, return null
+    print('[ProfileService] Could not fetch user $npub from any relay');
+    return null;
   }
 
   Future<Map<String, String>?> _fetchProfileFromSingleRelay(String relayUrl, String npub) async {

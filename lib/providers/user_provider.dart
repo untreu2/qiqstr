@@ -74,6 +74,15 @@ class UserProvider extends ChangeNotifier {
     return _users[primaryKey];
   }
 
+  /// Returns user if exists in cache or can be converted from existing data, null otherwise
+  /// Does not trigger network fetching like loadUser does
+  UserModel? getUserIfExists(String identifier) {
+    if (identifier.isEmpty) return null;
+
+    String primaryKey = _getPrimaryKey(identifier);
+    return _users[primaryKey];
+  }
+
   String _getPrimaryKey(String identifier) {
     if (identifier.startsWith('npub1')) {
       return identifier;
@@ -179,6 +188,17 @@ class UserProvider extends ChangeNotifier {
 
     try {
       final profileData = await _profileService.getCachedUserProfile(hexKey);
+
+      // Check if we actually got real profile data or just defaults
+      if (profileData['name'] == 'Anonymous' &&
+          profileData['profileImage'] == '' &&
+          profileData['about'] == '' &&
+          profileData['nip05'] == '') {
+        // This means the profile couldn't be fetched, don't cache it
+        debugPrint('[UserProvider] Profile not found for $identifier');
+        return getUserOrDefault(identifier);
+      }
+
       final user = UserModel.fromCachedProfile(npubKey, profileData);
 
       _users[npubKey] = user;
@@ -189,6 +209,7 @@ class UserProvider extends ChangeNotifier {
       return user;
     } catch (e) {
       debugPrint('[UserProvider] Error loading user $identifier: $e');
+      // Don't cache failed users, just return default without storing
       final defaultUser = getUserOrDefault(identifier);
 
       if (defaultUser.npub.isEmpty && npubKey.isNotEmpty) {
