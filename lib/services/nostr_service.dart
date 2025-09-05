@@ -212,6 +212,51 @@ class NostrService {
     return event;
   }
 
+  static Event createQuoteEvent({
+    required String content,
+    required String quotedEventId,
+    String? quotedEventPubkey,
+    String? relayUrl,
+    required String privateKey,
+    List<List<String>>? additionalTags,
+  }) {
+    final List<List<String>> tags = [];
+
+    if (quotedEventPubkey != null) {
+      tags.add(['q', quotedEventId, relayUrl ?? '', quotedEventPubkey]);
+    } else {
+      tags.add(['q', quotedEventId, relayUrl ?? '']);
+    }
+
+    if (quotedEventPubkey != null) {
+      tags.add(['p', quotedEventPubkey]);
+    }
+
+    if (additionalTags != null) {
+      tags.addAll(additionalTags);
+    }
+
+    final cacheKey = _generateEventCacheKey(1, content, privateKey, tags);
+
+    if (_eventCache.containsKey(cacheKey)) {
+      _cacheHits++;
+      return _eventCache[cacheKey]!;
+    }
+
+    _cacheMisses++;
+    _eventsCreated++;
+
+    final event = Event.from(
+      kind: 1,
+      tags: tags,
+      content: content,
+      privkey: privateKey,
+    );
+
+    _addToEventCache(cacheKey, event);
+    return event;
+  }
+
   static Filter createNotesFilter({
     List<String>? authors,
     List<int>? kinds,

@@ -26,7 +26,7 @@ class UserModelAdapter extends TypeAdapter<UserModel> {
       lud16: fields[6] as String,
       updatedAt: fields[7] as DateTime,
       website: fields[8] as String,
-      nip05Verified: fields[9] as bool? ?? false,
+      nip05Verified: fields[9] as bool,
     );
   }
 
@@ -61,5 +61,8 @@ class UserModelAdapter extends TypeAdapter<UserModel> {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || other is UserModelAdapter && runtimeType == other.runtimeType && typeId == other.typeId;
+      identical(this, other) ||
+      other is UserModelAdapter &&
+          runtimeType == other.runtimeType &&
+          typeId == other.typeId;
 }

@@ -87,11 +87,14 @@ class NoteListNotifier extends ValueNotifier<List<NoteModel>> {
 
   void _invalidateFilterCache() {
     _debounceTimer?.cancel();
-    // Faster invalidation for profiles to prevent lag
-    final debounceDelay = _dataType == DataType.profile ? const Duration(milliseconds: 100) : const Duration(milliseconds: 250);
-    _debounceTimer = Timer(debounceDelay, () {
+    if (_dataType == DataType.profile) {
       _filterCacheValid = false;
-    });
+      Future.microtask(() => notifyListeners());
+    } else {
+      _debounceTimer = Timer(const Duration(milliseconds: 100), () {
+        _filterCacheValid = false;
+      });
+    }
   }
 
   List<NoteModel> _getFilteredNotesList() {
@@ -237,11 +240,15 @@ class DataService {
     Function(String, List<RepostModel>)? onRepostsUpdated,
     Function(String, int)? onRepostCountUpdated,
   }) {
-    print('[DataService] Configuring for feed with npub: $npub');
+    print('[DataService] Fast configuring for feed with npub: $npub');
 
     _ensureLoggedInNpub();
 
-    // Always clear data structures when switching feeds to ensure fresh data loading
+    if (_currentNpub == npub && _currentDataType == DataType.feed) {
+      print('[DataService] Same feed configuration, skipping clear');
+      return;
+    }
+
     _clearDataStructures();
 
     _currentNpub = npub;
@@ -255,9 +262,8 @@ class DataService {
     _onRepostCountUpdated = onRepostCountUpdated;
 
     _notesNotifier = NoteListNotifier(_currentDataType, _currentNpub);
-    // Reset initialization state to force fresh loading
-    _isInitialized = false;
-    print('[DataService] Configured fresh feed service for: $npub');
+
+    print('[DataService] Fast feed configuration completed for: $npub');
   }
 
   void configureForProfile({
@@ -270,12 +276,15 @@ class DataService {
     Function(String, List<RepostModel>)? onRepostsUpdated,
     Function(String, int)? onRepostCountUpdated,
   }) {
-    print('[DataService] Configuring for profile with npub: $npub');
+    print('[DataService] Fast configuring for profile with npub: $npub');
 
     _ensureLoggedInNpub();
 
-    // Always clear data structures when configuring for profile to ensure fresh data loading
-    // This fixes the issue where returning to a previously visited profile doesn't reload notes
+    if (_currentNpub == npub && _currentDataType == DataType.profile) {
+      print('[DataService] Same profile configuration, skipping clear');
+      return;
+    }
+
     _clearDataStructures();
 
     _currentNpub = npub;
@@ -289,9 +298,8 @@ class DataService {
     _onRepostCountUpdated = onRepostCountUpdated;
 
     _notesNotifier = NoteListNotifier(_currentDataType, _currentNpub);
-    // Reset initialization state to force fresh loading
-    _isInitialized = false;
-    print('[DataService] Configured fresh profile service for: $npub');
+
+    print('[DataService] Fast profile configuration completed for: $npub');
   }
 
   void _ensureLoggedInNpub() {
@@ -301,33 +309,34 @@ class DataService {
   }
 
   void _clearDataStructures() {
-    print('[DataService] Clearing data structures for new configuration');
+    print('[DataService] Ultra-fast clearing for smooth profile transitions');
 
     notes.clear();
     eventIds.clear();
     _itemsTree.clear();
-
-    reactionsMap.clear();
-    repliesMap.clear();
-    repostsMap.clear();
-    zapsMap.clear();
-
     _pendingEvents.clear();
     _pendingOptimisticReactionIds.clear();
-    _pendingProfileRequests.clear();
+
+    Future.microtask(() {
+      const clearBatchSize = 100;
+      final reactionsKeys = reactionsMap.keys.toList();
+      for (int i = 0; i < reactionsKeys.length; i += clearBatchSize) {
+        final batch = reactionsKeys.skip(i).take(clearBatchSize);
+        for (final key in batch) {
+          reactionsMap.remove(key);
+        }
+        if (i % (clearBatchSize * 2) == 0) {
+          Future.delayed(Duration.zero);
+        }
+      }
+
+      repliesMap.clear();
+      repostsMap.clear();
+      zapsMap.clear();
+      _pendingProfileRequests.clear();
+    });
 
     _notesNotifier?.clearQuietly();
-    _notesNotifier = null;
-
-    // Don't clear profile cache completely - it can be reused
-    // profileCache.clear();
-
-    profilesNotifier.value = {};
-    unreadNotificationsCountNotifier.value = 0;
-
-    _itemsTree.clear();
-
-    print('[DataService] All data structures cleared completely');
 
     _isClosed = false;
     _isLoadingMore = false;
@@ -341,10 +350,7 @@ class DataService {
     _scrollDebounceTimer?.cancel();
     _scrollDebounceTimer = null;
 
-    // Keep the service initialized to avoid reinitialization issues
-    // _isInitialized = false;
-
-    print('[DataService] Data structures cleared for fresh configuration');
+    print('[DataService] Ultra-fast data clearing completed for smooth transitions');
   }
 
   int get connectedRelaysCount => _socketManager.activeSockets.length;
@@ -378,7 +384,6 @@ class DataService {
       _profileService = ProfileService.instance;
       await _profileService.initialize();
 
-      // Load cache immediately for instant display
       await loadNotesFromCache((loadedNotes) {});
       Future.microtask(() async {
         await _loadProfilesForNotes();
@@ -610,6 +615,7 @@ class DataService {
     _receivePort.listen((message) {
       if (message is SendPort) {
         _sendPort = message;
+
         if (!_sendPortReadyCompleter.isCompleted) {
           _sendPortReadyCompleter.complete();
           print('[DataService] Isolate initialized successfully.');
@@ -811,47 +817,6 @@ class DataService {
     });
   }
 
-  void _subscribeToInteractionsForNotes(List<String> noteIds) {
-    if (noteIds.isEmpty) return;
-
-    print('[DataService] Subscribing to interactions for ${noteIds.length} specific notes only');
-
-    final sinceTimestamp = DateTime.now().subtract(const Duration(minutes: 5)).millisecondsSinceEpoch ~/ 1000;
-
-    const batchSize = 15;
-    for (int i = 0; i < noteIds.length; i += batchSize) {
-      final batch = noteIds.skip(i).take(batchSize).toList();
-
-      final reactionFilter = NostrService.createReactionFilter(
-        eventIds: batch,
-        since: sinceTimestamp,
-        limit: 50,
-      );
-      _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(reactionFilter)));
-
-      final replyFilter = NostrService.createReplyFilter(
-        eventIds: batch,
-        since: sinceTimestamp,
-        limit: 50,
-      );
-      _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(replyFilter)));
-
-      final repostFilter = NostrService.createRepostFilter(
-        eventIds: batch,
-        since: sinceTimestamp,
-        limit: 50,
-      );
-      _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(repostFilter)));
-
-      final zapFilter = NostrService.createZapFilter(
-        eventIds: batch,
-        since: sinceTimestamp,
-        limit: 50,
-      );
-      _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(zapFilter)));
-    }
-  }
-
   Future<void> _subscribeToFollowing() async {
     final filter = NostrService.createFollowingFilter(
       authors: [npub],
@@ -930,8 +895,13 @@ class DataService {
 
         try {
           if (dataType == DataType.profile) {
-            // Start immediate aggressive profile fetch for instant display
-            Future.microtask(() => _fetchProfileNotesAggressively([npub]));
+            Future.microtask(() async {
+              await _fetchProfileNotesAggressively([npub]);
+              if (notes.isNotEmpty) {
+                final noteIds = notes.map((n) => n.id).toList();
+                Future.microtask(() => fetchInteractionsForEvents(noteIds));
+              }
+            });
           } else {
             await fetchNotes(targetNpubs, initialLoad: true).timeout(
               const Duration(seconds: 8),
@@ -1020,7 +990,6 @@ class DataService {
     final request = NostrService.serializeRequest(NostrService.createRequest(filter));
 
     if (dataType == DataType.profile) {
-      // For profiles, broadcast to all relays immediately for faster response
       await _socketManager.immediateBroadcastToAll(request);
       print('[DataService] Immediate broadcast to all relays for ${noteLimit} profile notes');
     } else {
@@ -1211,7 +1180,6 @@ class DataService {
         'priority': 1,
       });
 
-      // For profiles, process events more frequently with smaller batches to prevent lag
       final batchThreshold = dataType == DataType.profile ? 20 : 50;
       final batchDelay = dataType == DataType.profile ? const Duration(milliseconds: 15) : const Duration(milliseconds: 25);
 
@@ -1326,17 +1294,54 @@ class DataService {
   Future<void> _handleReplyEvent(Map<String, dynamic> eventData, String parentEventId) async {
     if (_isClosed) return;
     try {
-      final reply = ReplyModel.fromEvent(eventData);
-      repliesMap.putIfAbsent(parentEventId, () => []);
+      final tags = eventData['tags'] as List<dynamic>? ?? [];
+      String? rootId;
+      String? actualParentId = parentEventId;
+      String? replyMarker;
+      List<Map<String, String>> eTags = [];
+      List<Map<String, String>> pTags = [];
 
-      if (!repliesMap[parentEventId]!.any((r) => r.id == reply.id)) {
-        repliesMap[parentEventId]!.add(reply);
-        final parentNote = notes.firstWhereOrNull((n) => n.id == parentEventId);
+      for (var tag in tags) {
+        if (tag is List && tag.isNotEmpty) {
+          if (tag[0] == 'e' && tag.length >= 2) {
+            final eTag = <String, String>{
+              'eventId': tag[1] as String,
+              'relayUrl': tag.length > 2 ? (tag[2] as String? ?? '') : '',
+              'marker': tag.length > 3 ? (tag[3] as String? ?? '') : '',
+              'pubkey': tag.length > 4 ? (tag[4] as String? ?? '') : '',
+            };
+            eTags.add(eTag);
+
+            if (tag.length >= 4 && tag[3] == 'root') {
+              rootId = tag[1] as String;
+              replyMarker = 'root';
+            } else if (tag.length >= 4 && tag[3] == 'reply') {
+              actualParentId = tag[1] as String;
+              replyMarker = 'reply';
+            }
+          } else if (tag[0] == 'p' && tag.length >= 2) {
+            final pTag = <String, String>{
+              'pubkey': tag[1] as String,
+              'relayUrl': tag.length > 2 ? (tag[2] as String? ?? '') : '',
+              'petname': tag.length > 3 ? (tag[3] as String? ?? '') : '',
+            };
+            pTags.add(pTag);
+          }
+        }
+      }
+
+      final reply = ReplyModel.fromEvent(eventData);
+      final finalParentId = actualParentId ?? parentEventId;
+      repliesMap.putIfAbsent(finalParentId, () => []);
+
+      if (!repliesMap[finalParentId]!.any((r) => r.id == reply.id)) {
+        repliesMap[finalParentId]!.add(reply);
+        final parentNote = notes.firstWhereOrNull((n) => n.id == finalParentId);
         if (parentNote != null) {
-          parentNote.replyCount = repliesMap[parentEventId]!.length;
+          parentNote.replyCount = repliesMap[finalParentId]!.length;
         }
 
-        InteractionsProvider.instance.updateReplies(parentEventId, repliesMap[parentEventId]!);
+        InteractionsProvider.instance.updateReplies(finalParentId, repliesMap[finalParentId]!);
 
         final noteModel = NoteModel(
           id: reply.id,
@@ -1344,9 +1349,12 @@ class DataService {
           author: reply.author,
           timestamp: reply.timestamp,
           isReply: true,
-          parentId: parentEventId,
-          rootId: reply.rootEventId,
+          parentId: finalParentId,
+          rootId: rootId ?? reply.rootEventId,
           rawWs: jsonEncode(eventData),
+          eTags: eTags,
+          pTags: pTags,
+          replyMarker: replyMarker,
         );
 
         if (eventIds.add(noteModel.id)) {
@@ -1386,7 +1394,6 @@ class DataService {
       final nip05 = profileContent['nip05'] as String? ?? '';
       bool nip05Verified = false;
 
-      // Perform NIP-05 verification if nip05 is present
       if (nip05.isNotEmpty) {
         try {
           nip05Verified = await _nip05Service.verifyNip05(nip05, author);
@@ -1719,58 +1726,26 @@ class DataService {
     }
   }
 
-  Future<void> _fetchProfileNotesOptimized(List<String> authors) async {
-    if (_isClosed) return;
-
-    print('[DataService] Fetching profile notes with optimization');
-
-    final futures = <Future>[];
-
-    futures.add(_fetchNotes(authors, limit: 200));
-
-    Future.microtask(() async {
-      await Future.delayed(const Duration(milliseconds: 100));
-      if (!_isClosed) {
-        await _fetchNotes(authors, limit: 100);
-      }
-    });
-
-    await Future.wait(futures, eagerError: false);
-    print('[DataService] Profile notes optimization completed');
-  }
-
   Future<void> _fetchProfileNotesAggressively(List<String> authors) async {
     if (_isClosed) return;
 
-    print('[DataService] Starting optimized profile notes fetch with anti-freeze protection');
+    print('[DataService] Ultra-fast profile notes fetch for instant loading');
 
-    // Staggered fetching to prevent UI freezing
     Future.microtask(() async {
-      // First wave - small immediate batch
-      await _fetchNotes(authors, limit: 25);
+      final futures = [
+        _fetchNotes(authors, limit: 80),
+        _fetchNotes(authors, limit: 120),
+        _fetchNotes(authors, limit: 200),
+      ];
 
-      // Small delay to allow UI to render
-      await Future.delayed(const Duration(milliseconds: 10));
+      await Future.wait(futures, eagerError: false);
 
-      // Second wave - medium batch
-      await _fetchNotes(authors, limit: 75);
-
-      // Allow UI breathing room
-      await Future.delayed(const Duration(milliseconds: 20));
-
-      // Third wave - larger batch
       if (!_isClosed) {
-        await _fetchNotes(authors, limit: 150);
-      }
-
-      // Final wave with delay to prevent freezing
-      await Future.delayed(const Duration(milliseconds: 50));
-      if (!_isClosed) {
-        await _fetchNotes(authors, limit: 250);
+        await _fetchNotes(authors, limit: 300);
       }
     });
 
-    print('[DataService] Optimized profile notes fetch initiated with anti-freeze protection');
+    print('[DataService] Ultra-fast profile notes fetch initiated - instant loading');
   }
 
   DateTime? _getOldestNoteTimestamp() {
@@ -1974,16 +1949,10 @@ class DataService {
   }
 
   void addNote(NoteModel note) {
-    // Add note in microtask for profiles to prevent UI blocking
-    if (dataType == DataType.profile) {
-      Future.microtask(() {
-        _itemsTree.add(note);
-        notesNotifier.addNoteQuietly(note);
-      });
-    } else {
+    Future.microtask(() {
       _itemsTree.add(note);
       notesNotifier.addNoteQuietly(note);
-    }
+    });
   }
 
   void _invalidateFilterCache() => notesNotifier._invalidateFilterCache();
@@ -2119,7 +2088,7 @@ class DataService {
         lud16: lud16,
         website: website,
         updatedAt: updatedAt,
-        nip05Verified: false, // Will be verified asynchronously
+        nip05Verified: false,
       );
 
       profileCache[eventJson['pubkey']] = CachedProfile(
@@ -2409,26 +2378,64 @@ class DataService {
 
       String rootId;
       String replyId = parentEventId;
+      String replyMarker;
+      List<Map<String, String>> eTags = [];
+      List<Map<String, String>> pTags = [];
 
-      if (parentNote.isReply && parentNote.rootId != null) {
+      if (parentNote.isReply && parentNote.rootId != null && parentNote.rootId!.isNotEmpty) {
         rootId = parentNote.rootId!;
+        replyMarker = 'reply';
       } else {
         rootId = parentEventId;
+        replyMarker = 'root';
       }
 
       List<List<String>> tags = [];
 
       if (rootId != replyId) {
-        tags.add(['e', rootId, '', 'root']);
-        tags.add(['e', replyId, '', 'reply']);
+        tags.add(['e', rootId, '', 'root', parentNote.author]);
+        tags.add(['e', replyId, '', 'reply', parentNote.author]);
+
+        eTags.add({
+          'eventId': rootId,
+          'relayUrl': '',
+          'marker': 'root',
+          'pubkey': parentNote.author,
+        });
+        eTags.add({
+          'eventId': replyId,
+          'relayUrl': '',
+          'marker': 'reply',
+          'pubkey': parentNote.author,
+        });
       } else {
-        tags.add(['e', rootId, '', 'root']);
+        tags.add(['e', rootId, '', 'root', parentNote.author]);
+
+        eTags.add({
+          'eventId': rootId,
+          'relayUrl': '',
+          'marker': 'root',
+          'pubkey': parentNote.author,
+        });
       }
 
-      tags.add(['p', parentNote.author, '', 'mention']);
+      Set<String> mentionedPubkeys = {parentNote.author};
 
-      for (final relayUrl in relaySetMainSockets) {
-        tags.add(['r', relayUrl]);
+      if (parentNote.pTags.isNotEmpty) {
+        for (final pTag in parentNote.pTags) {
+          if (pTag['pubkey'] != null && pTag['pubkey']!.isNotEmpty) {
+            mentionedPubkeys.add(pTag['pubkey']!);
+          }
+        }
+      }
+
+      for (final pubkey in mentionedPubkeys) {
+        tags.add(['p', pubkey]);
+        pTags.add({
+          'pubkey': pubkey,
+          'relayUrl': '',
+          'petname': '',
+        });
       }
 
       final event = NostrService.createReplyEvent(
@@ -2465,6 +2472,9 @@ class DataService {
         parentId: parentEventId,
         rootId: rootId,
         rawWs: jsonEncode(NostrService.eventToJson(event)),
+        eTags: eTags,
+        pTags: pTags,
+        replyMarker: replyMarker,
       );
 
       replyNoteModel.hasMedia = replyNoteModel.hasMediaLazy;
@@ -2501,7 +2511,7 @@ class DataService {
       _invalidateFilterCache();
       notesNotifier.value = notesNotifier.notes;
 
-      print('[DataService] Reply broadcasted to ${activeSockets.length} relays');
+      print('[DataService] NIP-10 compliant reply broadcasted to ${activeSockets.length} relays');
     } catch (e) {
       print('[DataService ERROR] Error sending reply: $e');
       throw e;
@@ -2563,6 +2573,62 @@ class DataService {
       print('[DataService] Repost broadcasted to ${activeSockets.length} relays');
     } catch (e) {
       print('[DataService ERROR] Error sending repost: $e');
+      throw e;
+    }
+  }
+
+  Future<void> sendQuoteInstantly(String quotedEventId, String? quotedEventPubkey, String quoteContent) async {
+    if (_isClosed) return;
+    try {
+      final privateKey = await _secureStorage.read(key: 'privateKey');
+      if (privateKey == null || privateKey.isEmpty) {
+        throw Exception('Private key not found.');
+      }
+
+      final event = NostrService.createQuoteEvent(
+        content: quoteContent,
+        quotedEventId: quotedEventId,
+        quotedEventPubkey: quotedEventPubkey,
+        privateKey: privateKey,
+      );
+
+      final serializedEvent = NostrService.serializeEvent(event);
+      final activeSockets = _socketManager.activeSockets;
+
+      for (final ws in activeSockets) {
+        if (ws.readyState == WebSocket.open) {
+          ws.add(serializedEvent);
+        }
+      }
+
+      final timestamp = DateTime.now();
+      final eventJson = NostrService.eventToJson(event);
+      final newNote = NoteModel(
+        id: eventJson['id'],
+        content: quoteContent,
+        author: npub,
+        timestamp: timestamp,
+        isRepost: false,
+        rawWs: jsonEncode(eventJson),
+      );
+
+      newNote.hasMedia = newNote.hasMediaLazy;
+
+      notes.add(newNote);
+      eventIds.add(newNote.id);
+
+      if (_hiveManager.notesBox != null) {
+        _hiveManager.notesBox!.put(newNote.id, newNote).catchError((error) {
+          print('[DataService] Error saving quote note to cache: $error');
+        });
+      }
+
+      addNote(newNote);
+      onNewNote?.call(newNote);
+
+      print('[DataService] NIP-10 compliant quote broadcasted to ${activeSockets.length} relays');
+    } catch (e) {
+      print('[DataService ERROR] Error sending quote: $e');
       throw e;
     }
   }
@@ -2658,12 +2724,9 @@ class DataService {
         return bTime.compareTo(aTime);
       });
 
-      // For profiles, load more cached notes for instant display
-      // Limit cached notes to prevent UI freezing
       final limitedNotes = filteredNotes.take(dataType == DataType.profile ? 100 : 80).toList();
       final newNotes = <NoteModel>[];
 
-      // Smaller batches to prevent UI freezing
       final batchSize = dataType == DataType.profile ? 15 : 20;
       for (int i = 0; i < limitedNotes.length; i += batchSize) {
         final batch = limitedNotes.skip(i).take(batchSize);
@@ -2683,10 +2746,8 @@ class DataService {
           note.zapAmount = zapsMap[note.id]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
         }
 
-        // Always yield to UI between batches to prevent freezing
         await Future.delayed(Duration.zero);
 
-        // Additional micro-delay for profiles to ensure smooth UI
         if (dataType == DataType.profile && i % (batchSize * 3) == 0) {
           await Future.delayed(const Duration(milliseconds: 1));
         }
@@ -2697,7 +2758,6 @@ class DataService {
         notesNotifier.value = notesNotifier.notes;
         onLoad(newNotes);
 
-        // Load profiles immediately for instant display
         if (dataType == DataType.profile) {
           _fetchProfilesForVisibleNotes(newNotes);
         } else {
@@ -2802,7 +2862,6 @@ class DataService {
         final allReactions = _hiveManager.reactionsBox!.values.cast<ReactionModel>().toList();
         if (allReactions.isEmpty) return;
 
-        // Smaller batches to prevent UI freezing
         const batchSize = 25;
         final Map<String, List<ReactionModel>> tempMap = {};
 
@@ -2816,10 +2875,8 @@ class DataService {
             }
           }
 
-          // Always yield to UI to prevent freezing
           await Future.delayed(Duration.zero);
 
-          // Additional micro-delay every few batches
           if (i % (batchSize * 4) == 0) {
             await Future.delayed(const Duration(milliseconds: 1));
           }
@@ -3071,7 +3128,6 @@ class DataService {
     if (data is List<NoteModel> && data.isNotEmpty) {
       final newNoteIds = <String>[];
 
-      // Process in smaller batches to prevent UI freezing
       const maxBatchSize = 10;
       for (int i = 0; i < data.length; i += maxBatchSize) {
         final batch = data.skip(i).take(maxBatchSize);
@@ -3088,20 +3144,18 @@ class DataService {
               eventIds.add(note.id);
               newNoteIds.add(note.id);
 
-              // Always save to cache asynchronously to prevent UI blocking
               Future.microtask(() => _hiveManager.notesBox?.put(note.id, note));
 
               addNote(note);
 
-              // For profiles, trigger immediate UI update
               if (dataType == DataType.profile) {
                 onNewNote?.call(note);
+                Future.microtask(() => fetchInteractionsForEvents([note.id]));
               }
             }
           }
         }
 
-        // Yield to UI between batches to prevent freezing
         if (i + maxBatchSize < data.length) {
           await Future.delayed(Duration.zero);
         }
@@ -3169,19 +3223,32 @@ class DataService {
         await NoteProcessor.processNoteEvent(this, eventData, targetNpubs, rawWs: jsonEncode(eventData['content']));
       } else if (kind == 1) {
         final tags = List<dynamic>.from(eventData['tags'] ?? []);
-        final replyETags = tags.where((tag) {
-          if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
-            return !(tag.length >= 4 && tag[3] == 'mention');
-          }
-          return false;
-        }).toList();
 
-        if (replyETags.isNotEmpty) {
-          final lastETag = replyETags.last;
-          if (lastETag is List && lastETag.length >= 2) {
-            final parentId = lastETag[1] as String;
-            await _handleReplyEvent(eventData, parentId);
+        String? rootId;
+        String? replyId;
+        bool isReply = false;
+
+        for (var tag in tags) {
+          if (tag is List && tag.isNotEmpty && tag[0] == 'e' && tag.length >= 2) {
+            if (tag.length >= 4 && tag[3] == 'mention') continue;
+
+            if (tag.length >= 4 && tag[3] == 'root') {
+              rootId = tag[1] as String;
+              isReply = true;
+            } else if (tag.length >= 4 && tag[3] == 'reply') {
+              replyId = tag[1] as String;
+              isReply = true;
+            } else if (rootId == null && replyId == null) {
+              replyId = tag[1] as String;
+              isReply = true;
+            }
           }
+        }
+
+        if (isReply && replyId != null) {
+          await _handleReplyEvent(eventData, replyId);
+        } else if (isReply && rootId != null && replyId == null) {
+          await _handleReplyEvent(eventData, rootId);
         } else {
           await NoteProcessor.processNoteEvent(this, eventData, targetNpubs, rawWs: jsonEncode(eventData));
         }
@@ -3192,26 +3259,31 @@ class DataService {
     }
 
     if (_hasPendingUiUpdate && (_uiThrottleTimer == null || !_uiThrottleTimer!.isActive)) {
-      // For profiles, update UI immediately without throttling for instant display
-      final throttleDelay = dataType == DataType.profile ? Duration.zero : const Duration(milliseconds: 250);
+      final throttleDelay = dataType == DataType.profile ? Duration.zero : const Duration(milliseconds: 150);
 
       _uiThrottleTimer = Timer(throttleDelay, () {
         if (_isClosed) {
           return;
         }
 
-        print('[DataService] ${dataType == DataType.profile ? "INSTANT" : "Throttled"} UI update executed for all pending changes.');
+        print('[DataService] ${dataType == DataType.profile ? "INSTANT" : "Optimized"} UI update for smooth transitions');
 
-        // Update UI in microtasks to prevent blocking
-        Future.microtask(() {
+        if (dataType == DataType.profile) {
           notesNotifier.value = notesNotifier._getFilteredNotesList();
-        });
-
-        Future.microtask(() {
           profilesNotifier.value = {
             for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
           };
-        });
+        } else {
+          Future.microtask(() {
+            notesNotifier.value = notesNotifier._getFilteredNotesList();
+          });
+
+          Future.microtask(() {
+            profilesNotifier.value = {
+              for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
+            };
+          });
+        }
 
         Future.microtask(() {
           final notificationsBox = _hiveManager.getNotificationBox(_loggedInNpub);

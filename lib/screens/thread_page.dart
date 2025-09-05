@@ -143,7 +143,6 @@ class _ThreadPageState extends State<ThreadPage> {
     try {
       _currentUserNpub = await _secureStorage.read(key: 'npub');
 
-      // Check both notesNotifier.value and notes array
       final allNotesFromNotifier = widget.dataService.notesNotifier.value;
       final allNotesFromArray = widget.dataService.notes;
 
@@ -151,7 +150,6 @@ class _ThreadPageState extends State<ThreadPage> {
       print('[ThreadPage] Notifier has ${allNotesFromNotifier.length} notes');
       print('[ThreadPage] Array has ${allNotesFromArray.length} notes');
 
-      // Try both sources
       _rootNote = allNotesFromNotifier.firstWhereOrNull((n) => n.id == widget.rootNoteId) ??
           allNotesFromArray.firstWhereOrNull((n) => n.id == widget.rootNoteId);
 
@@ -348,21 +346,18 @@ class _ThreadPageState extends State<ThreadPage> {
       try {
         print('[ThreadPage] Attempting to fetch note: $noteId');
 
-        // Try cache first
         var note = await widget.dataService.getCachedNote(noteId).timeout(const Duration(seconds: 3));
 
         if (note == null) {
           print('[ThreadPage] Note not in cache, trying network fetch: $noteId');
-          // Try to fetch from network
+
           note = await _fetchNoteFromNetwork(noteId).timeout(const Duration(seconds: 5));
 
           if (note != null) {
-            // Add the fetched note to the data service
             widget.dataService.notes.add(note);
             widget.dataService.eventIds.add(note.id);
             widget.dataService.addNote(note);
 
-            // Save to cache if possible
             if (widget.dataService.notesBox != null && widget.dataService.notesBox!.isOpen) {
               try {
                 await widget.dataService.notesBox!.put(note.id, note);
@@ -404,7 +399,7 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Future<NoteModel?> _fetchNoteFromNetwork(String eventId) async {
-    final relayUrls = relaySetMainSockets.take(3).toList(); // Use first 3 relays
+    final relayUrls = relaySetMainSockets.take(3).toList();
 
     for (final relayUrl in relayUrls) {
       try {
@@ -471,19 +466,44 @@ class _ThreadPageState extends State<ThreadPage> {
       await ws.close();
 
       if (eventData != null) {
-        // Parse reply info from tags
         final tags = eventData['tags'] as List<dynamic>? ?? [];
         String? rootId;
         String? parentId;
+        String? replyMarker;
         bool isReply = false;
+        List<Map<String, String>> eTags = [];
+        List<Map<String, String>> pTags = [];
 
         for (var tag in tags) {
-          if (tag is List && tag.length >= 4 && tag[0] == 'e') {
-            if (tag[3] == 'root') {
-              rootId = tag[1] as String?;
-              isReply = true;
-            } else if (tag[3] == 'reply') {
-              parentId = tag[1] as String?;
+          if (tag is List && tag.isNotEmpty) {
+            if (tag[0] == 'e' && tag.length >= 2) {
+              final eTag = <String, String>{
+                'eventId': tag[1] as String,
+                'relayUrl': tag.length > 2 ? (tag[2] as String? ?? '') : '',
+                'marker': tag.length > 3 ? (tag[3] as String? ?? '') : '',
+                'pubkey': tag.length > 4 ? (tag[4] as String? ?? '') : '',
+              };
+              eTags.add(eTag);
+
+              if (tag.length >= 4 && tag[3] == 'root') {
+                rootId = tag[1] as String;
+                isReply = true;
+                replyMarker = 'root';
+              } else if (tag.length >= 4 && tag[3] == 'reply') {
+                parentId = tag[1] as String;
+                replyMarker = 'reply';
+                isReply = true;
+              } else if (rootId == null && parentId == null) {
+                parentId = tag[1] as String;
+                isReply = true;
+              }
+            } else if (tag[0] == 'p' && tag.length >= 2) {
+              final pTag = <String, String>{
+                'pubkey': tag[1] as String,
+                'relayUrl': tag.length > 2 ? (tag[2] as String? ?? '') : '',
+                'petname': tag.length > 3 ? (tag[3] as String? ?? '') : '',
+              };
+              pTags.add(pTag);
             }
           }
         }
@@ -500,6 +520,9 @@ class _ThreadPageState extends State<ThreadPage> {
           rootId: rootId,
           parentId: parentId ?? (isReply ? rootId : null),
           rawWs: jsonEncode(eventData),
+          eTags: eTags,
+          pTags: pTags,
+          replyMarker: replyMarker,
         );
       }
 
@@ -512,36 +535,17 @@ class _ThreadPageState extends State<ThreadPage> {
     }
   }
 
-  Future<void> _requestNoteFromRelays(String noteId) async {
-    print('[ThreadPage] Requesting note from relays: $noteId');
-    try {
-      final note = await _fetchNoteFromNetwork(noteId);
-      if (note != null) {
-        // Add the fetched note to the data service
-        widget.dataService.notes.add(note);
-        widget.dataService.eventIds.add(note.id);
-        widget.dataService.addNote(note);
-        print('[ThreadPage] Successfully fetched note from network: $noteId');
-      }
-    } catch (e) {
-      print('[ThreadPage] Error requesting note from relays: $e');
-    }
-  }
-
   Future<void> _retryFetchNote() async {
     print('[ThreadPage] Retrying note fetch');
     setState(() => _isLoading = true);
 
     try {
-      // Try to fetch the root note again
       await _fetchNotesById([widget.rootNoteId]);
 
-      // Try to fetch focused note if it exists
       if (widget.focusedNoteId != null) {
         await _fetchNotesById([widget.focusedNoteId!]);
       }
 
-      // Reload the root note
       await _loadRootNote();
     } catch (e) {
       print('[ThreadPage] Retry failed: $e');
@@ -637,9 +641,17 @@ class _ThreadPageState extends State<ThreadPage> {
       );
     }
 
-    final visibleReplies = directReplies.take(_currentlyShownReplies).toList();
-    final hasMore = directReplies.length > _currentlyShownReplies;
-    final remainingCount = directReplies.length - _currentlyShownReplies;
+    final sortedReplies = directReplies.toList()
+      ..sort((a, b) {
+        if (a.replyMarker == 'root' && b.replyMarker != 'root') return -1;
+        if (b.replyMarker == 'root' && a.replyMarker != 'root') return 1;
+
+        return a.timestamp.compareTo(b.timestamp);
+      });
+
+    final visibleReplies = sortedReplies.take(_currentlyShownReplies).toList();
+    final hasMore = sortedReplies.length > _currentlyShownReplies;
+    final remainingCount = sortedReplies.length - _currentlyShownReplies;
 
     return Column(
       children: [
@@ -714,6 +726,13 @@ class _ThreadPageState extends State<ThreadPage> {
     final isHighlighted = reply.id == _highlightedNoteId;
     final nestedReplies = hierarchy[reply.id] ?? [];
 
+    final sortedNestedReplies = nestedReplies.toList()
+      ..sort((a, b) {
+        if (a.replyMarker == 'root' && b.replyMarker != 'root') return -1;
+        if (b.replyMarker == 'root' && a.replyMarker != 'root') return 1;
+        return a.timestamp.compareTo(b.timestamp);
+      });
+
     return RepaintBoundary(
       child: Container(
         margin: EdgeInsets.only(
@@ -753,23 +772,23 @@ class _ThreadPageState extends State<ThreadPage> {
                     ),
                   ),
                   if (depth < maxNestingDepth - 1) ...[
-                    ...nestedReplies.take(5).toList().asMap().entries.map((entry) {
+                    ...sortedNestedReplies.take(5).toList().asMap().entries.map((entry) {
                       final index = entry.key;
                       final nestedReply = entry.value;
                       return _buildThreadReplyWithDepth(
                         nestedReply,
                         hierarchy,
                         depth + 1,
-                        index == nestedReplies.take(5).length - 1,
+                        index == sortedNestedReplies.take(5).length - 1,
                         [...parentIsLast, isLast],
                       );
                     }),
-                    if (nestedReplies.length > 5)
+                    if (sortedNestedReplies.length > 5)
                       Container(
                         margin: EdgeInsets.only(left: (depth + 1) * indentWidth + 8),
                         padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                         child: Text(
-                          '${nestedReplies.length - 5} more replies...',
+                          '${sortedNestedReplies.length - 5} more replies...',
                           style: TextStyle(
                             color: context.colors.textSecondary,
                             fontSize: 11,

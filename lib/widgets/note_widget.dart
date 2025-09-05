@@ -146,7 +146,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     print('[NoteWidget] DataService has ${widget.dataService.notes.length} notes in array');
     print('[NoteWidget] DataService notifier has ${widget.dataService.notesNotifier.value.length} notes');
 
-    // Verify the note exists in the data service
     final noteExistsInArray = widget.dataService.notes.any((n) => n.id == note.id);
     final noteExistsInNotifier = widget.dataService.notesNotifier.value.any((n) => n.id == note.id);
     print('[NoteWidget] Note exists in array: $noteExistsInArray');
@@ -242,7 +241,14 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
       );
 
       final parentAuthor = UserProvider.instance.getUserOrDefault(parentNote.author);
-      replyToText = 'Replying to @${parentAuthor.name.isNotEmpty ? parentAuthor.name : 'user'}';
+
+      if (widget.note.replyMarker == 'root') {
+        replyToText = 'Reply to @${parentAuthor.name.isNotEmpty ? parentAuthor.name : 'user'}';
+      } else if (widget.note.replyMarker == 'reply') {
+        replyToText = 'Replying to @${parentAuthor.name.isNotEmpty ? parentAuthor.name : 'user'}';
+      } else {
+        replyToText = 'Replying to @${parentAuthor.name.isNotEmpty ? parentAuthor.name : 'user'}';
+      }
     }
 
     return Column(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:bounce/bounce.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/services/data_service_manager.dart';
+import 'package:qiqstr/services/memory_manager.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/widgets/profile_info_widget.dart';
@@ -36,7 +37,6 @@ class _ProfilePageState extends State<ProfilePage> {
   void dispose() {
     _scrollController.dispose();
 
-    // Properly release the service instead of directly closing connections
     if (_userHexKey != null || widget.user.npub.isNotEmpty) {
       DataServiceManager.instance.releaseProfileService(_userHexKey ?? widget.user.npub);
     }
@@ -76,19 +76,28 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   void _initializeImmediately() {
+    Future.microtask(() {
+      try {
+        final memoryManager = MemoryManager.instance;
+        memoryManager.prepareForProfileTransition();
+        memoryManager.optimizeForProfileView();
+      } catch (e) {
+        print('[ProfilePage] Memory optimization error: $e');
+      }
+    });
+
     _createDataServiceEarly();
     if (mounted) {
       setState(() {
         _profileInfoLoaded = true;
       });
     }
-    // Start notes loading immediately with fresh initialization
+
     _startNotesLoading();
   }
 
   Future<void> _createDataServiceEarly() async {
     try {
-      // Create fresh service instance for this profile to ensure data reloading
       dataService = DataServiceManager.instance.getOrCreateService(
         npub: _userHexKey ?? widget.user.npub,
         dataType: DataType.profile,
@@ -115,13 +124,12 @@ class _ProfilePageState extends State<ProfilePage> {
         },
       );
 
-      // Initialize lightweight to prepare for data loading
       await dataService!.initializeLightweight();
       if (mounted) {
         setState(() {});
       }
 
-      print('[ProfilePage] Fresh service created for profile: ${_userHexKey ?? widget.user.npub}');
+      print('[ProfilePage] Ultra-fast service created for smooth transition: ${_userHexKey ?? widget.user.npub}');
     } catch (e) {
       print('[ProfilePage] Early DataService creation error: $e');
     }
@@ -129,7 +137,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _startNotesLoading() async {
     try {
-      // Always ensure we have the latest service, forcing fresh data loading
       dataService = DataServiceManager.instance.getOrCreateService(
         npub: _userHexKey ?? widget.user.npub,
         dataType: DataType.profile,
@@ -156,17 +163,15 @@ class _ProfilePageState extends State<ProfilePage> {
         },
       );
 
-      // Force fresh initialization for this profile
       await dataService!.initializeLightweight();
 
-      // Start heavy operations immediately with fresh data loading
       if (mounted && dataService != null) {
-        // Run heavy operations and connections in parallel for speed
-        Future.wait([
-          dataService!.initializeHeavyOperations(),
-          Future.delayed(const Duration(milliseconds: 50)).then((_) => dataService!.initializeConnections())
-        ]).catchError((e) {
-          print('[ProfilePage] Parallel initialization error: $e');
+        final heavyOpsFuture = dataService!.initializeHeavyOperations();
+
+        final connectionsFuture = Future.delayed(const Duration(milliseconds: 10)).then((_) => dataService!.initializeConnections());
+
+        Future.wait([heavyOpsFuture, connectionsFuture], eagerError: false).catchError((e) {
+          print('[ProfilePage] Ultra-fast parallel initialization error: $e');
         });
       }
     } catch (e) {

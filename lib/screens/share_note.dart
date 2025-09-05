@@ -336,13 +336,68 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   String _buildFinalNoteContent(String noteText, bool hasQuote) {
     final mediaPart = _mediaUrls.isNotEmpty ? "\n\n${_mediaUrls.join("\n")}" : "";
-    final quotePart = hasQuote ? "\n\n${widget.initialText}" : "";
+
+    String quotePart = "";
+    if (hasQuote) {
+      quotePart = "";
+    }
+
     return "$noteText$mediaPart$quotePart".trim();
+  }
+
+  Future<void> _sendQuoteNote(String content) async {
+    if (widget.initialText == null || !widget.initialText!.startsWith('nostr:')) {
+      throw Exception('Invalid quote content');
+    }
+
+    final quotedEventBech32 = widget.initialText!.replaceFirst('nostr:', '');
+
+    try {
+      String? quotedEventId;
+      String? quotedEventPubkey;
+
+      if (quotedEventBech32.startsWith('note1')) {
+        quotedEventId = _decodeNote1(quotedEventBech32);
+      } else if (quotedEventBech32.startsWith('nevent1')) {
+        final decoded = _decodeNevent1(quotedEventBech32);
+        quotedEventId = decoded['eventId'];
+        quotedEventPubkey = decoded['pubkey'];
+      }
+
+      if (quotedEventId == null) {
+        throw Exception('Could not decode quoted event ID');
+      }
+
+      await widget.dataService.sendQuoteInstantly(quotedEventId, quotedEventPubkey, content);
+    } catch (e) {
+      throw Exception('Failed to send quote: $e');
+    }
+  }
+
+  String? _decodeNote1(String note1) {
+    try {
+      return note1;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Map<String, String?> _decodeNevent1(String nevent1) {
+    try {
+      return {
+        'eventId': nevent1,
+        'pubkey': null,
+      };
+    } catch (e) {
+      return {'eventId': null, 'pubkey': null};
+    }
   }
 
   Future<void> _sendNote(String content) async {
     if (_isReply()) {
       await widget.dataService.sendReplyInstantly(widget.replyToNoteId!, content);
+    } else if (_hasQuoteContent()) {
+      await _sendQuoteNote(content);
     } else {
       await widget.dataService.shareNoteInstantly(content);
     }

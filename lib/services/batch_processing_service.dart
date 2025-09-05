@@ -96,60 +96,62 @@ class BatchProcessingService {
     if (_isClosed || visibleEventIds.isEmpty) return;
 
     try {
-      print('[BatchProcessingService] Processing interactions for ${visibleEventIds.length} visible notes only');
+      print('[BatchProcessingService] Ultra-fast processing for ${visibleEventIds.length} visible notes');
 
-      const batchSize = 10;
+      const batchSize = 6;
       for (int i = 0; i < visibleEventIds.length; i += batchSize) {
         final batch = visibleEventIds.skip(i).take(batchSize).toList();
 
-        await Future.wait([
-          _processVisibleBatchInteraction(batch, 'reaction'),
-          _processVisibleBatchInteraction(batch, 'reply'),
-          _processVisibleBatchInteraction(batch, 'repost'),
-          _processVisibleBatchInteraction(batch, 'zap'),
-        ], eagerError: false);
+        Future.microtask(() => _processVisibleBatchInteraction(batch, 'reaction'));
+        Future.microtask(() => _processVisibleBatchInteraction(batch, 'reply'));
+        Future.microtask(() => _processVisibleBatchInteraction(batch, 'repost'));
+        Future.microtask(() => _processVisibleBatchInteraction(batch, 'zap'));
 
-        if (i + batchSize < visibleEventIds.length) {
-          await Future.delayed(const Duration(milliseconds: 50));
+        if (i + batchSize < visibleEventIds.length && i % (batchSize * 3) == 0) {
+          await Future.delayed(const Duration(milliseconds: 15));
         }
       }
 
-      print('[BatchProcessingService] Completed processing ${visibleEventIds.length} visible notes interactions');
+      print('[BatchProcessingService] Ultra-fast processing completed for smooth transitions');
     } catch (e) {
-      print('[BatchProcessingService] Error processing visible notes interactions: $e');
+      print('[BatchProcessingService] Error in ultra-fast processing: $e');
     }
   }
 
   Future<void> _processVisibleBatchInteraction(List<String> eventIds, String interactionType) async {
     if (_isClosed || eventIds.isEmpty) return;
 
-    try {
-      String request;
-      switch (interactionType) {
-        case 'reaction':
-          final filter = NostrService.createReactionFilter(eventIds: eventIds, limit: 30);
-          request = NostrService.serializeRequest(NostrService.createRequest(filter));
-          break;
-        case 'reply':
-          final filter = NostrService.createReplyFilter(eventIds: eventIds, limit: 30);
-          request = NostrService.serializeRequest(NostrService.createRequest(filter));
-          break;
-        case 'repost':
-          final filter = NostrService.createRepostFilter(eventIds: eventIds, limit: 30);
-          request = NostrService.serializeRequest(NostrService.createRequest(filter));
-          break;
-        case 'zap':
-          final filter = NostrService.createZapFilter(eventIds: eventIds, limit: 30);
-          request = NostrService.serializeRequest(NostrService.createRequest(filter));
-          break;
-        default:
-          return;
-      }
+    Future.microtask(() async {
+      try {
+        String request;
+        switch (interactionType) {
+          case 'reaction':
+            final filter = NostrService.createReactionFilter(eventIds: eventIds, limit: 25);
+            request = NostrService.serializeRequest(NostrService.createRequest(filter));
+            break;
+          case 'reply':
+            final filter = NostrService.createReplyFilter(eventIds: eventIds, limit: 25);
+            request = NostrService.serializeRequest(NostrService.createRequest(filter));
+            break;
+          case 'repost':
+            final filter = NostrService.createRepostFilter(eventIds: eventIds, limit: 25);
+            request = NostrService.serializeRequest(NostrService.createRequest(filter));
+            break;
+          case 'zap':
+            final filter = NostrService.createZapFilter(eventIds: eventIds, limit: 25);
+            request = NostrService.serializeRequest(NostrService.createRequest(filter));
+            break;
+          default:
+            return;
+        }
 
-      await _networkService.broadcastRequest(request);
-    } catch (e) {
-      print('[BatchProcessingService] Error in visible batch interaction for $interactionType: $e');
-    }
+        _networkService.broadcastRequest(request).catchError((e) {
+          print('[BatchProcessingService] Background broadcast error for $interactionType: $e');
+        });
+      } catch (e) {
+        print('[BatchProcessingService] Error in smooth batch interaction for $interactionType: $e');
+      }
+    });
   }
 
   Future<void> _processBatchInteraction(List<String> eventIds, String interactionType) async {

@@ -37,13 +37,16 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       parentId: fields[18] as String?,
       rootId: fields[19] as String?,
       replyIds: (fields[20] as List?)?.cast<String>(),
+      eTags: (fields[21] as List?)?.map((dynamic e) => (e as Map).cast<String, String>()).toList(),
+      pTags: (fields[22] as List?)?.map((dynamic e) => (e as Map).cast<String, String>()).toList(),
+      replyMarker: fields[23] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, NoteModel obj) {
     writer
-      ..writeByte(20)
+      ..writeByte(23)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -83,7 +86,13 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
       ..writeByte(19)
       ..write(obj.rootId)
       ..writeByte(20)
-      ..write(obj.replyIds);
+      ..write(obj.replyIds)
+      ..writeByte(21)
+      ..write(obj.eTags)
+      ..writeByte(22)
+      ..write(obj.pTags)
+      ..writeByte(23)
+      ..write(obj.replyMarker);
   }
 
   @override
@@ -91,8 +100,5 @@ class NoteModelAdapter extends TypeAdapter<NoteModel> {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is NoteModelAdapter &&
-          runtimeType == other.runtimeType &&
-          typeId == other.typeId;
+      identical(this, other) || other is NoteModelAdapter && runtimeType == other.runtimeType && typeId == other.typeId;
 }

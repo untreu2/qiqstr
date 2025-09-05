@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../services/data_service.dart';
 import '../services/relay_service.dart';
+import '../services/memory_manager.dart';
 import '../models/note_model.dart';
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
@@ -30,8 +31,14 @@ class DataServiceManager {
   }) {
     final key = _generateKey(npub, dataType);
 
-    // Always close previous service when switching to a different profile/feed
-    // This ensures fresh data loading for each profile visit
+    if (dataType == DataType.profile) {
+      Future.microtask(() {
+        final memoryManager = MemoryManager.instance;
+        memoryManager.prepareForProfileTransition();
+        memoryManager.optimizeForProfileView();
+      });
+    }
+
     _closeActiveService();
 
     final service = DataService.instance;
@@ -69,9 +76,13 @@ class DataServiceManager {
 
   void _closeActiveService() {
     if (_activeService != null) {
-      debugPrint('[DataServiceManager] Releasing previous active service: $_activeServiceKey');
-      // Don't close connections immediately, just mark as inactive
-      // The DataService singleton will handle its own lifecycle
+      debugPrint('[DataServiceManager] Ultra-fast release for smooth transitions: $_activeServiceKey');
+
+      Future.microtask(() {
+        final memoryManager = MemoryManager.instance;
+        memoryManager.handleMemoryPressure();
+      });
+
       _activeService = null;
       _activeServiceKey = null;
     }

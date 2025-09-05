@@ -73,14 +73,26 @@ class CacheService {
 
       await _hiveManager.initializeNotificationBox(npub);
 
-      Future.microtask(() async {
-        await Future.wait([
-          loadReactionsFromCache(),
-          loadRepliesFromCache(),
-          loadRepostsFromCache(),
-          loadZapsFromCache(),
-        ], eagerError: false);
-      });
+      if (dataType == 'profile') {
+        Future.microtask(() async {
+          await loadReactionsFromCache();
+          await Future.delayed(Duration.zero);
+          await loadRepliesFromCache();
+          await Future.delayed(Duration.zero);
+          await loadRepostsFromCache();
+          await Future.delayed(Duration.zero);
+          await loadZapsFromCache();
+        });
+      } else {
+        Future.microtask(() async {
+          await Future.wait([
+            loadReactionsFromCache(),
+            loadRepliesFromCache(),
+            loadRepostsFromCache(),
+            loadZapsFromCache(),
+          ], eagerError: false);
+        });
+      }
     } catch (e) {
       debugPrint('[CacheService] Initialization error: $e');
     }
@@ -245,6 +257,25 @@ class CacheService {
 
   Future<void> handleMemoryPressure() async {
     await optimizeMemoryUsage();
+  }
+
+  Future<void> optimizeForProfileTransition() async {
+    Future.microtask(() async {
+      final now = DateTime.now();
+      final cutoffTime = now.subtract(const Duration(minutes: 10));
+
+      reactionsMap.removeWhere((eventId, reactions) {
+        reactions.removeWhere((reaction) => reaction.fetchedAt.isBefore(cutoffTime));
+        return reactions.isEmpty;
+      });
+
+      repliesMap.removeWhere((eventId, replies) {
+        replies.removeWhere((reply) => reply.fetchedAt.isBefore(cutoffTime));
+        return replies.isEmpty;
+      });
+
+      debugPrint('[CacheService] Profile transition optimization completed');
+    });
   }
 
   Map<String, dynamic> getCacheStats() {

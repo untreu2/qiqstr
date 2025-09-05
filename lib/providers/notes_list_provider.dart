@@ -50,7 +50,9 @@ class NotesListProvider extends ChangeNotifier {
     _onNotesChanged();
 
     if (!_isInitialized) {
-      Timer(const Duration(seconds: 1), () {
+      final initDelay = dataType == DataType.profile ? const Duration(milliseconds: 100) : const Duration(milliseconds: 500);
+
+      Timer(initDelay, () {
         _isInitialized = true;
         notifyListeners();
         _startPeriodicUpdates();
@@ -60,15 +62,29 @@ class NotesListProvider extends ChangeNotifier {
 
   void _onNotesChanged() {
     _notes = dataService.notesNotifier.value;
-    _updateFilteredNotes();
+    _updateFilteredNotesProgressive();
   }
 
-  void _updateFilteredNotes() {
-    _filteredNotes = _notes.where((n) => !n.isReply || n.isRepost).toList();
-    if (_isInitialized) {
-      notifyListeners();
+  void _updateFilteredNotesProgressive() {
+    final allFiltered = _notes.where((n) => !n.isReply || n.isRepost).toList();
+
+    if (dataType == DataType.profile) {
+      _filteredNotes = allFiltered;
+
+      if (_isInitialized) {
+        notifyListeners();
+      }
+
+      Future.microtask(() => _loadUserProfiles());
+    } else {
+      _filteredNotes = allFiltered;
+
+      if (_isInitialized) {
+        notifyListeners();
+      }
+
+      _loadUserProfiles();
     }
-    _loadUserProfiles();
   }
 
   void _startPeriodicUpdates() {
@@ -100,40 +116,50 @@ class NotesListProvider extends ChangeNotifier {
     _clearError();
 
     try {
-      _updateFilteredNotes();
+      _updateFilteredNotesProgressive();
       if (dataService.notes.isNotEmpty) {
         _setLoading(false);
-        debugPrint('[NotesListProvider] Immediate: Showing ${dataService.notes.length} cached notes');
+        debugPrint('[NotesListProvider] Instant display: ${dataService.notes.length} cached notes');
       }
 
       await dataService.initializeLightweight();
-      _updateFilteredNotes();
+      _updateFilteredNotesProgressive();
 
       if (_isLoading) {
         _setLoading(false);
       }
 
-      Future.microtask(() async {
-        try {
-          if (dataType == DataType.profile) {
-            await dataService.initializeHeavyOperations();
-            await dataService.initializeConnections();
-            debugPrint('[NotesListProvider] Profile: Background operations completed');
-          } else {
+      if (dataType == DataType.profile) {
+        Future.microtask(() async {
+          try {
+            final futures = [
+              dataService.initializeHeavyOperations(),
+              Future.delayed(const Duration(milliseconds: 25)).then((_) => dataService.initializeConnections()),
+            ];
+
+            await Future.wait(futures, eagerError: false);
+            _updateFilteredNotesProgressive();
+            debugPrint('[NotesListProvider] Profile: Ultra-fast parallel operations completed');
+          } catch (e) {
+            debugPrint('[NotesListProvider] Profile background error: $e');
+          }
+        });
+      } else {
+        Future.microtask(() async {
+          try {
             await dataService.initializeHeavyOperations();
             await dataService.initializeConnections();
 
-            Timer(const Duration(milliseconds: 500), () {
+            Timer(const Duration(milliseconds: 400), () {
               _refreshNewNotes();
             });
-            debugPrint('[NotesListProvider] Feed: Background operations + real-time setup completed');
+            _updateFilteredNotesProgressive();
+            debugPrint('[NotesListProvider] Feed: Background operations completed');
+          } catch (e) {
+            debugPrint('[NotesListProvider] Feed background error: $e');
           }
-
-          _updateFilteredNotes();
-        } catch (e) {
-          debugPrint('[NotesListProvider] Background operations error: $e');
-        }
-      });
+        });
+      }
     } catch (e) {
       _setError('Failed to load notes: $e');
       debugPrint('[NotesListProvider] Initial fetch error: $e');
@@ -177,7 +203,7 @@ class NotesListProvider extends ChangeNotifier {
   void _loadUserProfiles() {
     if (_filteredNotes.isEmpty) return;
 
-    final batchSize = dataType == DataType.profile ? 50 : 20;
+    final batchSize = dataType == DataType.profile ? 12 : 8;
     final firstBatchNotes = _filteredNotes.take(batchSize).toList();
 
     final userNpubs = <String>{};
@@ -186,14 +212,35 @@ class NotesListProvider extends ChangeNotifier {
       if (note.repostedBy != null) {
         userNpubs.add(note.repostedBy!);
       }
+
+      if (userNpubs.length >= 10) break;
     }
 
     if (userNpubs.isNotEmpty) {
-      UserProvider.instance.loadUsers(userNpubs.toList()).catchError((e) {
-        debugPrint('[NotesListProvider] User profiles error: $e');
-      });
+      if (dataType == DataType.profile) {
+        final userList = userNpubs.take(6).toList();
+        UserProvider.instance.loadUsers(userList).catchError((e) {
+          debugPrint('[NotesListProvider] Profile user load error: $e');
+        });
+
+        if (userNpubs.length > 6) {
+          Future.microtask(() {
+            final remainingUsers = userNpubs.skip(6).toList();
+            UserProvider.instance.loadUsers(remainingUsers).catchError((e) {
+              debugPrint('[NotesListProvider] Profile background user load error: $e');
+            });
+          });
+        }
+      } else {
+        Future.microtask(() {
+          UserProvider.instance.loadUsers(userNpubs.toList()).catchError((e) {
+            debugPrint('[NotesListProvider] Feed user load error: $e');
+          });
+        });
+      }
+
       debugPrint(
-          '[NotesListProvider] ${dataType == DataType.profile ? 'Profile' : 'Feed'}: Profile load for ${userNpubs.length} users from ${firstBatchNotes.length} notes');
+          '[NotesListProvider] ${dataType == DataType.profile ? 'Profile (MICRO-BATCH)' : 'Feed'}: Profile load for ${userNpubs.length} users from ${firstBatchNotes.length} notes');
     }
   }
 

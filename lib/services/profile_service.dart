@@ -48,48 +48,58 @@ class ProfileService {
     final completer = Completer<Map<String, String>>();
     _pendingRequests[npub] = completer;
 
-    try {
-      final user = _usersBox?.get(npub);
-      if (user != null && DateTime.now().difference(user.updatedAt) < _cacheTTL) {
-        final data = _userModelToMap(user);
-        _addToCache(npub, data);
-        completer.complete(data);
-        return data;
-      }
+    Future.microtask(() async {
+      try {
+        final user = _usersBox?.get(npub);
+        if (user != null && DateTime.now().difference(user.updatedAt) < _cacheTTL) {
+          final data = _userModelToMap(user);
+          _addToCache(npub, data);
+          completer.complete(data);
+          return;
+        }
 
-      final profileData = await _fetchUserProfileFromRelay(npub);
+        final profileData = await _fetchUserProfileFromRelay(npub);
 
-      // If we couldn't fetch from any relay, return default but don't cache it
-      if (profileData == null) {
+        if (profileData == null) {
+          final defaultData = _getDefaultProfile();
+          completer.complete(defaultData);
+          return;
+        }
+
+        _addToCache(npub, profileData);
+
+        if (_usersBox != null && _usersBox!.isOpen) {
+          final userModel = UserModel.fromCachedProfile(npub, profileData);
+          _saveToHiveAsync(npub, userModel);
+        }
+
+        completer.complete(profileData);
+      } catch (e) {
         final defaultData = _getDefaultProfile();
         completer.complete(defaultData);
-        return defaultData;
+      } finally {
+        _pendingRequests.remove(npub);
       }
+    });
 
-      // Only cache and save if we actually got real data
-      _addToCache(npub, profileData);
-
-      if (_usersBox != null && _usersBox!.isOpen) {
-        final userModel = UserModel.fromCachedProfile(npub, profileData);
-        _saveToHiveAsync(npub, userModel);
-      }
-
-      completer.complete(profileData);
-      return profileData;
-    } catch (e) {
-      final defaultData = _getDefaultProfile();
-      completer.complete(defaultData);
-      return defaultData;
-    } finally {
-      _pendingRequests.remove(npub);
-    }
+    return completer.future;
   }
 
   Future<void> batchFetchProfiles(List<String> npubs) async {
     if (npubs.isEmpty) return;
 
-    final futures = npubs.map((npub) => getCachedUserProfile(npub));
-    await Future.wait(futures, eagerError: false);
+    const fastBatchSize = 3;
+    for (int i = 0; i < npubs.length; i += fastBatchSize) {
+      final batch = npubs.skip(i).take(fastBatchSize).toList();
+
+      final futures = batch.map((npub) => Future.microtask(() => getCachedUserProfile(npub)));
+
+      await Future.wait(futures, eagerError: false);
+
+      if (i + fastBatchSize < npubs.length) {
+        await Future.delayed(Duration.zero);
+      }
+    }
   }
 
   Map<String, String> _getDefaultProfile() {
@@ -134,22 +144,21 @@ class ProfileService {
       return null;
     }
 
-    // Try multiple relays to ensure we really can't fetch the user
-    final relaysToTry = relaySetMainSockets.take(3).toList();
+    final relaysToTry = relaySetMainSockets.take(2).toList();
 
-    for (final relayUrl in relaysToTry) {
-      try {
-        final result = await _fetchProfileFromSingleRelay(relayUrl, npub);
-        if (result != null) {
-          return result;
-        }
-      } catch (e) {
-        print('[ProfileService] Error fetching from relay $relayUrl: $e');
-        continue;
+    final futures = relaysToTry.map((relayUrl) => _fetchProfileFromSingleRelay(relayUrl, npub).catchError((e) {
+          print('[ProfileService] Relay $relayUrl error: $e');
+          return null;
+        }));
+
+    final results = await Future.wait(futures, eagerError: false);
+
+    for (final result in results) {
+      if (result != null) {
+        return result;
       }
     }
 
-    // If we tried all relays and couldn't fetch, return null
     print('[ProfileService] Could not fetch user $npub from any relay');
     return null;
   }
@@ -161,7 +170,7 @@ class ProfileService {
 
     WebSocket? ws;
     try {
-      ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
+      ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 3));
       final subscriptionId = DateTime.now().millisecondsSinceEpoch.toString();
       final request = jsonEncode([
         "REQ",
@@ -200,7 +209,7 @@ class ProfileService {
         ws.add(request);
       }
 
-      final eventData = await completer.future.timeout(const Duration(seconds: 5), onTimeout: () => null);
+      final eventData = await completer.future.timeout(const Duration(seconds: 3), onTimeout: () => null);
 
       await sub.cancel();
       await ws.close();
@@ -215,29 +224,33 @@ class ProfileService {
         }
 
         final nip05 = profileContent['nip05'] ?? '';
-        bool nip05Verified = false;
 
-        // Perform NIP-05 verification if nip05 is present
+        final profileData = <String, String>{
+          'name': profileContent['name']?.toString() ?? 'Anonymous',
+          'profileImage': profileContent['picture']?.toString() ?? '',
+          'about': profileContent['about']?.toString() ?? '',
+          'nip05': nip05.toString(),
+          'banner': profileContent['banner']?.toString() ?? '',
+          'lud16': profileContent['lud16']?.toString() ?? '',
+          'website': profileContent['website']?.toString() ?? '',
+          'nip05Verified': 'false',
+        };
+
         if (nip05.isNotEmpty) {
-          try {
-            nip05Verified = await _nip05Service.verifyNip05(nip05, npub);
-            print('[ProfileService] NIP-05 verification for $nip05: $nip05Verified');
-          } catch (e) {
-            print('[ProfileService] NIP-05 verification error for $nip05: $e');
-            nip05Verified = false;
-          }
+          Future.microtask(() async {
+            try {
+              final nip05Verified = await _nip05Service.verifyNip05(nip05, npub);
+              final updatedData = Map<String, String>.from(profileData);
+              updatedData['nip05Verified'] = nip05Verified.toString();
+              _addToCache(npub, updatedData);
+              print('[ProfileService] Background NIP-05 verification for $nip05: $nip05Verified');
+            } catch (e) {
+              print('[ProfileService] Background NIP-05 verification error for $nip05: $e');
+            }
+          });
         }
 
-        return {
-          'name': profileContent['name'] ?? 'Anonymous',
-          'profileImage': profileContent['picture'] ?? '',
-          'about': profileContent['about'] ?? '',
-          'nip05': nip05,
-          'banner': profileContent['banner'] ?? '',
-          'lud16': profileContent['lud16'] ?? '',
-          'website': profileContent['website'] ?? '',
-          'nip05Verified': nip05Verified.toString(),
-        };
+        return profileData;
       }
       return null;
     } catch (e) {

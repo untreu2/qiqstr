@@ -22,7 +22,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   final Set<String> _visibleNoteIds = {};
   Timer? _interactionFetchTimer;
-  Duration _interactionFetchDelay = const Duration(milliseconds: 300);
+  Duration _interactionFetchDelay = const Duration(milliseconds: 200);
 
   Set<String>? _cachedVisibleNoteIds;
   double _lastCalculatedScrollPosition = -1;
@@ -30,8 +30,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   double _lastScrollPosition = 0;
   DateTime _lastScrollTime = DateTime.now();
-  static const double _scrollThreshold = 10.0;
-  Duration _scrollDebounceInterval = const Duration(milliseconds: 33);
+  static const double _scrollThreshold = 8.0;
+  Duration _scrollDebounceInterval = const Duration(milliseconds: 16);
 
   @override
   void initState() {
@@ -43,8 +43,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       final provider = context.read<NotesListProvider>();
 
       if (provider.dataType == DataType.profile) {
-        _interactionFetchDelay = const Duration(milliseconds: 200);
-        _scrollDebounceInterval = const Duration(milliseconds: 25);
+        _interactionFetchDelay = const Duration(milliseconds: 100);
+        _scrollDebounceInterval = const Duration(milliseconds: 8);
       }
 
       provider.fetchInitialNotes();
@@ -116,7 +116,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     if (notes.isEmpty) return {};
 
     final scrollPosition = _scrollController.position.pixels;
-    final cacheThreshold = provider.dataType == DataType.profile ? 30 : 50;
+
+    final cacheThreshold = provider.dataType == DataType.profile ? 15 : 40;
 
     if (_cachedVisibleNoteIds != null &&
         (scrollPosition - _lastCalculatedScrollPosition).abs() < cacheThreshold &&
@@ -125,18 +126,22 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     }
 
     final viewportHeight = _scrollController.position.viewportDimension;
-    final bufferSize = provider.dataType == DataType.profile ? viewportHeight * 0.4 : viewportHeight * 0.3;
+
+    final bufferSize = provider.dataType == DataType.profile ? viewportHeight * 0.3 : viewportHeight * 0.25;
     final visibleStart = math.max(0, scrollPosition - bufferSize);
     final visibleEnd = scrollPosition + viewportHeight + bufferSize;
 
     final visibleNoteIds = <String>{};
-    final estimatedItemHeight = provider.dataType == DataType.profile ? viewportHeight / 7 : viewportHeight / 6;
+
+    final estimatedItemHeight = provider.dataType == DataType.profile ? viewportHeight / 8 : viewportHeight / 6;
     final startIndex = (visibleStart / estimatedItemHeight).floor().clamp(0, notes.length - 1);
     final endIndex = (visibleEnd / estimatedItemHeight).ceil().clamp(0, notes.length - 1);
 
     final maxIndex = math.min(endIndex, notes.length - 1);
     for (int i = startIndex; i <= maxIndex; i++) {
       visibleNoteIds.add(notes[i].id);
+
+      if (visibleNoteIds.length > 50) break;
     }
 
     _cachedVisibleNoteIds = visibleNoteIds;
@@ -151,14 +156,15 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients && _savedScrollPosition > 0) {
           final targetPosition = _savedScrollPosition.clamp(0.0, _scrollController.position.maxScrollExtent);
-          if ((targetPosition - _scrollController.position.pixels).abs() > 5) {
+
+          if ((targetPosition - _scrollController.position.pixels).abs() > 3) {
             _scrollController.jumpTo(targetPosition);
           }
         }
       });
     }
 
-    Timer(const Duration(milliseconds: 100), () {
+    Timer(const Duration(milliseconds: 50), () {
       _isUserScrolling = false;
     });
   }
@@ -264,6 +270,10 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         }
 
         final noteIndex = index ~/ 2;
+        if (noteIndex >= notes.length) {
+          return const SizedBox.shrink();
+        }
+
         final note = notes[noteIndex];
 
         return _OptimizedNoteItem(

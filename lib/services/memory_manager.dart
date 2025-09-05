@@ -27,6 +27,26 @@ class MemoryManager {
     });
   }
 
+  Future<void> prepareForProfileTransition() async {
+    Future.microtask(() async {
+      try {
+        final mediaService = MediaService();
+
+        mediaService.handleMemoryPressure();
+
+        final cacheService = CacheService.instance;
+
+        await cacheService.handleMemoryPressure();
+
+        cacheService.cleanupExpiredCache(const Duration(minutes: 15));
+
+        debugPrint('[MemoryManager] Profile transition preparation completed');
+      } catch (e) {
+        debugPrint('[MemoryManager] Profile transition preparation error: $e');
+      }
+    });
+  }
+
   void handleMemoryPressure() {
     Future.microtask(() async {
       try {
@@ -42,6 +62,23 @@ class MemoryManager {
         debugPrint('[MemoryManager] Memory pressure handling completed');
       } catch (e) {
         debugPrint('[MemoryManager] Memory pressure handling error: $e');
+      }
+    });
+  }
+
+  void optimizeForProfileView() {
+    Future.microtask(() async {
+      try {
+        final mediaService = MediaService();
+        final cacheService = CacheService.instance;
+
+        mediaService.handleMemoryPressure();
+
+        await cacheService.optimizeMemoryUsage();
+
+        debugPrint('[MemoryManager] Profile view optimization completed');
+      } catch (e) {
+        debugPrint('[MemoryManager] Profile view optimization error: $e');
       }
     });
   }

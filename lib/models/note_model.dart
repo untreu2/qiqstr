@@ -37,9 +37,6 @@ class NoteModel extends HiveObject {
   @HiveField(10)
   int replyCount;
 
-  // Remove parsedContent from Hive to save storage space
-  // @HiveField(11) - REMOVED to reduce storage
-
   @HiveField(12)
   bool hasMedia;
 
@@ -67,10 +64,17 @@ class NoteModel extends HiveObject {
   @HiveField(20)
   List<String> replyIds;
 
-  // Single cache for parsed content - not stored in Hive
-  // Weak reference to prevent memory leaks
+  @HiveField(21)
+  List<Map<String, String>> eTags;
+
+  @HiveField(22)
+  List<Map<String, String>> pTags;
+
+  @HiveField(23)
+  String? replyMarker;
+
   static final Map<String, Map<String, dynamic>> _globalParseCache = {};
-  static const int _maxCacheSize = 500; // Limit cache size
+  static const int _maxCacheSize = 500;
 
   NoteModel({
     required this.id,
@@ -84,7 +88,6 @@ class NoteModel extends HiveObject {
     this.rawWs,
     this.reactionCount = 0,
     this.replyCount = 0,
-    // parsedContent removed to save memory
     this.hasMedia = false,
     this.estimatedHeight,
     this.isVideo = false,
@@ -94,21 +97,21 @@ class NoteModel extends HiveObject {
     this.parentId,
     this.rootId,
     List<String>? replyIds,
-  }) : replyIds = replyIds ?? [];
+    List<Map<String, String>>? eTags,
+    List<Map<String, String>>? pTags,
+    this.replyMarker,
+  })  : replyIds = replyIds ?? [],
+        eTags = eTags ?? [],
+        pTags = pTags ?? [];
 
-  // Lazy parsing getter - uses global cache to prevent memory duplication
   Map<String, dynamic> get parsedContentLazy {
-    // Check global cache first
     if (_globalParseCache.containsKey(id)) {
       return _globalParseCache[id]!;
     }
 
-    // Parse and cache with size limit
     final parsed = _parseInternal();
 
-    // Manage cache size
     if (_globalParseCache.length >= _maxCacheSize) {
-      // Remove oldest 20% of entries
       final keysToRemove = _globalParseCache.keys.take(_maxCacheSize ~/ 5).toList();
       for (final key in keysToRemove) {
         _globalParseCache.remove(key);
@@ -119,15 +122,12 @@ class NoteModel extends HiveObject {
     return parsed;
   }
 
-  // Clear cache method for memory management
   static void clearParseCache() {
     _globalParseCache.clear();
   }
 
-  // Helper getter for checking if note has media using lazy parsing
   bool get hasMediaLazy => (parsedContentLazy['mediaUrls'] as List).isNotEmpty;
 
-  // Internal parsing method - moved from DataService.parseContent
   Map<String, dynamic> _parseInternal() {
     final RegExp mediaRegExp = RegExp(
       r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|mp4|mov))',
@@ -217,7 +217,6 @@ class NoteModel extends HiveObject {
       rawWs: json['rawWs'] as String?,
       reactionCount: json['reactionCount'] as int? ?? 0,
       replyCount: json['replyCount'] as int? ?? 0,
-      // parsedContent removed to save memory
       hasMedia: json['hasMedia'] as bool? ?? false,
       estimatedHeight: (json['estimatedHeight'] as num?)?.toDouble(),
       isVideo: json['isVideo'] as bool? ?? false,
@@ -227,6 +226,9 @@ class NoteModel extends HiveObject {
       parentId: json['parentId'] as String?,
       rootId: json['rootId'] as String?,
       replyIds: json['replyIds'] != null ? List<String>.from(json['replyIds']) : null,
+      eTags: json['eTags'] != null ? List<Map<String, String>>.from(json['eTags'].map((tag) => Map<String, String>.from(tag))) : null,
+      pTags: json['pTags'] != null ? List<Map<String, String>>.from(json['pTags'].map((tag) => Map<String, String>.from(tag))) : null,
+      replyMarker: json['replyMarker'] as String?,
     );
   }
 
@@ -238,12 +240,11 @@ class NoteModel extends HiveObject {
       'timestamp': timestamp.millisecondsSinceEpoch ~/ 1000,
       'isRepost': isRepost,
       'repostedBy': repostedBy,
-      'repostTimestamp': repostTimestamp!.millisecondsSinceEpoch ~/ 1000,
+      'repostTimestamp': repostTimestamp?.millisecondsSinceEpoch == null ? null : repostTimestamp!.millisecondsSinceEpoch ~/ 1000,
       'repostCount': repostCount,
       'rawWs': rawWs,
       'reactionCount': reactionCount,
       'replyCount': replyCount,
-      // parsedContent removed to save memory
       'hasMedia': hasMedia,
       'estimatedHeight': estimatedHeight,
       'isVideo': isVideo,
@@ -253,6 +254,9 @@ class NoteModel extends HiveObject {
       'parentId': parentId,
       'rootId': rootId,
       'replyIds': replyIds,
+      'eTags': eTags,
+      'pTags': pTags,
+      'replyMarker': replyMarker,
     };
   }
 }
