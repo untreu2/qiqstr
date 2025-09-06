@@ -811,7 +811,12 @@ class _ThreadPageState extends State<ThreadPage> {
     return Consumer<ThemeManager>(
       builder: (context, themeManager, child) {
         final NoteModel? displayRoot = _focusedNote ?? _rootNote;
-        final NoteModel? contextNote = _focusedNote != null ? _rootNote : null;
+
+        NoteModel? contextNote;
+        if (_focusedNote != null && _focusedNote!.isReply && _focusedNote!.parentId != null) {
+          final allNotes = widget.dataService.notesNotifier.value;
+          contextNote = allNotes.firstWhereOrNull((n) => n.id == _focusedNote!.parentId);
+        }
         final isDisplayRootHighlighted = displayRoot?.id == _highlightedNoteId;
 
         final double topPadding = MediaQuery.of(context).padding.top;
