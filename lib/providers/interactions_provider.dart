@@ -141,7 +141,9 @@ class InteractionsProvider extends ChangeNotifier {
   int getReactionCount(String noteId) => _reactionsByNote[noteId]?.length ?? 0;
   int getReplyCount(String noteId) => _repliesByNote[noteId]?.length ?? 0;
   int getRepostCount(String noteId) => _repostsByNote[noteId]?.length ?? 0;
-  int getZapAmount(String noteId) => _zapsByNote[noteId]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
+  int getZapAmount(String noteId) =>
+      _zapsByNote[noteId]?.where((zap) => !zap.id.startsWith('optimistic_')).fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
+
   bool hasUserReacted(String userId, String noteId) => _userReactions[userId]?.contains(noteId) ?? false;
   bool hasUserReplied(String userId, String noteId) => _userReplies[userId]?.contains(noteId) ?? false;
   bool hasUserReposted(String userId, String noteId) => _userReposts[userId]?.contains(noteId) ?? false;
@@ -190,6 +192,11 @@ class InteractionsProvider extends ChangeNotifier {
   }
 
   Future<void> addZap(ZapModel zap) async {
+    // Remove any optimistic zaps for this note from this user when real zap arrives
+    if (!zap.id.startsWith('optimistic_')) {
+      _zapsByNote[zap.targetEventId]?.removeWhere((z) => z.sender == zap.sender && z.id.startsWith('optimistic_'));
+    }
+
     _addZapToCache(zap);
     try {
       await _zapsBox?.put(zap.id, zap);
@@ -311,8 +318,19 @@ class InteractionsProvider extends ChangeNotifier {
   }
 
   void updateZaps(String noteId, List<ZapModel> zaps) {
-    _zapsByNote[noteId] = zaps;
-    for (final zap in zaps) {
+    // Remove any optimistic zaps when real zaps arrive
+    final realZaps = zaps.where((z) => !z.id.startsWith('optimistic_')).toList();
+    final optimisticZaps = _zapsByNote[noteId]?.where((z) => z.id.startsWith('optimistic_')) ?? [];
+
+    // Remove optimistic zaps that have corresponding real zaps from the same sender
+    final filteredOptimisticZaps = optimisticZaps.where((optimistic) {
+      return !realZaps.any((real) => real.sender == optimistic.sender);
+    }).toList();
+
+    // Combine real zaps with remaining optimistic zaps
+    _zapsByNote[noteId] = [...realZaps, ...filteredOptimisticZaps];
+
+    for (final zap in _zapsByNote[noteId]!) {
       _userZaps.putIfAbsent(zap.sender, () => {}).add(zap.targetEventId);
     }
     if (_visibleNoteIds.contains(noteId)) {
@@ -368,6 +386,34 @@ class InteractionsProvider extends ChangeNotifier {
     _repostsByNote[noteId]?.removeWhere((r) => r.repostedBy == userId && r.id.startsWith('optimistic_'));
     _userReposts[userId]?.remove(noteId);
     _repostStreamController.add(noteId);
+  }
+
+  void addOptimisticZap(String noteId, String userId, int amount) {
+    // Remove any existing optimistic zaps from this user for this note
+    _zapsByNote[noteId]?.removeWhere((z) => z.sender == userId && z.id.startsWith('optimistic_'));
+    _userZaps[userId]?.remove(noteId);
+
+    final optimisticZap = ZapModel(
+      id: 'optimistic_${DateTime.now().millisecondsSinceEpoch}',
+      sender: userId,
+      recipient: '', // Will be filled when actual zap arrives
+      targetEventId: noteId,
+      timestamp: DateTime.now(),
+      bolt11: '',
+      comment: null,
+      amount: amount,
+    );
+    _addZapToCache(optimisticZap);
+    _zapStreamController.add(noteId);
+  }
+
+  void removeOptimisticZap(String noteId, String userId) {
+    final hasOptimistic = _zapsByNote[noteId]?.any((z) => z.sender == userId && z.id.startsWith('optimistic_')) ?? false;
+    if (hasOptimistic) {
+      _zapsByNote[noteId]?.removeWhere((z) => z.sender == userId && z.id.startsWith('optimistic_'));
+      _userZaps[userId]?.remove(noteId);
+      _zapStreamController.add(noteId);
+    }
   }
 
   void clearCache() {

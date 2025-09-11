@@ -3,10 +3,12 @@ import 'package:provider/provider.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/profile_page.dart';
 import 'package:qiqstr/screens/relay_page.dart';
+import 'package:qiqstr/screens/wallet_page.dart';
 import 'package:qiqstr/utils/logout.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/theme_manager.dart';
 import '../providers/user_provider.dart';
+import '../providers/wallet_provider.dart';
 import 'package:qiqstr/screens/keys_page.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'profile_image_widget.dart';
@@ -154,6 +156,17 @@ class _SidebarContent extends StatelessWidget {
                       context,
                       MaterialPageRoute(
                         builder: (context) => const KeysPage(),
+                      ),
+                    ),
+                  ),
+                  _buildSidebarItem(
+                    colors: colors,
+                    icon: CarbonIcons.wallet,
+                    label: 'Wallet',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const WalletPage(),
                       ),
                     ),
                   ),
