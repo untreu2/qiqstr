@@ -19,18 +19,17 @@ Future<String> _getCurrentUserNpub() async {
   }
 }
 
-Future<void> _processZapPayment(
+Future<void> _processZapPaymentFast(
   BuildContext context,
   DataService dataService,
   WalletProvider walletProvider,
   UserModel user,
   NoteModel note,
   int sats,
-  String currentUserNpub,
   String comment,
 ) async {
   try {
-    // Step 1: Generate the zap invoice using DataService (this creates and publishes the zap request to relays)
+    // Generate and pay zap invoice immediately without any fee checking
     final invoice = await dataService.sendZap(
       recipientPubkey: user.npub,
       lud16: user.lud16,
@@ -39,23 +38,15 @@ Future<void> _processZapPayment(
       content: comment,
     );
 
-    // Step 2: Pay the invoice using WalletProvider
+    // Pay immediately without any confirmation or fee checking
     await walletProvider.payInvoice(invoice);
 
-    // Step 3: Check payment status
-    if (walletProvider.status?.toLowerCase().contains('success') == true) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('⚡ Zap sent successfully!'), duration: Duration(seconds: 2)));
-      }
+    // Show success message and refresh balance in background
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⚡ Zap sent!'), duration: Duration(seconds: 1)));
 
-      // Refresh wallet balance after successful payment
-      await walletProvider.fetchBalance();
-    } else {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Payment failed: ${walletProvider.status}'), duration: const Duration(seconds: 2)));
-      }
+      // Refresh balance in background without blocking UI
+      walletProvider.fetchBalance();
     }
   } catch (e) {
     if (context.mounted) {
@@ -116,44 +107,32 @@ Future<void> showZapDialog({
                   final sats = int.tryParse(amountController.text.trim());
                   if (sats == null || sats <= 0) {
                     ScaffoldMessenger.of(modalContext)
-                        .showSnackBar(const SnackBar(content: Text('Enter a valid amount'), duration: Duration(seconds: 2)));
+                        .showSnackBar(const SnackBar(content: Text('Enter a valid amount'), duration: Duration(seconds: 1)));
                     return;
                   }
 
-                  // Check if wallet is connected
-                  final isLoggedIn = await walletProvider.isLoggedIn();
-                  if (!isLoggedIn) {
+                  // Quick wallet check
+                  if (!await walletProvider.isLoggedIn()) {
                     ScaffoldMessenger.of(modalContext)
-                        .showSnackBar(const SnackBar(content: Text('Please connect your wallet first'), duration: Duration(seconds: 2)));
+                        .showSnackBar(const SnackBar(content: Text('Please connect your wallet first'), duration: Duration(seconds: 1)));
                     return;
                   }
 
+                  // Close dialog immediately for faster UX
                   Navigator.pop(modalContext);
 
-                  // Get user profile for validation
+                  // Get user profile and process payment immediately
                   final profile = await dataService.getCachedUserProfile(note.author);
                   final user = UserModel.fromCachedProfile(note.author, profile);
 
                   if (user.lud16.isEmpty) {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text('User does not have a lightning address configured.'), duration: Duration(seconds: 2)));
+                        content: Text('User does not have a lightning address configured.'), duration: Duration(seconds: 1)));
                     return;
                   }
 
-                  // Get current user npub for optimistic update
-                  final currentUserNpub = await _getCurrentUserNpub();
-                  if (currentUserNpub.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Could not get current user information'), duration: Duration(seconds: 2)));
-                    return;
-                  }
-
-                  // Show processing message
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(const SnackBar(content: Text('⚡ Processing zap...'), duration: Duration(seconds: 1)));
-
-                  // Process payment in background
-                  _processZapPayment(context, dataService, walletProvider, user, note, sats, currentUserNpub, noteController.text.trim());
+                  // Process payment immediately without any delays or confirmations
+                  _processZapPaymentFast(context, dataService, walletProvider, user, note, sats, noteController.text.trim());
                 },
                 child: const Text('⚡ Zap'),
               );

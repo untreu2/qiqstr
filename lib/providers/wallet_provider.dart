@@ -425,6 +425,19 @@ class WalletProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> createAndPayLnurlInvoiceFast(String lnurl, int amountSatoshis, String memo) async {
+    try {
+      // Create invoice from LNURL without any fee checking
+      String lnInvoice = await createLnInvoiceFromLnurl(lnurl, amountSatoshis, memo);
+
+      // Pay immediately without fee confirmation
+      await payInvoice(lnInvoice);
+    } catch (e) {
+      _status = "Error creating LN invoice: $e";
+      notifyListeners();
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getHistory(int count) async {
     if (_authToken == null) {
       return [];
