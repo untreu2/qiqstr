@@ -284,7 +284,44 @@ class InteractionsProvider extends ChangeNotifier {
   }
 
   void updateVisibleNotes(Set<String> visibleNoteIds) {
+    final oldVisibleCount = _visibleNoteIds.length;
     _visibleNoteIds = visibleNoteIds;
+
+    // Only log significant changes to avoid spam
+    if ((visibleNoteIds.length - oldVisibleCount).abs() > 3) {
+      print('[InteractionsProvider] Visible notes updated: ${visibleNoteIds.length} notes tracked for interactions');
+    }
+  }
+
+  /// Get interaction data only for currently visible notes
+  Map<String, dynamic> getVisibleInteractionsData() {
+    final visibleReactions = <String, List<ReactionModel>>{};
+    final visibleReplies = <String, List<ReplyModel>>{};
+    final visibleReposts = <String, List<RepostModel>>{};
+    final visibleZaps = <String, List<ZapModel>>{};
+
+    for (final noteId in _visibleNoteIds) {
+      if (_reactionsByNote.containsKey(noteId)) {
+        visibleReactions[noteId] = _reactionsByNote[noteId]!;
+      }
+      if (_repliesByNote.containsKey(noteId)) {
+        visibleReplies[noteId] = _repliesByNote[noteId]!;
+      }
+      if (_repostsByNote.containsKey(noteId)) {
+        visibleReposts[noteId] = _repostsByNote[noteId]!;
+      }
+      if (_zapsByNote.containsKey(noteId)) {
+        visibleZaps[noteId] = _zapsByNote[noteId]!;
+      }
+    }
+
+    return {
+      'reactions': visibleReactions,
+      'replies': visibleReplies,
+      'reposts': visibleReposts,
+      'zaps': visibleZaps,
+      'visibleNotesCount': _visibleNoteIds.length,
+    };
   }
 
   void updateReactions(String noteId, List<ReactionModel> reactions) {

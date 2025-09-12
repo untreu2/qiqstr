@@ -1,13 +1,15 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import '../models/note_model.dart';
 import '../services/data_service.dart';
 import '../services/data_service_manager.dart';
 import '../services/batch_processing_service.dart';
 import '../services/network_service.dart';
 import '../providers/user_provider.dart';
+import 'base_provider.dart';
 
-class NotesListProvider extends ChangeNotifier {
+class NotesListProvider extends BaseProvider {
   final String npub;
   final DataType dataType;
   late final DataService dataService;
@@ -19,8 +21,11 @@ class NotesListProvider extends ChangeNotifier {
   bool _hasError = false;
   String? _errorMessage;
 
-  Timer? _periodicTimer;
   bool _isInitialized = false;
+
+  // Cache for filtered notes to avoid recomputation
+  List<NoteModel>? _cachedFilteredNotes;
+  int _lastNotesLength = 0;
 
   NotesListProvider({
     required this.npub,
@@ -50,7 +55,8 @@ class NotesListProvider extends ChangeNotifier {
     _onNotesChanged();
 
     if (!_isInitialized) {
-      final initDelay = dataType == DataType.profile ? const Duration(milliseconds: 100) : const Duration(milliseconds: 500);
+      // Optimize initialization delays - much faster for profile, reasonable for feed
+      final initDelay = dataType == DataType.profile ? const Duration(milliseconds: 50) : const Duration(milliseconds: 200);
 
       Timer(initDelay, () {
         _isInitialized = true;
@@ -66,46 +72,42 @@ class NotesListProvider extends ChangeNotifier {
   }
 
   void _updateFilteredNotesProgressive() {
-    final allFiltered = _notes.where((n) => !n.isReply || n.isRepost).toList();
+    // Only recompute if notes changed
+    if (_cachedFilteredNotes == null || _notes.length != _lastNotesLength) {
+      _cachedFilteredNotes = _notes.where((n) => !n.isReply || n.isRepost).toList();
+      _lastNotesLength = _notes.length;
+    }
 
-    if (dataType == DataType.profile) {
-      _filteredNotes = allFiltered;
+    _filteredNotes = _cachedFilteredNotes!;
 
-      if (_isInitialized) {
-        notifyListeners();
-      }
+    if (_isInitialized) {
+      notifyListeners();
+    }
 
-      Future.microtask(() => _loadUserProfiles());
-    } else {
-      _filteredNotes = allFiltered;
-
-      if (_isInitialized) {
-        notifyListeners();
-      }
-
-      _loadUserProfiles();
+    // Defer user profile loading to next frame
+    if (_filteredNotes.isNotEmpty) {
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        _loadUserProfiles();
+      });
     }
   }
 
   void _startPeriodicUpdates() {
-    final updateInterval = dataType == DataType.feed ? const Duration(seconds: 15) : const Duration(seconds: 30);
-
-    _periodicTimer = Timer.periodic(updateInterval, (timer) {
-      notifyListeners();
-
-      if (dataType == DataType.feed) {
+    // Only refresh data for feed, don't waste cycles calling notifyListeners
+    if (dataType == DataType.feed) {
+      createPeriodicTimer(const Duration(seconds: 20), (timer) {
         _refreshNewNotes();
-      }
-    });
+      });
+    }
   }
 
   void _refreshNewNotes() {
     try {
       dataService.refreshNotes().catchError((e) {
-        debugPrint('[NotesListProvider] Refresh error: $e');
+        handleError('refresh notes', e);
       });
     } catch (e) {
-      debugPrint('[NotesListProvider] Refresh new notes error: $e');
+      handleError('refresh new notes', e);
     }
   }
 
@@ -129,37 +131,30 @@ class NotesListProvider extends ChangeNotifier {
         _setLoading(false);
       }
 
-      if (dataType == DataType.profile) {
-        Future.microtask(() async {
-          try {
-            final futures = [
+      // Simplified background initialization
+      Future.microtask(() async {
+        try {
+          if (dataType == DataType.profile) {
+            // Parallel initialization for profile
+            await Future.wait([
               dataService.initializeHeavyOperations(),
-              Future.delayed(const Duration(milliseconds: 25)).then((_) => dataService.initializeConnections()),
-            ];
-
-            await Future.wait(futures, eagerError: false);
-            _updateFilteredNotesProgressive();
-            debugPrint('[NotesListProvider] Profile: Ultra-fast parallel operations completed');
-          } catch (e) {
-            debugPrint('[NotesListProvider] Profile background error: $e');
-          }
-        });
-      } else {
-        Future.microtask(() async {
-          try {
+              dataService.initializeConnections(),
+            ], eagerError: false);
+            debugPrint('[NotesListProvider] Profile: Parallel operations completed');
+          } else {
+            // Sequential for feed with quick refresh
             await dataService.initializeHeavyOperations();
             await dataService.initializeConnections();
 
-            Timer(const Duration(milliseconds: 400), () {
-              _refreshNewNotes();
-            });
-            _updateFilteredNotesProgressive();
+            // Quick refresh after initialization
+            createTimer(const Duration(milliseconds: 200), _refreshNewNotes);
             debugPrint('[NotesListProvider] Feed: Background operations completed');
-          } catch (e) {
-            debugPrint('[NotesListProvider] Feed background error: $e');
           }
-        });
-      }
+          _updateFilteredNotesProgressive();
+        } catch (e) {
+          handleError('background initialization', e);
+        }
+      });
     } catch (e) {
       _setError('Failed to load notes: $e');
       debugPrint('[NotesListProvider] Initial fetch error: $e');
@@ -196,14 +191,14 @@ class NotesListProvider extends ChangeNotifier {
     dataService.forceRefresh().then((_) {
       dataService.initializeConnections();
     }).catchError((e) {
-      debugPrint('[NotesListProvider] Refresh error: $e');
+      handleError('refresh', e);
     });
   }
 
   void _loadUserProfiles() {
     if (_filteredNotes.isEmpty) return;
 
-    final batchSize = dataType == DataType.profile ? 12 : 8;
+    final batchSize = dataType == DataType.profile ? 15 : 10;
     final firstBatchNotes = _filteredNotes.take(batchSize).toList();
 
     final userNpubs = <String>{};
@@ -213,54 +208,63 @@ class NotesListProvider extends ChangeNotifier {
         userNpubs.add(note.repostedBy!);
       }
 
-      if (userNpubs.length >= 10) break;
+      if (userNpubs.length >= 12) break;
     }
 
     if (userNpubs.isNotEmpty) {
-      if (dataType == DataType.profile) {
-        final userList = userNpubs.take(6).toList();
-        UserProvider.instance.loadUsers(userList).catchError((e) {
-          debugPrint('[NotesListProvider] Profile user load error: $e');
-        });
+      // Simplified user loading - no need for complex batching
+      UserProvider.instance.loadUsers(userNpubs.toList()).catchError((e) {
+        handleError('user profile load', e);
+      });
 
-        if (userNpubs.length > 6) {
-          Future.microtask(() {
-            final remainingUsers = userNpubs.skip(6).toList();
-            UserProvider.instance.loadUsers(remainingUsers).catchError((e) {
-              debugPrint('[NotesListProvider] Profile background user load error: $e');
-            });
-          });
-        }
-      } else {
-        Future.microtask(() {
-          UserProvider.instance.loadUsers(userNpubs.toList()).catchError((e) {
-            debugPrint('[NotesListProvider] Feed user load error: $e');
-          });
-        });
-      }
-
-      debugPrint(
-          '[NotesListProvider] ${dataType == DataType.profile ? 'Profile (MICRO-BATCH)' : 'Feed'}: Profile load for ${userNpubs.length} users from ${firstBatchNotes.length} notes');
+      debugPrint('[NotesListProvider] ${dataType.name}: Loaded ${userNpubs.length} user profiles');
     }
   }
+
+  // Track fetched interactions to avoid duplicate requests
+  final Set<String> _fetchedInteractions = {};
+  Timer? _interactionCleanupTimer;
 
   Future<void> fetchInteractionsForNotes(List<String> noteIds) async {
     if (noteIds.isEmpty) return;
 
     try {
-      final futures = <Future>[];
+      // Filter out already fetched interactions
+      final newNoteIds = noteIds.where((id) => !_fetchedInteractions.contains(id)).toList();
 
-      futures.add(dataService.fetchInteractionsForEvents(noteIds));
+      if (newNoteIds.isEmpty) {
+        debugPrint('[NotesListProvider] All ${noteIds.length} visible notes already have fetched interactions');
+        return;
+      }
 
-      final batchProcessor = BatchProcessingService(networkService: NetworkService.instance);
-      futures.add(batchProcessor.processVisibleNotesInteractions(noteIds));
+      // Mark as fetched immediately to prevent duplicate requests
+      _fetchedInteractions.addAll(newNoteIds);
 
-      await Future.wait(futures, eagerError: false);
+      // Use only the optimized data service method - no duplicate processing
+      await dataService.fetchInteractionsForEvents(newNoteIds);
 
-      debugPrint('[NotesListProvider] Fetched interactions for ${noteIds.length} visible notes using optimized batch processing');
+      debugPrint(
+          '[NotesListProvider] Fetched interactions for ${newNoteIds.length} new visible notes (${noteIds.length - newNoteIds.length} already cached)');
+
+      // Schedule cleanup of fetch tracking
+      _scheduleInteractionCleanup();
     } catch (e) {
-      debugPrint('[NotesListProvider] Error fetching interactions for visible notes: $e');
+      handleError('fetching interactions for visible notes', e);
+      // Remove failed fetches from cache to retry later
+      _fetchedInteractions.removeWhere((id) => noteIds.contains(id));
     }
+  }
+
+  void _scheduleInteractionCleanup() {
+    _interactionCleanupTimer?.cancel();
+    _interactionCleanupTimer = Timer(const Duration(minutes: 5), () {
+      if (_fetchedInteractions.length > 500) {
+        // Keep only the most recent 300 to prevent memory bloat
+        final recentNoteIds = _filteredNotes.take(300).map((note) => note.id).toSet();
+        _fetchedInteractions.retainWhere((id) => recentNoteIds.contains(id));
+        debugPrint('[NotesListProvider] Cleaned up interaction fetch cache: ${_fetchedInteractions.length} entries retained');
+      }
+    });
   }
 
   Future<void> fetchProfilesForVisibleNotes(List<String> visibleNoteIds) async {
@@ -284,43 +288,48 @@ class NotesListProvider extends ChangeNotifier {
         debugPrint('[NotesListProvider] Loaded profiles for ${authorNpubs.length} authors of ${visibleNotes.length} visible notes');
       }
     } catch (e) {
-      debugPrint('[NotesListProvider] Error fetching profiles for visible notes: $e');
+      handleError('fetching profiles for visible notes', e);
     }
   }
 
   void _setLoading(bool loading) {
     if (_isLoading != loading) {
       _isLoading = loading;
-      notifyListeners();
+      safeNotifyListeners();
     }
   }
 
   void _setLoadingMore(bool loading) {
     if (_isLoadingMore != loading) {
       _isLoadingMore = loading;
-      notifyListeners();
+      safeNotifyListeners();
     }
   }
 
   void _setError(String message) {
     _hasError = true;
     _errorMessage = message;
-    notifyListeners();
+    safeNotifyListeners();
   }
 
   void _clearError() {
     if (_hasError) {
       _hasError = false;
       _errorMessage = null;
-      notifyListeners();
+      safeNotifyListeners();
     }
   }
 
   @override
   void dispose() {
-    _periodicTimer?.cancel();
     dataService.notesNotifier.removeListener(_onNotesChanged);
     DataServiceManager.instance.releaseService(npub: npub, dataType: dataType);
+
+    // Clear caches and timers
+    _cachedFilteredNotes = null;
+    _fetchedInteractions.clear();
+    _interactionCleanupTimer?.cancel();
+
     super.dispose();
   }
 }

@@ -6,9 +6,11 @@ import 'package:bounce/bounce.dart';
 import 'package:qiqstr/screens/users_search_page.dart';
 import 'package:qiqstr/screens/notification_page.dart';
 import 'package:qiqstr/screens/share_note.dart';
+import 'package:qiqstr/screens/wallet_page.dart';
 import 'package:qiqstr/services/data_service.dart';
 import '../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
+import 'package:carbon_icons/carbon_icons.dart';
 
 class HomeNavigator extends StatefulWidget {
   final String npub;
@@ -31,7 +33,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
   late final List<Widget> _pages = [
     FeedPage(key: _feedPageKey, npub: widget.npub, dataService: widget.dataService),
     const UserSearchPage(),
-    const SizedBox(),
+    const WalletPage(),
     NotificationPage(dataService: widget.dataService),
   ];
 
@@ -43,10 +45,10 @@ class _HomeNavigatorState extends State<HomeNavigator> {
 
   Widget _buildCustomBottomBar() {
     const items = [
-      {'icon': 'assets/home_gap.svg', 'index': 0},
-      {'icon': 'assets/search_button.svg', 'index': 1},
-      {'icon': 'assets/dm_button.svg', 'index': 2},
-      {'icon': 'assets/notification_button.svg', 'index': 3},
+      {'icon': 'assets/home_gap.svg', 'index': 0, 'type': 'svg'},
+      {'icon': 'assets/search_button.svg', 'index': 1, 'type': 'svg'},
+      {'icon': 'wallet', 'index': 2, 'type': 'carbon'},
+      {'icon': 'assets/notification_button.svg', 'index': 3, 'type': 'svg'},
     ];
 
     return RepaintBoundary(
@@ -82,18 +84,19 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                                 scaleFactor: 0.85,
                                 onTap: () {
                                   if (index == 2) {
-                                    _handleAction("Designing: DMs");
+                                    if (mounted) {
+                                      setState(() {
+                                        _currentIndex = index;
+                                      });
+                                    }
                                   } else if (index == 3) {
                                     widget.dataService.markAllUserNotificationsAsRead().then((_) {
                                       if (mounted) setState(() => _currentIndex = index);
                                     });
                                   } else if (index == 0) {
-                                    
                                     if (_currentIndex == 0) {
-                                      
                                       _feedPageKey.currentState?.scrollToTop();
                                     } else {
-                                      
                                       if (mounted) {
                                         setState(() {
                                           _currentIndex = index;
@@ -162,12 +165,18 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                                         )
                                       else
                                         RepaintBoundary(
-                                          child: SvgPicture.asset(
-                                            item['icon'] as String,
-                                            width: 20,
-                                            height: 20,
-                                            color: isSelected ? context.colors.accent : context.colors.textPrimary,
-                                          ),
+                                          child: item['type'] == 'carbon'
+                                              ? Icon(
+                                                  CarbonIcons.flash,
+                                                  size: 22,
+                                                  color: isSelected ? context.colors.accent : context.colors.textPrimary,
+                                                )
+                                              : SvgPicture.asset(
+                                                  item['icon'] as String,
+                                                  width: 20,
+                                                  height: 20,
+                                                  color: isSelected ? context.colors.accent : context.colors.textPrimary,
+                                                ),
                                         ),
                                     ],
                                   ),

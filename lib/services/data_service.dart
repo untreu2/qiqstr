@@ -3397,6 +3397,10 @@ class DataService {
     _cacheCleanupTimer?.cancel();
     _interactionRefreshTimer?.cancel();
 
+    // Clear interaction fetch cache to free memory
+    _lastInteractionFetch.clear();
+    print('[DataService] Cleared interaction fetch cache');
+
     try {
       if (_sendPortReadyCompleter.isCompleted) {
         _sendPort.send(IsolateMessage(MessageType.close, 'close'));
@@ -3421,7 +3425,7 @@ class DataService {
     final serviceId = '${_currentDataType.toString()}_$_currentNpub';
     _socketManager.unregisterService(serviceId);
 
-    print('[DataService] Service closed. WebSocket connections remain open for other services.');
+    print('[DataService] Service closed with optimized cleanup. WebSocket connections remain open for other services.');
   }
 
   Future<void> _updateInteractionsProvider() async {
@@ -3456,30 +3460,51 @@ class DataService {
     return await getCachedUserProfile(npub);
   }
 
+  // Cache to track when we last fetched interactions for each note
+  final Map<String, DateTime> _lastInteractionFetch = {};
+  static const Duration _interactionFetchCooldown = Duration(minutes: 2);
+
   Future<void> fetchInteractionsForEvents(List<String> eventIds) async {
     if (_isClosed || eventIds.isEmpty) return;
 
-    print('[DataService] Fetching interactions for ${eventIds.length} visible notes only');
+    print('[DataService] Smart interaction fetching for ${eventIds.length} visible notes only');
 
+    final now = DateTime.now();
     final noteIdsToFetch = <String>[];
 
     for (final eventId in eventIds) {
-      final hasRecentReactions = reactionsMap[eventId]?.isNotEmpty == true;
-      final hasRecentReplies = repliesMap[eventId]?.isNotEmpty == true;
-      final hasRecentReposts = repostsMap[eventId]?.isNotEmpty == true;
-      final hasRecentZaps = zapsMap[eventId]?.isNotEmpty == true;
+      // Check if we've recently fetched interactions for this note
+      final lastFetch = _lastInteractionFetch[eventId];
+      if (lastFetch != null && now.difference(lastFetch) < _interactionFetchCooldown) {
+        continue; // Skip if recently fetched
+      }
 
-      if (!(hasRecentReactions && hasRecentReplies && hasRecentReposts && hasRecentZaps)) {
+      // Check if note has any existing interactions (even partial)
+      final hasAnyInteractions = reactionsMap[eventId]?.isNotEmpty == true ||
+          repliesMap[eventId]?.isNotEmpty == true ||
+          repostsMap[eventId]?.isNotEmpty == true ||
+          zapsMap[eventId]?.isNotEmpty == true;
+
+      // For new notes or notes without interactions, always fetch
+      // For notes with some interactions, only fetch if cooldown has passed
+      if (!hasAnyInteractions || lastFetch == null) {
         noteIdsToFetch.add(eventId);
+        _lastInteractionFetch[eventId] = now;
       }
     }
 
     if (noteIdsToFetch.isNotEmpty) {
       await _fetchVisibleNotesInteractions(noteIdsToFetch);
       print(
-          '[DataService] Fetched interactions for ${noteIdsToFetch.length} visible notes (${eventIds.length - noteIdsToFetch.length} already cached)');
+          '[DataService] Fetched interactions for ${noteIdsToFetch.length} new/updated visible notes (${eventIds.length - noteIdsToFetch.length} skipped due to recent fetch)');
     } else {
-      print('[DataService] All visible notes already have cached interactions');
+      print('[DataService] No new interactions needed for visible notes - all recently fetched');
+    }
+
+    // Cleanup old fetch timestamps to prevent memory bloat
+    if (_lastInteractionFetch.length > 1000) {
+      final cutoffTime = now.subtract(const Duration(hours: 1));
+      _lastInteractionFetch.removeWhere((key, timestamp) => timestamp.isBefore(cutoffTime));
     }
   }
 
@@ -3487,23 +3512,36 @@ class DataService {
     if (_isClosed || eventIds.isEmpty) return;
 
     try {
-      const batchSize = 15;
+      print('[DataService] Optimized fetching for ${eventIds.length} visible notes with intelligent batching');
+
+      // Smaller, more frequent batches for visible notes to get faster UI updates
+      const batchSize = 8;
       for (int i = 0; i < eventIds.length; i += batchSize) {
         final batch = eventIds.skip(i).take(batchSize).toList();
 
-        await Future.wait([
-          _fetchReactionsForBatch(batch),
-          _fetchRepliesForBatch(batch),
-          _fetchRepostsForBatch(batch),
-          _fetchZapsForBatch(batch),
-        ], eagerError: false);
+        // Use microtasks for non-blocking execution
+        final futures = [
+          Future.microtask(() => _fetchReactionsForBatch(batch)),
+          Future.microtask(() => _fetchRepliesForBatch(batch)),
+          Future.microtask(() => _fetchRepostsForBatch(batch)),
+          Future.microtask(() => _fetchZapsForBatch(batch)),
+        ];
 
+        // Don't wait for all to complete - fire and continue
+        Future.wait(futures, eagerError: false).catchError((e) {
+          print('[DataService] Batch ${i ~/ batchSize + 1} error: $e');
+        });
+
+        // Minimal delay between batches for smooth user experience
         if (i + batchSize < eventIds.length) {
-          await Future.delayed(const Duration(milliseconds: 30));
+          await Future.delayed(const Duration(milliseconds: 15));
         }
       }
+
+      print(
+          '[DataService] Launched interaction fetches for ${eventIds.length} visible notes in ${(eventIds.length / batchSize).ceil()} batches');
     } catch (e) {
-      print('[DataService] Error fetching visible notes interactions: $e');
+      print('[DataService] Error in optimized visible notes interaction fetching: $e');
     }
   }
 

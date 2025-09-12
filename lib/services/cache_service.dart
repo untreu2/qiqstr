@@ -278,6 +278,73 @@ class CacheService {
     });
   }
 
+  /// Optimize cache for visible notes only - keep interactions for currently visible notes
+  Future<void> optimizeForVisibleNotes(Set<String> visibleNoteIds) async {
+    if (visibleNoteIds.isEmpty) return;
+
+    Future.microtask(() async {
+      final now = DateTime.now();
+      final recentCutoff = now.subtract(const Duration(minutes: 5));
+      final oldCutoff = now.subtract(const Duration(hours: 1));
+
+      int removedReactions = 0;
+      int removedReplies = 0;
+      int removedReposts = 0;
+      int removedZaps = 0;
+
+      // Clean reactions - keep visible notes and recent interactions
+      reactionsMap.removeWhere((eventId, reactions) {
+        if (visibleNoteIds.contains(eventId)) return false; // Keep visible
+
+        reactions.removeWhere((reaction) => reaction.fetchedAt.isBefore(oldCutoff));
+        if (reactions.isEmpty) {
+          removedReactions++;
+          return true;
+        }
+        return false;
+      });
+
+      // Clean replies - more aggressive for non-visible notes
+      repliesMap.removeWhere((eventId, replies) {
+        if (visibleNoteIds.contains(eventId)) return false; // Keep visible
+
+        replies.removeWhere((reply) => reply.fetchedAt.isBefore(recentCutoff));
+        if (replies.isEmpty) {
+          removedReplies++;
+          return true;
+        }
+        return false;
+      });
+
+      // Clean reposts - keep visible and recent
+      repostsMap.removeWhere((eventId, reposts) {
+        if (visibleNoteIds.contains(eventId)) return false; // Keep visible
+
+        reposts.removeWhere((repost) => repost.repostTimestamp.isBefore(oldCutoff));
+        if (reposts.isEmpty) {
+          removedReposts++;
+          return true;
+        }
+        return false;
+      });
+
+      // Clean zaps - keep visible and recent
+      zapsMap.removeWhere((eventId, zaps) {
+        if (visibleNoteIds.contains(eventId)) return false; // Keep visible
+
+        zaps.removeWhere((zap) => zap.timestamp.isBefore(oldCutoff));
+        if (zaps.isEmpty) {
+          removedZaps++;
+          return true;
+        }
+        return false;
+      });
+
+      debugPrint(
+          '[CacheService] Visible notes optimization: Kept ${visibleNoteIds.length} visible, removed $removedReactions reactions, $removedReplies replies, $removedReposts reposts, $removedZaps zaps');
+    });
+  }
+
   Map<String, dynamic> getCacheStats() {
     final totalEntries = reactionsMap.length + repliesMap.length + repostsMap.length + zapsMap.length;
 

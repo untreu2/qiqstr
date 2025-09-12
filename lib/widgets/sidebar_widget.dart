@@ -159,17 +159,6 @@ class _SidebarContent extends StatelessWidget {
                       ),
                     ),
                   ),
-                  _buildSidebarItem(
-                    colors: colors,
-                    icon: CarbonIcons.wallet,
-                    label: 'Wallet',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const WalletPage(),
-                      ),
-                    ),
-                  ),
                   _buildThemeToggle(colors),
                   Divider(color: colors.border, indent: 16, endIndent: 16),
                   _buildSidebarItem(

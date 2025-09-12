@@ -5,6 +5,63 @@ import 'package:hive/hive.dart';
 import '../models/note_model.dart';
 import '../services/data_service.dart';
 import '../services/hive_manager.dart';
+import 'base_provider.dart';
+
+/// Optimized data structures for notes management
+class OptimizedNoteStorage {
+  final SplayTreeSet<NoteNotifier> _sortedNotes;
+  final Map<String, SplayTreeSet<NoteNotifier>> _authorIndex;
+  final Map<String, SplayTreeSet<NoteNotifier>> _replyIndex;
+
+  OptimizedNoteStorage(int Function(NoteNotifier, NoteNotifier) compare)
+      : _sortedNotes = SplayTreeSet(compare),
+        _authorIndex = {},
+        _replyIndex = {};
+
+  void add(NoteNotifier notifier) {
+    _sortedNotes.add(notifier);
+
+    // Batch index updates
+    final note = notifier.note;
+    _authorIndex.putIfAbsent(note.author, () => SplayTreeSet(_compareNotesDesc)).add(notifier);
+
+    if (note.isReply && note.parentId != null) {
+      _replyIndex.putIfAbsent(note.parentId!, () => SplayTreeSet(_compareNotesAsc)).add(notifier);
+    }
+  }
+
+  bool remove(NoteNotifier notifier) {
+    final removed = _sortedNotes.remove(notifier);
+    if (removed) {
+      final note = notifier.note;
+      _authorIndex[note.author]?.remove(notifier);
+      if (_authorIndex[note.author]?.isEmpty ?? false) {
+        _authorIndex.remove(note.author);
+      }
+
+      if (note.parentId != null) {
+        _replyIndex[note.parentId!]?.remove(notifier);
+        if (_replyIndex[note.parentId!]?.isEmpty ?? false) {
+          _replyIndex.remove(note.parentId!);
+        }
+      }
+    }
+    return removed;
+  }
+
+  void clear() {
+    _sortedNotes.clear();
+    _authorIndex.clear();
+    _replyIndex.clear();
+  }
+
+  List<NoteNotifier> get allNotes => _sortedNotes.toList();
+  List<NoteNotifier> notesByAuthor(String author) => _authorIndex[author]?.toList() ?? [];
+  List<NoteNotifier> repliesForNote(String noteId) => _replyIndex[noteId]?.toList() ?? [];
+
+  static int _compareNotesDesc(NoteNotifier a, NoteNotifier b) => b.note.timestamp.compareTo(a.note.timestamp);
+  static int _compareNotesAsc(NoteNotifier a, NoteNotifier b) => a.note.timestamp.compareTo(b.note.timestamp);
+}
 
 class NoteNotifier extends ChangeNotifier {
   NoteModel _note;
@@ -52,22 +109,23 @@ class NoteNotifier extends ChangeNotifier {
   }
 }
 
-class NotesProvider extends ChangeNotifier {
+class NotesProvider extends BaseProvider with CacheMixin<List<NoteNotifier>> {
   static NotesProvider? _instance;
   static NotesProvider get instance => _instance ??= NotesProvider._internal();
 
-  NotesProvider._internal();
-
-  Timer? _periodicTimer;
+  NotesProvider._internal() {
+    _storage = OptimizedNoteStorage(_compareNotesDesc);
+  }
 
   final Map<String, NoteNotifier> _notifiers = {};
-  final SplayTreeSet<NoteNotifier> _allNotesSet = SplayTreeSet(_compareNotesDesc);
-  final Map<String, SplayTreeSet<NoteNotifier>> _notesByAuthor = {};
-  final Map<String, SplayTreeSet<NoteNotifier>> _repliesByParent = {};
+  late final OptimizedNoteStorage _storage;
   final Set<String> _loadingNotes = {};
   bool _isInitialized = false;
   final HiveManager _hiveManager = HiveManager.instance;
   String? _currentNpub;
+
+  // Version tracking for cache invalidation
+  int _dataVersion = 0;
 
   bool get isInitialized => _isInitialized;
 
@@ -102,12 +160,11 @@ class NotesProvider extends ChangeNotifier {
       _currentNpub = npub;
       _isInitialized = true;
 
-      Timer(const Duration(seconds: 1), () {
-        notifyListeners();
-        _startPeriodicUpdates();
+      createTimer(const Duration(seconds: 1), () {
+        safeNotifyListeners();
       });
     } catch (e) {
-      debugPrint('[NotesProvider] Initialization error: $e');
+      handleError('initialization', e);
     }
   }
 
@@ -132,6 +189,8 @@ class NotesProvider extends ChangeNotifier {
   }
 
   void _addNoteToCache(NoteModel note) {
+    bool cacheNeedsInvalidation = false;
+
     if (_notifiers.containsKey(note.id)) {
       final notifier = _notifiers[note.id]!;
       final oldNote = notifier.note;
@@ -139,31 +198,25 @@ class NotesProvider extends ChangeNotifier {
       final needsReSort = oldNote.timestamp != note.timestamp || oldNote.author != note.author || oldNote.parentId != note.parentId;
 
       if (needsReSort) {
-        _allNotesSet.remove(notifier);
-        _notesByAuthor[oldNote.author]?.remove(notifier);
-        if (oldNote.isReply && oldNote.parentId != null) {
-          _repliesByParent[oldNote.parentId]?.remove(notifier);
-        }
+        _storage.remove(notifier);
+        cacheNeedsInvalidation = true;
       }
 
       notifier.updateNote(note);
 
       if (needsReSort) {
-        _allNotesSet.add(notifier);
-        _notesByAuthor.putIfAbsent(note.author, () => SplayTreeSet(_compareNotesDesc)).add(notifier);
-        if (note.isReply && note.parentId != null) {
-          _repliesByParent.putIfAbsent(note.parentId!, () => SplayTreeSet(_compareNotesAsc)).add(notifier);
-        }
+        _storage.add(notifier);
       }
     } else {
       final notifier = NoteNotifier(note);
       _notifiers[note.id] = notifier;
+      _storage.add(notifier);
+      cacheNeedsInvalidation = true;
+    }
 
-      _allNotesSet.add(notifier);
-      _notesByAuthor.putIfAbsent(note.author, () => SplayTreeSet(_compareNotesDesc)).add(notifier);
-      if (note.isReply && note.parentId != null) {
-        _repliesByParent.putIfAbsent(note.parentId!, () => SplayTreeSet(_compareNotesAsc)).add(notifier);
-      }
+    if (cacheNeedsInvalidation) {
+      _dataVersion++;
+      invalidateCache();
     }
   }
 
@@ -172,23 +225,25 @@ class NotesProvider extends ChangeNotifier {
   }
 
   List<NoteNotifier> getNotesByAuthor(String authorNpub) {
-    return _notesByAuthor[authorNpub]?.toList() ?? [];
+    return _storage.notesByAuthor(authorNpub);
   }
 
   List<NoteNotifier> getRepliesForNote(String noteId) {
-    return _repliesByParent[noteId]?.toList() ?? [];
+    return _storage.repliesForNote(noteId);
   }
 
   List<NoteNotifier> getAllNotes() {
-    return _allNotesSet.toList();
+    return getCachedData(_dataVersion, () => _storage.allNotes);
   }
 
   List<NoteNotifier> getFeedNotes() {
-    return _allNotesSet.where((notifier) => !notifier.note.isReply || notifier.note.isRepost).toList();
+    return getCachedData(
+        _dataVersion, () => _storage.allNotes.where((notifier) => !notifier.note.isReply || notifier.note.isRepost).toList());
   }
 
   List<NoteNotifier> getMediaNotes() {
-    return _allNotesSet.where((notifier) => notifier.note.hasMedia && (!notifier.note.isReply || notifier.note.isRepost)).toList();
+    return getCachedData(_dataVersion,
+        () => _storage.allNotes.where((notifier) => notifier.note.hasMedia && (!notifier.note.isReply || notifier.note.isRepost)).toList());
   }
 
   Future<void> addNote(NoteModel note, {DataType? dataType}) async {
@@ -202,7 +257,7 @@ class NotesProvider extends ChangeNotifier {
         await _profileNotesBox!.put(note.id, note);
       }
     } catch (e) {
-      debugPrint('[NotesProvider] Error saving note to Hive: $e');
+      handleError('saving note to Hive', e);
     }
 
     if (wasNewNote) {
@@ -229,7 +284,7 @@ class NotesProvider extends ChangeNotifier {
         await _profileNotesBox!.putAll(notesMap);
       }
     } catch (e) {
-      debugPrint('[NotesProvider] Error saving notes to Hive: $e');
+      handleError('saving notes to Hive', e);
     }
 
     if (newNotesCount > 0) {
@@ -261,45 +316,26 @@ class NotesProvider extends ChangeNotifier {
   void removeNote(String noteId) {
     final noteNotifier = _notifiers.remove(noteId);
     if (noteNotifier != null) {
-      final note = noteNotifier.note;
-      _allNotesSet.remove(noteNotifier);
-      _notesByAuthor[note.author]?.remove(noteNotifier);
-      if (_notesByAuthor[note.author]?.isEmpty ?? false) {
-        _notesByAuthor.remove(note.author);
-      }
-
-      if (note.parentId != null) {
-        _repliesByParent[note.parentId!]?.remove(noteNotifier);
-        if (_repliesByParent[note.parentId]?.isEmpty ?? false) {
-          _repliesByParent.remove(note.parentId);
-        }
-      }
-
-      notifyListeners();
+      _storage.remove(noteNotifier);
+      _dataVersion++;
+      invalidateCache();
+      safeNotifyListeners();
     }
   }
 
   void clearCache() {
     _notifiers.clear();
-    _allNotesSet.clear();
-    _notesByAuthor.clear();
-    _repliesByParent.clear();
+    _storage.clear();
     _loadingNotes.clear();
+    _dataVersion++;
+    invalidateCache();
 
     NoteModel.clearParseCache();
-    notifyListeners();
-  }
-
-  void _startPeriodicUpdates() {
-    _periodicTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
-      notifyListeners();
-    });
+    safeNotifyListeners();
   }
 
   @override
   void dispose() {
-    _periodicTimer?.cancel();
-
     _feedNotesBox?.close();
     _profileNotesBox?.close();
 

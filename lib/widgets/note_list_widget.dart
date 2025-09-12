@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import '../providers/notes_list_provider.dart';
 import '../providers/interactions_provider.dart';
 import '../services/data_service.dart';
+import '../services/cache_service.dart';
 import '../theme/theme_manager.dart';
 import 'note_widget.dart';
 
@@ -22,16 +23,16 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   final Set<String> _visibleNoteIds = {};
   Timer? _interactionFetchTimer;
-  Duration _interactionFetchDelay = const Duration(milliseconds: 200);
+  Duration _interactionFetchDelay = const Duration(milliseconds: 150);
 
   Set<String>? _cachedVisibleNoteIds;
   double _lastCalculatedScrollPosition = -1;
   int _lastNotesLength = 0;
 
   double _lastScrollPosition = 0;
-  DateTime _lastScrollTime = DateTime.now();
-  static const double _scrollThreshold = 8.0;
-  Duration _scrollDebounceInterval = const Duration(milliseconds: 16);
+  int _lastScrollTime = 0; // Use milliseconds since epoch for better performance
+  static const double _scrollThreshold = 10.0;
+  int _scrollDebounceInterval = 16; // milliseconds
 
   @override
   void initState() {
@@ -43,8 +44,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       final provider = context.read<NotesListProvider>();
 
       if (provider.dataType == DataType.profile) {
-        _interactionFetchDelay = const Duration(milliseconds: 100);
-        _scrollDebounceInterval = const Duration(milliseconds: 8);
+        _interactionFetchDelay = const Duration(milliseconds: 80);
+        _scrollDebounceInterval = 12; // milliseconds
       }
 
       provider.fetchInitialNotes();
@@ -54,30 +55,31 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   void _setupScrollListener() {
     _scrollController.addListener(() {
       final currentPosition = _scrollController.position.pixels;
-      final now = DateTime.now();
+      final nowMillis = DateTime.now().millisecondsSinceEpoch;
 
+      // Simplified throttling using milliseconds
       final shouldThrottle =
-          (currentPosition - _lastScrollPosition).abs() < _scrollThreshold && now.difference(_lastScrollTime) < _scrollDebounceInterval;
+          (currentPosition - _lastScrollPosition).abs() < _scrollThreshold && (nowMillis - _lastScrollTime) < _scrollDebounceInterval;
 
       if (!shouldThrottle) {
         _lastScrollPosition = currentPosition;
-        _lastScrollTime = now;
-      }
+        _lastScrollTime = nowMillis;
 
-      if (_scrollController.position.isScrollingNotifier.value) {
-        _isUserScrolling = true;
-        _savedScrollPosition = currentPosition;
-      }
-
-      final provider = context.read<NotesListProvider>();
-      final threshold = provider.dataType == DataType.profile ? 0.8 : 0.9;
-      if (currentPosition >= _scrollController.position.maxScrollExtent * threshold) {
-        if (!provider.isLoadingMore) {
-          provider.fetchMoreNotes();
+        if (_scrollController.position.isScrollingNotifier.value) {
+          _isUserScrolling = true;
+          _savedScrollPosition = currentPosition;
         }
-      }
 
-      if (!shouldThrottle) {
+        final provider = context.read<NotesListProvider>();
+
+        // Check for load more with optimized threshold
+        final threshold = provider.dataType == DataType.profile ? 0.85 : 0.9;
+        if (currentPosition >= _scrollController.position.maxScrollExtent * threshold) {
+          if (!provider.isLoadingMore) {
+            provider.fetchMoreNotes();
+          }
+        }
+
         _scheduleInteractionFetch();
       }
     });
@@ -96,16 +98,38 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     final provider = context.read<NotesListProvider>();
     final visibleNoteIds = _getVisibleNoteIds();
 
+    // Update InteractionsProvider with current visible notes
     InteractionsProvider.instance.updateVisibleNotes(visibleNoteIds);
 
     final newVisibleNotes = visibleNoteIds.difference(_visibleNoteIds);
     if (newVisibleNotes.isNotEmpty) {
+      // Only fetch for truly new visible notes to avoid redundant operations
       provider.fetchInteractionsForNotes(newVisibleNotes.toList());
       provider.fetchProfilesForVisibleNotes(newVisibleNotes.toList());
       _visibleNoteIds.addAll(newVisibleNotes);
+
+      print(
+          '[NoteListWidget] Processing ${newVisibleNotes.length} newly visible notes (${visibleNoteIds.length - newVisibleNotes.length} already tracked)');
     }
 
-    _visibleNoteIds.retainWhere((id) => visibleNoteIds.contains(id));
+    // Clean up no longer visible notes from tracking
+    final removedNotes = _visibleNoteIds.difference(visibleNoteIds);
+    if (removedNotes.isNotEmpty) {
+      _visibleNoteIds.retainWhere((id) => visibleNoteIds.contains(id));
+      print('[NoteListWidget] Stopped tracking ${removedNotes.length} notes that are no longer visible');
+    }
+
+    // Optimize cache for current visible notes
+    if (visibleNoteIds.isNotEmpty) {
+      Future.microtask(() {
+        try {
+          // Tell cache service to optimize for these visible notes
+          CacheService.instance.optimizeForVisibleNotes(visibleNoteIds);
+        } catch (e) {
+          print('[NoteListWidget] Cache optimization error: $e');
+        }
+      });
+    }
   }
 
   Set<String> _getVisibleNoteIds() {
@@ -116,9 +140,9 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     if (notes.isEmpty) return {};
 
     final scrollPosition = _scrollController.position.pixels;
+    final cacheThreshold = provider.dataType == DataType.profile ? 20.0 : 50.0;
 
-    final cacheThreshold = provider.dataType == DataType.profile ? 15 : 40;
-
+    // Use cached result if scroll position hasn't changed much
     if (_cachedVisibleNoteIds != null &&
         (scrollPosition - _lastCalculatedScrollPosition).abs() < cacheThreshold &&
         notes.length == _lastNotesLength) {
@@ -127,21 +151,25 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
     final viewportHeight = _scrollController.position.viewportDimension;
 
-    final bufferSize = provider.dataType == DataType.profile ? viewportHeight * 0.3 : viewportHeight * 0.25;
-    final visibleStart = math.max(0, scrollPosition - bufferSize);
+    // Optimized buffer calculation
+    final bufferMultiplier = provider.dataType == DataType.profile ? 0.4 : 0.3;
+    final bufferSize = viewportHeight * bufferMultiplier;
+    final visibleStart = math.max(0.0, scrollPosition - bufferSize);
     final visibleEnd = scrollPosition + viewportHeight + bufferSize;
 
     final visibleNoteIds = <String>{};
 
-    final estimatedItemHeight = provider.dataType == DataType.profile ? viewportHeight / 8 : viewportHeight / 6;
+    // More accurate item height estimation
+    final estimatedItemHeight = provider.dataType == DataType.profile ? viewportHeight / 9 : viewportHeight / 7;
     final startIndex = (visibleStart / estimatedItemHeight).floor().clamp(0, notes.length - 1);
-    final endIndex = (visibleEnd / estimatedItemHeight).ceil().clamp(0, notes.length - 1);
+    final endIndex = (visibleEnd / estimatedItemHeight).ceil().clamp(startIndex, notes.length - 1);
 
-    final maxIndex = math.min(endIndex, notes.length - 1);
-    for (int i = startIndex; i <= maxIndex; i++) {
+    // Limit maximum visible items for performance
+    final maxVisibleItems = provider.dataType == DataType.profile ? 60 : 40;
+    final actualEndIndex = math.min(endIndex, startIndex + maxVisibleItems - 1);
+
+    for (int i = startIndex; i <= actualEndIndex && i < notes.length; i++) {
       visibleNoteIds.add(notes[i].id);
-
-      if (visibleNoteIds.length > 50) break;
     }
 
     _cachedVisibleNoteIds = visibleNoteIds;
@@ -157,14 +185,16 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         if (_scrollController.hasClients && _savedScrollPosition > 0) {
           final targetPosition = _savedScrollPosition.clamp(0.0, _scrollController.position.maxScrollExtent);
 
-          if ((targetPosition - _scrollController.position.pixels).abs() > 3) {
+          // Only jump if difference is significant enough to matter
+          if ((targetPosition - _scrollController.position.pixels).abs() > 5.0) {
             _scrollController.jumpTo(targetPosition);
           }
         }
       });
     }
 
-    Timer(const Duration(milliseconds: 50), () {
+    // Shorter delay for better responsiveness
+    Timer(const Duration(milliseconds: 30), () {
       _isUserScrolling = false;
     });
   }
@@ -244,11 +274,10 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   Widget _buildNotesList(List<dynamic> notes, bool isLoadingMore) {
     final noteCount = notes.length;
 
-    int itemCount = noteCount * 2;
+    // Simplified item count calculation
+    int itemCount = (noteCount * 2) - 1; // notes + dividers
     if (isLoadingMore) {
       itemCount++;
-    } else if (itemCount > 0) {
-      itemCount--;
     }
 
     if (!isLoadingMore) {
