@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:like_button/like_button.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../theme/theme_manager.dart';
 import '../providers/interactions_provider.dart';
 import '../services/data_service.dart';
@@ -43,169 +42,122 @@ class _InteractionBarState extends State<InteractionBar> with AutomaticKeepAlive
   @override
   bool get wantKeepAlive => true;
 
-  static const _secureStorage = FlutterSecureStorage();
-  static String? _globalCachedUserNpub;
-  static bool _isLoading = false;
-
-  String? _localUserNpub;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUserNpubOnce();
-  }
-
-  void _loadUserNpubOnce() async {
-    if (widget.currentUserNpub.isNotEmpty) {
-      setState(() {
-        _localUserNpub = widget.currentUserNpub;
-      });
-    }
-
-    if (_globalCachedUserNpub != null) {
-      setState(() {
-        _localUserNpub = _globalCachedUserNpub;
-      });
-      return;
-    }
-
-    if (_isLoading) return;
-    _isLoading = true;
-
-    try {
-      final npub = await _secureStorage.read(key: 'npub');
-      _globalCachedUserNpub = npub;
-      if (mounted) {
-        setState(() {
-          _localUserNpub = npub ?? widget.currentUserNpub;
-        });
-      }
-    } catch (e) {
-      debugPrint('[InteractionBar] Error loading user npub: $e');
-      if (mounted) {
-        setState(() {
-          _localUserNpub = widget.currentUserNpub;
-        });
-      }
-    } finally {
-      _isLoading = false;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     super.build(context);
 
-    final effectiveUserNpub = _localUserNpub ?? widget.currentUserNpub;
-    if (effectiveUserNpub.isEmpty) {
+    if (widget.currentUserNpub.isEmpty) {
       return const SizedBox.shrink();
     }
 
     final colors = context.colors;
     final double statsIconSize = 21;
 
-    return RepaintBoundary(
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _InteractionButton(
-            noteId: widget.noteId,
-            currentUserNpub: effectiveUserNpub,
-            iconPath: 'assets/reply_button.svg',
-            color: colors.reply,
-            isGlowing: widget.isReplyGlowing,
-            onTap: () {
-              if (widget.dataService == null) return;
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ShareNotePage(
-                    dataService: widget.dataService!,
-                    replyToNoteId: widget.noteId,
-                  ),
-                ),
-              );
-            },
-            getInteractionCount: (provider) => provider.getReplyCount(widget.noteId),
-            hasUserInteracted: (provider, npub, id) => provider.hasUserReplied(npub, id),
-          ),
-          _InteractionButton(
-            noteId: widget.noteId,
-            currentUserNpub: effectiveUserNpub,
-            iconPath: 'assets/repost_button.svg',
-            color: colors.repost,
-            isGlowing: widget.isRepostGlowing,
-            onTap: () {
-              if (widget.dataService == null || widget.note == null) return;
-              final hasReposted = InteractionsProvider.instance.hasUserReposted(effectiveUserNpub, widget.noteId);
-              if (hasReposted) return;
-              showRepostDialog(
-                context: context,
-                dataService: widget.dataService!,
-                note: widget.note!,
-              );
-            },
-            getInteractionCount: (provider) => provider.getRepostCount(widget.noteId),
-            hasUserInteracted: (provider, npub, id) => provider.hasUserReposted(npub, id),
-          ),
-          _InteractionButton(
-            noteId: widget.noteId,
-            currentUserNpub: effectiveUserNpub,
-            iconPath: 'assets/reaction_button.svg',
-            color: colors.reaction,
-            isGlowing: widget.isReactionGlowing,
-            isLikeButton: true,
-            onLikeTap: (isCurrentlyLiked) async {
-              if (widget.dataService == null) return false;
-              if (isCurrentlyLiked) {
-                return false;
-              }
-              await widget.dataService!.sendReactionInstantly(widget.noteId, '+').catchError((e) {
-                debugPrint('Error sending reaction: $e');
-              });
-              return true;
-            },
-            getInteractionCount: (provider) => provider.getReactionCount(widget.noteId),
-            hasUserInteracted: (provider, npub, id) => provider.hasUserReacted(npub, id),
-          ),
-          _InteractionButton(
-            noteId: widget.noteId,
-            currentUserNpub: effectiveUserNpub,
-            iconPath: 'assets/zap_button.svg',
-            color: colors.zap,
-            isGlowing: widget.isZapGlowing,
-            onTap: () {
-              if (widget.dataService == null || widget.note == null) return;
-              showZapDialog(
-                context: context,
-                dataService: widget.dataService!,
-                note: widget.note!,
-              );
-            },
-            getInteractionCount: (provider) => provider.getZapAmount(widget.noteId),
-            hasUserInteracted: (provider, npub, id) => provider.hasUserZapped(npub, id),
-          ),
-          RepaintBoundary(
-            child: GestureDetector(
+    return SizedBox(
+      height: 32,
+      child: RepaintBoundary(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _InteractionButton(
+              noteId: widget.noteId,
+              currentUserNpub: widget.currentUserNpub,
+              iconPath: 'assets/reply_button.svg',
+              color: colors.reply,
+              isGlowing: widget.isReplyGlowing,
               onTap: () {
-                if (widget.dataService == null || widget.note == null) return;
+                if (widget.dataService == null) return;
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => NoteStatisticsPage(
-                      note: widget.note!,
+                    builder: (_) => ShareNotePage(
                       dataService: widget.dataService!,
+                      replyToNoteId: widget.noteId,
                     ),
                   ),
                 );
               },
-              child: Padding(
-                padding: const EdgeInsets.only(left: 6),
-                child: Icon(Icons.bar_chart, size: statsIconSize, color: colors.secondary),
+              getInteractionCount: (provider) => provider.getReplyCount(widget.noteId),
+              hasUserInteracted: (provider, npub, id) => provider.hasUserReplied(npub, id),
+            ),
+            _InteractionButton(
+              noteId: widget.noteId,
+              currentUserNpub: widget.currentUserNpub,
+              iconPath: 'assets/repost_button.svg',
+              color: colors.repost,
+              isGlowing: widget.isRepostGlowing,
+              onTap: () {
+                if (widget.dataService == null || widget.note == null) return;
+                final hasReposted = InteractionsProvider.instance.hasUserReposted(widget.currentUserNpub, widget.noteId);
+                if (hasReposted) return;
+                showRepostDialog(
+                  context: context,
+                  dataService: widget.dataService!,
+                  note: widget.note!,
+                );
+              },
+              getInteractionCount: (provider) => provider.getRepostCount(widget.noteId),
+              hasUserInteracted: (provider, npub, id) => provider.hasUserReposted(npub, id),
+            ),
+            _InteractionButton(
+              noteId: widget.noteId,
+              currentUserNpub: widget.currentUserNpub,
+              iconPath: 'assets/reaction_button.svg',
+              color: colors.reaction,
+              isGlowing: widget.isReactionGlowing,
+              isLikeButton: true,
+              onLikeTap: (isCurrentlyLiked) async {
+                if (widget.dataService == null) return false;
+                if (isCurrentlyLiked) {
+                  return false;
+                }
+                await widget.dataService!.sendReactionInstantly(widget.noteId, '+').catchError((e) {
+                  debugPrint('Error sending reaction: $e');
+                });
+                return true;
+              },
+              getInteractionCount: (provider) => provider.getReactionCount(widget.noteId),
+              hasUserInteracted: (provider, npub, id) => provider.hasUserReacted(npub, id),
+            ),
+            _InteractionButton(
+              noteId: widget.noteId,
+              currentUserNpub: widget.currentUserNpub,
+              iconPath: 'assets/zap_button.svg',
+              color: colors.zap,
+              isGlowing: widget.isZapGlowing,
+              onTap: () {
+                if (widget.dataService == null || widget.note == null) return;
+                showZapDialog(
+                  context: context,
+                  dataService: widget.dataService!,
+                  note: widget.note!,
+                );
+              },
+              getInteractionCount: (provider) => provider.getZapAmount(widget.noteId),
+              hasUserInteracted: (provider, npub, id) => provider.hasUserZapped(npub, id),
+            ),
+            RepaintBoundary(
+              child: GestureDetector(
+                onTap: () {
+                  if (widget.dataService == null || widget.note == null) return;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => NoteStatisticsPage(
+                        note: widget.note!,
+                        dataService: widget.dataService!,
+                      ),
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: Icon(Icons.bar_chart, size: statsIconSize, color: colors.secondary),
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -285,16 +237,21 @@ class _InteractionButtonState extends State<_InteractionButton> with AutomaticKe
 
   void _onProviderUpdate() {
     if (!mounted) return;
+
     final provider = InteractionsProvider.instance;
     final newCount = widget.getInteractionCount(provider);
     final newHasInteracted = widget.hasUserInteracted(provider, widget.currentUserNpub, widget.noteId);
 
-    if (newCount != _initialCount || newHasInteracted != _initialHasInteracted) {
+    final hasChanges = newCount != _initialCount || newHasInteracted != _initialHasInteracted;
+
+    if (hasChanges || newCount > 0) {
       setState(() {
         _initialCount = newCount;
         _initialHasInteracted = newHasInteracted;
-        if (!_userHasInteracted) {
-          _userHasInteracted = newHasInteracted;
+        _userHasInteracted = newHasInteracted;
+
+        if (newCount > 0) {
+          _localInteractionDelta = 0;
         }
       });
     }

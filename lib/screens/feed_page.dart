@@ -5,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
+import 'package:carbon_icons/carbon_icons.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart';
 import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/services/data_service.dart';
@@ -29,6 +30,7 @@ class FeedPageState extends State<FeedPage> {
 
   late ScrollController _scrollController;
   bool _showAppBar = true;
+  NoteViewMode _currentViewMode = NoteViewMode.text;
 
   @override
   void initState() {
@@ -132,6 +134,68 @@ class FeedPageState extends State<FeedPage> {
     }
   }
 
+  Widget _buildViewModeToggle(dynamic colors) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surface.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: colors.border.withOpacity(0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildToggleButton(
+            icon: CarbonIcons.list,
+            isSelected: _currentViewMode == NoteViewMode.text,
+            onTap: () => _setViewMode(NoteViewMode.text),
+            colors: colors,
+          ),
+          _buildToggleButton(
+            icon: CarbonIcons.grid,
+            isSelected: _currentViewMode == NoteViewMode.grid,
+            onTap: () => _setViewMode(NoteViewMode.grid),
+            colors: colors,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToggleButton({
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required dynamic colors,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: 32,
+        decoration: BoxDecoration(
+          color: isSelected ? colors.primary.withOpacity(0.2) : Colors.transparent,
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Icon(
+          icon,
+          size: 18,
+          color: isSelected ? colors.primary : colors.iconSecondary,
+        ),
+      ),
+    );
+  }
+
+  void _setViewMode(NoteViewMode mode) {
+    if (_currentViewMode != mode) {
+      setState(() {
+        _currentViewMode = mode;
+      });
+    }
+  }
+
   Widget _buildHeader(BuildContext context, double topPadding) {
     final colors = context.colors;
 
@@ -185,23 +249,12 @@ class FeedPageState extends State<FeedPage> {
                         ),
                       ),
                     ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: _buildViewModeToggle(colors),
+                    ),
                   ],
                 ),
-              ),
-              ValueListenableBuilder<bool>(
-                valueListenable: dataService.isRefreshingNotifier,
-                builder: (context, isRefreshing, child) {
-                  return AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    height: isRefreshing ? 3 : 0,
-                    child: isRefreshing
-                        ? LinearProgressIndicator(
-                            backgroundColor: colors.borderLight,
-                            valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
-                          )
-                        : const SizedBox.shrink(),
-                  );
-                },
               ),
             ],
           ),
@@ -254,6 +307,7 @@ class FeedPageState extends State<FeedPage> {
                     npub: widget.npub,
                     dataType: DataType.feed,
                     sharedDataService: dataService,
+                    viewMode: _currentViewMode,
                   ),
                 ],
               ),

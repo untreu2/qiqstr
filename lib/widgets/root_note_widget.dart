@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/note_model.dart';
 import '../services/data_service.dart';
 import '../providers/user_provider.dart';
 import '../theme/theme_manager.dart';
 import 'note_content_widget.dart';
 import 'interaction_bar_widget.dart';
-import 'profile_image_widget.dart';
 
 class RootNoteWidget extends StatelessWidget {
   final NoteModel note;
@@ -70,11 +70,13 @@ class RootNoteWidget extends StatelessWidget {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      ProfileImageHelper.xlarge(
-                        imageUrl: authorProfile.profileImage,
-                        npub: authorProfile.npub,
-                        backgroundColor: context.colors.surfaceTransparent,
+                      GestureDetector(
                         onTap: () => dataService.openUserProfile(context, note.author),
+                        child: _buildProfileImage(
+                          imageUrl: authorProfile.profileImage,
+                          radius: 21,
+                          colors: context.colors,
+                        ),
                       ),
                       const SizedBox(width: 8),
                       Expanded(
@@ -133,6 +135,7 @@ class RootNoteWidget extends StatelessWidget {
                   parsedContent: parsedContent,
                   dataService: dataService,
                   onNavigateToMentionProfile: onNavigateToMentionProfile,
+                  size: NoteContentSize.big,
                 ),
                 const SizedBox(height: 12),
                 InteractionBar(
@@ -150,6 +153,49 @@ class RootNoteWidget extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildProfileImage({
+    required String imageUrl,
+    required double radius,
+    required dynamic colors,
+  }) {
+    if (imageUrl.isEmpty) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: colors.surfaceTransparent,
+        child: Icon(
+          Icons.person,
+          size: radius,
+          color: colors.textSecondary,
+        ),
+      );
+    }
+
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: colors.surfaceTransparent,
+      child: ClipOval(
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
+          width: radius * 2,
+          height: radius * 2,
+          fit: BoxFit.cover,
+          fadeInDuration: Duration.zero,
+          fadeOutDuration: Duration.zero,
+          placeholder: (context, url) => Icon(
+            Icons.person,
+            size: radius,
+            color: colors.textSecondary,
+          ),
+          errorWidget: (context, url, error) => Icon(
+            Icons.person,
+            size: radius,
+            color: colors.textSecondary,
+          ),
+        ),
+      ),
     );
   }
 }

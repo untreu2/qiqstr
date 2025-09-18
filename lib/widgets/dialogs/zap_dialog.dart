@@ -1,35 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/data_service.dart';
-import 'package:qiqstr/providers/wallet_provider.dart';
-import 'package:qiqstr/providers/interactions_provider.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../theme/theme_manager.dart';
 
-Future<String> _getCurrentUserNpub() async {
-  try {
-    const secureStorage = FlutterSecureStorage();
-    final npub = await secureStorage.read(key: 'npub');
-    return npub ?? '';
-  } catch (e) {
-    return '';
-  }
-}
-
-Future<void> _processZapPaymentFast(
+Future<void> _generateAndCopyZapInvoice(
   BuildContext context,
   DataService dataService,
-  WalletProvider walletProvider,
   UserModel user,
   NoteModel note,
   int sats,
   String comment,
 ) async {
   try {
-    // Generate and pay zap invoice immediately without any fee checking
     final invoice = await dataService.sendZap(
       recipientPubkey: user.npub,
       lud16: user.lud16,
@@ -38,19 +22,26 @@ Future<void> _processZapPaymentFast(
       content: comment,
     );
 
-    // Pay immediately without any confirmation or fee checking
-    await walletProvider.payInvoice(invoice);
+    await Clipboard.setData(ClipboardData(text: invoice));
 
-    // Show success message and refresh balance in background
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('⚡ Zap sent!'), duration: Duration(seconds: 1)));
-
-      // Refresh balance in background without blocking UI
-      walletProvider.fetchBalance();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚡ Zap invoice copied to clipboard!'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Zap failed: $e'), duration: const Duration(seconds: 2)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to generate zap invoice: $e'),
+          duration: const Duration(seconds: 2),
+          backgroundColor: Colors.red[700],
+        ),
+      );
     }
   }
 }
@@ -96,47 +87,33 @@ Future<void> showZapDialog({
             ),
           ),
           const SizedBox(height: 20),
-          Consumer<WalletProvider>(
-            builder: (context, walletProvider, child) {
-              return ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: context.colors.buttonPrimary,
-                    foregroundColor: context.colors.background,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
-                onPressed: () async {
-                  final sats = int.tryParse(amountController.text.trim());
-                  if (sats == null || sats <= 0) {
-                    ScaffoldMessenger.of(modalContext)
-                        .showSnackBar(const SnackBar(content: Text('Enter a valid amount'), duration: Duration(seconds: 1)));
-                    return;
-                  }
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: context.colors.buttonPrimary,
+                foregroundColor: context.colors.background,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+            onPressed: () async {
+              final sats = int.tryParse(amountController.text.trim());
+              if (sats == null || sats <= 0) {
+                ScaffoldMessenger.of(modalContext)
+                    .showSnackBar(const SnackBar(content: Text('Enter a valid amount'), duration: Duration(seconds: 1)));
+                return;
+              }
 
-                  // Quick wallet check
-                  if (!await walletProvider.isLoggedIn()) {
-                    ScaffoldMessenger.of(modalContext)
-                        .showSnackBar(const SnackBar(content: Text('Please connect your wallet first'), duration: Duration(seconds: 1)));
-                    return;
-                  }
+              Navigator.pop(modalContext);
 
-                  // Close dialog immediately for faster UX
-                  Navigator.pop(modalContext);
+              final profile = await dataService.getCachedUserProfile(note.author);
+              final user = UserModel.fromCachedProfile(note.author, profile);
 
-                  // Get user profile and process payment immediately
-                  final profile = await dataService.getCachedUserProfile(note.author);
-                  final user = UserModel.fromCachedProfile(note.author, profile);
+              if (user.lud16.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('User does not have a lightning address configured.'), duration: Duration(seconds: 1)));
+                return;
+              }
 
-                  if (user.lud16.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text('User does not have a lightning address configured.'), duration: Duration(seconds: 1)));
-                    return;
-                  }
-
-                  // Process payment immediately without any delays or confirmations
-                  _processZapPaymentFast(context, dataService, walletProvider, user, note, sats, noteController.text.trim());
-                },
-                child: const Text('⚡ Zap'),
-              );
+              _generateAndCopyZapInvoice(context, dataService, user, note, sats, noteController.text.trim());
             },
+            child: const Text('⚡ Generate Zap Invoice'),
           ),
         ],
       ),

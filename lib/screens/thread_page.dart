@@ -15,6 +15,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:collection/collection.dart';
 import '../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
+import '../providers/interactions_provider.dart';
+import '../providers/media_provider.dart';
 
 class ThreadPage extends StatefulWidget {
   final String rootNoteId;
@@ -56,6 +58,7 @@ class _ThreadPageState extends State<ThreadPage> {
 
   Timer? _uiUpdateTimer;
   bool _hasPendingUIUpdate = false;
+  Timer? _periodicInteractionTimer;
 
   static const int repliesPerPage = 10;
   static const int maxNestingDepth = 2;
@@ -66,16 +69,50 @@ class _ThreadPageState extends State<ThreadPage> {
   void initState() {
     super.initState();
     widget.dataService.notesNotifier.addListener(_onNotesChanged);
-    _loadRootNote();
+
+    InteractionsProvider.instance.addListener(_onInteractionsChanged);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadRootNote();
+      _startPeriodicInteractionFetch();
+    });
   }
 
   @override
   void dispose() {
     widget.dataService.notesNotifier.removeListener(_onNotesChanged);
+    InteractionsProvider.instance.removeListener(_onInteractionsChanged);
     _scrollController.dispose();
     _reloadTimer?.cancel();
     _uiUpdateTimer?.cancel();
+    _periodicInteractionTimer?.cancel();
     super.dispose();
+  }
+
+  void _onInteractionsChanged() {
+    if (mounted && !_isLoading) {
+      // Multiple rapid UI updates for immediate visibility
+      setState(() {});
+
+      // Immediate follow-up updates
+      Future.microtask(() {
+        if (mounted && !_isLoading) {
+          setState(() {});
+        }
+      });
+
+      Future.delayed(const Duration(milliseconds: 16), () {
+        if (mounted && !_isLoading) {
+          setState(() {});
+        }
+      });
+
+      Future.delayed(const Duration(milliseconds: 50), () {
+        if (mounted && !_isLoading) {
+          setState(() {});
+        }
+      });
+    }
   }
 
   void _onNotesChanged() {
@@ -107,6 +144,7 @@ class _ThreadPageState extends State<ThreadPage> {
       for (final note in allNotes) {
         if (note.isReply && (note.rootId == _rootNote!.id || note.parentId == _rootNote!.id) && !_relevantNoteIds.contains(note.id)) {
           hasRelevantChanges = true;
+          print('[ThreadPage] New reply detected: ${note.id} - forcing immediate UI update');
           break;
         }
       }
@@ -114,6 +152,39 @@ class _ThreadPageState extends State<ThreadPage> {
 
     if (hasRelevantChanges) {
       _cachedThreadHierarchy = null;
+
+      // Multiple immediate UI updates for new replies
+      if (mounted) {
+        setState(() {
+          _updateRelevantNoteIds();
+          _updateVisibleNotesInProvider();
+        });
+
+        // Force additional immediate updates
+        Future.microtask(() {
+          if (mounted) setState(() {});
+        });
+
+        Timer(const Duration(milliseconds: 16), () {
+          if (mounted) setState(() {});
+        });
+
+        Timer(const Duration(milliseconds: 50), () {
+          if (mounted) setState(() {});
+        });
+      }
+
+      // Aggressive interaction fetching for new replies
+      Future.microtask(() async {
+        await _fetchPeriodicInteractions();
+        if (mounted) {
+          setState(() {});
+          // Force another update after fetch
+          Future.microtask(() {
+            if (mounted) setState(() {});
+          });
+        }
+      });
 
       _debounceUIUpdate();
 
@@ -126,10 +197,24 @@ class _ThreadPageState extends State<ThreadPage> {
 
     _hasPendingUIUpdate = true;
     _uiUpdateTimer?.cancel();
-    _uiUpdateTimer = Timer(const Duration(milliseconds: 150), () {
+    _uiUpdateTimer = Timer(const Duration(milliseconds: 50), () {
       if (mounted && !_isLoading) {
         _hasPendingUIUpdate = false;
-        _loadRootNote();
+
+        // Force immediate state updates without full reload
+        setState(() {
+          _updateRelevantNoteIds();
+          _updateVisibleNotesInProvider();
+        });
+
+        // Additional updates to ensure visibility
+        Future.microtask(() {
+          if (mounted) setState(() {});
+        });
+
+        Timer(const Duration(milliseconds: 25), () {
+          if (mounted) setState(() {});
+        });
       }
     });
   }
@@ -195,9 +280,27 @@ class _ThreadPageState extends State<ThreadPage> {
         }
       }
 
-      _loadAdditionalDataInBackground();
+      _updateRelevantNoteIds();
+      _updateVisibleNotesInProvider();
 
-      _loadThreadInteractions();
+      await _fetchMissingThreadReplies();
+
+      _updateRelevantNoteIds();
+      _updateVisibleNotesInProvider();
+
+      await _forceLoadAllInteractions();
+
+      if (mounted) {
+        setState(() {});
+        Future.microtask(() {
+          if (mounted) setState(() {});
+        });
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) setState(() {});
+        });
+      }
+
+      _loadAdditionalDataInBackground();
     } catch (e) {
       print('[ThreadPage] Error in _loadRootNote: $e');
       if (mounted) {
@@ -229,7 +332,7 @@ class _ThreadPageState extends State<ThreadPage> {
     }
   }
 
-  Future<void> _loadThreadInteractions() async {
+  Future<void> _forceLoadAllInteractions() async {
     if (_rootNote == null) return;
 
     try {
@@ -246,14 +349,148 @@ class _ThreadPageState extends State<ThreadPage> {
         }
       }
 
-      print('[ThreadPage] Loading interactions for ${threadEventIds.length} thread notes');
+      print('[ThreadPage] Force loading interactions for ${threadEventIds.length} thread notes');
 
-      await widget.dataService
-          .fetchInteractionsForEvents(threadEventIds.toList())
-          .timeout(const Duration(seconds: 3))
-          .catchError((e) => print('[ThreadPage] Thread interactions fetch timeout: $e'));
+      final futures = <Future>[];
+
+      // Immediate parallel fetching with minimal delays
+      futures.add(widget.dataService
+          .fetchInteractionsForEvents(threadEventIds.toList(), forceLoad: true)
+          .timeout(const Duration(seconds: 5))
+          .catchError((e) => print('[ThreadPage] DataService interaction fetch error: $e')));
+
+      // Faster attempt intervals for quicker loading
+      for (int attempt = 0; attempt < 5; attempt++) {
+        futures.add(Future.delayed(Duration(milliseconds: attempt * 50), () async {
+          try {
+            await InteractionsProvider.instance.fetchInteractionsForNotes(threadEventIds.toList());
+            print('[ThreadPage] InteractionsProvider attempt ${attempt + 1} completed');
+
+            // Immediate UI update after each successful fetch
+            if (mounted) {
+              setState(() {});
+            }
+          } catch (e) {
+            print('[ThreadPage] InteractionsProvider attempt ${attempt + 1} failed: $e');
+          }
+        }));
+      }
+
+      futures.add(Future.microtask(() {
+        InteractionsProvider.instance.updateVisibleNotes(threadEventIds);
+        return InteractionsProvider.instance.fetchInteractionsForNotes(threadEventIds.toList());
+      }).catchError((e) => print('[ThreadPage] Direct visibility update error: $e')));
+
+      await Future.wait(futures, eagerError: false);
+
+      print('[ThreadPage] All interaction loading attempts completed');
+
+      final threadNotes = <NoteModel>[];
+      if (_rootNote != null) threadNotes.add(_rootNote!);
+      if (_focusedNote != null) threadNotes.add(_focusedNote!);
+
+      for (final replies in threadHierarchy.values) {
+        threadNotes.addAll(replies);
+      }
+
+      final notesWithMedia = threadNotes.where((note) => note.hasMedia).toList();
+      if (notesWithMedia.isNotEmpty) {
+        Future.microtask(() {
+          MediaProvider.instance.cacheImagesFromNotes(notesWithMedia);
+        });
+        print('[ThreadPage] Cached media for ${notesWithMedia.length} thread notes with media');
+      }
+
+      _forceUIUpdates();
     } catch (e) {
-      print('[ThreadPage] Error loading thread interactions: $e');
+      print('[ThreadPage] Error in force loading interactions: $e');
+
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted) {
+          _forceLoadAllInteractions();
+        }
+      });
+    }
+  }
+
+  void _forceUIUpdates() {
+    if (!mounted) return;
+
+    // Immediate updates
+    setState(() {});
+    InteractionsProvider.instance.notifyListeners();
+
+    // Rapid sequence of updates for maximum responsiveness
+    for (int i = 0; i < 10; i++) {
+      Future.delayed(Duration(milliseconds: i * 25), () {
+        if (mounted) {
+          setState(() {});
+          if (i % 3 == 0) {
+            InteractionsProvider.instance.notifyListeners();
+          }
+        }
+      });
+    }
+
+    // Final updates
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        InteractionsProvider.instance.notifyListeners();
+        setState(() {});
+      }
+    });
+  }
+
+  void _startPeriodicInteractionFetch() {
+    _periodicInteractionTimer?.cancel();
+    _periodicInteractionTimer = Timer.periodic(
+      const Duration(milliseconds: 200), // Faster interval for better responsiveness
+      (timer) async {
+        if (!mounted || _isLoading) return;
+
+        try {
+          await _fetchPeriodicInteractions();
+        } catch (e) {
+          print('[ThreadPage] Periodic interaction fetch error: $e');
+        }
+      },
+    );
+  }
+
+  Future<void> _fetchPeriodicInteractions() async {
+    if (_rootNote == null) return;
+
+    final threadEventIds = <String>{_rootNote!.id};
+
+    if (_focusedNote != null) {
+      threadEventIds.add(_focusedNote!.id);
+    }
+
+    final threadHierarchy = _getOrBuildThreadHierarchy(_rootNote!.id);
+    for (final replies in threadHierarchy.values) {
+      for (final reply in replies) {
+        threadEventIds.add(reply.id);
+      }
+    }
+
+    // Aggressive parallel fetching for maximum speed
+    final futures = <Future>[];
+
+    // Multiple simultaneous fetch attempts
+    futures.add(InteractionsProvider.instance.fetchInteractionsForNotes(threadEventIds.toList()));
+    futures.add(widget.dataService.fetchInteractionsForEvents(threadEventIds.toList(), forceLoad: false));
+
+    try {
+      await Future.wait(futures, eagerError: false);
+    } catch (e) {
+      print('[ThreadPage] Periodic interaction fetch error: $e');
+    }
+
+    InteractionsProvider.instance.updateVisibleNotes(threadEventIds);
+
+    // Force immediate UI update after interaction fetch
+    if (mounted) {
+      setState(() {});
     }
   }
 
@@ -293,6 +530,41 @@ class _ThreadPageState extends State<ThreadPage> {
       } catch (e) {
         print('[ThreadPage] Profile fetch timeout: $e');
       }
+    }
+  }
+
+  Future<void> _fetchMissingThreadReplies() async {
+    if (_rootNote == null) return;
+
+    try {
+      _cachedThreadHierarchy = null;
+      final threadHierarchy = _getOrBuildThreadHierarchy(_rootNote!.id);
+
+      _updateRelevantNoteIds();
+
+      final allReplyIds = <String>[];
+      for (final replies in threadHierarchy.values) {
+        for (final reply in replies) {
+          allReplyIds.add(reply.id);
+        }
+      }
+
+      if (allReplyIds.isNotEmpty) {
+        print('[ThreadPage] Found ${allReplyIds.length} replies, fetching their interactions');
+
+        await widget.dataService
+            .fetchInteractionsForEvents(allReplyIds, forceLoad: false)
+            .timeout(const Duration(seconds: 2))
+            .catchError((e) => print('[ThreadPage] Reply interactions fetch timeout: $e'));
+      }
+
+      print('[ThreadPage] Thread replies processing completed');
+
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (e) {
+      print('[ThreadPage] Error fetching thread replies: $e');
     }
   }
 
@@ -396,6 +668,10 @@ class _ThreadPageState extends State<ThreadPage> {
     if (_focusedNote != null) {
       _relevantNoteIds.add(_focusedNote!.id);
     }
+  }
+
+  void _updateVisibleNotesInProvider() {
+    InteractionsProvider.instance.updateVisibleNotes(_relevantNoteIds);
   }
 
   Future<NoteModel?> _fetchNoteFromNetwork(String eventId) async {
@@ -556,12 +832,35 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Map<String, List<NoteModel>> _getOrBuildThreadHierarchy(String rootId) {
-    if (_cachedThreadHierarchy != null && _lastHierarchyRootId == rootId) {
-      return _cachedThreadHierarchy!;
-    }
+    // Always rebuild hierarchy to catch new replies immediately
+    _cachedThreadHierarchy = null;
+
+    print('[ThreadPage] Building fresh thread hierarchy for root: $rootId');
+
+    final allNotes = [
+      ...widget.dataService.notesNotifier.value,
+      ...widget.dataService.notes,
+    ];
+
+    print('[ThreadPage] Available notes for hierarchy: ${allNotes.length}');
 
     _cachedThreadHierarchy = widget.dataService.buildThreadHierarchy(rootId);
     _lastHierarchyRootId = rootId;
+
+    int totalReplies = 0;
+    for (final replies in _cachedThreadHierarchy!.values) {
+      totalReplies += replies.length;
+    }
+
+    print('[ThreadPage] Fresh thread hierarchy built with $totalReplies total replies');
+
+    // Force immediate UI update after hierarchy rebuild
+    if (mounted) {
+      Future.microtask(() {
+        if (mounted) setState(() {});
+      });
+    }
+
     return _cachedThreadHierarchy!;
   }
 
@@ -959,9 +1258,6 @@ class _OptimizedNoteWidgetState extends State<_OptimizedNoteWidget> {
 
         return NoteWidget(
           note: noteToUse,
-          reactionCount: noteToUse.reactionCount,
-          replyCount: noteToUse.replyCount,
-          repostCount: noteToUse.repostCount,
           dataService: widget.dataService,
           currentUserNpub: widget.currentUserNpub,
           notesNotifier: widget.dataService.notesNotifier,

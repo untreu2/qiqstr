@@ -28,6 +28,7 @@ import 'nostr_service.dart';
 import 'profile_service.dart';
 import 'hive_manager.dart';
 import '../providers/interactions_provider.dart';
+import '../providers/media_provider.dart';
 import 'nip05_verification_service.dart';
 
 enum DataType { feed, profile, note }
@@ -1360,6 +1361,11 @@ class DataService {
         if (eventIds.add(noteModel.id)) {
           notes.add(noteModel);
           notesNotifier.addNoteQuietly(noteModel);
+
+          // Force immediate UI update for new replies
+          Future.microtask(() {
+            notesNotifier.notifyListenersWithFilteredList();
+          });
         }
 
         _hiveManager.repliesBox?.put(reply.id, reply).catchError((e) {});
@@ -1367,6 +1373,11 @@ class DataService {
         fetchProfilesBatch([reply.author]);
 
         _hasPendingUiUpdate = true;
+
+        // Force immediate notification for reply events
+        Future.microtask(() {
+          notesNotifier.notifyListenersWithFilteredList();
+        });
       }
     } catch (e) {
       print('[DataService ERROR] Error handling reply event: $e');
@@ -2768,7 +2779,15 @@ class DataService {
           for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data),
         };
 
-        print('[DataService] Cached notes loaded (${newNotes.length} notes) - ${dataType == DataType.profile ? "INSTANT" : "NORMAL"} mode');
+        final notesWithMedia = newNotes.where((note) => note.hasMedia).toList();
+        if (notesWithMedia.isNotEmpty) {
+          Future.microtask(() {
+            MediaProvider.instance.cacheImagesFromNotes(notesWithMedia);
+          });
+        }
+
+        print(
+            '[DataService] Cached notes loaded (${newNotes.length} notes, ${notesWithMedia.length} with media cached) - ${dataType == DataType.profile ? "INSTANT" : "NORMAL"} mode');
       }
     } catch (e) {
       print('[DataService ERROR] Error loading notes from cache: $e');
@@ -2846,7 +2865,7 @@ class DataService {
         ], eagerError: false);
 
         if (i + batchSize < eventIds.length) {
-          await Future.delayed(const Duration(milliseconds: 100));
+          await Future.delayed(const Duration(milliseconds: 10));
         }
       }
     } catch (e) {
@@ -3127,6 +3146,7 @@ class DataService {
   Future<void> _handleNewNotes(dynamic data) async {
     if (data is List<NoteModel> && data.isNotEmpty) {
       final newNoteIds = <String>[];
+      final newNotesForMedia = <NoteModel>[];
 
       const maxBatchSize = 10;
       for (int i = 0; i < data.length; i += maxBatchSize) {
@@ -3143,6 +3163,7 @@ class DataService {
               notes.add(note);
               eventIds.add(note.id);
               newNoteIds.add(note.id);
+              newNotesForMedia.add(note);
 
               Future.microtask(() => _hiveManager.notesBox?.put(note.id, note));
 
@@ -3161,8 +3182,17 @@ class DataService {
         }
       }
 
+      if (newNotesForMedia.isNotEmpty) {
+        final notesWithMedia = newNotesForMedia.where((note) => note.hasMedia).toList();
+        if (notesWithMedia.isNotEmpty) {
+          Future.microtask(() {
+            MediaProvider.instance.cacheImagesFromNotes(notesWithMedia);
+          });
+        }
+      }
+
       print(
-          '[DataService] Handled new notes: ${data.length} notes processed, ${newNoteIds.length} added - ${dataType == DataType.profile ? "INSTANT" : "NORMAL"} mode');
+          '[DataService] Handled new notes: ${data.length} notes processed, ${newNoteIds.length} added, ${newNotesForMedia.where((n) => n.hasMedia).length} with media cached - ${dataType == DataType.profile ? "INSTANT" : "NORMAL"} mode');
     }
   }
 
@@ -3259,31 +3289,25 @@ class DataService {
     }
 
     if (_hasPendingUiUpdate && (_uiThrottleTimer == null || !_uiThrottleTimer!.isActive)) {
-      final throttleDelay = dataType == DataType.profile ? Duration.zero : const Duration(milliseconds: 150);
+      final throttleDelay = dataType == DataType.profile ? Duration.zero : const Duration(milliseconds: 50);
 
       _uiThrottleTimer = Timer(throttleDelay, () {
         if (_isClosed) {
           return;
         }
 
-        print('[DataService] ${dataType == DataType.profile ? "INSTANT" : "Optimized"} UI update for smooth transitions');
+        print('[DataService] ${dataType == DataType.profile ? "INSTANT" : "Ultra-fast"} UI update for immediate reply visibility');
 
-        if (dataType == DataType.profile) {
-          notesNotifier.value = notesNotifier._getFilteredNotesList();
-          profilesNotifier.value = {
-            for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
-          };
-        } else {
-          Future.microtask(() {
-            notesNotifier.value = notesNotifier._getFilteredNotesList();
-          });
+        // Immediate updates for both profile and feed types
+        notesNotifier.value = notesNotifier._getFilteredNotesList();
+        profilesNotifier.value = {
+          for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
+        };
 
-          Future.microtask(() {
-            profilesNotifier.value = {
-              for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
-            };
-          });
-        }
+        // Additional immediate update
+        Future.microtask(() {
+          notesNotifier.notifyListenersWithFilteredList();
+        });
 
         Future.microtask(() {
           final notificationsBox = _hiveManager.getNotificationBox(_loggedInNpub);
@@ -3397,7 +3421,6 @@ class DataService {
     _cacheCleanupTimer?.cancel();
     _interactionRefreshTimer?.cancel();
 
-    // Clear interaction fetch cache to free memory
     _lastInteractionFetch.clear();
     print('[DataService] Cleared interaction fetch cache');
 
@@ -3460,48 +3483,36 @@ class DataService {
     return await getCachedUserProfile(npub);
   }
 
-  // Cache to track when we last fetched interactions for each note
   final Map<String, DateTime> _lastInteractionFetch = {};
-  static const Duration _interactionFetchCooldown = Duration(minutes: 2);
 
-  Future<void> fetchInteractionsForEvents(List<String> eventIds) async {
+  Future<void> fetchInteractionsForEvents(List<String> eventIds, {bool forceLoad = false}) async {
     if (_isClosed || eventIds.isEmpty) return;
 
-    print('[DataService] Smart interaction fetching for ${eventIds.length} visible notes only');
+    if (!forceLoad) {
+      print('[DataService] Automatic interaction fetching disabled - use forceLoad=true for manual fetching');
+      return;
+    }
+
+    print('[DataService] Manual interaction fetching for ${eventIds.length} notes');
 
     final now = DateTime.now();
     final noteIdsToFetch = <String>[];
 
     for (final eventId in eventIds) {
-      // Check if we've recently fetched interactions for this note
       final lastFetch = _lastInteractionFetch[eventId];
-      if (lastFetch != null && now.difference(lastFetch) < _interactionFetchCooldown) {
-        continue; // Skip if recently fetched
+      if (lastFetch != null && now.difference(lastFetch) < const Duration(seconds: 5)) {
+        continue;
       }
 
-      // Check if note has any existing interactions (even partial)
-      final hasAnyInteractions = reactionsMap[eventId]?.isNotEmpty == true ||
-          repliesMap[eventId]?.isNotEmpty == true ||
-          repostsMap[eventId]?.isNotEmpty == true ||
-          zapsMap[eventId]?.isNotEmpty == true;
-
-      // For new notes or notes without interactions, always fetch
-      // For notes with some interactions, only fetch if cooldown has passed
-      if (!hasAnyInteractions || lastFetch == null) {
-        noteIdsToFetch.add(eventId);
-        _lastInteractionFetch[eventId] = now;
-      }
+      noteIdsToFetch.add(eventId);
+      _lastInteractionFetch[eventId] = now;
     }
 
     if (noteIdsToFetch.isNotEmpty) {
       await _fetchVisibleNotesInteractions(noteIdsToFetch);
-      print(
-          '[DataService] Fetched interactions for ${noteIdsToFetch.length} new/updated visible notes (${eventIds.length - noteIdsToFetch.length} skipped due to recent fetch)');
-    } else {
-      print('[DataService] No new interactions needed for visible notes - all recently fetched');
+      print('[DataService] Manual interaction fetching completed for ${noteIdsToFetch.length} notes');
     }
 
-    // Cleanup old fetch timestamps to prevent memory bloat
     if (_lastInteractionFetch.length > 1000) {
       final cutoffTime = now.subtract(const Duration(hours: 1));
       _lastInteractionFetch.removeWhere((key, timestamp) => timestamp.isBefore(cutoffTime));
@@ -3512,36 +3523,69 @@ class DataService {
     if (_isClosed || eventIds.isEmpty) return;
 
     try {
-      print('[DataService] Optimized fetching for ${eventIds.length} visible notes with intelligent batching');
+      print('[DataService] Manual interaction fetching for ${eventIds.length} notes with intelligent batching');
 
-      // Smaller, more frequent batches for visible notes to get faster UI updates
-      const batchSize = 8;
+      const batchSize = 12;
       for (int i = 0; i < eventIds.length; i += batchSize) {
         final batch = eventIds.skip(i).take(batchSize).toList();
 
-        // Use microtasks for non-blocking execution
         final futures = [
-          Future.microtask(() => _fetchReactionsForBatch(batch)),
-          Future.microtask(() => _fetchRepliesForBatch(batch)),
-          Future.microtask(() => _fetchRepostsForBatch(batch)),
-          Future.microtask(() => _fetchZapsForBatch(batch)),
+          _fetchReactionsForBatch(batch),
+          _fetchRepliesForBatch(batch),
+          _fetchRepostsForBatch(batch),
+          _fetchZapsForBatch(batch),
         ];
 
-        // Don't wait for all to complete - fire and continue
-        Future.wait(futures, eagerError: false).catchError((e) {
+        await Future.wait(futures, eagerError: false).catchError((e) {
           print('[DataService] Batch ${i ~/ batchSize + 1} error: $e');
         });
 
-        // Minimal delay between batches for smooth user experience
         if (i + batchSize < eventIds.length) {
-          await Future.delayed(const Duration(milliseconds: 15));
+          await Future.delayed(const Duration(milliseconds: 5));
         }
       }
 
-      print(
-          '[DataService] Launched interaction fetches for ${eventIds.length} visible notes in ${(eventIds.length / batchSize).ceil()} batches');
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      await _updateNoteCounts(eventIds);
+      await _updateInteractionsProvider();
+
+      _hasPendingUiUpdate = true;
+      Future.microtask(() {
+        notesNotifier.value = notesNotifier.notes;
+        profilesNotifier.value = {
+          for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
+        };
+      });
+
+      print('[DataService] Manual interaction fetching completed for ${eventIds.length} notes with UI update');
     } catch (e) {
-      print('[DataService] Error in optimized visible notes interaction fetching: $e');
+      print('[DataService] Error in manual interaction fetching: $e');
+    }
+  }
+
+  Future<void> _updateNoteCounts(List<String> eventIds) async {
+    for (final eventId in eventIds) {
+      final note = notes.firstWhereOrNull((n) => n.id == eventId);
+      if (note != null) {
+        note.reactionCount = reactionsMap[eventId]?.length ?? 0;
+        note.replyCount = repliesMap[eventId]?.length ?? 0;
+        note.repostCount = repostsMap[eventId]?.length ?? 0;
+        note.zapAmount = zapsMap[eventId]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
+
+        if (reactionsMap[eventId] != null) {
+          InteractionsProvider.instance.updateReactions(eventId, reactionsMap[eventId]!);
+        }
+        if (repliesMap[eventId] != null) {
+          InteractionsProvider.instance.updateReplies(eventId, repliesMap[eventId]!);
+        }
+        if (repostsMap[eventId] != null) {
+          InteractionsProvider.instance.updateReposts(eventId, repostsMap[eventId]!);
+        }
+        if (zapsMap[eventId] != null) {
+          InteractionsProvider.instance.updateZaps(eventId, zapsMap[eventId]!);
+        }
+      }
     }
   }
 

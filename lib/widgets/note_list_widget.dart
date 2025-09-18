@@ -4,19 +4,28 @@ import 'dart:async';
 import 'dart:math' as math;
 import '../providers/notes_list_provider.dart';
 import '../providers/interactions_provider.dart';
+import '../providers/media_provider.dart';
 import '../services/data_service.dart';
 import '../services/cache_service.dart';
 import '../theme/theme_manager.dart';
 import 'note_widget.dart';
+import 'grid_view_widget.dart';
+
+enum NoteViewMode { text, grid }
 
 class NoteListWidget extends StatefulWidget {
-  const NoteListWidget({super.key});
+  final NoteViewMode viewMode;
+
+  const NoteListWidget({
+    super.key,
+    this.viewMode = NoteViewMode.text,
+  });
 
   @override
   State<NoteListWidget> createState() => _NoteListWidgetState();
 }
 
-class _NoteListWidgetState extends State<NoteListWidget> {
+class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAliveClientMixin<NoteListWidget>, WidgetsBindingObserver {
   late final ScrollController _scrollController;
   double _savedScrollPosition = 0.0;
   bool _isUserScrolling = false;
@@ -30,26 +39,158 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   int _lastNotesLength = 0;
 
   double _lastScrollPosition = 0;
-  int _lastScrollTime = 0; // Use milliseconds since epoch for better performance
+  int _lastScrollTime = 0;
   static const double _scrollThreshold = 10.0;
-  int _scrollDebounceInterval = 16; // milliseconds
+  int _scrollDebounceInterval = 16;
+
+  bool _isNavigatedAway = false;
+  Timer? _navigationStateTimer;
+  final Map<String, dynamic> _persistentMediaCache = {};
+  static final Map<String, double> _globalScrollPositions = {};
+
+  bool _wantKeepAlive = true;
+
+  @override
+  bool get wantKeepAlive => _wantKeepAlive;
 
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController(keepScrollOffset: true);
+    WidgetsBinding.instance.addObserver(this);
+
+    _initializeScrollController();
     _setupScrollListener();
+    _restoreNavigationState();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<NotesListProvider>();
 
       if (provider.dataType == DataType.profile) {
         _interactionFetchDelay = const Duration(milliseconds: 80);
-        _scrollDebounceInterval = 12; // milliseconds
+        _scrollDebounceInterval = 12;
       }
 
       provider.fetchInitialNotes();
+      _preloadCriticalMedia();
     });
+  }
+
+  void _initializeScrollController() {
+    final provider = context.read<NotesListProvider>();
+    final scrollKey = '${provider.npub}_${provider.dataType.name}';
+    final savedPosition = _globalScrollPositions[scrollKey] ?? 0.0;
+
+    _scrollController = ScrollController(
+      keepScrollOffset: true,
+      initialScrollOffset: savedPosition,
+    );
+    _savedScrollPosition = savedPosition;
+
+    debugPrint('[NoteListWidget] Initialized scroll controller with position: $savedPosition');
+  }
+
+  void _restoreNavigationState() {
+    final provider = context.read<NotesListProvider>();
+    final cacheKey = '${provider.npub}_${provider.dataType.name}';
+
+    if (_persistentMediaCache.containsKey(cacheKey)) {
+      final cacheData = _persistentMediaCache[cacheKey] as Map<String, dynamic>?;
+      if (cacheData != null) {
+        _visibleNoteIds.addAll((cacheData['visibleNoteIds'] as List<dynamic>? ?? []).cast<String>());
+        debugPrint('[NoteListWidget] Restored ${_visibleNoteIds.length} visible note IDs from cache');
+      }
+    }
+  }
+
+  void _preloadCriticalMedia() {
+    final provider = context.read<NotesListProvider>();
+    if (provider.notes.isNotEmpty) {
+      final criticalNotes = provider.notes.take(5).toList();
+      MediaProvider.instance.cacheImagesFromVisibleNotes(criticalNotes);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+
+    switch (state) {
+      case AppLifecycleState.paused:
+      case AppLifecycleState.inactive:
+        _handleNavigationAway();
+        break;
+      case AppLifecycleState.resumed:
+        _handleNavigationReturn();
+        break;
+      case AppLifecycleState.detached:
+        break;
+      case AppLifecycleState.hidden:
+        break;
+    }
+  }
+
+  void _handleNavigationAway() {
+    _isNavigatedAway = true;
+    _persistScrollPosition();
+    _persistMediaState();
+
+    _wantKeepAlive = true;
+
+    debugPrint('[NoteListWidget] Navigation away detected, state preserved');
+  }
+
+  void _handleNavigationReturn() {
+    if (_isNavigatedAway) {
+      _isNavigatedAway = false;
+
+      _restoreScrollPosition();
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scheduleInteractionFetch();
+      });
+
+      debugPrint('[NoteListWidget] Navigation return detected, state restored');
+    }
+  }
+
+  void _persistScrollPosition() {
+    if (_scrollController.hasClients) {
+      final provider = context.read<NotesListProvider>();
+      final scrollKey = '${provider.npub}_${provider.dataType.name}';
+      final currentPosition = _scrollController.position.pixels;
+
+      _globalScrollPositions[scrollKey] = currentPosition;
+      _savedScrollPosition = currentPosition;
+
+      debugPrint('[NoteListWidget] Persisted scroll position: $currentPosition for key: $scrollKey');
+    }
+  }
+
+  void _persistMediaState() {
+    final provider = context.read<NotesListProvider>();
+    final cacheKey = '${provider.npub}_${provider.dataType.name}';
+
+    _persistentMediaCache[cacheKey] = {
+      'visibleNoteIds': _visibleNoteIds.toList(),
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
+  }
+
+  void _restoreScrollPosition() {
+    if (_scrollController.hasClients && _savedScrollPosition > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (_scrollController.hasClients && mounted && !_isUserScrolling) {
+            final targetPosition = _savedScrollPosition.clamp(0.0, _scrollController.position.maxScrollExtent);
+
+            if ((_scrollController.position.pixels - targetPosition).abs() > 5.0) {
+              _scrollController.jumpTo(targetPosition);
+              debugPrint('[NoteListWidget] Restored scroll position to $targetPosition');
+            }
+          }
+        });
+      });
+    }
   }
 
   void _setupScrollListener() {
@@ -57,7 +198,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       final currentPosition = _scrollController.position.pixels;
       final nowMillis = DateTime.now().millisecondsSinceEpoch;
 
-      // Simplified throttling using milliseconds
       final shouldThrottle =
           (currentPosition - _lastScrollPosition).abs() < _scrollThreshold && (nowMillis - _lastScrollTime) < _scrollDebounceInterval;
 
@@ -68,19 +208,40 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         if (_scrollController.position.isScrollingNotifier.value) {
           _isUserScrolling = true;
           _savedScrollPosition = currentPosition;
+
+          Timer(const Duration(milliseconds: 200), () {
+            if (!_isNavigatedAway && mounted) {
+              _persistScrollPosition();
+            }
+          });
         }
+
+        Timer(const Duration(milliseconds: 500), () {
+          if (mounted) {
+            _isUserScrolling = false;
+          }
+        });
 
         final provider = context.read<NotesListProvider>();
 
-        // Check for load more with optimized threshold
-        final threshold = provider.dataType == DataType.profile ? 0.85 : 0.9;
-        if (currentPosition >= _scrollController.position.maxScrollExtent * threshold) {
+        // Lower threshold to trigger earlier
+        final threshold = provider.dataType == DataType.profile ? 0.75 : 0.8;
+        final maxScrollExtent = _scrollController.position.maxScrollExtent;
+
+        // Additional check: also trigger if we're within 200 pixels of the bottom
+        final isNearBottom = (maxScrollExtent - currentPosition) < 200;
+
+        if ((currentPosition >= maxScrollExtent * threshold || isNearBottom) && maxScrollExtent > 0) {
           if (!provider.isLoadingMore) {
+            print(
+                '[NoteListWidget] Triggering fetchMoreNotes - currentPosition: $currentPosition, maxScrollExtent: $maxScrollExtent, threshold: $threshold');
             provider.fetchMoreNotes();
           }
         }
 
-        _scheduleInteractionFetch();
+        if (!_isNavigatedAway) {
+          _scheduleInteractionFetch();
+        }
       }
     });
   }
@@ -93,42 +254,65 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   }
 
   void _fetchInteractionsForVisibleNotes() {
-    if (!mounted || !_scrollController.hasClients) return;
+    if (!mounted || !_scrollController.hasClients || _isNavigatedAway) return;
 
     final provider = context.read<NotesListProvider>();
     final visibleNoteIds = _getVisibleNoteIds();
 
-    // Update InteractionsProvider with current visible notes
     InteractionsProvider.instance.updateVisibleNotes(visibleNoteIds);
 
     final newVisibleNotes = visibleNoteIds.difference(_visibleNoteIds);
     if (newVisibleNotes.isNotEmpty) {
-      // Only fetch for truly new visible notes to avoid redundant operations
       provider.fetchInteractionsForNotes(newVisibleNotes.toList());
       provider.fetchProfilesForVisibleNotes(newVisibleNotes.toList());
+
+      final visibleNotes = provider.notes.where((note) => newVisibleNotes.contains(note.id)).toList();
+      if (visibleNotes.isNotEmpty) {
+        MediaProvider.instance.cacheImagesFromVisibleNotes(visibleNotes);
+
+        _persistCriticalMediaForNavigation(visibleNotes);
+      }
+
       _visibleNoteIds.addAll(newVisibleNotes);
 
-      print(
-          '[NoteListWidget] Processing ${newVisibleNotes.length} newly visible notes (${visibleNoteIds.length - newVisibleNotes.length} already tracked)');
+      print('[NoteListWidget] Processing ${newVisibleNotes.length} newly visible notes (automatic interaction + media loading enabled)');
     }
 
-    // Clean up no longer visible notes from tracking
     final removedNotes = _visibleNoteIds.difference(visibleNoteIds);
     if (removedNotes.isNotEmpty) {
       _visibleNoteIds.retainWhere((id) => visibleNoteIds.contains(id));
       print('[NoteListWidget] Stopped tracking ${removedNotes.length} notes that are no longer visible');
     }
 
-    // Optimize cache for current visible notes
     if (visibleNoteIds.isNotEmpty) {
       Future.microtask(() {
         try {
-          // Tell cache service to optimize for these visible notes
           CacheService.instance.optimizeForVisibleNotes(visibleNoteIds);
         } catch (e) {
           print('[NoteListWidget] Cache optimization error: $e');
         }
       });
+    }
+  }
+
+  void _persistCriticalMediaForNavigation(List<dynamic> visibleNotes) {
+    final provider = context.read<NotesListProvider>();
+    final cacheKey = '${provider.npub}_${provider.dataType.name}_media';
+
+    final mediaUrls = <String>[];
+    for (final note in visibleNotes.take(10)) {
+      final parsedContent = note.parsedContentLazy;
+      final noteMediaUrls = parsedContent['mediaUrls'] as List<String>? ?? [];
+      if (noteMediaUrls.isNotEmpty) {
+        mediaUrls.addAll(noteMediaUrls.where((url) => url.isNotEmpty));
+      }
+    }
+
+    if (mediaUrls.isNotEmpty) {
+      _persistentMediaCache[cacheKey] = {
+        'urls': mediaUrls,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      };
     }
   }
 
@@ -142,7 +326,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     final scrollPosition = _scrollController.position.pixels;
     final cacheThreshold = provider.dataType == DataType.profile ? 20.0 : 50.0;
 
-    // Use cached result if scroll position hasn't changed much
     if (_cachedVisibleNoteIds != null &&
         (scrollPosition - _lastCalculatedScrollPosition).abs() < cacheThreshold &&
         notes.length == _lastNotesLength) {
@@ -151,7 +334,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
     final viewportHeight = _scrollController.position.viewportDimension;
 
-    // Optimized buffer calculation
     final bufferMultiplier = provider.dataType == DataType.profile ? 0.4 : 0.3;
     final bufferSize = viewportHeight * bufferMultiplier;
     final visibleStart = math.max(0.0, scrollPosition - bufferSize);
@@ -159,12 +341,10 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
     final visibleNoteIds = <String>{};
 
-    // More accurate item height estimation
     final estimatedItemHeight = provider.dataType == DataType.profile ? viewportHeight / 9 : viewportHeight / 7;
     final startIndex = (visibleStart / estimatedItemHeight).floor().clamp(0, notes.length - 1);
     final endIndex = (visibleEnd / estimatedItemHeight).ceil().clamp(startIndex, notes.length - 1);
 
-    // Limit maximum visible items for performance
     final maxVisibleItems = provider.dataType == DataType.profile ? 60 : 40;
     final actualEndIndex = math.min(endIndex, startIndex + maxVisibleItems - 1);
 
@@ -179,31 +359,35 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     return visibleNoteIds;
   }
 
-  void _preserveScrollPosition() {
-    if (_scrollController.hasClients && !_isUserScrolling && !_scrollController.position.isScrollingNotifier.value) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients && _savedScrollPosition > 0) {
-          final targetPosition = _savedScrollPosition.clamp(0.0, _scrollController.position.maxScrollExtent);
-
-          // Only jump if difference is significant enough to matter
-          if ((targetPosition - _scrollController.position.pixels).abs() > 5.0) {
-            _scrollController.jumpTo(targetPosition);
-          }
-        }
+  void _scheduleNavigationStateCleanup() {
+    _navigationStateTimer?.cancel();
+    _navigationStateTimer = Timer(const Duration(minutes: 10), () {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      _persistentMediaCache.removeWhere((key, value) {
+        final timestamp = value['timestamp'] as int? ?? 0;
+        return (now - timestamp) > Duration(minutes: 30).inMilliseconds;
       });
-    }
 
-    // Shorter delay for better responsiveness
-    Timer(const Duration(milliseconds: 30), () {
-      _isUserScrolling = false;
+      if (_globalScrollPositions.length > 20) {
+        _globalScrollPositions.clear();
+      }
     });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _interactionFetchTimer?.cancel();
+    _navigationStateTimer?.cancel();
+
+    _persistScrollPosition();
+    _persistMediaState();
+
     _scrollController.dispose();
     _clearCaches();
+
+    _scheduleNavigationStateCleanup();
+
     super.dispose();
   }
 
@@ -214,9 +398,11 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Selector<NotesListProvider, ({List<dynamic> notes, bool isLoadingMore, bool hasError, String? errorMessage})>(
+    super.build(context);
+    return Selector<NotesListProvider, ({List<dynamic> notes, bool isLoading, bool isLoadingMore, bool hasError, String? errorMessage})>(
       selector: (_, provider) => (
         notes: provider.notes,
+        isLoading: provider.isLoading,
         isLoadingMore: provider.isLoadingMore,
         hasError: provider.hasError,
         errorMessage: provider.errorMessage,
@@ -226,21 +412,51 @@ class _NoteListWidgetState extends State<NoteListWidget> {
           return _buildErrorState(data.errorMessage ?? 'Unknown error');
         }
 
-        if (data.notes.isEmpty) {
-          return _buildLoadingState();
+        if (data.notes.isNotEmpty) {
+          if (widget.viewMode == NoteViewMode.grid) {
+            return const GridViewWidget();
+          } else {
+            return _buildNotesList(data.notes, data.isLoadingMore);
+          }
         }
 
-        return _buildNotesList(data.notes, data.isLoadingMore);
+        return _buildEmptyState();
       },
     );
   }
 
-  Widget _buildLoadingState() {
-    return const SliverToBoxAdapter(
+  Widget _buildEmptyState() {
+    return SliverToBoxAdapter(
       child: Center(
         child: Padding(
-          padding: EdgeInsets.all(32.0),
-          child: CircularProgressIndicator(),
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.article_outlined,
+                size: 64,
+                color: context.colors.textSecondary,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No notes available',
+                style: TextStyle(
+                  color: context.colors.textSecondary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Try refreshing or check back later',
+                style: TextStyle(
+                  color: context.colors.textTertiary,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -274,14 +490,10 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   Widget _buildNotesList(List<dynamic> notes, bool isLoadingMore) {
     final noteCount = notes.length;
 
-    // Simplified item count calculation
-    int itemCount = (noteCount * 2) - 1; // notes + dividers
-    if (isLoadingMore) {
-      itemCount++;
-    }
-
-    if (!isLoadingMore) {
-      _preserveScrollPosition();
+    // Add extra item for loading indicator when loading more
+    int itemCount = (noteCount * 2) - 1;
+    if (isLoadingMore && noteCount > 0) {
+      itemCount += 1;
     }
 
     return SliverList.builder(
@@ -290,8 +502,20 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       addAutomaticKeepAlives: true,
       addRepaintBoundaries: true,
       itemBuilder: (context, index) {
+        // Show loading indicator at the bottom when loading more
         if (isLoadingMore && index == itemCount - 1) {
-          return const _LoadingIndicator();
+          return Container(
+            padding: const EdgeInsets.all(20),
+            alignment: Alignment.center,
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: context.colors.textSecondary,
+              ),
+            ),
+          );
         }
 
         if (index.isOdd) {
@@ -311,18 +535,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
           noteIndex: noteIndex,
         );
       },
-    );
-  }
-}
-
-class _LoadingIndicator extends StatelessWidget {
-  const _LoadingIndicator();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.all(16.0),
-      child: Center(child: CircularProgressIndicator()),
     );
   }
 }
@@ -348,19 +560,16 @@ class _OptimizedNoteItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Selector<NotesListProvider, ({DataService dataService, String npub})>(
+    return Selector<NotesListProvider, ({DataService dataService, String currentUserNpub})>(
       selector: (_, provider) => (
         dataService: provider.dataService,
-        npub: provider.npub,
+        currentUserNpub: provider.currentUserNpub,
       ),
       builder: (context, data, child) {
         return NoteWidget(
           note: note,
-          reactionCount: note.reactionCount,
-          replyCount: note.replyCount,
-          repostCount: note.repostCount,
           dataService: data.dataService,
-          currentUserNpub: data.npub,
+          currentUserNpub: data.currentUserNpub,
           notesNotifier: data.dataService.notesNotifier,
           profiles: const {},
           isSmallView: true,
@@ -376,6 +585,7 @@ class NoteListWidgetFactory {
     required DataType dataType,
     DataService? sharedDataService,
     String? scrollRestorationId,
+    NoteViewMode viewMode = NoteViewMode.text,
   }) {
     return ChangeNotifierProvider(
       create: (context) => NotesListProvider(
@@ -383,7 +593,7 @@ class NoteListWidgetFactory {
         dataType: dataType,
         sharedDataService: sharedDataService,
       ),
-      child: const NoteListWidget(),
+      child: NoteListWidget(viewMode: viewMode),
     );
   }
 }

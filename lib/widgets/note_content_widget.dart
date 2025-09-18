@@ -9,11 +9,14 @@ import 'package:qiqstr/widgets/quote_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/theme_manager.dart';
 
+enum NoteContentSize { small, big }
+
 class NoteContentWidget extends StatefulWidget {
   final Map<String, dynamic> parsedContent;
   final DataService dataService;
   final void Function(String mentionId) onNavigateToMentionProfile;
   final void Function(String noteId)? onShowMoreTap;
+  final NoteContentSize size;
 
   const NoteContentWidget({
     super.key,
@@ -21,6 +24,7 @@ class NoteContentWidget extends StatefulWidget {
     required this.dataService,
     required this.onNavigateToMentionProfile,
     this.onShowMoreTap,
+    this.size = NoteContentSize.small,
   });
 
   @override
@@ -67,7 +71,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> with AutomaticKee
     return widget.dataService.resolveMentions(mentionIds);
   }
 
-  double get _fontSize => 16.0;
+  double get _fontSize => widget.size == NoteContentSize.big ? 18.0 : 16.0;
 
   @override
   Widget build(BuildContext context) {
@@ -187,7 +191,7 @@ class _RichTextContentState extends State<_RichTextContent> with AutomaticKeepAl
   }
 
   TextStyle _getCachedTextStyle(String key, Color color, {FontWeight? fontWeight}) {
-    final cacheKey = '$key-$color-$fontWeight';
+    final cacheKey = '$key-$color-$fontWeight-$_currentFontSize';
     return _textStyleCache.putIfAbsent(
         cacheKey,
         () => TextStyle(

@@ -82,7 +82,7 @@ class BatchProcessingService {
         await _networkService.broadcastRequest(request);
 
         if (i + batchSize < eventIds.length) {
-          await Future.delayed(const Duration(milliseconds: 50));
+          await Future.delayed(const Duration(milliseconds: 10));
         }
       }
 
@@ -98,20 +98,19 @@ class BatchProcessingService {
   final Set<String> _fetchedReposts = {};
   final Set<String> _fetchedZaps = {};
 
+  // ENABLED: Automatic interaction fetching for visible notes for better UX
+  // Interactions will be fetched for notes visible on screen to improve user experience
   Future<void> processVisibleNotesInteractions(List<String> visibleEventIds) async {
     if (_isClosed || visibleEventIds.isEmpty) return;
 
     try {
-      print('[BatchProcessingService] Smart processing for ${visibleEventIds.length} visible notes only');
-
-      // Filter out already fetched interactions to avoid duplicate requests
+      // Filter out already fetched interactions to avoid duplicates
       final needsReactions = visibleEventIds.where((id) => !_fetchedReactions.contains(id)).toList();
       final needsReplies = visibleEventIds.where((id) => !_fetchedReplies.contains(id)).toList();
       final needsReposts = visibleEventIds.where((id) => !_fetchedReposts.contains(id)).toList();
       final needsZaps = visibleEventIds.where((id) => !_fetchedZaps.contains(id)).toList();
 
-      // Only process if there are new interactions needed
-      const batchSize = 8; // Slightly larger batches for efficiency
+      const batchSize = 8;
 
       if (needsReactions.isNotEmpty) {
         await _processInteractionType(needsReactions, 'reaction', _fetchedReactions, batchSize);
@@ -129,10 +128,9 @@ class BatchProcessingService {
         await _processInteractionType(needsZaps, 'zap', _fetchedZaps, batchSize);
       }
 
-      print(
-          '[BatchProcessingService] Smart processing completed - avoided ${visibleEventIds.length - needsReactions.length} duplicate reaction fetches');
+      print('[BatchProcessingService] Fetched interactions for ${visibleEventIds.length} visible notes efficiently');
     } catch (e) {
-      print('[BatchProcessingService] Error in smart visible notes processing: $e');
+      print('[BatchProcessingService] Error processing visible notes interactions: $e');
     }
   }
 
@@ -146,9 +144,9 @@ class BatchProcessingService {
       // Mark as fetched to avoid duplicate requests
       fetchedCache.addAll(batch);
 
-      // Small delay between batches to prevent overwhelming the network
+      // Minimal delay between batches for maximum speed
       if (i + batchSize < eventIds.length) {
-        await Future.delayed(const Duration(milliseconds: 20));
+        await Future.delayed(const Duration(milliseconds: 5));
       }
     }
   }
@@ -159,6 +157,43 @@ class BatchProcessingService {
     _fetchedReposts.clear();
     _fetchedZaps.clear();
     print('[BatchProcessingService] Cleared visible notes interaction cache');
+  }
+
+  // Method to manually fetch interactions for specific notes (e.g., for thread page)
+  Future<void> fetchInteractionsForNotes(List<String> eventIds, {bool force = false}) async {
+    if (_isClosed || eventIds.isEmpty) return;
+
+    try {
+      print('[BatchProcessingService] Manual interaction fetching for ${eventIds.length} notes');
+
+      // Filter out already fetched interactions unless forced
+      final needsReactions = force ? eventIds : eventIds.where((id) => !_fetchedReactions.contains(id)).toList();
+      final needsReplies = force ? eventIds : eventIds.where((id) => !_fetchedReplies.contains(id)).toList();
+      final needsReposts = force ? eventIds : eventIds.where((id) => !_fetchedReposts.contains(id)).toList();
+      final needsZaps = force ? eventIds : eventIds.where((id) => !_fetchedZaps.contains(id)).toList();
+
+      const batchSize = 8;
+
+      if (needsReactions.isNotEmpty) {
+        await _processInteractionType(needsReactions, 'reaction', _fetchedReactions, batchSize);
+      }
+
+      if (needsReplies.isNotEmpty) {
+        await _processInteractionType(needsReplies, 'reply', _fetchedReplies, batchSize);
+      }
+
+      if (needsReposts.isNotEmpty) {
+        await _processInteractionType(needsReposts, 'repost', _fetchedReposts, batchSize);
+      }
+
+      if (needsZaps.isNotEmpty) {
+        await _processInteractionType(needsZaps, 'zap', _fetchedZaps, batchSize);
+      }
+
+      print('[BatchProcessingService] Manual interaction fetching completed');
+    } catch (e) {
+      print('[BatchProcessingService] Error in manual interaction fetching: $e');
+    }
   }
 
   Future<void> _processVisibleBatchInteraction(List<String> eventIds, String interactionType) async {
@@ -197,38 +232,6 @@ class BatchProcessingService {
         print('[BatchProcessingService] Error in visible notes $interactionType processing: $e');
       }
     });
-  }
-
-  Future<void> _processBatchInteraction(List<String> eventIds, String interactionType) async {
-    if (_isClosed || eventIds.isEmpty) return;
-
-    try {
-      String request;
-      switch (interactionType) {
-        case 'reaction':
-          final filter = NostrService.createReactionFilter(eventIds: eventIds, limit: 20);
-          request = NostrService.serializeRequest(NostrService.createRequest(filter));
-          break;
-        case 'reply':
-          final filter = NostrService.createReplyFilter(eventIds: eventIds, limit: 20);
-          request = NostrService.serializeRequest(NostrService.createRequest(filter));
-          break;
-        case 'repost':
-          final filter = NostrService.createRepostFilter(eventIds: eventIds, limit: 20);
-          request = NostrService.serializeRequest(NostrService.createRequest(filter));
-          break;
-        case 'zap':
-          final filter = NostrService.createZapFilter(eventIds: eventIds, limit: 20);
-          request = NostrService.serializeRequest(NostrService.createRequest(filter));
-          break;
-        default:
-          return;
-      }
-
-      await _networkService.broadcastRequest(request);
-    } catch (e) {
-      print('[BatchProcessingService] Error in _processBatchInteraction for $interactionType: $e');
-    }
   }
 
   void close() {

@@ -29,6 +29,7 @@ class NotificationProvider extends ChangeNotifier {
   UserProvider? _userProvider;
   bool _isInitialized = false;
   String? _errorMessage;
+  String? _currentUserNpub;
 
   List<NotificationModel> _notifications = [];
   List<dynamic> _displayNotifications = [];
@@ -72,6 +73,7 @@ class NotificationProvider extends ChangeNotifier {
     if (_isInitialized) return;
 
     try {
+      _currentUserNpub = npub;
       _dataService = dataService;
       _userProvider = userProvider;
 
@@ -131,7 +133,9 @@ class NotificationProvider extends ChangeNotifier {
 
       _performPeriodicCleanup();
 
-      final filtered = notificationsFromSource.where((n) => ['mention', 'reaction', 'repost', 'zap'].contains(n.type)).toList()
+      final filtered = notificationsFromSource
+          .where((n) => ['mention', 'reaction', 'repost', 'zap'].contains(n.type) && n.author != _currentUserNpub)
+          .toList()
         ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
       final limited = filtered.take(75).toList();

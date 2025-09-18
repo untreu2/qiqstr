@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 class AppColors {
   static const Color primary = Colors.white;
   static const Color secondary = Colors.grey;
-  static const Color accent = Color.fromARGB(255, 195, 60, 150);
+  static const Color accent = Color.fromARGB(255, 222, 169, 54);
 
-  static const Color background = Color.fromARGB(255, 25, 25, 25);
-  static const Color surface = Color.fromARGB(255, 25, 25, 25);
-  static const Color surfaceVariant = Color.fromARGB(255, 25, 25, 25);
+  static const Color background = Colors.black;
+  static const Color surface = Colors.black;
+  static const Color surfaceVariant = Colors.black;
 
   static const Color textPrimary = Colors.white;
   static const Color textSecondary = Colors.white70;
@@ -62,10 +62,10 @@ class AppColors {
 
   static const List<Color> backgroundGradient = [
     Colors.black,
-    Color(0xFF1A1A1A),
+    Colors.black,
   ];
 
-  static Color get cardBackground => Colors.grey.shade900.withOpacity(0.3);
+  static Color get cardBackground => Colors.black.withOpacity(0.3);
   static Color get cardBorder => Colors.grey.shade800;
   static Color get profileBorder => Colors.black;
   static Color get videoBorder => Colors.white.withOpacity(0.2);

@@ -37,12 +37,6 @@ class _HomeNavigatorState extends State<HomeNavigator> {
     NotificationPage(dataService: widget.dataService),
   ];
 
-  void _handleAction(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
-    );
-  }
-
   Widget _buildCustomBottomBar() {
     const items = [
       {'icon': 'assets/home_gap.svg', 'index': 0, 'type': 'svg'},

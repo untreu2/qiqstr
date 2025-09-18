@@ -1,19 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/note_model.dart';
 import '../models/user_model.dart';
 import '../services/data_service.dart';
 import '../theme/theme_manager.dart';
 import '../screens/thread_page.dart';
 import '../providers/user_provider.dart';
-import 'interaction_bar_widget.dart';
 import 'note_content_widget.dart';
-import 'profile_image_widget.dart';
+import 'interaction_bar_widget.dart';
 
 class NoteWidget extends StatefulWidget {
   final NoteModel note;
-  final int reactionCount;
-  final int replyCount;
-  final int repostCount;
   final DataService dataService;
   final String currentUserNpub;
   final ValueNotifier<List<NoteModel>> notesNotifier;
@@ -24,9 +21,6 @@ class NoteWidget extends StatefulWidget {
   const NoteWidget({
     super.key,
     required this.note,
-    required this.reactionCount,
-    required this.replyCount,
-    required this.repostCount,
     required this.dataService,
     required this.currentUserNpub,
     required this.notesNotifier,
@@ -49,11 +43,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   UserModel? _cachedAuthorUser;
   UserModel? _cachedReposterUser;
 
-  bool _isReactionGlowing = false;
-  bool _isReplyGlowing = false;
-  bool _isRepostGlowing = false;
-  bool _isZapGlowing = false;
-
   bool _isDisposed = false;
 
   @override
@@ -72,11 +61,9 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     final authorUser = UserProvider.instance.getUserOrDefault(widget.note.author);
     final reposterUser = widget.note.repostedBy != null ? UserProvider.instance.getUserOrDefault(widget.note.repostedBy!) : null;
 
-    if (_cachedAuthorUser?.profileImage != authorUser.profileImage ||
-        _cachedAuthorUser?.name != authorUser.name ||
+    if (_cachedAuthorUser?.name != authorUser.name ||
         _cachedAuthorUser?.nip05 != authorUser.nip05 ||
         _cachedAuthorUser?.nip05Verified != authorUser.nip05Verified ||
-        (_cachedReposterUser?.profileImage != reposterUser?.profileImage) ||
         (_cachedReposterUser?.name != reposterUser?.name)) {
       setState(() {
         _cachedAuthorUser = authorUser;
@@ -320,6 +307,49 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     );
   }
 
+  Widget _buildProfileImage({
+    required String imageUrl,
+    required double radius,
+    required dynamic colors,
+  }) {
+    if (imageUrl.isEmpty) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: colors.surfaceTransparent,
+        child: Icon(
+          Icons.person,
+          size: radius,
+          color: colors.textSecondary,
+        ),
+      );
+    }
+
+    return CircleAvatar(
+      radius: radius,
+      backgroundColor: colors.surfaceTransparent,
+      child: ClipOval(
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
+          width: radius * 2,
+          height: radius * 2,
+          fit: BoxFit.cover,
+          fadeInDuration: Duration.zero,
+          fadeOutDuration: Duration.zero,
+          placeholder: (context, url) => Icon(
+            Icons.person,
+            size: radius,
+            color: colors.textSecondary,
+          ),
+          errorWidget: (context, url, error) => Icon(
+            Icons.person,
+            size: radius,
+            color: colors.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -354,26 +384,31 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                     children: [
                       Padding(
                         padding: widget.note.isRepost ? const EdgeInsets.only(top: 8, left: 10) : const EdgeInsets.only(top: 8),
-                        child: ProfileImageHelper.medium(
-                          imageUrl: authorUser.profileImage,
-                          npub: authorUser.npub,
-                          backgroundColor: colors.surfaceTransparent,
+                        child: GestureDetector(
                           onTap: () => _navigateToProfile(widget.note.author),
+                          child: _buildProfileImage(
+                            imageUrl: authorUser.profileImage,
+                            radius: 22,
+                            colors: colors,
+                          ),
                         ),
                       ),
                       if (widget.note.isRepost && reposterUser != null)
                         Positioned(
                           top: 0,
                           left: 0,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: colors.surface,
-                            ),
-                            child: ProfileImageHelper.small(
-                              imageUrl: reposterUser.profileImage,
-                              npub: reposterUser.npub,
-                              onTap: () => _navigateToProfile(reposterUser.npub),
+                          child: GestureDetector(
+                            onTap: () => _navigateToProfile(reposterUser.npub),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: colors.surface,
+                              ),
+                              child: _buildProfileImage(
+                                imageUrl: reposterUser.profileImage,
+                                radius: 12,
+                                colors: colors,
+                              ),
                             ),
                           ),
                         ),
@@ -386,23 +421,17 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                       children: [
                         _buildUserInfoWithReply(context, authorUser, colors),
                         _buildNoteContent(context, _parsedContent, widget.note),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: InteractionBar(
-                                noteId: widget.note.id,
-                                currentUserNpub: widget.currentUserNpub,
-                                dataService: widget.dataService,
-                                note: widget.note,
-                                isReactionGlowing: _isReactionGlowing,
-                                isReplyGlowing: _isReplyGlowing,
-                                isRepostGlowing: _isRepostGlowing,
-                                isZapGlowing: _isZapGlowing,
-                              ),
-                            ),
-                          ],
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: InteractionBar(
+                            noteId: widget.note.id,
+                            currentUserNpub: widget.currentUserNpub,
+                            dataService: widget.dataService,
+                            note: widget.note,
+                          ),
                         ),
+                        const SizedBox(height: 8),
                       ],
                     ),
                   ),

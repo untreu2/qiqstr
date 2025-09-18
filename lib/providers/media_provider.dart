@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../services/media_service.dart';
+import '../models/note_model.dart';
 
 class MediaProvider extends ChangeNotifier {
   static MediaProvider? _instance;
@@ -7,7 +8,22 @@ class MediaProvider extends ChangeNotifier {
 
   MediaProvider._internal() {
     _mediaService = MediaService();
+    _initialize();
     _schedulePeriodicCleanup();
+  }
+
+  static final Map<String, Set<String>> _navigationMediaCache = {};
+  static final Map<String, DateTime> _navigationCacheTimestamps = {};
+
+  Future<void> _initialize() async {
+    try {
+      await _mediaService.initialize();
+      _isInitialized = true;
+      debugPrint('[MediaProvider] MediaService initialized successfully');
+    } catch (e) {
+      _errorMessage = 'Failed to initialize MediaService: $e';
+      debugPrint('[MediaProvider] Initialization error: $e');
+    }
   }
 
   late final MediaService _mediaService;
@@ -57,21 +73,101 @@ class MediaProvider extends ChangeNotifier {
     }
   }
 
-  void cacheImagesFromNotes(List<Map<String, dynamic>> notes) {
-    final imageUrls = <String>{};
-
-    for (final note in notes) {
-      final content = note['content'] as String? ?? '';
-      if (content.length > 10000) continue;
-
-      final images = _extractImageUrls(content);
-      imageUrls.addAll(images);
-
-      if (imageUrls.length > 200) break;
+  void cacheImagesFromNotes(List<NoteModel> notes) {
+    if (!_isInitialized) {
+      Future.microtask(() async {
+        await _initialize();
+        cacheImagesFromNotes(notes);
+      });
+      return;
     }
 
-    if (imageUrls.isNotEmpty) {
-      cacheMediaUrls(imageUrls.toList(), priority: 2);
+    try {
+      _mediaService.cacheMediaFromNotes(notes, priority: 2);
+      _updateQueueSize();
+      _scheduleNotification();
+    } catch (e) {
+      _errorMessage = 'Failed to cache images from notes: $e';
+      debugPrint('[MediaProvider] Cache from notes error: $e');
+      notifyListeners();
+    }
+  }
+
+  void cacheImagesFromVisibleNotes(List<NoteModel> visibleNotes) {
+    if (visibleNotes.isEmpty) return;
+
+    try {
+      _mediaService.preloadVisibleNoteImages(visibleNotes);
+      _updateQueueSize();
+      _scheduleNotification();
+
+      _storeInNavigationCache(visibleNotes);
+    } catch (e) {
+      _errorMessage = 'Failed to cache visible note images: $e';
+      debugPrint('[MediaProvider] Visible notes cache error: $e');
+      notifyListeners();
+    }
+  }
+
+  void _storeInNavigationCache(List<NoteModel> notes) {
+    final mediaUrls = <String>{};
+    for (final note in notes) {
+      final parsedContent = note.parsedContentLazy;
+      final noteMediaUrls = parsedContent['mediaUrls'] as List<String>? ?? [];
+      if (noteMediaUrls.isNotEmpty) {
+        mediaUrls.addAll(noteMediaUrls.where((url) => url.isNotEmpty));
+      }
+    }
+
+    if (mediaUrls.isNotEmpty) {
+      final cacheKey = 'navigation_${DateTime.now().millisecondsSinceEpoch}';
+      _navigationMediaCache[cacheKey] = mediaUrls;
+      _navigationCacheTimestamps[cacheKey] = DateTime.now();
+
+      _cleanupNavigationCache();
+    }
+  }
+
+  void precacheForNavigation(String contextId, List<String> mediaUrls) {
+    if (mediaUrls.isEmpty) return;
+
+    try {
+      cacheMediaUrls(mediaUrls, priority: 0);
+
+      _navigationMediaCache[contextId] = mediaUrls.toSet();
+      _navigationCacheTimestamps[contextId] = DateTime.now();
+
+      debugPrint('[MediaProvider] Pre-cached ${mediaUrls.length} media items for navigation context: $contextId');
+    } catch (e) {
+      debugPrint('[MediaProvider] Navigation pre-cache error: $e');
+    }
+  }
+
+  bool isNavigationMediaCached(String contextId) {
+    final mediaUrls = _navigationMediaCache[contextId];
+    if (mediaUrls == null || mediaUrls.isEmpty) return false;
+
+    final cachedCount = mediaUrls.where((url) => isCached(url)).length;
+    return cachedCount >= (mediaUrls.length * 0.7);
+  }
+
+  void _cleanupNavigationCache() {
+    final now = DateTime.now();
+    final expiredKeys = <String>[];
+
+    _navigationCacheTimestamps.forEach((key, timestamp) {
+      if (now.difference(timestamp).inMinutes > 30) {
+        expiredKeys.add(key);
+      }
+    });
+
+    for (final key in expiredKeys) {
+      _navigationMediaCache.remove(key);
+      _navigationCacheTimestamps.remove(key);
+    }
+
+    if (expiredKeys.isNotEmpty) {
+      debugPrint('[MediaProvider] Cleaned up ${expiredKeys.length} expired navigation cache entries');
     }
   }
 
@@ -80,21 +176,6 @@ class MediaProvider extends ChangeNotifier {
     if (validUrls.isNotEmpty) {
       cacheMediaUrls(validUrls, priority: 3);
     }
-  }
-
-  List<String> _extractImageUrls(String content) {
-    final imageUrls = <String>[];
-    final urlPattern = RegExp(r'https?://[^\s]+\.(jpg|jpeg|png|gif|webp|bmp|svg|avif|heic|heif)', caseSensitive: false);
-    final matches = urlPattern.allMatches(content);
-
-    for (final match in matches) {
-      final url = match.group(0);
-      if (url != null) {
-        imageUrls.add(url);
-      }
-    }
-
-    return imageUrls;
   }
 
   bool isCached(String url) {
@@ -119,7 +200,7 @@ class MediaProvider extends ChangeNotifier {
 
   void clearFailedUrls() {
     try {
-      _mediaService.clearFailedUrls();
+      _mediaService.clearCache(clearFailed: true);
       notifyListeners();
     } catch (e) {
       _errorMessage = 'Failed to clear failed URLs: $e';
@@ -338,6 +419,23 @@ class MediaProvider extends ChangeNotifier {
   void dispose() {
     _isInitialized = false;
     _mediaService.dispose();
+
+    _navigationMediaCache.clear();
+    _navigationCacheTimestamps.clear();
+
     super.dispose();
+  }
+
+  Map<String, dynamic> getNavigationCacheStats() {
+    final totalUrls = _navigationMediaCache.values.fold<int>(0, (sum, urls) => sum + urls.length);
+    final cacheContexts = _navigationMediaCache.length;
+
+    return {
+      'totalCachedUrls': totalUrls,
+      'cacheContexts': cacheContexts,
+      'oldestCacheAge': _navigationCacheTimestamps.isEmpty
+          ? 0
+          : DateTime.now().difference(_navigationCacheTimestamps.values.reduce((a, b) => a.isBefore(b) ? a : b)).inMinutes,
+    };
   }
 }

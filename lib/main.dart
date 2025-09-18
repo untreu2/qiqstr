@@ -16,7 +16,6 @@ import 'providers/relay_provider.dart';
 import 'providers/network_provider.dart';
 import 'providers/media_provider.dart';
 import 'providers/notification_provider.dart';
-import 'providers/wallet_provider.dart';
 
 void main() {
   runZonedGuarded(() {
@@ -55,7 +54,6 @@ void main() {
           provider.ChangeNotifierProvider.value(value: NetworkProvider.instance),
           provider.ChangeNotifierProvider.value(value: MediaProvider.instance),
           provider.ChangeNotifierProvider.value(value: NotificationProvider.instance),
-          provider.ChangeNotifierProvider(create: (context) => WalletProvider()),
         ],
         child: const ProviderScope(
           child: QiqstrApp(home: SplashScreen()),

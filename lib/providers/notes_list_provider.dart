@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/note_model.dart';
 import '../services/data_service.dart';
 import '../services/data_service_manager.dart';
@@ -23,7 +24,11 @@ class NotesListProvider extends BaseProvider {
 
   bool _isInitialized = false;
 
-  // Cache for filtered notes to avoid recomputation
+  String? _currentUserNpub;
+
+  int _newNotesCount = 0;
+  List<String> _lastKnownNoteIds = [];
+
   List<NoteModel>? _cachedFilteredNotes;
   int _lastNotesLength = 0;
 
@@ -50,12 +55,17 @@ class NotesListProvider extends BaseProvider {
   String? get errorMessage => _errorMessage;
   bool get isEmpty => _filteredNotes.isEmpty && !_isLoading;
 
+  int get newNotesCount => _newNotesCount;
+  bool get hasNewNotes => _newNotesCount > 0;
+
+  String get currentUserNpub => _currentUserNpub ?? '';
+
   void _initialize() {
     dataService.notesNotifier.addListener(_onNotesChanged);
     _onNotesChanged();
+    _loadCurrentUserNpub();
 
     if (!_isInitialized) {
-      // Optimize initialization delays - much faster for profile, reasonable for feed
       final initDelay = dataType == DataType.profile ? const Duration(milliseconds: 50) : const Duration(milliseconds: 200);
 
       Timer(initDelay, () {
@@ -66,25 +76,53 @@ class NotesListProvider extends BaseProvider {
     }
   }
 
+  Future<void> _loadCurrentUserNpub() async {
+    try {
+      final storage = const FlutterSecureStorage();
+      _currentUserNpub = await storage.read(key: 'npub');
+      debugPrint('[NotesListProvider] Loaded current user npub: ${_currentUserNpub?.substring(0, 8)}...');
+    } catch (e) {
+      debugPrint('[NotesListProvider] Error loading current user npub: $e');
+    }
+  }
+
   void _onNotesChanged() {
     _notes = dataService.notesNotifier.value;
+    _detectNewNotes();
     _updateFilteredNotesProgressive();
   }
 
+  void _detectNewNotes() {
+    if (!_isInitialized || dataType != DataType.feed) return;
+
+    final newFilteredNotes = _notes.where((n) => !n.isReply || n.isRepost).toList();
+    final currentNoteIds = newFilteredNotes.map((n) => n.id).toList();
+
+    if (_lastKnownNoteIds.isNotEmpty) {
+      final newNoteIds = currentNoteIds.where((id) => !_lastKnownNoteIds.contains(id)).toList();
+      if (newNoteIds.isNotEmpty) {
+        _newNotesCount += newNoteIds.length;
+        print('[NotesListProvider] Detected ${newNoteIds.length} new notes (total pending: $_newNotesCount)');
+      }
+    }
+
+    _lastKnownNoteIds = currentNoteIds;
+  }
+
   void _updateFilteredNotesProgressive() {
-    // Only recompute if notes changed
     if (_cachedFilteredNotes == null || _notes.length != _lastNotesLength) {
       _cachedFilteredNotes = _notes.where((n) => !n.isReply || n.isRepost).toList();
       _lastNotesLength = _notes.length;
     }
 
-    _filteredNotes = _cachedFilteredNotes!;
+    if (_newNotesCount == 0) {
+      _filteredNotes = _cachedFilteredNotes!;
+    }
 
     if (_isInitialized) {
       notifyListeners();
     }
 
-    // Defer user profile loading to next frame
     if (_filteredNotes.isNotEmpty) {
       SchedulerBinding.instance.addPostFrameCallback((_) {
         _loadUserProfiles();
@@ -93,7 +131,6 @@ class NotesListProvider extends BaseProvider {
   }
 
   void _startPeriodicUpdates() {
-    // Only refresh data for feed, don't waste cycles calling notifyListeners
     if (dataType == DataType.feed) {
       createPeriodicTimer(const Duration(seconds: 20), (timer) {
         _refreshNewNotes();
@@ -109,6 +146,24 @@ class NotesListProvider extends BaseProvider {
     } catch (e) {
       handleError('refresh new notes', e);
     }
+  }
+
+  void loadNewNotes() {
+    if (_newNotesCount == 0) return;
+
+    print('[NotesListProvider] Loading $_newNotesCount new notes');
+
+    _filteredNotes = _cachedFilteredNotes ?? _notes.where((n) => !n.isReply || n.isRepost).toList();
+
+    _newNotesCount = 0;
+
+    _lastKnownNoteIds = _filteredNotes.map((n) => n.id).toList();
+
+    notifyListeners();
+
+    SchedulerBinding.instance.addPostFrameCallback((_) {
+      _loadUserProfiles();
+    });
   }
 
   Future<void> fetchInitialNotes() async {
@@ -131,22 +186,18 @@ class NotesListProvider extends BaseProvider {
         _setLoading(false);
       }
 
-      // Simplified background initialization
       Future.microtask(() async {
         try {
           if (dataType == DataType.profile) {
-            // Parallel initialization for profile
             await Future.wait([
               dataService.initializeHeavyOperations(),
               dataService.initializeConnections(),
             ], eagerError: false);
             debugPrint('[NotesListProvider] Profile: Parallel operations completed');
           } else {
-            // Sequential for feed with quick refresh
             await dataService.initializeHeavyOperations();
             await dataService.initializeConnections();
 
-            // Quick refresh after initialization
             createTimer(const Duration(milliseconds: 200), _refreshNewNotes);
             debugPrint('[NotesListProvider] Feed: Background operations completed');
           }
@@ -212,7 +263,6 @@ class NotesListProvider extends BaseProvider {
     }
 
     if (userNpubs.isNotEmpty) {
-      // Simplified user loading - no need for complex batching
       UserProvider.instance.loadUsers(userNpubs.toList()).catchError((e) {
         handleError('user profile load', e);
       });
@@ -221,7 +271,6 @@ class NotesListProvider extends BaseProvider {
     }
   }
 
-  // Track fetched interactions to avoid duplicate requests
   final Set<String> _fetchedInteractions = {};
   Timer? _interactionCleanupTimer;
 
@@ -229,7 +278,6 @@ class NotesListProvider extends BaseProvider {
     if (noteIds.isEmpty) return;
 
     try {
-      // Filter out already fetched interactions
       final newNoteIds = noteIds.where((id) => !_fetchedInteractions.contains(id)).toList();
 
       if (newNoteIds.isEmpty) {
@@ -237,20 +285,17 @@ class NotesListProvider extends BaseProvider {
         return;
       }
 
-      // Mark as fetched immediately to prevent duplicate requests
       _fetchedInteractions.addAll(newNoteIds);
 
-      // Use only the optimized data service method - no duplicate processing
-      await dataService.fetchInteractionsForEvents(newNoteIds);
+      await dataService.fetchInteractionsForEvents(newNoteIds, forceLoad: true);
 
       debugPrint(
           '[NotesListProvider] Fetched interactions for ${newNoteIds.length} new visible notes (${noteIds.length - newNoteIds.length} already cached)');
 
-      // Schedule cleanup of fetch tracking
       _scheduleInteractionCleanup();
     } catch (e) {
       handleError('fetching interactions for visible notes', e);
-      // Remove failed fetches from cache to retry later
+
       _fetchedInteractions.removeWhere((id) => noteIds.contains(id));
     }
   }
@@ -259,7 +304,6 @@ class NotesListProvider extends BaseProvider {
     _interactionCleanupTimer?.cancel();
     _interactionCleanupTimer = Timer(const Duration(minutes: 5), () {
       if (_fetchedInteractions.length > 500) {
-        // Keep only the most recent 300 to prevent memory bloat
         final recentNoteIds = _filteredNotes.take(300).map((note) => note.id).toSet();
         _fetchedInteractions.retainWhere((id) => recentNoteIds.contains(id));
         debugPrint('[NotesListProvider] Cleaned up interaction fetch cache: ${_fetchedInteractions.length} entries retained');
@@ -325,7 +369,6 @@ class NotesListProvider extends BaseProvider {
     dataService.notesNotifier.removeListener(_onNotesChanged);
     DataServiceManager.instance.releaseService(npub: npub, dataType: dataType);
 
-    // Clear caches and timers
     _cachedFilteredNotes = null;
     _fetchedInteractions.clear();
     _interactionCleanupTimer?.cancel();

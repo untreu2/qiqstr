@@ -106,7 +106,7 @@ class WebSocketManager {
   }
 
   void _startMessageProcessing() {
-    _messageProcessingTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
+    _messageProcessingTimer = Timer.periodic(const Duration(milliseconds: 10), (_) {
       Future.microtask(() => _processMessageQueue());
     });
   }
@@ -318,7 +318,7 @@ class WebSocketManager {
   Future<void> broadcast(String message) async {
     _messageQueue.add(message);
 
-    if (_messageQueue.length >= 10) {
+    if (_messageQueue.length >= 5) {
       _processMessageQueue();
     }
   }
@@ -355,7 +355,7 @@ class WebSocketManager {
     Future.microtask(() async {
       try {
         final messagesToSend = <String>[];
-        while (_messageQueue.isNotEmpty && messagesToSend.length < 3) {
+        while (_messageQueue.isNotEmpty && messagesToSend.length < 10) {
           messagesToSend.add(_messageQueue.removeFirst());
         }
 

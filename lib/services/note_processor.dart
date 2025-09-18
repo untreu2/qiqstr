@@ -211,7 +211,12 @@ class NoteProcessor {
         newNote.hasMedia = newNote.hasMediaLazy;
 
         if (!dataService.eventIds.contains(newNote.id)) {
-          _fetchProfilesOptimizedAsync(dataService, noteAuthor, isOuterEventRepost ? outerEventAuthor : null);
+          final profilesFetched = await _fetchProfilesAndValidate(dataService, noteAuthor, isOuterEventRepost ? outerEventAuthor : null);
+
+          if (!profilesFetched) {
+            _metrics.recordSkip('profile_fetch_failed');
+            return;
+          }
 
           dataService.notes.add(newNote);
           dataService.eventIds.add(newNote.id);
@@ -332,12 +337,12 @@ class NoteProcessor {
     return Future.microtask(() => _parseReplyTags(tags));
   }
 
-  static void _fetchProfilesOptimizedAsync(
+  static Future<bool> _fetchProfilesAndValidate(
     DataService dataService,
     String noteAuthor,
     String? repostedBy,
-  ) {
-    Future.microtask(() async {
+  ) async {
+    try {
       final authorsToFetch = <String>{noteAuthor};
       if (repostedBy != null) {
         authorsToFetch.add(repostedBy);
@@ -346,7 +351,33 @@ class NoteProcessor {
       _metrics.profilesFetched += authorsToFetch.length;
 
       await dataService.fetchProfilesBatch(authorsToFetch.toList());
-    });
+
+      final authorProfile = await dataService.getCachedUserProfile(noteAuthor);
+      if (authorProfile['name'] == 'Anonymous' &&
+          authorProfile['profileImage'] == '' &&
+          authorProfile['about'] == '' &&
+          authorProfile['nip05'] == '') {
+        print('[NoteProcessor] Note author profile not found: $noteAuthor');
+        return false;
+      }
+
+      if (repostedBy != null) {
+        final reposterProfile = await dataService.getCachedUserProfile(repostedBy);
+        if (reposterProfile['name'] == 'Anonymous' &&
+            reposterProfile['profileImage'] == '' &&
+            reposterProfile['about'] == '' &&
+            reposterProfile['nip05'] == '') {
+          print('[NoteProcessor] Reposter profile not found: $repostedBy');
+          return false;
+        }
+      }
+
+      print('[NoteProcessor] User profiles validated successfully for note');
+      return true;
+    } catch (e) {
+      print('[NoteProcessor] Error fetching/validating profiles: $e');
+      return false;
+    }
   }
 
   static void _saveNoteAsync(DataService dataService, NoteModel note) {

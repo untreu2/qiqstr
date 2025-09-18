@@ -7,7 +7,6 @@ import '../services/data_service.dart';
 import '../services/hive_manager.dart';
 import 'base_provider.dart';
 
-/// Optimized data structures for notes management
 class OptimizedNoteStorage {
   final SplayTreeSet<NoteNotifier> _sortedNotes;
   final Map<String, SplayTreeSet<NoteNotifier>> _authorIndex;
@@ -21,7 +20,6 @@ class OptimizedNoteStorage {
   void add(NoteNotifier notifier) {
     _sortedNotes.add(notifier);
 
-    // Batch index updates
     final note = notifier.note;
     _authorIndex.putIfAbsent(note.author, () => SplayTreeSet(_compareNotesDesc)).add(notifier);
 
@@ -124,7 +122,6 @@ class NotesProvider extends BaseProvider with CacheMixin<List<NoteNotifier>> {
   final HiveManager _hiveManager = HiveManager.instance;
   String? _currentNpub;
 
-  // Version tracking for cache invalidation
   int _dataVersion = 0;
 
   bool get isInitialized => _isInitialized;
@@ -294,8 +291,6 @@ class NotesProvider extends BaseProvider with CacheMixin<List<NoteNotifier>> {
 
   void updateNote(NoteModel note) {
     _addNoteToCache(note);
-    // Consider if this should also write to Hive. For now, it only updates in-memory.
-    // To persist, we would need to know the dataType or write to all boxes.
   }
 
   void updateNoteInteractionCounts(

@@ -6,6 +6,7 @@ import '../models/reply_model.dart';
 import '../models/repost_model.dart';
 import '../models/zap_model.dart';
 import '../services/hive_manager.dart';
+import '../services/data_service.dart';
 
 import 'package:rxdart/rxdart.dart';
 
@@ -23,10 +24,10 @@ class InteractionsProvider extends ChangeNotifier {
   final _repostStreamController = StreamController<String>.broadcast();
   final _zapStreamController = StreamController<String>.broadcast();
 
-  Stream<String> get reactionsStream => _reactionStreamController.stream.debounceTime(const Duration(milliseconds: 200));
-  Stream<String> get repliesStream => _replyStreamController.stream.debounceTime(const Duration(milliseconds: 200));
-  Stream<String> get repostsStream => _repostStreamController.stream.debounceTime(const Duration(milliseconds: 200));
-  Stream<String> get zapsStream => _zapStreamController.stream.debounceTime(const Duration(milliseconds: 200));
+  Stream<String> get reactionsStream => _reactionStreamController.stream.debounceTime(const Duration(milliseconds: 50));
+  Stream<String> get repliesStream => _replyStreamController.stream.debounceTime(const Duration(milliseconds: 50));
+  Stream<String> get repostsStream => _repostStreamController.stream.debounceTime(const Duration(milliseconds: 50));
+  Stream<String> get zapsStream => _zapStreamController.stream.debounceTime(const Duration(milliseconds: 50));
 
   final Map<String, List<ReactionModel>> _reactionsByNote = {};
   final Map<String, List<ReplyModel>> _repliesByNote = {};
@@ -40,6 +41,9 @@ class InteractionsProvider extends ChangeNotifier {
 
   bool _isInitialized = false;
   final HiveManager _hiveManager = HiveManager.instance;
+
+  final Set<String> _fetchedInteractionNotes = {};
+  final Map<String, DateTime> _lastManualFetch = {};
 
   Box<ReactionModel>? get _reactionsBox => _hiveManager.reactionsBox;
   Box<ReplyModel>? get _repliesBox => _hiveManager.repliesBox;
@@ -192,7 +196,6 @@ class InteractionsProvider extends ChangeNotifier {
   }
 
   Future<void> addZap(ZapModel zap) async {
-    // Remove any optimistic zaps for this note from this user when real zap arrives
     if (!zap.id.startsWith('optimistic_')) {
       _zapsByNote[zap.targetEventId]?.removeWhere((z) => z.sender == zap.sender && z.id.startsWith('optimistic_'));
     }
@@ -227,6 +230,8 @@ class InteractionsProvider extends ChangeNotifier {
     for (var id in noteIdsToUpdate) {
       _reactionStreamController.add(id);
     }
+
+    notifyListeners();
   }
 
   Future<void> addReplies(List<ReplyModel> replies) async {
@@ -245,6 +250,8 @@ class InteractionsProvider extends ChangeNotifier {
     for (var id in noteIdsToUpdate) {
       _replyStreamController.add(id);
     }
+
+    notifyListeners();
   }
 
   Future<void> addReposts(List<RepostModel> reposts) async {
@@ -263,6 +270,8 @@ class InteractionsProvider extends ChangeNotifier {
     for (var id in noteIdsToUpdate) {
       _repostStreamController.add(id);
     }
+
+    notifyListeners();
   }
 
   Future<void> addZaps(List<ZapModel> zaps) async {
@@ -281,19 +290,19 @@ class InteractionsProvider extends ChangeNotifier {
     for (var id in noteIdsToUpdate) {
       _zapStreamController.add(id);
     }
+
+    notifyListeners();
   }
 
   void updateVisibleNotes(Set<String> visibleNoteIds) {
     final oldVisibleCount = _visibleNoteIds.length;
     _visibleNoteIds = visibleNoteIds;
 
-    // Only log significant changes to avoid spam
     if ((visibleNoteIds.length - oldVisibleCount).abs() > 3) {
       print('[InteractionsProvider] Visible notes updated: ${visibleNoteIds.length} notes tracked for interactions');
     }
   }
 
-  /// Get interaction data only for currently visible notes
   Map<String, dynamic> getVisibleInteractionsData() {
     final visibleReactions = <String, List<ReactionModel>>{};
     final visibleReplies = <String, List<ReplyModel>>{};
@@ -355,16 +364,13 @@ class InteractionsProvider extends ChangeNotifier {
   }
 
   void updateZaps(String noteId, List<ZapModel> zaps) {
-    // Remove any optimistic zaps when real zaps arrive
     final realZaps = zaps.where((z) => !z.id.startsWith('optimistic_')).toList();
     final optimisticZaps = _zapsByNote[noteId]?.where((z) => z.id.startsWith('optimistic_')) ?? [];
 
-    // Remove optimistic zaps that have corresponding real zaps from the same sender
     final filteredOptimisticZaps = optimisticZaps.where((optimistic) {
       return !realZaps.any((real) => real.sender == optimistic.sender);
     }).toList();
 
-    // Combine real zaps with remaining optimistic zaps
     _zapsByNote[noteId] = [...realZaps, ...filteredOptimisticZaps];
 
     for (final zap in _zapsByNote[noteId]!) {
@@ -426,14 +432,13 @@ class InteractionsProvider extends ChangeNotifier {
   }
 
   void addOptimisticZap(String noteId, String userId, int amount) {
-    // Remove any existing optimistic zaps from this user for this note
     _zapsByNote[noteId]?.removeWhere((z) => z.sender == userId && z.id.startsWith('optimistic_'));
     _userZaps[userId]?.remove(noteId);
 
     final optimisticZap = ZapModel(
       id: 'optimistic_${DateTime.now().millisecondsSinceEpoch}',
       sender: userId,
-      recipient: '', // Will be filled when actual zap arrives
+      recipient: '',
       targetEventId: noteId,
       timestamp: DateTime.now(),
       bolt11: '',
@@ -479,8 +484,85 @@ class InteractionsProvider extends ChangeNotifier {
     };
   }
 
+  Future<void> fetchInteractionsForNote(String noteId) async {
+    await fetchInteractionsForNotes([noteId]);
+  }
+
+  Future<void> fetchInteractionsForNotes(List<String> noteIds) async {
+    if (!_isInitialized || noteIds.isEmpty) return;
+
+    final now = DateTime.now();
+    final notesToFetch = <String>[];
+
+    for (final noteId in noteIds) {
+      if (shouldFetchInteractions(noteId)) {
+        notesToFetch.add(noteId);
+        _lastManualFetch[noteId] = now;
+        _fetchedInteractionNotes.add(noteId);
+      }
+    }
+
+    if (notesToFetch.isNotEmpty) {
+      try {
+        print('[InteractionsProvider] Manually fetching interactions for ${notesToFetch.length} notes');
+
+        final dataService = DataService.instance;
+        await dataService.fetchInteractionsForEvents(notesToFetch, forceLoad: true);
+
+        print('[InteractionsProvider] Manual interaction fetching completed for ${notesToFetch.length} notes');
+
+        notifyListeners();
+
+        for (final noteId in notesToFetch) {
+          _reactionStreamController.add(noteId);
+          _replyStreamController.add(noteId);
+          _repostStreamController.add(noteId);
+          _zapStreamController.add(noteId);
+        }
+      } catch (e) {
+        print('[InteractionsProvider] Error in manual interaction fetching: $e');
+
+        for (final noteId in notesToFetch) {
+          _fetchedInteractionNotes.remove(noteId);
+          _lastManualFetch.remove(noteId);
+        }
+      }
+    } else {
+      print('[InteractionsProvider] No new interactions needed - all notes recently fetched');
+
+      notifyListeners();
+    }
+  }
+
+  bool shouldFetchInteractions(String noteId) {
+    final lastFetch = _lastManualFetch[noteId];
+    if (lastFetch != null) {
+      final timeSinceLastFetch = DateTime.now().difference(lastFetch);
+
+      if (timeSinceLastFetch < const Duration(seconds: 10)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  bool hasLoadedInteractions(String noteId) {
+    return _fetchedInteractionNotes.contains(noteId) ||
+        (_reactionsByNote[noteId]?.isNotEmpty ?? false) ||
+        (_repliesByNote[noteId]?.isNotEmpty ?? false) ||
+        (_repostsByNote[noteId]?.isNotEmpty ?? false) ||
+        (_zapsByNote[noteId]?.isNotEmpty ?? false);
+  }
+
+  void clearFetchTracking() {
+    _fetchedInteractionNotes.clear();
+    _lastManualFetch.clear();
+    print('[InteractionsProvider] Interaction fetch tracking cleared');
+  }
+
   void _startPeriodicUpdates() {
-    _periodicTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
+    _periodicTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       notifyListeners();
     });
   }
@@ -492,6 +574,8 @@ class InteractionsProvider extends ChangeNotifier {
     _replyStreamController.close();
     _repostStreamController.close();
     _zapStreamController.close();
+
+    clearFetchTracking();
 
     super.dispose();
   }
