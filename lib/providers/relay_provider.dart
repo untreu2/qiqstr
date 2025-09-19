@@ -105,16 +105,16 @@ class RelayProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> immediateBroadcast(String message) async {
+  Future<void> priorityBroadcast(String message) async {
     if (_socketManager == null) {
       throw Exception('Relay manager not initialized');
     }
 
     try {
-      await _socketManager!.immediateBroadcast(message);
+      await _socketManager!.priorityBroadcast(message);
     } catch (e) {
-      _errorMessage = 'Failed to immediate broadcast: $e';
-      debugPrint('[RelayProvider] Immediate broadcast error: $e');
+      _errorMessage = 'Failed to priority broadcast: $e';
+      debugPrint('[RelayProvider] Priority broadcast error: $e');
       notifyListeners();
       rethrow;
     }
@@ -126,7 +126,7 @@ class RelayProvider extends ChangeNotifier {
     }
 
     try {
-      await _socketManager!.immediateBroadcastToAll(message);
+      await _socketManager!.priorityBroadcastToAll(message);
     } catch (e) {
       _errorMessage = 'Failed to broadcast to all relays: $e';
       debugPrint('[RelayProvider] Broadcast to all error: $e');

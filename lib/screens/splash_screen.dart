@@ -40,18 +40,26 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _initializeAppAndNavigate() async {
-    final results = await Future.wait([
-      _performInitialization(),
-      Future.delayed(const Duration(seconds: 2)),
-    ]);
+    // Non-blocking initialization with delayed navigation
+    Map<String, dynamic>? initializationResult;
 
-    final initializationResult = results[0] as Map<String, dynamic>?;
+    Future.microtask(() async {
+      initializationResult = await _performInitialization();
+    });
+
+    // Wait for minimum splash time while initialization runs in background
+    await Future.delayed(const Duration(seconds: 2));
+
+    // Wait for initialization to complete if not already done
+    if (initializationResult == null) {
+      initializationResult = await _performInitialization();
+    }
 
     if (!mounted) return;
 
     if (initializationResult != null) {
-      final npub = initializationResult['npub'] as String;
-      final dataService = initializationResult['dataService'] as DataService;
+      final npub = initializationResult!['npub'] as String;
+      final dataService = initializationResult!['dataService'] as DataService;
 
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
@@ -85,21 +93,40 @@ class _SplashScreenState extends State<SplashScreen> {
       await _initializeHiveOptimized();
 
       final secureStorage = const FlutterSecureStorage();
-      final credentials = await Future.wait([
-        secureStorage.read(key: 'privateKey'),
-        secureStorage.read(key: 'npub'),
-      ]);
+      // Non-blocking credential retrieval
+      String? privateKey, npub;
+      Future.microtask(() async {
+        final credentialsFuture = Future.wait([
+          secureStorage.read(key: 'privateKey'),
+          secureStorage.read(key: 'npub'),
+        ]);
+        final credentials = await credentialsFuture;
+        privateKey = credentials[0];
+        npub = credentials[1];
+      });
 
-      final privateKey = credentials[0];
-      final npub = credentials[1];
+      // Small delay to allow microtask to complete
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      // Fallback to direct read if microtask didn't complete
+      if (privateKey == null || npub == null) {
+        final credentials = await Future.wait([
+          secureStorage.read(key: 'privateKey'),
+          secureStorage.read(key: 'npub'),
+        ]);
+        privateKey = credentials[0];
+        npub = credentials[1];
+      }
+
+      // privateKey and npub are already set above
 
       if (privateKey != null && npub != null) {
         final dataService = DataServiceManager.instance.getOrCreateService(
-          npub: npub,
+          npub: npub!,
           dataType: DataType.feed,
         );
-        await _initializeMinimalForNavigation(npub, dataService);
-        return {'npub': npub, 'dataService': dataService};
+        await _initializeMinimalForNavigation(npub!, dataService);
+        return {'npub': npub!, 'dataService': dataService};
       } else {
         return null;
       }
@@ -152,18 +179,25 @@ class _SplashScreenState extends State<SplashScreen> {
 
       await _openCriticalBoxes(npub);
 
-      await Future.wait([
-        UserProvider.instance.initialize(),
-        NotesProvider.instance.initialize(npub),
-        InteractionsProvider.instance.initialize(npub),
-        MediaProvider.instance.initialize(),
-      ]);
+      // Non-blocking provider initialization
+      Future.microtask(() async {
+        try {
+          await Future.wait([
+            UserProvider.instance.initialize(),
+            NotesProvider.instance.initialize(npub),
+            InteractionsProvider.instance.initialize(npub),
+            MediaProvider.instance.initialize(),
+          ]);
 
-      await Future.wait([
-        RelayProvider.instance.initialize(),
-        NetworkProvider.instance.initialize(),
-        NotificationProvider.instance.initialize(npub, dataService: dataService, userProvider: UserProvider.instance),
-      ]);
+          await Future.wait([
+            RelayProvider.instance.initialize(),
+            NetworkProvider.instance.initialize(),
+            NotificationProvider.instance.initialize(npub, dataService: dataService, userProvider: UserProvider.instance),
+          ]);
+        } catch (e) {
+          print('[SplashScreen] Background provider initialization error: $e');
+        }
+      });
 
       await dataService.initialize();
 
@@ -178,11 +212,18 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _openCriticalBoxes(String npub) async {
-    await Future.wait([
-      Hive.openBox<UserModel>('users'),
-      Hive.openBox<NoteModel>('notes_Feed_$npub'),
-      Hive.openBox<FollowingModel>('followingBox'),
-    ]);
+    // Non-blocking critical box opening
+    Future.microtask(() async {
+      try {
+        await Future.wait([
+          Hive.openBox<UserModel>('users'),
+          Hive.openBox<NoteModel>('notes_Feed_$npub'),
+          Hive.openBox<FollowingModel>('followingBox'),
+        ]);
+      } catch (e) {
+        print('[SplashScreen] Critical boxes opening error: $e');
+      }
+    });
   }
 
   void _openRemainingBoxes(String npub) {
@@ -199,7 +240,11 @@ class _SplashScreenState extends State<SplashScreen> {
         Hive.openBox<NotificationModel>('notifications_$npub'),
       ];
 
-      await Future.wait(remainingBoxFutures);
+      try {
+        await Future.wait(remainingBoxFutures);
+      } catch (e) {
+        print('[SplashScreen] Remaining boxes opening error: $e');
+      }
     });
   }
 

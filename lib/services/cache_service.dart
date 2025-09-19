@@ -38,11 +38,20 @@ class CacheService {
   final Map<String, List<ZapModel>> zapsMap = {};
 
   Timer? _cleanupTimer;
-  static const int _maxCacheEntries = 2000;
+  Timer? _performanceMonitorTimer;
+  static const int _maxCacheEntries = 1500; // Reduced for better performance
+  static const int _highMemoryThreshold = 1200; // Trigger cleanup earlier
+  static const int _criticalMemoryThreshold = 1400; // Emergency cleanup
 
   void _startBasicCleanup() {
-    _cleanupTimer = Timer.periodic(const Duration(hours: 1), (_) {
+    // More frequent cleanup for better performance
+    _cleanupTimer = Timer.periodic(const Duration(minutes: 30), (_) {
       _performBasicCleanup();
+    });
+
+    // Performance monitoring
+    _performanceMonitorTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      _monitorPerformance();
     });
   }
 
@@ -50,7 +59,7 @@ class CacheService {
     final totalEntries = reactionsMap.length + repliesMap.length + repostsMap.length + zapsMap.length;
 
     if (totalEntries > _maxCacheEntries) {
-      final removeCount = (totalEntries * 0.2).round();
+      final removeCount = (totalEntries * 0.3).round(); // More thorough cleanup
       final allKeys = [...reactionsMap.keys, ...repliesMap.keys, ...repostsMap.keys, ...zapsMap.keys];
       allKeys.shuffle();
 
@@ -61,8 +70,53 @@ class CacheService {
         repostsMap.remove(key);
         zapsMap.remove(key);
       }
-      debugPrint('[CacheService] Basic cleanup: removed $removeCount entries');
+      debugPrint('[CacheService] Cleanup: removed $removeCount entries');
     }
+  }
+
+  void _monitorPerformance() {
+    final totalEntries = reactionsMap.length + repliesMap.length + repostsMap.length + zapsMap.length;
+
+    if (totalEntries > _criticalMemoryThreshold) {
+      debugPrint('[CacheService] Critical memory usage detected, performing emergency cleanup');
+      _performEmergencyCleanup();
+    } else if (totalEntries > _highMemoryThreshold) {
+      debugPrint('[CacheService] High memory usage detected, performing proactive cleanup');
+      _performProactiveCleanup();
+    }
+  }
+
+  void _performEmergencyCleanup() {
+    // Keep only most recent 25% of cache
+    final targetSize = (_maxCacheEntries * 0.25).round();
+    final allKeys = [...reactionsMap.keys, ...repliesMap.keys, ...repostsMap.keys, ...zapsMap.keys];
+    allKeys.shuffle();
+
+    final keysToRemove = allKeys.skip(targetSize);
+    for (final key in keysToRemove) {
+      reactionsMap.remove(key);
+      repliesMap.remove(key);
+      repostsMap.remove(key);
+      zapsMap.remove(key);
+    }
+    debugPrint('[CacheService] Emergency cleanup: cache reduced to $targetSize entries');
+  }
+
+  void _performProactiveCleanup() {
+    // Remove 40% of cache proactively
+    final totalEntries = reactionsMap.length + repliesMap.length + repostsMap.length + zapsMap.length;
+    final removeCount = (totalEntries * 0.4).round();
+    final allKeys = [...reactionsMap.keys, ...repliesMap.keys, ...repostsMap.keys, ...zapsMap.keys];
+    allKeys.shuffle();
+
+    final keysToRemove = allKeys.take(removeCount);
+    for (final key in keysToRemove) {
+      reactionsMap.remove(key);
+      repliesMap.remove(key);
+      repostsMap.remove(key);
+      zapsMap.remove(key);
+    }
+    debugPrint('[CacheService] Proactive cleanup: removed $removeCount entries');
   }
 
   Future<void> initializeBoxes(String npub, String dataType) async {
@@ -240,22 +294,50 @@ class CacheService {
   }
 
   Future<void> clearMemoryCache() async {
-    reactionsMap.clear();
-    repliesMap.clear();
-    repostsMap.clear();
-    zapsMap.clear();
+    // Clear in stages to prevent UI freeze
+    Future.microtask(() {
+      reactionsMap.clear();
+    });
+
+    await Future.delayed(const Duration(milliseconds: 10));
+    Future.microtask(() {
+      repliesMap.clear();
+    });
+
+    await Future.delayed(const Duration(milliseconds: 10));
+    Future.microtask(() {
+      repostsMap.clear();
+      zapsMap.clear();
+    });
+
+    debugPrint('[CacheService] Memory cache cleared in stages');
   }
 
   Future<void> optimizeMemoryUsage() async {
-    _performBasicCleanup();
+    // Staged optimization to prevent blocking
+    Future.microtask(() {
+      _performBasicCleanup();
+    });
 
-    reactionsMap.removeWhere((key, value) => value.isEmpty);
-    repliesMap.removeWhere((key, value) => value.isEmpty);
-    repostsMap.removeWhere((key, value) => value.isEmpty);
-    zapsMap.removeWhere((key, value) => value.isEmpty);
+    await Future.delayed(const Duration(milliseconds: 25));
+    Future.microtask(() {
+      reactionsMap.removeWhere((key, value) => value.isEmpty);
+      repliesMap.removeWhere((key, value) => value.isEmpty);
+    });
+
+    await Future.delayed(const Duration(milliseconds: 25));
+    Future.microtask(() {
+      repostsMap.removeWhere((key, value) => value.isEmpty);
+      zapsMap.removeWhere((key, value) => value.isEmpty);
+    });
   }
 
   Future<void> handleMemoryPressure() async {
+    // Pressure relief
+    _performEmergencyCleanup();
+
+    // Follow up with optimization
+    await Future.delayed(const Duration(milliseconds: 50));
     await optimizeMemoryUsage();
   }
 
@@ -304,7 +386,7 @@ class CacheService {
         return false;
       });
 
-      // Clean replies - more aggressive for non-visible notes
+      // Clean replies - more thorough for non-visible notes
       repliesMap.removeWhere((eventId, replies) {
         if (visibleNoteIds.contains(eventId)) return false; // Keep visible
 
@@ -360,6 +442,7 @@ class CacheService {
 
   void dispose() {
     _cleanupTimer?.cancel();
+    _performanceMonitorTimer?.cancel();
     clearMemoryCache();
   }
 

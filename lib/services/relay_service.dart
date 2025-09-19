@@ -323,11 +323,11 @@ class WebSocketManager {
     }
   }
 
-  Future<void> immediateBroadcast(String message) async {
+  Future<void> priorityBroadcast(String message) async {
     await _broadcastMessage(message);
   }
 
-  Future<void> immediateBroadcastToAll(String message) async {
+  Future<void> priorityBroadcastToAll(String message) async {
     final activeWs = activeSockets;
     if (activeWs.isEmpty) return;
 

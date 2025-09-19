@@ -53,25 +53,39 @@ class FeedPageState extends State<FeedPage> {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
 
       if (widget.dataService != null) {
-        await userProvider.initialize();
-
-        if (userProvider.currentUserNpub == widget.npub) {
-          await userProvider.setCurrentUser(widget.npub);
-        }
+        // Non-blocking initialization
+        Future.microtask(() async {
+          try {
+            await userProvider.initialize();
+            if (userProvider.currentUserNpub == widget.npub) {
+              await userProvider.setCurrentUser(widget.npub);
+            }
+          } catch (e) {
+            print('[FeedPage] UserProvider initialization error: $e');
+          }
+        });
         print('[FeedPage] Using provided DataService - skipping initialization');
       } else {
-        await Future.wait([
-          userProvider.initialize(),
-          dataService.initializeLightweight(),
-        ]);
+        // Non-blocking initialization
+        Future.microtask(() async {
+          try {
+            await Future.wait([
+              userProvider.initialize(),
+              dataService.initializeLightweight(),
+            ]);
 
-        if (userProvider.currentUserNpub == widget.npub) {
-          await userProvider.setCurrentUser(widget.npub);
-        }
+            if (userProvider.currentUserNpub == widget.npub) {
+              await userProvider.setCurrentUser(widget.npub);
+            }
 
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (mounted) {
-            dataService.initializeHeavyOperations();
+            // Schedule heavy operations
+            Future.delayed(const Duration(milliseconds: 100), () {
+              if (mounted) {
+                dataService.initializeHeavyOperations();
+              }
+            });
+          } catch (e) {
+            print('[FeedPage] Background initialization error: $e');
           }
         });
       }
@@ -110,12 +124,23 @@ class FeedPageState extends State<FeedPage> {
   }
 
   Future<void> _checkFirstOpen() async {
-    final prefs = await SharedPreferences.getInstance();
-    final alreadyOpened = prefs.getBool('feed_page_opened') ?? false;
-    if (!alreadyOpened) {
-      isFirstOpen = true;
-      await prefs.setBool('feed_page_opened', true);
-    }
+    // Non-blocking SharedPreferences check
+    Future.microtask(() async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final alreadyOpened = prefs.getBool('feed_page_opened') ?? false;
+        if (!alreadyOpened) {
+          if (mounted) {
+            setState(() {
+              isFirstOpen = true;
+            });
+          }
+          await prefs.setBool('feed_page_opened', true);
+        }
+      } catch (e) {
+        print('[FeedPage] First open check error: $e');
+      }
+    });
   }
 
   void scrollToTop() {
@@ -281,7 +306,8 @@ class FeedPageState extends State<FeedPage> {
             )
           : RefreshIndicator(
               onRefresh: () async {
-                await dataService.refreshNotes();
+                // Non-blocking refresh
+                Future.microtask(() => dataService.refreshNotes());
               },
               child: CustomScrollView(
                 key: const PageStorageKey<String>('feed_scroll'),

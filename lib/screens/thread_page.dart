@@ -53,12 +53,16 @@ class _ThreadPageState extends State<ThreadPage> {
   Set<String> _relevantNoteIds = {};
 
   Map<String, List<NoteModel>>? _cachedThreadHierarchy;
-  String? _lastHierarchyRootId;
   int _lastNotesVersion = 0;
 
   Timer? _uiUpdateTimer;
   bool _hasPendingUIUpdate = false;
   Timer? _periodicInteractionTimer;
+  Timer? _reloadTimer;
+
+  // Timer management
+  final Set<Timer> _activeTimers = {};
+  static const int _maxConcurrentTimers = 3;
 
   static const int repliesPerPage = 10;
   static const int maxNestingDepth = 2;
@@ -80,13 +84,49 @@ class _ThreadPageState extends State<ThreadPage> {
 
   @override
   void dispose() {
+    // Clean up all listeners
     widget.dataService.notesNotifier.removeListener(_onNotesChanged);
     InteractionsProvider.instance.removeListener(_onInteractionsChanged);
     _scrollController.dispose();
+
+    // Cancel all timers efficiently
+    _cancelAllTimers();
+
+    super.dispose();
+  }
+
+  void _cancelAllTimers() {
+    // Cancel specific timers
     _reloadTimer?.cancel();
     _uiUpdateTimer?.cancel();
     _periodicInteractionTimer?.cancel();
-    super.dispose();
+
+    // Cancel any remaining timers in the set
+    for (final timer in _activeTimers) {
+      timer.cancel();
+    }
+    _activeTimers.clear();
+
+    debugPrint('[ThreadPage] All timers cancelled - ${_activeTimers.length} active timers cleaned up');
+  }
+
+  Timer _createManagedTimer(Duration duration, VoidCallback callback) {
+    // Limit concurrent timers to prevent performance issues
+    if (_activeTimers.length >= _maxConcurrentTimers) {
+      // Cancel oldest timer
+      final oldestTimer = _activeTimers.first;
+      oldestTimer.cancel();
+      _activeTimers.remove(oldestTimer);
+    }
+
+    late Timer timer;
+    timer = Timer(duration, () {
+      _activeTimers.remove(timer);
+      callback();
+    });
+
+    _activeTimers.add(timer);
+    return timer;
   }
 
   void _onInteractionsChanged() {
@@ -101,13 +141,13 @@ class _ThreadPageState extends State<ThreadPage> {
         }
       });
 
-      Future.delayed(const Duration(milliseconds: 16), () {
+      _createManagedTimer(const Duration(milliseconds: 16), () {
         if (mounted && !_isLoading) {
           setState(() {});
         }
       });
 
-      Future.delayed(const Duration(milliseconds: 50), () {
+      _createManagedTimer(const Duration(milliseconds: 50), () {
         if (mounted && !_isLoading) {
           setState(() {});
         }
@@ -165,11 +205,11 @@ class _ThreadPageState extends State<ThreadPage> {
           if (mounted) setState(() {});
         });
 
-        Timer(const Duration(milliseconds: 16), () {
+        _createManagedTimer(const Duration(milliseconds: 16), () {
           if (mounted) setState(() {});
         });
 
-        Timer(const Duration(milliseconds: 50), () {
+        _createManagedTimer(const Duration(milliseconds: 50), () {
           if (mounted) setState(() {});
         });
       }
@@ -212,14 +252,12 @@ class _ThreadPageState extends State<ThreadPage> {
           if (mounted) setState(() {});
         });
 
-        Timer(const Duration(milliseconds: 25), () {
+        _createManagedTimer(const Duration(milliseconds: 25), () {
           if (mounted) setState(() {});
         });
       }
     });
   }
-
-  Timer? _reloadTimer;
 
   Future<void> _loadRootNote() async {
     if (!mounted) return;
@@ -319,11 +357,14 @@ class _ThreadPageState extends State<ThreadPage> {
         .timeout(const Duration(seconds: 3))
         .catchError((e) => print('[ThreadPage] Profiles fetch timeout: $e')));
 
-    try {
-      await Future.wait(futures).timeout(const Duration(seconds: 5));
-    } catch (e) {
-      print('[ThreadPage] Background loading timeout: $e');
-    }
+    // Non-blocking background loading
+    Future.microtask(() async {
+      try {
+        await Future.wait(futures).timeout(const Duration(seconds: 5));
+      } catch (e) {
+        print('[ThreadPage] Background loading timeout: $e');
+      }
+    });
 
     if (mounted) {
       setState(() {
@@ -381,7 +422,14 @@ class _ThreadPageState extends State<ThreadPage> {
         return InteractionsProvider.instance.fetchInteractionsForNotes(threadEventIds.toList());
       }).catchError((e) => print('[ThreadPage] Direct visibility update error: $e')));
 
-      await Future.wait(futures, eagerError: false);
+      // Non-blocking interaction loading
+      Future.microtask(() async {
+        try {
+          await Future.wait(futures, eagerError: false);
+        } catch (e) {
+          print('[ThreadPage] Interaction loading error: $e');
+        }
+      });
 
       print('[ThreadPage] All interaction loading attempts completed');
 
@@ -443,10 +491,15 @@ class _ThreadPageState extends State<ThreadPage> {
 
   void _startPeriodicInteractionFetch() {
     _periodicInteractionTimer?.cancel();
+
+    // Optimized periodic fetch with adaptive intervals
     _periodicInteractionTimer = Timer.periodic(
-      const Duration(milliseconds: 200), // Faster interval for better responsiveness
+      const Duration(milliseconds: 500), // Reduced frequency to prevent performance issues
       (timer) async {
-        if (!mounted || _isLoading) return;
+        if (!mounted || _isLoading) {
+          timer.cancel();
+          return;
+        }
 
         try {
           await _fetchPeriodicInteractions();
@@ -478,13 +531,16 @@ class _ThreadPageState extends State<ThreadPage> {
 
     // Multiple simultaneous fetch attempts
     futures.add(InteractionsProvider.instance.fetchInteractionsForNotes(threadEventIds.toList()));
-    futures.add(widget.dataService.fetchInteractionsForEvents(threadEventIds.toList(), forceLoad: false));
+    futures.add(widget.dataService.fetchInteractionsForEvents(threadEventIds.toList(), forceLoad: true));
 
-    try {
-      await Future.wait(futures, eagerError: false);
-    } catch (e) {
-      print('[ThreadPage] Periodic interaction fetch error: $e');
-    }
+    // Non-blocking periodic interaction fetch
+    Future.microtask(() async {
+      try {
+        await Future.wait(futures, eagerError: false);
+      } catch (e) {
+        print('[ThreadPage] Periodic interaction fetch error: $e');
+      }
+    });
 
     InteractionsProvider.instance.updateVisibleNotes(threadEventIds);
 
@@ -525,11 +581,14 @@ class _ThreadPageState extends State<ThreadPage> {
 
     if (allUserNpubs.isNotEmpty) {
       print('[ThreadPage] Fetching profiles for ${allUserNpubs.length} thread users');
-      try {
-        await widget.dataService.fetchProfilesBatch(allUserNpubs.toList()).timeout(const Duration(seconds: 3));
-      } catch (e) {
-        print('[ThreadPage] Profile fetch timeout: $e');
-      }
+      // Non-blocking profile fetch
+      Future.microtask(() async {
+        try {
+          await widget.dataService.fetchProfilesBatch(allUserNpubs.toList()).timeout(const Duration(seconds: 3));
+        } catch (e) {
+          print('[ThreadPage] Profile fetch timeout: $e');
+        }
+      });
     }
   }
 
@@ -553,7 +612,7 @@ class _ThreadPageState extends State<ThreadPage> {
         print('[ThreadPage] Found ${allReplyIds.length} replies, fetching their interactions');
 
         await widget.dataService
-            .fetchInteractionsForEvents(allReplyIds, forceLoad: false)
+            .fetchInteractionsForEvents(allReplyIds, forceLoad: true)
             .timeout(const Duration(seconds: 2))
             .catchError((e) => print('[ThreadPage] Reply interactions fetch timeout: $e'));
       }
@@ -845,7 +904,6 @@ class _ThreadPageState extends State<ThreadPage> {
     print('[ThreadPage] Available notes for hierarchy: ${allNotes.length}');
 
     _cachedThreadHierarchy = widget.dataService.buildThreadHierarchy(rootId);
-    _lastHierarchyRootId = rootId;
 
     int totalReplies = 0;
     for (final replies in _cachedThreadHierarchy!.values) {
@@ -878,7 +936,9 @@ class _ThreadPageState extends State<ThreadPage> {
       }
     }
 
-    Future.delayed(const Duration(seconds: 2), () => {if (mounted) setState(() => _highlightedNoteId = null)});
+    _createManagedTimer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _highlightedNoteId = null);
+    });
   }
 
   void _navigateToProfile(String npub) {

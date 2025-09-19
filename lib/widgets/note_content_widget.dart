@@ -35,17 +35,18 @@ class _NoteContentWidgetState extends State<NoteContentWidget> with AutomaticKee
   @override
   bool get wantKeepAlive => true;
 
-  late final Future<Map<String, String>> _mentionsFuture;
+  Future<Map<String, String>>? _mentionsFuture;
   late final List<dynamic> _textParts;
   late final List<String> _mediaUrls;
   late final List<String> _linkUrls;
   late final List<String> _quoteIds;
+  bool _hasMentions = false;
 
   @override
   void initState() {
     super.initState();
     _processParsedContent();
-    _mentionsFuture = _resolveMentions();
+    _scheduleMentionResolution();
   }
 
   void _processParsedContent() {
@@ -53,6 +54,21 @@ class _NoteContentWidgetState extends State<NoteContentWidget> with AutomaticKee
     _mediaUrls = (widget.parsedContent['mediaUrls'] as List<dynamic>?)?.cast<String>() ?? [];
     _linkUrls = (widget.parsedContent['linkUrls'] as List<dynamic>?)?.cast<String>() ?? [];
     _quoteIds = (widget.parsedContent['quoteIds'] as List<dynamic>?)?.cast<String>() ?? [];
+
+    // Check if we have mentions to avoid unnecessary future creation
+    _hasMentions = _textParts.any((p) => p['type'] == 'mention');
+  }
+
+  void _scheduleMentionResolution() {
+    if (!_hasMentions) return;
+
+    Future.microtask(() {
+      if (!mounted) return;
+      _mentionsFuture = _resolveMentions();
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   @override
@@ -60,15 +76,20 @@ class _NoteContentWidgetState extends State<NoteContentWidget> with AutomaticKee
     super.didUpdateWidget(oldWidget);
     if (!const DeepCollectionEquality().equals(widget.parsedContent, oldWidget.parsedContent)) {
       _processParsedContent();
-      setState(() {
-        _mentionsFuture = _resolveMentions();
-      });
+      _scheduleMentionResolution();
     }
   }
 
-  Future<Map<String, String>> _resolveMentions() {
-    final mentionIds = _textParts.where((p) => p['type'] == 'mention').map((p) => p['id'] as String).toList();
-    return widget.dataService.resolveMentions(mentionIds);
+  Future<Map<String, String>> _resolveMentions() async {
+    try {
+      final mentionIds = _textParts.where((p) => p['type'] == 'mention').map((p) => p['id'] as String).toList();
+      if (mentionIds.isEmpty) return {};
+
+      return await widget.dataService.resolveMentions(mentionIds);
+    } catch (e) {
+      debugPrint('[NoteContentWidget] Error resolving mentions: $e');
+      return {};
+    }
   }
 
   double get _fontSize => widget.size == NoteContentSize.big ? 18.0 : 16.0;
@@ -83,22 +104,27 @@ class _NoteContentWidgetState extends State<NoteContentWidget> with AutomaticKee
         children: [
           if (_textParts.isNotEmpty)
             RepaintBoundary(
-              child: FutureBuilder<Map<String, String>>(
-                future: _mentionsFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const SizedBox.shrink();
-                  }
-                  final mentionsMap = snapshot.data ?? {};
-                  return _RichTextContent(
-                    parsedContent: widget.parsedContent,
-                    mentions: mentionsMap,
-                    fontSize: _fontSize,
-                    onNavigateToMentionProfile: widget.onNavigateToMentionProfile,
-                    onShowMoreTap: widget.onShowMoreTap,
-                  );
-                },
-              ),
+              child: _hasMentions && _mentionsFuture != null
+                  ? FutureBuilder<Map<String, String>>(
+                      future: _mentionsFuture,
+                      builder: (context, snapshot) {
+                        final mentionsMap = snapshot.data ?? {};
+                        return _RichTextContent(
+                          parsedContent: widget.parsedContent,
+                          mentions: mentionsMap,
+                          fontSize: _fontSize,
+                          onNavigateToMentionProfile: widget.onNavigateToMentionProfile,
+                          onShowMoreTap: widget.onShowMoreTap,
+                        );
+                      },
+                    )
+                  : _RichTextContent(
+                      parsedContent: widget.parsedContent,
+                      mentions: const {},
+                      fontSize: _fontSize,
+                      onNavigateToMentionProfile: widget.onNavigateToMentionProfile,
+                      onShowMoreTap: widget.onShowMoreTap,
+                    ),
             ),
           if (_mediaUrls.isNotEmpty)
             RepaintBoundary(

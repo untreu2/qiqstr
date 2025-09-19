@@ -76,7 +76,7 @@ class DataServiceManager {
 
   void _closeActiveService() {
     if (_activeService != null) {
-      debugPrint('[DataServiceManager] Ultra-fast release for smooth transitions: $_activeServiceKey');
+      debugPrint('[DataServiceManager] Release for smooth transitions: $_activeServiceKey');
 
       Future.microtask(() {
         final memoryManager = MemoryManager.instance;

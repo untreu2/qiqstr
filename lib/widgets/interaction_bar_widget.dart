@@ -111,7 +111,7 @@ class _InteractionBarState extends State<InteractionBar> with AutomaticKeepAlive
                 if (isCurrentlyLiked) {
                   return false;
                 }
-                await widget.dataService!.sendReactionInstantly(widget.noteId, '+').catchError((e) {
+                await widget.dataService!.sendReaction(widget.noteId, '+').catchError((e) {
                   debugPrint('Error sending reaction: $e');
                 });
                 return true;

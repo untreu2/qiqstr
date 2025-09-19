@@ -193,7 +193,7 @@ class DataService {
 
   Timer? _cacheCleanupTimer;
   Timer? _interactionRefreshTimer;
-  int currentLimit = 100;
+  int currentLimit = 800; // Increased to 800 for much more notes in feed
 
   final Map<String, Completer<Map<String, String>>> _pendingProfileRequests = {};
 
@@ -310,7 +310,7 @@ class DataService {
   }
 
   void _clearDataStructures() {
-    print('[DataService] Ultra-fast clearing for smooth profile transitions');
+    print('[DataService] Clearing data for profile transitions');
 
     notes.clear();
     eventIds.clear();
@@ -351,7 +351,7 @@ class DataService {
     _scrollDebounceTimer?.cancel();
     _scrollDebounceTimer = null;
 
-    print('[DataService] Ultra-fast data clearing completed for smooth transitions');
+    print('[DataService] Data clearing completed for smooth transitions');
   }
 
   int get connectedRelaysCount => _socketManager.activeSockets.length;
@@ -385,8 +385,9 @@ class DataService {
       _profileService = ProfileService.instance;
       await _profileService.initialize();
 
-      await loadNotesFromCache((loadedNotes) {});
+      // Non-blocking cache loading
       Future.microtask(() async {
+        await loadNotesFromCache((loadedNotes) {});
         await _loadProfilesForNotes();
       });
 
@@ -513,10 +514,15 @@ class DataService {
 
   Future<void> _loadBasicCacheData() async {
     try {
-      await loadReactionsFromCache();
-      await loadRepliesFromCache();
-      await loadRepostsFromCache();
-      await _loadNotificationsFromCache();
+      // Non-blocking parallel cache loading
+      Future.microtask(() async {
+        await Future.wait([
+          loadReactionsFromCache(),
+          loadRepliesFromCache(),
+          loadRepostsFromCache(),
+          _loadNotificationsFromCache(),
+        ], eagerError: false);
+      });
 
       print('[DataService] Basic cache loading completed');
     } catch (e) {
@@ -773,7 +779,7 @@ class DataService {
       authors: targetNpubs,
       kinds: [1],
       since: sinceTimestamp,
-      limit: 100,
+      limit: 200,
     );
     final requestNotes = NostrService.createRequest(filterNotes);
     _safeBroadcast(NostrService.serializeRequest(requestNotes));
@@ -782,7 +788,7 @@ class DataService {
       authors: targetNpubs,
       kinds: [6],
       since: sinceTimestamp,
-      limit: 50,
+      limit: 100,
     );
     final requestReposts = NostrService.createRequest(filterReposts);
     _safeBroadcast(NostrService.serializeRequest(requestReposts));
@@ -790,11 +796,11 @@ class DataService {
     _startPeriodicNoteRefresh(targetNpubs);
     _startRealTimeInteractionSubscription();
 
-    print('[DataService] Started aggressive real-time subscription for immediate new note fetching');
+    print('[DataService] Started real-time subscription for new note fetching');
   }
 
   void _startRealTimeInteractionSubscription() {
-    print('[DataService] Real-time interaction subscription initialized - interactions will be fetched only for visible notes');
+    print('[DataService] Real-time interaction subscription disabled - interactions will be fetched only for thread pages');
   }
 
   void _startPeriodicNoteRefresh(List<String> targetNpubs) {
@@ -810,7 +816,7 @@ class DataService {
         authors: targetNpubs,
         kinds: [1, 6],
         since: recentTimestamp,
-        limit: 20,
+        limit: 50,
       );
 
       _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(filterRecent)));
@@ -897,10 +903,11 @@ class DataService {
         try {
           if (dataType == DataType.profile) {
             Future.microtask(() async {
-              await _fetchProfileNotesAggressively([npub]);
+              await _fetchProfileNotes([npub]);
               if (notes.isNotEmpty) {
                 final noteIds = notes.map((n) => n.id).toList();
-                Future.microtask(() => fetchInteractionsForEvents(noteIds));
+                // Disabled automatic interaction fetching for profile notes
+                // Interactions will only be fetched when entering thread pages
               }
             });
           } else {
@@ -919,6 +926,7 @@ class DataService {
           print('[DataService] Note fetching error: $e, continuing with cached data');
         }
 
+        // Background cache loading - completely non-blocking
         Future.microtask(() async {
           try {
             await Future.wait([
@@ -926,7 +934,7 @@ class DataService {
               loadRepliesFromCache(),
               loadRepostsFromCache(),
             ], eagerError: false);
-            print('[DataService] Cached interactions loaded');
+            print('[DataService] Cached interactions loaded in background');
           } catch (e) {
             print('[DataService] Error loading cached interactions: $e');
           }
@@ -980,7 +988,7 @@ class DataService {
   Future<void> _fetchNotes(List<String> authors, {int? limit, DateTime? until}) async {
     if (_isClosed) return;
 
-    final noteLimit = limit ?? (dataType == DataType.profile ? 150 : currentLimit);
+    final noteLimit = limit ?? (dataType == DataType.profile ? 400 : currentLimit);
     final filter = NostrService.createNotesFilter(
       authors: authors,
       kinds: [1, 6],
@@ -991,14 +999,14 @@ class DataService {
     final request = NostrService.serializeRequest(NostrService.createRequest(filter));
 
     if (dataType == DataType.profile) {
-      await _socketManager.immediateBroadcastToAll(request);
-      print('[DataService] Immediate broadcast to all relays for ${noteLimit} profile notes');
+      await _socketManager.priorityBroadcastToAll(request);
+      print('[DataService] Broadcast to all relays for ${noteLimit} profile notes');
     } else {
       await _safeBroadcast(request);
     }
 
     if (dataType == DataType.profile) {
-      print('[DataService] Fetched ${noteLimit} profile notes for instant display');
+      print('[DataService] Fetched ${noteLimit} profile notes for display');
     }
   }
 
@@ -1362,7 +1370,7 @@ class DataService {
           notes.add(noteModel);
           notesNotifier.addNoteQuietly(noteModel);
 
-          // Force immediate UI update for new replies
+          // Force UI update for new replies
           Future.microtask(() {
             notesNotifier.notifyListenersWithFilteredList();
           });
@@ -1374,7 +1382,7 @@ class DataService {
 
         _hasPendingUiUpdate = true;
 
-        // Force immediate notification for reply events
+        // Force notification for reply events
         Future.microtask(() {
           notesNotifier.notifyListenersWithFilteredList();
         });
@@ -1727,7 +1735,7 @@ class DataService {
       }
 
       final until = _getOldestNoteTimestamp();
-      final increment = dataType == DataType.profile ? 100 : 50;
+      final increment = dataType == DataType.profile ? 200 : 250; // Much larger load more for feed
 
       await _fetchNotes(targetNpubs, limit: increment, until: until);
 
@@ -1737,26 +1745,26 @@ class DataService {
     }
   }
 
-  Future<void> _fetchProfileNotesAggressively(List<String> authors) async {
+  Future<void> _fetchProfileNotes(List<String> authors) async {
     if (_isClosed) return;
 
-    print('[DataService] Ultra-fast profile notes fetch for instant loading');
+    print('[DataService] Profile notes fetch for loading');
 
     Future.microtask(() async {
       final futures = [
-        _fetchNotes(authors, limit: 80),
-        _fetchNotes(authors, limit: 120),
-        _fetchNotes(authors, limit: 200),
+        _fetchNotes(authors, limit: 300),
+        _fetchNotes(authors, limit: 500),
+        _fetchNotes(authors, limit: 800),
       ];
 
       await Future.wait(futures, eagerError: false);
 
       if (!_isClosed) {
-        await _fetchNotes(authors, limit: 300);
+        await _fetchNotes(authors, limit: 1000);
       }
     });
 
-    print('[DataService] Ultra-fast profile notes fetch initiated - instant loading');
+    print('[DataService] Profile notes fetch initiated - loading');
   }
 
   DateTime? _getOldestNoteTimestamp() {
@@ -1870,7 +1878,7 @@ class DataService {
     final filter = NostrService.createNotesFilter(
       authors: [userNpub],
       kinds: [1, 6],
-      limit: 100,
+      limit: 200,
       since: since != null ? since.millisecondsSinceEpoch ~/ 1000 : null,
     );
 
@@ -1892,7 +1900,7 @@ class DataService {
     final filter = NostrService.createNotesFilter(
       authors: targetNpubs,
       kinds: [1, 6],
-      limit: 100,
+      limit: 200,
       since: since != null ? since.millisecondsSinceEpoch ~/ 1000 : null,
     );
 
@@ -1913,10 +1921,9 @@ class DataService {
   Future<void> _refreshBasicInteractions() async {
     if (notes.isEmpty) return;
 
-    final recentNoteIds = notes.take(20).map((note) => note.id).toList();
-    if (recentNoteIds.isNotEmpty) {
-      await _fetchBasicInteractions(recentNoteIds);
-    }
+    // Disabled automatic interaction refresh - interactions only fetched for thread pages
+    print('[DataService] Automatic interaction refresh disabled - use thread page for interactions');
+    return;
   }
 
   Future<void> _refreshBasicProfiles() async {
@@ -2325,7 +2332,7 @@ class DataService {
     return invoice;
   }
 
-  Future<void> sendReactionInstantly(String targetEventId, String reactionContent) async {
+  Future<void> sendReaction(String targetEventId, String reactionContent) async {
     if (_isClosed) return;
     try {
       final privateKey = await _secureStorage.read(key: 'privateKey');
@@ -2369,12 +2376,12 @@ class DataService {
       onReactionsUpdated?.call(targetEventId, reactionsMap[targetEventId]!);
       notesNotifier.value = notesNotifier.notes;
     } catch (e) {
-      print('[DataService ERROR] Error sending reaction instantly: $e');
+      print('[DataService ERROR] Error sending reaction: $e');
       throw e;
     }
   }
 
-  Future<void> sendReplyInstantly(String parentEventId, String replyContent) async {
+  Future<void> sendReply(String parentEventId, String replyContent) async {
     if (_isClosed) return;
     try {
       final privateKey = await _secureStorage.read(key: 'privateKey');
@@ -2529,7 +2536,7 @@ class DataService {
     }
   }
 
-  Future<void> sendRepostInstantly(NoteModel note) async {
+  Future<void> sendRepost(NoteModel note) async {
     if (_isClosed) return;
     try {
       final privateKey = await _secureStorage.read(key: 'privateKey');
@@ -2588,7 +2595,7 @@ class DataService {
     }
   }
 
-  Future<void> sendQuoteInstantly(String quotedEventId, String? quotedEventPubkey, String quoteContent) async {
+  Future<void> sendQuote(String quotedEventId, String? quotedEventPubkey, String quoteContent) async {
     if (_isClosed) return;
     try {
       final privateKey = await _secureStorage.read(key: 'privateKey');
@@ -2644,7 +2651,7 @@ class DataService {
     }
   }
 
-  Future<void> shareNoteInstantly(String noteContent) async {
+  Future<void> shareNote(String noteContent) async {
     if (_isClosed) return;
     try {
       final privateKey = await _secureStorage.read(key: 'privateKey');
@@ -2735,7 +2742,7 @@ class DataService {
         return bTime.compareTo(aTime);
       });
 
-      final limitedNotes = filteredNotes.take(dataType == DataType.profile ? 100 : 80).toList();
+      final limitedNotes = filteredNotes.take(dataType == DataType.profile ? 200 : 400).toList(); // Even more cache loading for feed
       final newNotes = <NoteModel>[];
 
       final batchSize = dataType == DataType.profile ? 15 : 20;
@@ -2787,7 +2794,7 @@ class DataService {
         }
 
         print(
-            '[DataService] Cached notes loaded (${newNotes.length} notes, ${notesWithMedia.length} with media cached) - ${dataType == DataType.profile ? "INSTANT" : "NORMAL"} mode');
+            '[DataService] Cached notes loaded (${newNotes.length} notes, ${notesWithMedia.length} with media cached) - ${dataType == DataType.profile ? "PROFILE" : "FEED"} mode');
       }
     } catch (e) {
       print('[DataService ERROR] Error loading notes from cache: $e');
@@ -2853,9 +2860,12 @@ class DataService {
     if (_isClosed || eventIds.isEmpty) return;
 
     try {
-      const batchSize = 10;
-      for (int i = 0; i < eventIds.length; i += batchSize) {
-        final batch = eventIds.skip(i).take(batchSize).toList();
+      // Optimized batch processing with controlled concurrency
+      const optimizedBatchSize = 8; // Smaller batches for better performance
+
+      for (int i = 0; i < eventIds.length; i += optimizedBatchSize) {
+        // Simple batch processing without network tracking for now
+        final batch = eventIds.skip(i).take(optimizedBatchSize).toList();
 
         await Future.wait([
           _fetchReactionsForBatch(batch),
@@ -2864,8 +2874,8 @@ class DataService {
           _fetchZapsForBatch(batch),
         ], eagerError: false);
 
-        if (i + batchSize < eventIds.length) {
-          await Future.delayed(const Duration(milliseconds: 10));
+        if (i + optimizedBatchSize < eventIds.length) {
+          await Future.delayed(const Duration(milliseconds: 25)); // Longer delay for stability
         }
       }
     } catch (e) {
@@ -3171,7 +3181,8 @@ class DataService {
 
               if (dataType == DataType.profile) {
                 onNewNote?.call(note);
-                Future.microtask(() => fetchInteractionsForEvents([note.id]));
+                // Disabled automatic interaction fetching for new notes
+                // Interactions will only be fetched when entering thread pages
               }
             }
           }
@@ -3192,7 +3203,7 @@ class DataService {
       }
 
       print(
-          '[DataService] Handled new notes: ${data.length} notes processed, ${newNoteIds.length} added, ${newNotesForMedia.where((n) => n.hasMedia).length} with media cached - ${dataType == DataType.profile ? "INSTANT" : "NORMAL"} mode');
+          '[DataService] Handled new notes: ${data.length} notes processed, ${newNoteIds.length} added, ${newNotesForMedia.where((n) => n.hasMedia).length} with media cached - ${dataType == DataType.profile ? "PROFILE" : "FEED"} mode');
     }
   }
 
@@ -3296,15 +3307,15 @@ class DataService {
           return;
         }
 
-        print('[DataService] ${dataType == DataType.profile ? "INSTANT" : "Ultra-fast"} UI update for immediate reply visibility');
+        print('[DataService] ${dataType == DataType.profile ? "PROFILE" : "FEED"} UI update for reply visibility');
 
-        // Immediate updates for both profile and feed types
+        // Updates for both profile and feed types
         notesNotifier.value = notesNotifier._getFilteredNotesList();
         profilesNotifier.value = {
           for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
         };
 
-        // Additional immediate update
+        // Additional update
         Future.microtask(() {
           notesNotifier.notifyListenersWithFilteredList();
         });
@@ -3459,22 +3470,6 @@ class DataService {
     }
   }
 
-  Future<void> sendReaction(String targetEventId, String reactionContent) async {
-    return await sendReactionInstantly(targetEventId, reactionContent);
-  }
-
-  Future<void> sendReply(String parentEventId, String replyContent) async {
-    return await sendReplyInstantly(parentEventId, replyContent);
-  }
-
-  Future<void> sendRepost(NoteModel note) async {
-    return await sendRepostInstantly(note);
-  }
-
-  Future<void> shareNote(String noteContent) async {
-    return await shareNoteInstantly(noteContent);
-  }
-
   Future<NoteModel?> fetchNoteByIdIndependently(String eventId) async {
     return await getCachedNote(eventId);
   }
@@ -3489,7 +3484,7 @@ class DataService {
     if (_isClosed || eventIds.isEmpty) return;
 
     if (!forceLoad) {
-      print('[DataService] Automatic interaction fetching disabled - use forceLoad=true for manual fetching');
+      print('[DataService] Automatic interaction fetching disabled - use forceLoad=true for thread pages only');
       return;
     }
 

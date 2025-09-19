@@ -368,7 +368,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
         throw Exception('Could not decode quoted event ID');
       }
 
-      await widget.dataService.sendQuoteInstantly(quotedEventId, quotedEventPubkey, content);
+      await widget.dataService.sendQuote(quotedEventId, quotedEventPubkey, content);
     } catch (e) {
       throw Exception('Failed to send quote: $e');
     }
@@ -395,11 +395,11 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   Future<void> _sendNote(String content) async {
     if (_isReply()) {
-      await widget.dataService.sendReplyInstantly(widget.replyToNoteId!, content);
+      await widget.dataService.sendReply(widget.replyToNoteId!, content);
     } else if (_hasQuoteContent()) {
       await _sendQuoteNote(content);
     } else {
-      await widget.dataService.shareNoteInstantly(content);
+      await widget.dataService.shareNote(content);
     }
   }
 

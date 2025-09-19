@@ -38,18 +38,20 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   bool get wantKeepAlive => true;
 
   late final String _formattedTimestamp;
-  late final Map<String, dynamic> _parsedContent;
+  Map<String, dynamic>? _parsedContent;
 
   UserModel? _cachedAuthorUser;
   UserModel? _cachedReposterUser;
+  UserModel? _cachedParentAuthor;
 
   bool _isDisposed = false;
+  bool _isContentParsed = false;
 
   @override
   void initState() {
     super.initState();
     _formattedTimestamp = _formatTimestamp(widget.note.timestamp);
-    _parsedContent = _parseContentOnce();
+    _scheduleContentParsing();
     _scheduleUserLoading();
 
     UserProvider.instance.addListener(_onUserDataChange);
@@ -79,8 +81,37 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     super.dispose();
   }
 
-  Map<String, dynamic> _parseContentOnce() {
-    return widget.note.parsedContentLazy;
+  void _scheduleContentParsing() {
+    if (_isDisposed) return;
+
+    Future.microtask(() {
+      if (_isDisposed || !mounted) return;
+
+      try {
+        final parsedContent = widget.note.parsedContentLazy;
+        if (mounted && !_isDisposed) {
+          setState(() {
+            _parsedContent = parsedContent;
+            _isContentParsed = true;
+          });
+        }
+      } catch (e) {
+        print('[NoteWidget] Error parsing content: $e');
+        if (mounted && !_isDisposed) {
+          setState(() {
+            _parsedContent = {
+              'textParts': [
+                {'type': 'text', 'text': widget.note.content}
+              ],
+              'mediaUrls': <String>[],
+              'linkUrls': <String>[],
+              'quoteIds': <String>[],
+            };
+            _isContentParsed = true;
+          });
+        }
+      }
+    });
   }
 
   void _scheduleUserLoading() {
@@ -148,18 +179,23 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
 
   Widget _buildNoteContent(BuildContext context, Map<String, dynamic> parsed, NoteModel note) {
     final textParts = (parsed['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
-    String fullText = '';
+
+    const int characterLimit = 280;
+    int estimatedLength = 0;
+    bool shouldTruncate = false;
 
     for (var part in textParts) {
       if (part['type'] == 'text') {
-        fullText += part['text'] as String;
+        estimatedLength += (part['text'] as String).length;
       } else if (part['type'] == 'mention') {
-        fullText += '@mention ';
+        estimatedLength += 8;
+      }
+
+      if (estimatedLength > characterLimit) {
+        shouldTruncate = true;
+        break;
       }
     }
-
-    const int characterLimit = 280;
-    final shouldTruncate = fullText.length > characterLimit;
 
     return NoteContentWidget(
       parsedContent: shouldTruncate ? _createTruncatedParsedContentWithShowMore(parsed, characterLimit, note) : parsed,
@@ -217,25 +253,13 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   Widget _buildUserInfoWithReply(BuildContext context, UserModel authorUser, dynamic colors) {
     String? replyToText;
     if (widget.note.isReply && widget.note.parentId != null) {
-      final parentNote = widget.notesNotifier.value.firstWhere(
-        (note) => note.id == widget.note.parentId,
-        orElse: () => NoteModel(
-          id: '',
-          content: '',
-          author: widget.note.parentId!,
-          timestamp: DateTime.now(),
-        ),
-      );
+      final parentAuthor = _cachedParentAuthor ?? UserProvider.instance.getUserOrDefault(widget.note.parentId!);
 
-      final parentAuthor = UserProvider.instance.getUserOrDefault(parentNote.author);
-
-      if (widget.note.replyMarker == 'root') {
-        replyToText = 'Reply to @${parentAuthor.name.isNotEmpty ? parentAuthor.name : 'user'}';
-      } else if (widget.note.replyMarker == 'reply') {
-        replyToText = 'Replying to @${parentAuthor.name.isNotEmpty ? parentAuthor.name : 'user'}';
-      } else {
-        replyToText = 'Replying to @${parentAuthor.name.isNotEmpty ? parentAuthor.name : 'user'}';
+      if (_cachedParentAuthor == null) {
+        _cachedParentAuthor = parentAuthor;
       }
+
+      replyToText = 'Reply to...';
     }
 
     return Column(
@@ -367,6 +391,51 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
       _cachedReposterUser = reposterUser;
     }
 
+    if (!_isContentParsed || _parsedContent == null) {
+      return Container(
+        color: widget.containerColor ?? colors.background,
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: colors.surfaceTransparent,
+              child: Icon(
+                Icons.person,
+                size: 22,
+                color: colors.textSecondary,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    height: 14,
+                    width: 120,
+                    decoration: BoxDecoration(
+                      color: colors.surfaceTransparent,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    height: 12,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: colors.surfaceTransparent,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return GestureDetector(
       onTap: () => _navigateToThreadPage(widget.note),
       child: Container(
@@ -420,7 +489,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _buildUserInfoWithReply(context, authorUser, colors),
-                        _buildNoteContent(context, _parsedContent, widget.note),
+                        _buildNoteContent(context, _parsedContent!, widget.note),
                         const SizedBox(height: 8),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),

@@ -65,7 +65,7 @@ Future<void> _performOptimisticRepost(
   InteractionsProvider.instance.addOptimisticRepost(note.id, currentUserNpub);
 
   try {
-    await dataService.sendRepostInstantly(note);
+    await dataService.sendRepost(note);
   } catch (e) {
     print('Error sending repost: $e');
 

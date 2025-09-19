@@ -166,12 +166,16 @@ class _ProfilePageState extends State<ProfilePage> {
       await dataService!.initializeLightweight();
 
       if (mounted && dataService != null) {
-        final heavyOpsFuture = dataService!.initializeHeavyOperations();
+        // Non-blocking background initialization
+        Future.microtask(() async {
+          try {
+            final heavyOpsFuture = dataService!.initializeHeavyOperations();
+            final connectionsFuture = Future.delayed(const Duration(milliseconds: 10)).then((_) => dataService!.initializeConnections());
 
-        final connectionsFuture = Future.delayed(const Duration(milliseconds: 10)).then((_) => dataService!.initializeConnections());
-
-        Future.wait([heavyOpsFuture, connectionsFuture], eagerError: false).catchError((e) {
-          print('[ProfilePage] Ultra-fast parallel initialization error: $e');
+            await Future.wait([heavyOpsFuture, connectionsFuture], eagerError: false);
+          } catch (e) {
+            print('[ProfilePage] Ultra-fast parallel initialization error: $e');
+          }
         });
       }
     } catch (e) {
@@ -223,7 +227,8 @@ class _ProfilePageState extends State<ProfilePage> {
     return RefreshIndicator(
       onRefresh: () async {
         if (dataService != null) {
-          await dataService!.refreshNotes();
+          // Non-blocking refresh
+          Future.microtask(() => dataService!.refreshNotes());
         }
       },
       child: CustomScrollView(

@@ -55,21 +55,28 @@ class InteractionsProvider extends ChangeNotifier {
   Future<void> initialize(String npub, {String dataType = 'Feed'}) async {
     if (_isInitialized) return;
 
-    try {
-      if (!_hiveManager.isInitialized) {
-        await _hiveManager.initializeBoxes();
+    // Non-blocking initialization
+    Future.microtask(() async {
+      try {
+        if (!_hiveManager.isInitialized) {
+          await _hiveManager.initializeBoxes();
+        }
+
+        // Load interactions in background completely
+        Future.microtask(() async {
+          await _loadInteractionsFromHive();
+          notifyListeners();
+        });
+
+        _isInitialized = true;
+        Timer(const Duration(milliseconds: 100), () {
+          notifyListeners();
+          _startPeriodicUpdates();
+        });
+      } catch (e) {
+        debugPrint('[InteractionsProvider] Initialization error: $e');
       }
-
-      await _loadInteractionsFromHive();
-
-      _isInitialized = true;
-      Timer(const Duration(seconds: 1), () {
-        notifyListeners();
-        _startPeriodicUpdates();
-      });
-    } catch (e) {
-      debugPrint('[InteractionsProvider] Initialization error: $e');
-    }
+    });
   }
 
   Future<void> _loadInteractionsFromHive() async {
@@ -158,14 +165,20 @@ class InteractionsProvider extends ChangeNotifier {
       _reactionsByNote[reaction.targetEventId]?.removeWhere((r) => r.author == reaction.author && r.id.startsWith('optimistic_'));
     }
     _addReactionToCache(reaction);
-    try {
-      await _reactionsBox?.put(reaction.id, reaction);
-      if (_visibleNoteIds.contains(reaction.targetEventId)) {
-        _reactionStreamController.add(reaction.targetEventId);
-      }
-    } catch (e) {
-      debugPrint('[InteractionsProvider] Error saving reaction: $e');
+
+    // Immediate UI update, background save
+    if (_visibleNoteIds.contains(reaction.targetEventId)) {
+      _reactionStreamController.add(reaction.targetEventId);
     }
+
+    // Save to disk in background
+    Future.microtask(() async {
+      try {
+        await _reactionsBox?.put(reaction.id, reaction);
+      } catch (e) {
+        debugPrint('[InteractionsProvider] Error saving reaction: $e');
+      }
+    });
   }
 
   Future<void> addReply(ReplyModel reply) async {
@@ -491,47 +504,55 @@ class InteractionsProvider extends ChangeNotifier {
   Future<void> fetchInteractionsForNotes(List<String> noteIds) async {
     if (!_isInitialized || noteIds.isEmpty) return;
 
-    final now = DateTime.now();
-    final notesToFetch = <String>[];
+    // Only allow interaction fetching from thread pages
+    print('[InteractionsProvider] Manual interaction fetching for thread pages - ${noteIds.length} notes');
 
-    for (final noteId in noteIds) {
-      if (shouldFetchInteractions(noteId)) {
-        notesToFetch.add(noteId);
-        _lastManualFetch[noteId] = now;
-        _fetchedInteractionNotes.add(noteId);
+    // Completely background operation - no UI blocking
+    Future.microtask(() async {
+      final now = DateTime.now();
+      final notesToFetch = <String>[];
+
+      for (final noteId in noteIds) {
+        if (shouldFetchInteractions(noteId)) {
+          notesToFetch.add(noteId);
+          _lastManualFetch[noteId] = now;
+          _fetchedInteractionNotes.add(noteId);
+        }
       }
-    }
 
-    if (notesToFetch.isNotEmpty) {
-      try {
-        print('[InteractionsProvider] Manually fetching interactions for ${notesToFetch.length} notes');
+      if (notesToFetch.isNotEmpty) {
+        try {
+          print('[InteractionsProvider] Thread page interaction fetching for ${notesToFetch.length} notes');
 
-        final dataService = DataService.instance;
-        await dataService.fetchInteractionsForEvents(notesToFetch, forceLoad: true);
+          final dataService = DataService.instance;
 
-        print('[InteractionsProvider] Manual interaction fetching completed for ${notesToFetch.length} notes');
+          // Fire and forget - don't block UI
+          Future.microtask(() async {
+            await dataService.fetchInteractionsForEvents(notesToFetch, forceLoad: true);
+            print('[InteractionsProvider] Thread page interaction fetching completed for ${notesToFetch.length} notes');
 
+            notifyListeners();
+
+            for (final noteId in notesToFetch) {
+              _reactionStreamController.add(noteId);
+              _replyStreamController.add(noteId);
+              _repostStreamController.add(noteId);
+              _zapStreamController.add(noteId);
+            }
+          });
+        } catch (e) {
+          print('[InteractionsProvider] Error in thread page interaction fetching: $e');
+
+          for (final noteId in notesToFetch) {
+            _fetchedInteractionNotes.remove(noteId);
+            _lastManualFetch.remove(noteId);
+          }
+        }
+      } else {
+        print('[InteractionsProvider] No new interactions needed - all notes recently fetched');
         notifyListeners();
-
-        for (final noteId in notesToFetch) {
-          _reactionStreamController.add(noteId);
-          _replyStreamController.add(noteId);
-          _repostStreamController.add(noteId);
-          _zapStreamController.add(noteId);
-        }
-      } catch (e) {
-        print('[InteractionsProvider] Error in manual interaction fetching: $e');
-
-        for (final noteId in notesToFetch) {
-          _fetchedInteractionNotes.remove(noteId);
-          _lastManualFetch.remove(noteId);
-        }
       }
-    } else {
-      print('[InteractionsProvider] No new interactions needed - all notes recently fetched');
-
-      notifyListeners();
-    }
+    });
   }
 
   bool shouldFetchInteractions(String noteId) {
@@ -562,9 +583,8 @@ class InteractionsProvider extends ChangeNotifier {
   }
 
   void _startPeriodicUpdates() {
-    _periodicTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      notifyListeners();
-    });
+    // Disabled periodic interaction updates - interactions only fetched for thread pages
+    print('[InteractionsProvider] Periodic interaction updates disabled - use thread pages for interactions');
   }
 
   @override

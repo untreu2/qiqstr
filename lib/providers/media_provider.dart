@@ -16,14 +16,19 @@ class MediaProvider extends ChangeNotifier {
   static final Map<String, DateTime> _navigationCacheTimestamps = {};
 
   Future<void> _initialize() async {
-    try {
-      await _mediaService.initialize();
-      _isInitialized = true;
-      debugPrint('[MediaProvider] MediaService initialized successfully');
-    } catch (e) {
-      _errorMessage = 'Failed to initialize MediaService: $e';
-      debugPrint('[MediaProvider] Initialization error: $e');
-    }
+    // Completely non-blocking initialization
+    Future.microtask(() async {
+      try {
+        await _mediaService.initialize();
+        _isInitialized = true;
+        debugPrint('[MediaProvider] MediaService initialized successfully');
+        notifyListeners();
+      } catch (e) {
+        _errorMessage = 'Failed to initialize MediaService: $e';
+        debugPrint('[MediaProvider] Initialization error: $e');
+        notifyListeners();
+      }
+    });
   }
 
   late final MediaService _mediaService;
@@ -45,20 +50,23 @@ class MediaProvider extends ChangeNotifier {
   }
 
   void cacheMediaUrls(List<String> urls, {int priority = 1}) {
-    try {
-      final validUrls = urls.where((url) => url.isNotEmpty).toSet().toList();
-      if (validUrls.isEmpty) return;
+    // Fire and forget - completely non-blocking
+    Future.microtask(() async {
+      try {
+        final validUrls = urls.where((url) => url.isNotEmpty).toSet().toList();
+        if (validUrls.isEmpty) return;
 
-      _mediaService.cacheMediaUrls(validUrls, priority: priority);
-      _updateQueueSize();
-      _errorMessage = null;
+        _mediaService.cacheMediaUrls(validUrls, priority: priority);
+        _updateQueueSize();
+        _errorMessage = null;
 
-      _scheduleNotification();
-    } catch (e) {
-      _errorMessage = 'Failed to cache media URLs: $e';
-      debugPrint('[MediaProvider] Cache error: $e');
-      notifyListeners();
-    }
+        _scheduleNotification();
+      } catch (e) {
+        _errorMessage = 'Failed to cache media URLs: $e';
+        debugPrint('[MediaProvider] Cache error: $e');
+        notifyListeners();
+      }
+    });
   }
 
   void preloadCriticalImages(List<String> urls) {
@@ -74,39 +82,41 @@ class MediaProvider extends ChangeNotifier {
   }
 
   void cacheImagesFromNotes(List<NoteModel> notes) {
-    if (!_isInitialized) {
-      Future.microtask(() async {
+    // Completely non-blocking execution
+    Future.microtask(() async {
+      if (!_isInitialized) {
         await _initialize();
-        cacheImagesFromNotes(notes);
-      });
-      return;
-    }
+      }
 
-    try {
-      _mediaService.cacheMediaFromNotes(notes, priority: 2);
-      _updateQueueSize();
-      _scheduleNotification();
-    } catch (e) {
-      _errorMessage = 'Failed to cache images from notes: $e';
-      debugPrint('[MediaProvider] Cache from notes error: $e');
-      notifyListeners();
-    }
+      try {
+        _mediaService.cacheMediaFromNotes(notes, priority: 2);
+        _updateQueueSize();
+        _scheduleNotification();
+      } catch (e) {
+        _errorMessage = 'Failed to cache images from notes: $e';
+        debugPrint('[MediaProvider] Cache from notes error: $e');
+        notifyListeners();
+      }
+    });
   }
 
   void cacheImagesFromVisibleNotes(List<NoteModel> visibleNotes) {
     if (visibleNotes.isEmpty) return;
 
-    try {
-      _mediaService.preloadVisibleNoteImages(visibleNotes);
-      _updateQueueSize();
-      _scheduleNotification();
+    // Background processing - no UI blocking
+    Future.microtask(() async {
+      try {
+        _mediaService.preloadVisibleNoteImages(visibleNotes);
+        _updateQueueSize();
+        _scheduleNotification();
 
-      _storeInNavigationCache(visibleNotes);
-    } catch (e) {
-      _errorMessage = 'Failed to cache visible note images: $e';
-      debugPrint('[MediaProvider] Visible notes cache error: $e');
-      notifyListeners();
-    }
+        _storeInNavigationCache(visibleNotes);
+      } catch (e) {
+        _errorMessage = 'Failed to cache visible note images: $e';
+        debugPrint('[MediaProvider] Visible notes cache error: $e');
+        notifyListeners();
+      }
+    });
   }
 
   void _storeInNavigationCache(List<NoteModel> notes) {

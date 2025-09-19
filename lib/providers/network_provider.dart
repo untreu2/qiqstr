@@ -79,7 +79,7 @@ class NetworkProvider extends ChangeNotifier {
 
     try {
       if (immediate) {
-        await _networkService!.immediateBroadcast(message);
+        await _networkService!.priorityBroadcast(message);
       } else {
         await _networkService!.broadcastRequest(message);
       }
@@ -264,7 +264,7 @@ class NetworkProvider extends ChangeNotifier {
         switch (type) {
           case 'broadcast':
             if (params['immediate'] == true) {
-              await _networkService!.immediateBroadcast(params['message']);
+              await _networkService!.priorityBroadcast(params['message']);
             } else {
               await _networkService!.broadcastRequest(params['message']);
             }

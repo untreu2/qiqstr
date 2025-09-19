@@ -52,10 +52,15 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
   void _loadPreview() {
     final cached = _cacheBox.get(widget.url);
     if (cached != null) {
-      setState(() {
-        _title = cached.title;
-        _imageUrl = cached.imageUrl;
-        _isLoading = false;
+      // Non-blocking cache load
+      Future.microtask(() {
+        if (mounted) {
+          setState(() {
+            _title = cached.title;
+            _imageUrl = cached.imageUrl;
+            _isLoading = false;
+          });
+        }
       });
     } else {
       _fetchPreviewData();
@@ -63,25 +68,32 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
   }
 
   Future<void> _fetchPreviewData() async {
-    try {
-      final model = await compute(_fetchAndParseLink, widget.url);
+    Future.microtask(() async {
+      try {
+        final model = await compute(_fetchAndParseLink, widget.url);
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      if (model != null) {
-        _cacheBox.put(widget.url, model);
-        setState(() {
-          _title = model.title;
-          _imageUrl = model.imageUrl;
-          _isLoading = false;
-        });
-      } else {
-        setState(() => _isLoading = false);
+        if (model != null) {
+          await _cacheBox.put(widget.url, model);
+          if (mounted) {
+            setState(() {
+              _title = model.title;
+              _imageUrl = model.imageUrl;
+              _isLoading = false;
+            });
+          }
+        } else {
+          if (mounted) {
+            setState(() => _isLoading = false);
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
       }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isLoading = false);
-    }
+    });
   }
 
   @override

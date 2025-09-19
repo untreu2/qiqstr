@@ -127,7 +127,6 @@ class NotesProvider extends BaseProvider with CacheMixin<List<NoteNotifier>> {
   bool get isInitialized => _isInitialized;
 
   static int _compareNotesDesc(NoteNotifier a, NoteNotifier b) => b.note.timestamp.compareTo(a.note.timestamp);
-  static int _compareNotesAsc(NoteNotifier a, NoteNotifier b) => a.note.timestamp.compareTo(b.note.timestamp);
 
   Box<NoteModel>? _feedNotesBox;
   Box<NoteModel>? _profileNotesBox;

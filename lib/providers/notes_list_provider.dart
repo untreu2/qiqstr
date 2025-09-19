@@ -5,8 +5,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../models/note_model.dart';
 import '../services/data_service.dart';
 import '../services/data_service_manager.dart';
-import '../services/batch_processing_service.dart';
-import '../services/network_service.dart';
 import '../providers/user_provider.dart';
 import 'base_provider.dart';
 
@@ -179,32 +177,34 @@ class NotesListProvider extends BaseProvider {
         debugPrint('[NotesListProvider] Instant display: ${dataService.notes.length} cached notes');
       }
 
-      await dataService.initializeLightweight();
-      _updateFilteredNotesProgressive();
-
-      if (_isLoading) {
-        _setLoading(false);
-      }
-
+      // Complete non-blocking initialization
       Future.microtask(() async {
-        try {
-          if (dataType == DataType.profile) {
-            await Future.wait([
-              dataService.initializeHeavyOperations(),
-              dataService.initializeConnections(),
-            ], eagerError: false);
-            debugPrint('[NotesListProvider] Profile: Parallel operations completed');
-          } else {
-            await dataService.initializeHeavyOperations();
-            await dataService.initializeConnections();
+        await dataService.initializeLightweight();
+        _updateFilteredNotesProgressive();
 
-            createTimer(const Duration(milliseconds: 200), _refreshNewNotes);
-            debugPrint('[NotesListProvider] Feed: Background operations completed');
-          }
-          _updateFilteredNotesProgressive();
-        } catch (e) {
-          handleError('background initialization', e);
+        if (_isLoading) {
+          _setLoading(false);
         }
+
+        // All heavy operations run in background without blocking UI
+        Future.microtask(() async {
+          try {
+            if (dataType == DataType.profile) {
+              Future.microtask(() => dataService.initializeHeavyOperations());
+              Future.microtask(() => dataService.initializeConnections());
+              debugPrint('[NotesListProvider] Profile: Background operations started');
+            } else {
+              Future.microtask(() => dataService.initializeHeavyOperations());
+              Future.microtask(() => dataService.initializeConnections());
+
+              createTimer(const Duration(milliseconds: 500), _refreshNewNotes);
+              debugPrint('[NotesListProvider] Feed: Background operations started');
+            }
+            _updateFilteredNotesProgressive();
+          } catch (e) {
+            handleError('background initialization', e);
+          }
+        });
       });
     } catch (e) {
       _setError('Failed to load notes: $e');
@@ -287,7 +287,10 @@ class NotesListProvider extends BaseProvider {
 
       _fetchedInteractions.addAll(newNoteIds);
 
-      await dataService.fetchInteractionsForEvents(newNoteIds, forceLoad: true);
+      // Non-blocking interaction fetching
+      Future.microtask(() async {
+        await dataService.fetchInteractionsForEvents(newNoteIds, forceLoad: true);
+      });
 
       debugPrint(
           '[NotesListProvider] Fetched interactions for ${newNoteIds.length} new visible notes (${noteIds.length - newNoteIds.length} already cached)');
@@ -328,7 +331,10 @@ class NotesListProvider extends BaseProvider {
       }
 
       if (authorNpubs.isNotEmpty) {
-        await UserProvider.instance.loadUsers(authorNpubs.toList());
+        // Non-blocking profile loading
+        Future.microtask(() async {
+          await UserProvider.instance.loadUsers(authorNpubs.toList());
+        });
         debugPrint('[NotesListProvider] Loaded profiles for ${authorNpubs.length} authors of ${visibleNotes.length} visible notes');
       }
     } catch (e) {

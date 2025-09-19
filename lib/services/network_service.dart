@@ -316,7 +316,7 @@ class NetworkService {
 
   Future<void> broadcastRequest(String serializedRequest) => broadcast(serializedRequest);
   Future<void> safeBroadcast(String message) => broadcast(message);
-  Future<void> immediateBroadcast(String message) => broadcast(message);
+  Future<void> priorityBroadcast(String message) => broadcast(message);
   Future<void> shareNote(String noteContent, String npub) => sendNote(noteContent);
   Future<void> broadcastUserNote(String noteContent) => sendNote(noteContent);
   Future<void> broadcastUserReaction(String targetEventId, String reactionContent) => sendReaction(targetEventId, reactionContent);
