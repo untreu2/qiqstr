@@ -285,7 +285,7 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
 
   Widget _buildNoteSeparator() {
     return Container(
-      height: 12,
+      height: 24,
       margin: const EdgeInsets.symmetric(horizontal: 16),
       child: Center(
         child: Container(

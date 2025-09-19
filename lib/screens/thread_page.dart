@@ -1116,6 +1116,7 @@ class _ThreadPageState extends State<ThreadPage> {
                 key: isFocused ? _focusedNoteKey : null,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  SizedBox(height: 4),
                   Container(
                     margin: EdgeInsets.only(left: depth > 0 ? 8 : 0),
                     decoration: BoxDecoration(

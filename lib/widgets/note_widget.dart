@@ -500,7 +500,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                             note: widget.note,
                           ),
                         ),
-                        const SizedBox(height: 8),
                       ],
                     ),
                   ),
