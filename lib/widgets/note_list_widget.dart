@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import '../providers/notes_list_provider.dart';
-import '../providers/media_provider.dart';
 import '../services/data_service.dart';
 import 'note_widget.dart';
 import 'grid_view_widget.dart';
@@ -22,84 +21,119 @@ class NoteListWidget extends StatefulWidget {
 }
 
 class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAliveClientMixin<NoteListWidget> {
+  @override
+  bool get wantKeepAlive => true;
+
+  // Immutable cached data
   late final ScrollController _scrollController;
+  late final String _scrollKey;
+  late final NotesListProvider _provider;
+
+  // Static cache for scroll positions
   static final Map<String, double> _globalScrollPositions = {};
 
-  Timer? _loadMoreTimer;
-  Timer? _scrollSaveTimer;
+  // Performance constants
   static const double _loadMoreThreshold = 200.0;
-  static const int _criticalNotesCount = 3;
   static const Duration _scrollSaveDelay = Duration(milliseconds: 300);
   static const Duration _loadMoreDelay = Duration(milliseconds: 100);
 
+  // Minimal state tracking
+  Timer? _loadMoreTimer;
+  Timer? _scrollSaveTimer;
   bool _isScrollJumping = false;
   double? _lastScrollPosition;
-  final GlobalKey _listKey = GlobalKey();
+  bool _isInitialized = false;
 
-  @override
-  bool get wantKeepAlive => true;
+  // Single consolidated state
+  final ValueNotifier<_ListState> _stateNotifier = ValueNotifier(_ListState.initial());
 
   @override
   void initState() {
     super.initState();
-    _initializeScrollController();
-    _setupScrollListener();
-
-    // Optimize post-frame callback
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-
-      final provider = context.read<NotesListProvider>();
-      provider.fetchInitialNotes();
-
-      // Delay media preloading to avoid blocking UI
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (mounted) _preloadCriticalMedia();
-      });
-    });
+    _precomputeData();
+    _initializeController();
+    _setupProviderListener();
+    _scheduleAsyncInitialization();
   }
 
-  void _initializeScrollController() {
-    final provider = context.read<NotesListProvider>();
-    final scrollKey = '${provider.npub}_${provider.dataType.name}';
-    final savedPosition = _globalScrollPositions[scrollKey] ?? 0.0;
+  void _precomputeData() {
+    _provider = context.read<NotesListProvider>();
+    _scrollKey = '${_provider.npub}_${_provider.dataType.name}';
+    _isInitialized = true;
+  }
+
+  void _initializeController() {
+    final savedPosition = _globalScrollPositions[_scrollKey] ?? 0.0;
 
     _scrollController = ScrollController(
       keepScrollOffset: true,
       initialScrollOffset: savedPosition,
     );
 
-    // Prevent initial jump by waiting for widget to be fully built
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && savedPosition > 0) {
-        Future.delayed(const Duration(milliseconds: 50), () {
-          if (mounted && _scrollController.hasClients) {
-            _scrollController.jumpTo(savedPosition);
-          }
-        });
-      }
-    });
-  }
-
-  void _setupScrollListener() {
     _scrollController.addListener(_onScroll);
   }
 
-  // Improved scroll handler with jump prevention
+  void _setupProviderListener() {
+    _provider.addListener(_onProviderChange);
+    _syncProviderState();
+  }
+
+  void _onProviderChange() {
+    if (!mounted) return;
+    _syncProviderState();
+  }
+
+  void _syncProviderState() {
+    final currentState = _stateNotifier.value;
+
+    final newState = _ListState(
+      notes: List.unmodifiable(_provider.notes),
+      isLoading: _provider.isLoading,
+      isLoadingMore: _provider.isLoadingMore,
+      hasError: _provider.hasError,
+      errorMessage: _provider.errorMessage,
+    );
+
+    // Only update if something actually changed
+    if (currentState != newState) {
+      _stateNotifier.value = newState;
+    }
+  }
+
+  void _scheduleAsyncInitialization() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      _provider.fetchInitialNotes();
+      _restoreScrollPosition();
+    });
+  }
+
+  void _restoreScrollPosition() {
+    final savedPosition = _globalScrollPositions[_scrollKey] ?? 0.0;
+
+    if (savedPosition > 0) {
+      Future.delayed(const Duration(milliseconds: 50), () {
+        if (mounted && _scrollController.hasClients) {
+          _scrollController.jumpTo(savedPosition);
+        }
+      });
+    }
+  }
+
   void _onScroll() {
     if (!_scrollController.hasClients || _isScrollJumping) return;
 
     final currentPosition = _scrollController.position.pixels;
     final maxScrollExtent = _scrollController.position.maxScrollExtent;
 
-    // Detect sudden jumps and prevent them
+    // Anti-jump protection
     if (_lastScrollPosition != null) {
       final jumpThreshold = MediaQuery.of(context).size.height * 0.5;
       final positionDiff = (currentPosition - _lastScrollPosition!).abs();
 
       if (positionDiff > jumpThreshold) {
         _isScrollJumping = true;
-        // Restore to last known good position
         _scrollController.jumpTo(_lastScrollPosition!);
         Future.delayed(const Duration(milliseconds: 100), () {
           _isScrollJumping = false;
@@ -110,38 +144,25 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
 
     _lastScrollPosition = currentPosition;
 
-    // Save scroll position with debouncing
+    // Debounced scroll position saving
     _scrollSaveTimer?.cancel();
     _scrollSaveTimer = Timer(_scrollSaveDelay, () {
       if (mounted && !_isScrollJumping) {
-        final provider = context.read<NotesListProvider>();
-        final scrollKey = '${provider.npub}_${provider.dataType.name}';
-        _globalScrollPositions[scrollKey] = currentPosition;
+        _globalScrollPositions[_scrollKey] = currentPosition;
       }
     });
 
-    // Load more with debouncing
+    // Debounced load more
     if (maxScrollExtent > 0 && (maxScrollExtent - currentPosition) < _loadMoreThreshold) {
       _loadMoreTimer?.cancel();
       _loadMoreTimer = Timer(_loadMoreDelay, () {
         if (mounted && !_isScrollJumping) {
-          final provider = context.read<NotesListProvider>();
-          if (!provider.isLoadingMore && !provider.isLoading) {
-            provider.fetchMoreNotes();
+          final state = _stateNotifier.value;
+          if (!state.isLoading && !state.isLoadingMore) {
+            _provider.fetchMoreNotes();
           }
         }
       });
-    }
-  }
-
-  void _preloadCriticalMedia() {
-    if (!mounted) return;
-
-    final provider = context.read<NotesListProvider>();
-    if (provider.notes.isNotEmpty) {
-      final criticalNotes = provider.notes.take(_criticalNotesCount).toList();
-      // Use compute or isolate for heavy operations if needed
-      MediaProvider.instance.cacheImagesFromVisibleNotes(criticalNotes);
     }
   }
 
@@ -151,6 +172,8 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
     _scrollSaveTimer?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _provider.removeListener(_onProviderChange);
+    _stateNotifier.dispose();
     super.dispose();
   }
 
@@ -158,83 +181,131 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
   Widget build(BuildContext context) {
     super.build(context);
 
-    return Selector<NotesListProvider, NoteListState>(
-      selector: (context, provider) => NoteListState(
-        notes: provider.notes,
-        isLoading: provider.isLoading,
-        isLoadingMore: provider.isLoadingMore,
-        hasError: provider.hasError,
-        errorMessage: provider.errorMessage,
-      ),
-      shouldRebuild: (previous, next) {
-        // Only rebuild if there are actual changes
-        if (previous.isLoading != next.isLoading ||
-            previous.isLoadingMore != next.isLoadingMore ||
-            previous.hasError != next.hasError ||
-            previous.errorMessage != next.errorMessage) {
-          return true;
-        }
+    if (!_isInitialized) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
 
-        // For notes list, check if content actually changed
-        if (previous.notes.length != next.notes.length) {
-          return true;
-        }
-
-        // Check if first few items changed (most likely to affect visible area)
-        const checkCount = 5;
-        final prevCheck = previous.notes.take(checkCount);
-        final nextCheck = next.notes.take(checkCount);
-
-        for (int i = 0; i < prevCheck.length && i < nextCheck.length; i++) {
-          if (prevCheck.elementAt(i).id != nextCheck.elementAt(i).id) {
-            return true;
-          }
-        }
-
-        return false;
-      },
-      builder: (context, state, child) {
+    return ValueListenableBuilder<_ListState>(
+      valueListenable: _stateNotifier,
+      builder: (context, state, _) {
         if (state.hasError) {
-          return _buildErrorState(state.errorMessage ?? 'Unknown error');
+          return _ErrorState(
+            errorMessage: state.errorMessage ?? 'Unknown error',
+            onRetry: () => _provider.fetchInitialNotes(),
+          );
         }
 
         if (state.notes.isNotEmpty) {
-          return widget.viewMode == NoteViewMode.grid ? const GridViewWidget() : _buildListView(state);
+          return widget.viewMode == NoteViewMode.grid
+              ? const GridViewWidget()
+              : _OptimizedListView(
+                  state: state,
+                  scrollController: _scrollController,
+                  provider: _provider,
+                );
         }
 
         if (state.isLoading) {
-          return _buildLoadingState();
+          return const _LoadingState();
         }
 
-        return _buildEmptyState();
+        return const _EmptyState();
       },
     );
   }
+}
 
-  Widget _buildListView(NoteListState state) {
-    final provider = context.read<NotesListProvider>();
+// Immutable state class
+class _ListState {
+  final List<dynamic> notes;
+  final bool isLoading;
+  final bool isLoadingMore;
+  final bool hasError;
+  final String? errorMessage;
 
+  const _ListState({
+    required this.notes,
+    required this.isLoading,
+    required this.isLoadingMore,
+    required this.hasError,
+    this.errorMessage,
+  });
+
+  factory _ListState.initial() {
+    return const _ListState(
+      notes: [],
+      isLoading: false,
+      isLoadingMore: false,
+      hasError: false,
+      errorMessage: null,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _ListState &&
+          runtimeType == other.runtimeType &&
+          notes.length == other.notes.length &&
+          isLoading == other.isLoading &&
+          isLoadingMore == other.isLoadingMore &&
+          hasError == other.hasError &&
+          errorMessage == other.errorMessage &&
+          _areNotesEqual(notes, other.notes);
+
+  bool _areNotesEqual(List<dynamic> current, List<dynamic> other) {
+    if (current.length != other.length) return false;
+
+    // Quick check - compare first 5 items for visible changes
+    const checkCount = 5;
+    final actualCheckCount = current.length < checkCount ? current.length : checkCount;
+
+    for (int i = 0; i < actualCheckCount; i++) {
+      if (current[i].id != other[i].id) return false;
+    }
+
+    return true;
+  }
+
+  @override
+  int get hashCode => notes.length.hashCode ^ isLoading.hashCode ^ isLoadingMore.hashCode ^ hasError.hashCode ^ errorMessage.hashCode;
+}
+
+// Optimized list view - single ValueListenableBuilder, no nested listeners
+class _OptimizedListView extends StatelessWidget {
+  final _ListState state;
+  final ScrollController scrollController;
+  final NotesListProvider provider;
+
+  const _OptimizedListView({
+    required this.state,
+    required this.scrollController,
+    required this.provider,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return SliverList(
-      key: _listKey,
       delegate: SliverChildBuilderDelegate(
         (context, index) {
-          if (state.isLoadingMore && index == state.notes.length) {
-            return _buildLoadMoreIndicator();
+          // Handle load more indicator
+          if (index == state.notes.length) {
+            return state.isLoadingMore ? const _LoadMoreIndicator() : const SizedBox.shrink();
           }
 
+          // Handle out of bounds
           if (index >= state.notes.length) {
             return const SizedBox.shrink();
           }
 
           final note = state.notes[index];
 
-          return Column(
-            key: ValueKey('${note.id}_$index'), // More stable key
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Wrap in RepaintBoundary to prevent unnecessary repaints
-              RepaintBoundary(
-                child: NoteWidget(
+          return RepaintBoundary(
+            key: ValueKey('note_${note.id}'),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                NoteWidget(
                   note: note,
                   dataService: provider.dataService,
                   currentUserNpub: provider.currentUserNpub,
@@ -242,20 +313,44 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
                   profiles: const {},
                   isSmallView: true,
                 ),
-              ),
-              if (index < state.notes.length - 1) _buildNoteSeparator(),
-            ],
+                if (index < state.notes.length - 1) const _NoteSeparator(),
+              ],
+            ),
           );
         },
         childCount: state.notes.length + (state.isLoadingMore ? 1 : 0),
-        addAutomaticKeepAlives: true, // Changed back to true for scroll stability
-        addRepaintBoundaries: true,
-        addSemanticIndexes: false, // Reduce overhead
+        addAutomaticKeepAlives: true,
+        addRepaintBoundaries: false, // We handle this manually
+        addSemanticIndexes: false,
       ),
     );
   }
+}
 
-  Widget _buildLoadMoreIndicator() {
+// Immutable components
+class _LoadingState extends StatelessWidget {
+  const _LoadingState();
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverToBoxAdapter(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: CircularProgressIndicator(
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LoadMoreIndicator extends StatelessWidget {
+  const _LoadMoreIndicator();
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
       alignment: Alignment.center,
@@ -269,21 +364,13 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
       ),
     );
   }
+}
 
-  Widget _buildLoadingState() {
-    return SliverToBoxAdapter(
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: CircularProgressIndicator(
-            color: Theme.of(context).colorScheme.primary,
-          ),
-        ),
-      ),
-    );
-  }
+class _NoteSeparator extends StatelessWidget {
+  const _NoteSeparator();
 
-  Widget _buildNoteSeparator() {
+  @override
+  Widget build(BuildContext context) {
     return Container(
       height: 24,
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -297,8 +384,13 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
       ),
     );
   }
+}
 
-  Widget _buildEmptyState() {
+class _EmptyState extends StatelessWidget {
+  const _EmptyState();
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return SliverToBoxAdapter(
@@ -333,8 +425,19 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
       ),
     );
   }
+}
 
-  Widget _buildErrorState(String error) {
+class _ErrorState extends StatelessWidget {
+  final String errorMessage;
+  final VoidCallback onRetry;
+
+  const _ErrorState({
+    required this.errorMessage,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     return SliverToBoxAdapter(
@@ -356,13 +459,13 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
               ),
               const SizedBox(height: 8),
               Text(
-                error,
+                errorMessage,
                 style: theme.textTheme.bodyMedium,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: () => context.read<NotesListProvider>().fetchInitialNotes(),
+                onPressed: onRetry,
                 child: const Text('Retry'),
               ),
             ],
@@ -373,37 +476,7 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
   }
 }
 
-// State class for better performance with Selector
-class NoteListState {
-  final List<dynamic> notes;
-  final bool isLoading;
-  final bool isLoadingMore;
-  final bool hasError;
-  final String? errorMessage;
-
-  const NoteListState({
-    required this.notes,
-    required this.isLoading,
-    required this.isLoadingMore,
-    required this.hasError,
-    this.errorMessage,
-  });
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is NoteListState &&
-          runtimeType == other.runtimeType &&
-          notes.length == other.notes.length &&
-          isLoading == other.isLoading &&
-          isLoadingMore == other.isLoadingMore &&
-          hasError == other.hasError &&
-          errorMessage == other.errorMessage;
-
-  @override
-  int get hashCode => notes.length.hashCode ^ isLoading.hashCode ^ isLoadingMore.hashCode ^ hasError.hashCode ^ errorMessage.hashCode;
-}
-
+// Factory remains the same
 class NoteListWidgetFactory {
   static Widget create({
     required String npub,

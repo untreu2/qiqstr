@@ -72,7 +72,6 @@ dependencies:
     bech32: ^0.2.2
     flutter_svg: ^2.0.10+1
     html: ^0.15.4
-    like_button: ^2.1.0
     carbon_icons: ^0.0.1+2
     rxdart: ^0.28.0
 dev_dependencies:

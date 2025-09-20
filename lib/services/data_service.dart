@@ -905,7 +905,7 @@ class DataService {
             Future.microtask(() async {
               await _fetchProfileNotes([npub]);
               if (notes.isNotEmpty) {
-                final noteIds = notes.map((n) => n.id).toList();
+                notes.map((n) => n.id).toList();
                 // Disabled automatic interaction fetching for profile notes
                 // Interactions will only be fetched when entering thread pages
               }
@@ -1340,6 +1340,7 @@ class DataService {
       }
 
       final reply = ReplyModel.fromEvent(eventData);
+      notes.firstWhereOrNull((n) => n.id == parentEventId);
       final finalParentId = actualParentId ?? parentEventId;
       repliesMap.putIfAbsent(finalParentId, () => []);
 
@@ -1359,7 +1360,7 @@ class DataService {
           timestamp: reply.timestamp,
           isReply: true,
           parentId: finalParentId,
-          rootId: rootId ?? reply.rootEventId,
+          rootId: (rootId ?? (parentNote?.rootId) ?? reply.rootEventId),
           rawWs: jsonEncode(eventData),
           eTags: eTags,
           pTags: pTags,
@@ -2678,7 +2679,7 @@ class DataService {
       final newNote = NoteModel(
         id: eventJson['id'],
         content: noteContent,
-        author: npub,
+        author: _loggedInNpub,
         timestamp: timestamp,
         isRepost: false,
       );

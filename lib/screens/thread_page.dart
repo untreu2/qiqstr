@@ -60,7 +60,6 @@ class _ThreadPageState extends State<ThreadPage> {
   Timer? _periodicInteractionTimer;
   Timer? _reloadTimer;
 
-  // Timer management
   final Set<Timer> _activeTimers = {};
   static const int _maxConcurrentTimers = 3;
 
@@ -84,24 +83,20 @@ class _ThreadPageState extends State<ThreadPage> {
 
   @override
   void dispose() {
-    // Clean up all listeners
     widget.dataService.notesNotifier.removeListener(_onNotesChanged);
     InteractionsProvider.instance.removeListener(_onInteractionsChanged);
     _scrollController.dispose();
 
-    // Cancel all timers efficiently
     _cancelAllTimers();
 
     super.dispose();
   }
 
   void _cancelAllTimers() {
-    // Cancel specific timers
     _reloadTimer?.cancel();
     _uiUpdateTimer?.cancel();
     _periodicInteractionTimer?.cancel();
 
-    // Cancel any remaining timers in the set
     for (final timer in _activeTimers) {
       timer.cancel();
     }
@@ -111,9 +106,7 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Timer _createManagedTimer(Duration duration, VoidCallback callback) {
-    // Limit concurrent timers to prevent performance issues
     if (_activeTimers.length >= _maxConcurrentTimers) {
-      // Cancel oldest timer
       final oldestTimer = _activeTimers.first;
       oldestTimer.cancel();
       _activeTimers.remove(oldestTimer);
@@ -131,10 +124,8 @@ class _ThreadPageState extends State<ThreadPage> {
 
   void _onInteractionsChanged() {
     if (mounted && !_isLoading) {
-      // Multiple rapid UI updates for immediate visibility
       setState(() {});
 
-      // Immediate follow-up updates
       Future.microtask(() {
         if (mounted && !_isLoading) {
           setState(() {});
@@ -193,14 +184,12 @@ class _ThreadPageState extends State<ThreadPage> {
     if (hasRelevantChanges) {
       _cachedThreadHierarchy = null;
 
-      // Multiple immediate UI updates for new replies
       if (mounted) {
         setState(() {
           _updateRelevantNoteIds();
           _updateVisibleNotesInProvider();
         });
 
-        // Force additional immediate updates
         Future.microtask(() {
           if (mounted) setState(() {});
         });
@@ -214,12 +203,11 @@ class _ThreadPageState extends State<ThreadPage> {
         });
       }
 
-      // Aggressive interaction fetching for new replies
       Future.microtask(() async {
         await _fetchPeriodicInteractions();
         if (mounted) {
           setState(() {});
-          // Force another update after fetch
+
           Future.microtask(() {
             if (mounted) setState(() {});
           });
@@ -241,13 +229,11 @@ class _ThreadPageState extends State<ThreadPage> {
       if (mounted && !_isLoading) {
         _hasPendingUIUpdate = false;
 
-        // Force immediate state updates without full reload
         setState(() {
           _updateRelevantNoteIds();
           _updateVisibleNotesInProvider();
         });
 
-        // Additional updates to ensure visibility
         Future.microtask(() {
           if (mounted) setState(() {});
         });
@@ -357,7 +343,6 @@ class _ThreadPageState extends State<ThreadPage> {
         .timeout(const Duration(seconds: 3))
         .catchError((e) => print('[ThreadPage] Profiles fetch timeout: $e')));
 
-    // Non-blocking background loading
     Future.microtask(() async {
       try {
         await Future.wait(futures).timeout(const Duration(seconds: 5));
@@ -394,20 +379,17 @@ class _ThreadPageState extends State<ThreadPage> {
 
       final futures = <Future>[];
 
-      // Immediate parallel fetching with minimal delays
       futures.add(widget.dataService
           .fetchInteractionsForEvents(threadEventIds.toList(), forceLoad: true)
           .timeout(const Duration(seconds: 5))
           .catchError((e) => print('[ThreadPage] DataService interaction fetch error: $e')));
 
-      // Faster attempt intervals for quicker loading
       for (int attempt = 0; attempt < 5; attempt++) {
         futures.add(Future.delayed(Duration(milliseconds: attempt * 50), () async {
           try {
             await InteractionsProvider.instance.fetchInteractionsForNotes(threadEventIds.toList());
             print('[ThreadPage] InteractionsProvider attempt ${attempt + 1} completed');
 
-            // Immediate UI update after each successful fetch
             if (mounted) {
               setState(() {});
             }
@@ -422,7 +404,6 @@ class _ThreadPageState extends State<ThreadPage> {
         return InteractionsProvider.instance.fetchInteractionsForNotes(threadEventIds.toList());
       }).catchError((e) => print('[ThreadPage] Direct visibility update error: $e')));
 
-      // Non-blocking interaction loading
       Future.microtask(() async {
         try {
           await Future.wait(futures, eagerError: false);
@@ -464,11 +445,9 @@ class _ThreadPageState extends State<ThreadPage> {
   void _forceUIUpdates() {
     if (!mounted) return;
 
-    // Immediate updates
     setState(() {});
     InteractionsProvider.instance.notifyListeners();
 
-    // Rapid sequence of updates for maximum responsiveness
     for (int i = 0; i < 10; i++) {
       Future.delayed(Duration(milliseconds: i * 25), () {
         if (mounted) {
@@ -480,7 +459,6 @@ class _ThreadPageState extends State<ThreadPage> {
       });
     }
 
-    // Final updates
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted) {
         InteractionsProvider.instance.notifyListeners();
@@ -492,9 +470,8 @@ class _ThreadPageState extends State<ThreadPage> {
   void _startPeriodicInteractionFetch() {
     _periodicInteractionTimer?.cancel();
 
-    // Optimized periodic fetch with adaptive intervals
     _periodicInteractionTimer = Timer.periodic(
-      const Duration(milliseconds: 500), // Reduced frequency to prevent performance issues
+      const Duration(milliseconds: 500),
       (timer) async {
         if (!mounted || _isLoading) {
           timer.cancel();
@@ -526,14 +503,11 @@ class _ThreadPageState extends State<ThreadPage> {
       }
     }
 
-    // Aggressive parallel fetching for maximum speed
     final futures = <Future>[];
 
-    // Multiple simultaneous fetch attempts
     futures.add(InteractionsProvider.instance.fetchInteractionsForNotes(threadEventIds.toList()));
     futures.add(widget.dataService.fetchInteractionsForEvents(threadEventIds.toList(), forceLoad: true));
 
-    // Non-blocking periodic interaction fetch
     Future.microtask(() async {
       try {
         await Future.wait(futures, eagerError: false);
@@ -544,7 +518,6 @@ class _ThreadPageState extends State<ThreadPage> {
 
     InteractionsProvider.instance.updateVisibleNotes(threadEventIds);
 
-    // Force immediate UI update after interaction fetch
     if (mounted) {
       setState(() {});
     }
@@ -581,7 +554,7 @@ class _ThreadPageState extends State<ThreadPage> {
 
     if (allUserNpubs.isNotEmpty) {
       print('[ThreadPage] Fetching profiles for ${allUserNpubs.length} thread users');
-      // Non-blocking profile fetch
+
       Future.microtask(() async {
         try {
           await widget.dataService.fetchProfilesBatch(allUserNpubs.toList()).timeout(const Duration(seconds: 3));
@@ -891,14 +864,12 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Map<String, List<NoteModel>> _getOrBuildThreadHierarchy(String rootId) {
-    // Always rebuild hierarchy to catch new replies immediately
     _cachedThreadHierarchy = null;
 
     print('[ThreadPage] Building fresh thread hierarchy for root: $rootId');
 
     final allNotes = [
       ...widget.dataService.notesNotifier.value,
-      ...widget.dataService.notes,
     ];
 
     print('[ThreadPage] Available notes for hierarchy: ${allNotes.length}');
@@ -912,7 +883,6 @@ class _ThreadPageState extends State<ThreadPage> {
 
     print('[ThreadPage] Fresh thread hierarchy built with $totalReplies total replies');
 
-    // Force immediate UI update after hierarchy rebuild
     if (mounted) {
       Future.microtask(() {
         if (mounted) setState(() {});
