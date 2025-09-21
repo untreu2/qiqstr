@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:bounce/bounce.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -599,6 +600,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
       body: Stack(
         children: [
           _buildMainScaffold(),
+          _buildFloatingBackButton(context),
         ],
       ),
     );
@@ -624,12 +626,12 @@ class _ShareNotePageState extends State<ShareNotePage> {
     return AppBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
-      leading: _buildBackButton(),
+      leading: _buildAppBarBackButton(),
       actions: [_buildAppBarActions()],
     );
   }
 
-  Widget _buildBackButton() {
+  Widget _buildAppBarBackButton() {
     return Padding(
       padding: const EdgeInsets.only(left: 8.0),
       child: Semantics(
@@ -643,6 +645,43 @@ class _ShareNotePageState extends State<ShareNotePage> {
           ),
           onPressed: () => Navigator.pop(context),
           tooltip: 'Go back',
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFloatingBackButton(BuildContext context) {
+    final double topPadding = MediaQuery.of(context).padding.top;
+
+    return Positioned(
+      top: topPadding + 8,
+      left: 16,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(25.0),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: context.colors.backgroundTransparent,
+              border: Border.all(
+                color: context.colors.borderLight,
+                width: 1.5,
+              ),
+              borderRadius: BorderRadius.circular(25.0),
+            ),
+            child: Bounce(
+              scaleFactor: 0.85,
+              onTap: () => Navigator.pop(context),
+              behavior: HitTestBehavior.opaque,
+              child: Icon(
+                Icons.arrow_back,
+                color: context.colors.textSecondary,
+                size: 20,
+              ),
+            ),
+          ),
         ),
       ),
     );
