@@ -15,9 +15,10 @@ import '../screens/edit_profile.dart';
 import '../services/data_service.dart';
 import '../providers/user_provider.dart';
 import '../screens/following_page.dart';
-import 'mini_link_preview_widget.dart';
 import 'photo_viewer_widget.dart';
 import 'profile_image_widget.dart';
+import 'package:carbon_icons/carbon_icons.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class ProfileInfoWidget extends StatefulWidget {
   final UserModel user;
@@ -282,7 +283,23 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                     ],
                     if (user.website.isNotEmpty && _isInitialized) ...[
                       const SizedBox(height: 8),
-                      MiniLinkPreviewWidget(url: websiteUrl),
+                      GestureDetector(
+                        onTap: () async {
+                          final Uri url = Uri.parse(websiteUrl);
+                          if (!await launchUrl(url)) {
+                            throw Exception('Could not launch $url');
+                          }
+                        },
+                        child: InkWell(
+                          child: Text(
+                            user.website,
+                            style: const TextStyle(
+                              decoration: TextDecoration.underline,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                     const SizedBox(height: 8),
                     _buildFollowerInfo(context),

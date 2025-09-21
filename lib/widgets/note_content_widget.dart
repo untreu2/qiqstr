@@ -8,6 +8,7 @@ import 'package:qiqstr/widgets/media_preview_widget.dart';
 import 'package:qiqstr/widgets/quote_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../theme/theme_manager.dart';
+import 'mini_link_preview_widget.dart';
 
 enum NoteContentSize { small, big }
 
@@ -133,13 +134,20 @@ class _NoteContentWidgetState extends State<NoteContentWidget> with AutomaticKee
                 child: MediaPreviewWidget(mediaUrls: _mediaUrls),
               ),
             ),
-          if (_linkUrls.isNotEmpty && _mediaUrls.isEmpty)
+          if (_linkUrls.isNotEmpty)
             RepaintBoundary(
               child: Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: _linkUrls.map((u) => LinkPreviewWidget(url: u)).toList(),
+                  children: _linkUrls.length > 1
+                      ? _linkUrls
+                          .map((u) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8.0),
+                                child: MiniLinkPreviewWidget(url: u),
+                              ))
+                          .toList()
+                      : _linkUrls.map((u) => LinkPreviewWidget(url: u)).toList(),
                 ),
               ),
             ),
