@@ -134,7 +134,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> with AutomaticKee
                 child: MediaPreviewWidget(mediaUrls: _mediaUrls),
               ),
             ),
-          if (_linkUrls.isNotEmpty)
+          if (_linkUrls.isNotEmpty && _mediaUrls.isEmpty)
             RepaintBoundary(
               child: Padding(
                 padding: const EdgeInsets.only(top: 8),
