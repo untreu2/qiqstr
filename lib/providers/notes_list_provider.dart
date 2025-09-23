@@ -93,7 +93,12 @@ class NotesListProvider extends BaseProvider {
   void _detectNewNotes() {
     if (!_isInitialized || dataType != DataType.feed) return;
 
-    final newFilteredNotes = _notes.where((n) => !n.isReply || n.isRepost).toList();
+    final List<NoteModel> newFilteredNotes = [];
+    for (final n in _notes) {
+      if (!n.isReply || n.isRepost) {
+        newFilteredNotes.add(n);
+      }
+    }
     final currentNoteIds = newFilteredNotes.map((n) => n.id).toList();
 
     if (_lastKnownNoteIds.isNotEmpty) {
@@ -109,7 +114,13 @@ class NotesListProvider extends BaseProvider {
 
   void _updateFilteredNotesProgressive() {
     if (_cachedFilteredNotes == null || _notes.length != _lastNotesLength) {
-      _cachedFilteredNotes = _notes.where((n) => !n.isReply || n.isRepost).toList();
+      final List<NoteModel> newCachedFilteredNotes = [];
+      for (final n in _notes) {
+        if (!n.isReply || n.isRepost) {
+          newCachedFilteredNotes.add(n);
+        }
+      }
+      _cachedFilteredNotes = newCachedFilteredNotes;
       _lastNotesLength = _notes.length;
     }
 
@@ -130,7 +141,7 @@ class NotesListProvider extends BaseProvider {
 
   void _startPeriodicUpdates() {
     if (dataType == DataType.feed) {
-      createPeriodicTimer(const Duration(seconds: 20), (timer) {
+      createPeriodicTimer(const Duration(seconds: 60), (timer) {
         _refreshNewNotes();
       });
     }
@@ -249,8 +260,8 @@ class NotesListProvider extends BaseProvider {
   void _loadUserProfiles() {
     if (_filteredNotes.isEmpty) return;
 
-    final batchSize = dataType == DataType.profile ? 15 : 10;
-    final firstBatchNotes = _filteredNotes.take(batchSize).toList();
+    const int _userProfileBatchSize = 12;
+    final firstBatchNotes = _filteredNotes.take(_userProfileBatchSize).toList();
 
     final userNpubs = <String>{};
     for (final note in firstBatchNotes) {
@@ -259,7 +270,7 @@ class NotesListProvider extends BaseProvider {
         userNpubs.add(note.repostedBy!);
       }
 
-      if (userNpubs.length >= 12) break;
+      if (userNpubs.length >= _userProfileBatchSize) break;
     }
 
     if (userNpubs.isNotEmpty) {
@@ -307,9 +318,11 @@ class NotesListProvider extends BaseProvider {
     _interactionCleanupTimer?.cancel();
     _interactionCleanupTimer = Timer(const Duration(minutes: 5), () {
       if (_fetchedInteractions.length > 500) {
-        final recentNoteIds = _filteredNotes.take(300).map((note) => note.id).toSet();
-        _fetchedInteractions.retainWhere((id) => recentNoteIds.contains(id));
-        debugPrint('[NotesListProvider] Cleaned up interaction fetch cache: ${_fetchedInteractions.length} entries retained');
+        if (_filteredNotes.isNotEmpty) {
+          final recentNoteIds = _filteredNotes.take(300).map((note) => note.id).toSet();
+          _fetchedInteractions.retainWhere((id) => recentNoteIds.contains(id));
+          debugPrint('[NotesListProvider] Cleaned up interaction fetch cache: ${_fetchedInteractions.length} entries retained');
+        }
       }
     });
   }

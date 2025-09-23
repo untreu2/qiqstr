@@ -34,7 +34,7 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
 
   // Performance constants
   static const double _loadMoreThreshold = 200.0;
-  static const Duration _scrollSaveDelay = Duration(milliseconds: 300);
+  static const Duration _scrollSaveDelay = Duration(milliseconds: 0);
   static const Duration _loadMoreDelay = Duration(milliseconds: 100);
 
   // Minimal state tracking
@@ -256,8 +256,8 @@ class _ListState {
   bool _areNotesEqual(List<dynamic> current, List<dynamic> other) {
     if (current.length != other.length) return false;
 
-    // Quick check - compare first 5 items for visible changes
-    const checkCount = 5;
+    // Quick check - compare first 10 items for visible changes
+    const checkCount = 10;
     final actualCheckCount = current.length < checkCount ? current.length : checkCount;
 
     for (int i = 0; i < actualCheckCount; i++) {

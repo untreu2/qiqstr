@@ -69,9 +69,10 @@ class NoteNotifier extends ChangeNotifier {
   NoteModel get note => _note;
 
   void updateNote(NoteModel newNote) {
-    if (_note.id == newNote.id) {
-      if (_note != newNote) {
-        _note = newNote;
+    if (_note.id == newNote.id && _note != newNote) {
+      final oldNote = _note;
+      _note = newNote;
+      if (oldNote != newNote) {
         notifyListeners();
       }
     }
@@ -185,8 +186,6 @@ class NotesProvider extends BaseProvider with CacheMixin<List<NoteNotifier>> {
   }
 
   void _addNoteToCache(NoteModel note) {
-    bool cacheNeedsInvalidation = false;
-
     if (_notifiers.containsKey(note.id)) {
       final notifier = _notifiers[note.id]!;
       final oldNote = notifier.note;
@@ -195,7 +194,6 @@ class NotesProvider extends BaseProvider with CacheMixin<List<NoteNotifier>> {
 
       if (needsReSort) {
         _storage.remove(notifier);
-        cacheNeedsInvalidation = true;
       }
 
       notifier.updateNote(note);
@@ -203,16 +201,15 @@ class NotesProvider extends BaseProvider with CacheMixin<List<NoteNotifier>> {
       if (needsReSort) {
         _storage.add(notifier);
       }
+      _dataVersion++;
+      invalidateCache();
     } else {
       final notifier = NoteNotifier(note);
       _notifiers[note.id] = notifier;
       _storage.add(notifier);
-      cacheNeedsInvalidation = true;
-    }
-
-    if (cacheNeedsInvalidation) {
       _dataVersion++;
       invalidateCache();
+      return;
     }
   }
 
