@@ -159,14 +159,14 @@ class _GridMediaItem extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           color: context.colors.surface,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(0),
           border: Border.all(
             color: context.colors.border.withOpacity(0.3),
             width: 0.5,
           ),
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(0),
           child: Stack(
             children: [
               Positioned.fill(
