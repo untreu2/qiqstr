@@ -17,11 +17,13 @@ import 'note_content_widget.dart';
 class QuoteWidget extends StatefulWidget {
   final String bech32;
   final DataService dataService;
+  final dynamic notesListProvider;
 
   const QuoteWidget({
     super.key,
     required this.bech32,
     required this.dataService,
+    this.notesListProvider,
   });
 
   @override
@@ -109,8 +111,17 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
       if (_isDisposed || !mounted) return;
 
       try {
-        // Try cache first
-        var note = await _dataService.getCachedNote(_eventId);
+        var note;
+
+        // Try to get pre-loaded quote first
+        if (widget.notesListProvider != null) {
+          note = widget.notesListProvider.getQuoteForBech32(_bech32);
+        }
+
+        // Try cache if not pre-loaded
+        if (note == null) {
+          note = await _dataService.getCachedNote(_eventId);
+        }
 
         // Fetch from network if needed
         if (note == null) {
@@ -175,14 +186,22 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
       if (_isDisposed || !mounted) return;
 
       try {
-        final provider = UserProvider.instance;
+        var user;
 
-        // Try to get from cache/provider first
-        var user = provider.getUserIfExists(npub);
+        // Try to get pre-loaded user first
+        if (widget.notesListProvider != null) {
+          user = widget.notesListProvider.getPreloadedUser(npub);
+        }
 
+        // Fallback to UserProvider
         if (user == null || user.name == 'Anonymous') {
-          // Load from network
-          user = await provider.loadUser(npub);
+          final provider = UserProvider.instance;
+          user = provider.getUserIfExists(npub);
+
+          if (user == null || user.name == 'Anonymous') {
+            // Load from network only if not pre-loaded
+            user = await provider.loadUser(npub);
+          }
         }
 
         if (!_isDisposed && mounted && user.name != 'Anonymous') {

@@ -312,6 +312,7 @@ class _OptimizedListView extends StatelessWidget {
                   notesNotifier: provider.dataService.notesNotifier,
                   profiles: const {},
                   isSmallView: true,
+                  notesListProvider: provider,
                 ),
                 if (index < state.notes.length - 1) const _NoteSeparator(),
               ],

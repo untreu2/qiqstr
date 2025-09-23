@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:nostr_nip19/nostr_nip19.dart';
 import '../models/note_model.dart';
+import '../models/user_model.dart';
 import '../services/data_service.dart';
 import '../services/data_service_manager.dart';
 import '../providers/user_provider.dart';
@@ -29,6 +31,13 @@ class NotesListProvider extends BaseProvider {
 
   List<NoteModel>? _cachedFilteredNotes;
   int _lastNotesLength = 0;
+
+  // Pre-loading state
+  bool _isPreloadingDependencies = false;
+  final Set<String> _preloadedNoteIds = {};
+  final Map<String, String> _preloadedMentions = {};
+  final Map<String, NoteModel> _preloadedQuotes = {};
+  final Set<String> _preloadedUserProfiles = {};
 
   NotesListProvider({
     required this.npub,
@@ -87,7 +96,7 @@ class NotesListProvider extends BaseProvider {
   void _onNotesChanged() {
     _notes = dataService.notesNotifier.value;
     _detectNewNotes();
-    _updateFilteredNotesProgressive();
+    _preloadNoteDependenciesAndFilter();
   }
 
   void _detectNewNotes() {
@@ -112,31 +121,272 @@ class NotesListProvider extends BaseProvider {
     _lastKnownNoteIds = currentNoteIds;
   }
 
-  void _updateFilteredNotesProgressive() {
+  void _preloadNoteDependenciesAndFilter() {
+    if (_isPreloadingDependencies) return;
+
     if (_cachedFilteredNotes == null || _notes.length != _lastNotesLength) {
-      final List<NoteModel> newCachedFilteredNotes = [];
+      final List<NoteModel> potentialNotes = [];
       for (final n in _notes) {
         if (!n.isReply || n.isRepost) {
-          newCachedFilteredNotes.add(n);
+          potentialNotes.add(n);
         }
       }
-      _cachedFilteredNotes = newCachedFilteredNotes;
+      _cachedFilteredNotes = potentialNotes;
       _lastNotesLength = _notes.length;
     }
 
     if (_newNotesCount == 0) {
-      _filteredNotes = _cachedFilteredNotes!;
+      _preloadDependenciesForNotes(_cachedFilteredNotes ?? []);
+    }
+  }
+
+  Future<void> _preloadDependenciesForNotes(List<NoteModel> notes) async {
+    if (_isPreloadingDependencies || notes.isEmpty) return;
+
+    _isPreloadingDependencies = true;
+
+    try {
+      // Extract all dependencies from notes
+      final dependencies = _extractNoteDependencies(notes);
+
+      // Pre-load all dependencies in parallel
+      await Future.wait([
+        _preloadUserProfiles(dependencies.userProfiles),
+        _preloadMentions(dependencies.mentions),
+        _preloadQuotes(dependencies.quotes),
+      ], eagerError: false);
+
+      // Only show notes that have all dependencies loaded
+      _filteredNotes = _filterNotesWithLoadedDependencies(notes);
+
+      if (_isInitialized) {
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[NotesListProvider] Error preloading dependencies: $e');
+      // Fallback to showing notes without full dependencies
+      _filteredNotes = notes;
+      if (_isInitialized) {
+        notifyListeners();
+      }
+    } finally {
+      _isPreloadingDependencies = false;
+    }
+  }
+
+  _NoteDependencies _extractNoteDependencies(List<NoteModel> notes) {
+    final userProfiles = <String>{};
+    final mentions = <String, List<String>>{};
+    final quotes = <String>{};
+
+    for (final note in notes) {
+      // Extract user profiles needed
+      userProfiles.add(note.author);
+      if (note.repostedBy != null) {
+        userProfiles.add(note.repostedBy!);
+      }
+
+      try {
+        // Extract mentions from parsed content
+        final parsedContent = note.parsedContentLazy;
+        final textParts = (parsedContent['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+
+        final noteMentions = <String>[];
+        for (final part in textParts) {
+          if (part['type'] == 'mention') {
+            final mentionId = part['id'] as String?;
+            if (mentionId != null) {
+              noteMentions.add(mentionId);
+            }
+          }
+        }
+
+        if (noteMentions.isNotEmpty) {
+          mentions[note.id] = noteMentions;
+        }
+
+        // Extract quotes
+        final quoteIds = (parsedContent['quoteIds'] as List<dynamic>?)?.cast<String>() ?? [];
+        quotes.addAll(quoteIds);
+      } catch (e) {
+        debugPrint('[NotesListProvider] Error parsing note ${note.id}: $e');
+      }
     }
 
-    if (_isInitialized) {
-      notifyListeners();
+    return _NoteDependencies(
+      userProfiles: userProfiles.toList(),
+      mentions: mentions,
+      quotes: quotes.toList(),
+    );
+  }
+
+  Future<void> _preloadUserProfiles(List<String> userIds) async {
+    if (userIds.isEmpty) return;
+
+    final usersToLoad = userIds.where((id) => !_preloadedUserProfiles.contains(id)).toList();
+    if (usersToLoad.isEmpty) return;
+
+    try {
+      await UserProvider.instance.loadUsers(usersToLoad);
+      _preloadedUserProfiles.addAll(usersToLoad);
+      debugPrint('[NotesListProvider] Pre-loaded ${usersToLoad.length} user profiles');
+    } catch (e) {
+      debugPrint('[NotesListProvider] Error pre-loading user profiles: $e');
+    }
+  }
+
+  Future<void> _preloadMentions(Map<String, List<String>> mentionsByNote) async {
+    if (mentionsByNote.isEmpty) return;
+
+    final allMentionIds = <String>{};
+    for (final mentions in mentionsByNote.values) {
+      allMentionIds.addAll(mentions);
     }
 
-    if (_filteredNotes.isNotEmpty) {
-      SchedulerBinding.instance.addPostFrameCallback((_) {
-        _loadUserProfiles();
-      });
+    final mentionsToLoad = allMentionIds.where((id) => !_preloadedMentions.containsKey(id)).toList();
+    if (mentionsToLoad.isEmpty) return;
+
+    try {
+      final resolvedMentions = await dataService.resolveMentions(mentionsToLoad);
+      _preloadedMentions.addAll(resolvedMentions);
+      debugPrint('[NotesListProvider] Pre-loaded ${resolvedMentions.length} mentions');
+    } catch (e) {
+      debugPrint('[NotesListProvider] Error pre-loading mentions: $e');
     }
+  }
+
+  Future<void> _preloadQuotes(List<String> quoteIds) async {
+    if (quoteIds.isEmpty) return;
+
+    final quotesToLoad = quoteIds.where((id) => !_preloadedQuotes.containsKey(id)).toList();
+    if (quotesToLoad.isEmpty) return;
+
+    try {
+      for (final quoteId in quotesToLoad) {
+        final eventId = _extractEventIdFromBech32(quoteId);
+        if (eventId != null) {
+          final quote = await dataService.getCachedNote(eventId);
+          if (quote != null) {
+            _preloadedQuotes[quoteId] = quote;
+            // Also pre-load the quote author's profile
+            if (!_preloadedUserProfiles.contains(quote.author)) {
+              await UserProvider.instance.loadUser(quote.author);
+              _preloadedUserProfiles.add(quote.author);
+            }
+          }
+        }
+      }
+      debugPrint('[NotesListProvider] Pre-loaded ${_preloadedQuotes.length} quotes');
+    } catch (e) {
+      debugPrint('[NotesListProvider] Error pre-loading quotes: $e');
+    }
+  }
+
+  String? _extractEventIdFromBech32(String bech32) {
+    try {
+      if (bech32.startsWith('note1')) {
+        return decodeBasicBech32(bech32, 'note');
+      } else if (bech32.startsWith('nevent1')) {
+        final result = decodeTlvBech32Full(bech32, 'nevent');
+        return result['type_0_main'];
+      }
+    } catch (e) {
+      debugPrint('[NotesListProvider] Error extracting event ID from $bech32: $e');
+    }
+    return null;
+  }
+
+  List<NoteModel> _filterNotesWithLoadedDependencies(List<NoteModel> notes) {
+    final readyNotes = <NoteModel>[];
+
+    for (final note in notes) {
+      if (_areNoteDependenciesLoaded(note)) {
+        readyNotes.add(note);
+        _preloadedNoteIds.add(note.id);
+      }
+    }
+
+    return readyNotes;
+  }
+
+  bool _areNoteDependenciesLoaded(NoteModel note) {
+    // Check if already processed
+    if (_preloadedNoteIds.contains(note.id)) {
+      return true;
+    }
+
+    // Check user profiles
+    if (!_preloadedUserProfiles.contains(note.author)) {
+      final user = UserProvider.instance.getUserIfExists(note.author);
+      if (user == null || user.name == 'Anonymous') {
+        return false;
+      }
+    }
+
+    if (note.repostedBy != null && !_preloadedUserProfiles.contains(note.repostedBy!)) {
+      final user = UserProvider.instance.getUserIfExists(note.repostedBy!);
+      if (user == null || user.name == 'Anonymous') {
+        return false;
+      }
+    }
+
+    try {
+      // Check mentions
+      final parsedContent = note.parsedContentLazy;
+      final textParts = (parsedContent['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+
+      for (final part in textParts) {
+        if (part['type'] == 'mention') {
+          final mentionId = part['id'] as String?;
+          if (mentionId != null && !_preloadedMentions.containsKey(mentionId)) {
+            return false;
+          }
+        }
+      }
+
+      // Check quotes
+      final quoteIds = (parsedContent['quoteIds'] as List<dynamic>?)?.cast<String>() ?? [];
+      for (final quoteId in quoteIds) {
+        if (!_preloadedQuotes.containsKey(quoteId)) {
+          return false;
+        }
+      }
+    } catch (e) {
+      debugPrint('[NotesListProvider] Error checking dependencies for note ${note.id}: $e');
+      return false;
+    }
+
+    return true;
+  }
+
+  // Getter methods for pre-loaded data
+  Map<String, String> getMentionsForNote(String noteId) {
+    final result = <String, String>{};
+    try {
+      final note = _notes.firstWhere((n) => n.id == noteId);
+      final parsedContent = note.parsedContentLazy;
+      final textParts = (parsedContent['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+
+      for (final part in textParts) {
+        if (part['type'] == 'mention') {
+          final mentionId = part['id'] as String?;
+          if (mentionId != null && _preloadedMentions.containsKey(mentionId)) {
+            result[mentionId] = _preloadedMentions[mentionId]!;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[NotesListProvider] Error getting mentions for note $noteId: $e');
+    }
+    return result;
+  }
+
+  NoteModel? getQuoteForBech32(String bech32) {
+    return _preloadedQuotes[bech32];
+  }
+
+  UserModel? getPreloadedUser(String npub) {
+    return UserProvider.instance.getUserIfExists(npub);
   }
 
   void _startPeriodicUpdates() {
@@ -182,7 +432,7 @@ class NotesListProvider extends BaseProvider {
     _clearError();
 
     try {
-      _updateFilteredNotesProgressive();
+      _preloadNoteDependenciesAndFilter();
       if (dataService.notes.isNotEmpty) {
         _setLoading(false);
         debugPrint('[NotesListProvider] Instant display: ${dataService.notes.length} cached notes');
@@ -191,7 +441,7 @@ class NotesListProvider extends BaseProvider {
       // Complete non-blocking initialization
       Future.microtask(() async {
         await dataService.initializeLightweight();
-        _updateFilteredNotesProgressive();
+        _preloadNoteDependenciesAndFilter();
 
         if (_isLoading) {
           _setLoading(false);
@@ -211,7 +461,7 @@ class NotesListProvider extends BaseProvider {
               createTimer(const Duration(milliseconds: 500), _refreshNewNotes);
               debugPrint('[NotesListProvider] Feed: Background operations started');
             }
-            _updateFilteredNotesProgressive();
+            _preloadNoteDependenciesAndFilter();
           } catch (e) {
             handleError('background initialization', e);
           }
@@ -383,6 +633,13 @@ class NotesListProvider extends BaseProvider {
     }
   }
 
+  void _clearPreloadedData() {
+    _preloadedNoteIds.clear();
+    _preloadedMentions.clear();
+    _preloadedQuotes.clear();
+    _preloadedUserProfiles.clear();
+  }
+
   @override
   void dispose() {
     dataService.notesNotifier.removeListener(_onNotesChanged);
@@ -391,7 +648,21 @@ class NotesListProvider extends BaseProvider {
     _cachedFilteredNotes = null;
     _fetchedInteractions.clear();
     _interactionCleanupTimer?.cancel();
+    _clearPreloadedData();
 
     super.dispose();
   }
+}
+
+// Helper class for organizing note dependencies
+class _NoteDependencies {
+  final List<String> userProfiles;
+  final Map<String, List<String>> mentions;
+  final List<String> quotes;
+
+  const _NoteDependencies({
+    required this.userProfiles,
+    required this.mentions,
+    required this.quotes,
+  });
 }

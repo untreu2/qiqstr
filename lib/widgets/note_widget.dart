@@ -18,6 +18,7 @@ class NoteWidget extends StatefulWidget {
   final Color? containerColor;
   final bool isSmallView;
   final ScrollController? scrollController;
+  final dynamic notesListProvider; // Add notes list provider for pre-loaded data
 
   const NoteWidget({
     super.key,
@@ -29,6 +30,7 @@ class NoteWidget extends StatefulWidget {
     this.containerColor,
     this.isSmallView = true,
     this.scrollController,
+    this.notesListProvider,
   });
 
   @override
@@ -155,10 +157,23 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     try {
       final currentState = _stateNotifier.value;
 
-      final provider = UserProvider.instance;
+      // Try to get pre-loaded user data first
+      UserModel? authorUser;
+      UserModel? reposterUser;
 
-      final authorUser = provider.getUserOrDefault(_authorId);
-      final reposterUser = _reposterId != null ? provider.getUserOrDefault(_reposterId) : null;
+      if (widget.notesListProvider != null) {
+        authorUser = widget.notesListProvider.getPreloadedUser(_authorId);
+        if (_reposterId != null) {
+          reposterUser = widget.notesListProvider.getPreloadedUser(_reposterId);
+        }
+      }
+
+      // Fallback to UserProvider if not pre-loaded
+      authorUser ??= UserProvider.instance.getUserOrDefault(_authorId);
+      if (_reposterId != null) {
+        reposterUser ??= UserProvider.instance.getUserOrDefault(_reposterId);
+      }
+
       final replyText = _isReply && _parentId != null ? 'Reply to...' : null;
 
       final newState = _NoteState(
@@ -180,6 +195,20 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     if (_isDisposed || !mounted) return;
 
     try {
+      // If we have a notes list provider with pre-loaded data, skip async loading
+      if (widget.notesListProvider != null) {
+        final authorPreloaded = widget.notesListProvider.getPreloadedUser(_authorId);
+        final reposterPreloaded = _reposterId != null ? widget.notesListProvider.getPreloadedUser(_reposterId) : null;
+
+        if (authorPreloaded != null &&
+            authorPreloaded.name != 'Anonymous' &&
+            (_reposterId == null || (reposterPreloaded != null && reposterPreloaded.name != 'Anonymous'))) {
+          // All users are pre-loaded, no need for async loading
+          return;
+        }
+      }
+
+      // Fallback to async loading if not pre-loaded
       final usersToLoad = <String>[_authorId];
       if (_reposterId != null) usersToLoad.add(_reposterId);
       if (_isReply && _parentId != null) usersToLoad.add(_parentId);
@@ -383,6 +412,8 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                                 dataService: widget.dataService,
                                 onMentionTap: _navigateToMentionProfile,
                                 onShowMoreTap: _shouldTruncate ? (_) => _navigateToThreadPage() : null,
+                                notesListProvider: widget.notesListProvider,
+                                noteId: _noteId,
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -675,12 +706,16 @@ class _SafeContentSection extends StatelessWidget {
   final DataService dataService;
   final Function(String) onMentionTap;
   final Function(String)? onShowMoreTap;
+  final dynamic notesListProvider;
+  final String noteId;
 
   const _SafeContentSection({
     required this.parsedContent,
     required this.dataService,
     required this.onMentionTap,
     required this.onShowMoreTap,
+    this.notesListProvider,
+    required this.noteId,
   });
 
   @override
@@ -691,6 +726,8 @@ class _SafeContentSection extends StatelessWidget {
         dataService: dataService,
         onNavigateToMentionProfile: onMentionTap,
         onShowMoreTap: onShowMoreTap,
+        notesListProvider: notesListProvider,
+        noteId: noteId,
       );
     } catch (e) {
       debugPrint('[ContentSection] Build error: $e');

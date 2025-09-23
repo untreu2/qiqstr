@@ -18,6 +18,8 @@ class NoteContentWidget extends StatefulWidget {
   final void Function(String mentionId) onNavigateToMentionProfile;
   final void Function(String noteId)? onShowMoreTap;
   final NoteContentSize size;
+  final dynamic notesListProvider;
+  final String? noteId;
 
   const NoteContentWidget({
     super.key,
@@ -26,6 +28,8 @@ class NoteContentWidget extends StatefulWidget {
     required this.onNavigateToMentionProfile,
     this.onShowMoreTap,
     this.size = NoteContentSize.small,
+    this.notesListProvider,
+    this.noteId,
   });
 
   @override
@@ -63,6 +67,19 @@ class _NoteContentWidgetState extends State<NoteContentWidget> with AutomaticKee
   void _scheduleMentionResolution() {
     if (!_hasMentions) return;
 
+    // Try to get pre-loaded mentions first
+    if (widget.notesListProvider != null && widget.noteId != null) {
+      final preloadedMentions = widget.notesListProvider.getMentionsForNote(widget.noteId!);
+      if (preloadedMentions.isNotEmpty) {
+        _mentionsFuture = Future.value(preloadedMentions);
+        if (mounted) {
+          setState(() {});
+        }
+        return;
+      }
+    }
+
+    // Fallback to async loading
     Future.microtask(() {
       if (!mounted) return;
       _mentionsFuture = _resolveMentions();
@@ -158,7 +175,11 @@ class _NoteContentWidgetState extends State<NoteContentWidget> with AutomaticKee
                 children: _quoteIds
                     .map((q) => Padding(
                           padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: QuoteWidget(bech32: q, dataService: widget.dataService),
+                          child: QuoteWidget(
+                            bech32: q,
+                            dataService: widget.dataService,
+                            notesListProvider: widget.notesListProvider,
+                          ),
                         ))
                     .toList(),
               ),

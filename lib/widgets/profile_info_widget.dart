@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -17,7 +16,6 @@ import '../providers/user_provider.dart';
 import '../screens/following_page.dart';
 import 'photo_viewer_widget.dart';
 import 'profile_image_widget.dart';
-import 'package:carbon_icons/carbon_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class ProfileInfoWidget extends StatefulWidget {
