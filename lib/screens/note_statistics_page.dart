@@ -1,5 +1,7 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:bounce/bounce.dart';
 import '../models/note_model.dart';
 import '../services/data_service.dart';
 import '../models/user_model.dart';
@@ -25,6 +27,16 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
     return UserModel.fromCachedProfile(npub, cached);
   }
 
+  void _navigateToProfile(String npub) {
+    try {
+      if (mounted) {
+        widget.dataService.openUserProfile(context, npub);
+      }
+    } catch (e) {
+      debugPrint('[NoteStatisticsPage] Navigate to profile error: $e');
+    }
+  }
+
   Widget _buildEntry({
     required String npub,
     required String content,
@@ -35,43 +47,68 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
       builder: (_, snapshot) {
         final user = snapshot.data;
 
-        return ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          leading: CircleAvatar(
-            radius: 20,
-            backgroundImage: user?.profileImage.isNotEmpty == true ? CachedNetworkImageProvider(user!.profileImage) : null,
-            backgroundColor: context.colors.grey800,
-            child: user?.profileImage.isNotEmpty != true ? Icon(Icons.person, color: context.colors.surface) : null,
-          ),
-          title: Text(
-            user?.name ?? npub.substring(0, 8),
-            style: TextStyle(color: context.colors.textPrimary),
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
             children: [
-              if (zapAmount != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    '⚡ $zapAmount sats',
-                    style: const TextStyle(
-                      color: Color(0xFFECB200),
-                      fontSize: 13,
-                    ),
-                  ),
+              GestureDetector(
+                onTap: () => _navigateToProfile(npub),
+                child: CircleAvatar(
+                  radius: 26,
+                  backgroundImage: user?.profileImage.isNotEmpty == true ? CachedNetworkImageProvider(user!.profileImage) : null,
+                  backgroundColor: context.colors.grey800,
+                  child: user?.profileImage.isNotEmpty != true ? Icon(Icons.person, color: context.colors.surface, size: 26) : null,
                 ),
-              if (content.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    content,
-                    style: TextStyle(
-                      color: context.colors.textSecondary,
-                      fontSize: 13,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Flexible(
+                      child: GestureDetector(
+                        onTap: () => _navigateToProfile(npub),
+                        child: Text(
+                          user?.name ?? npub.substring(0, 8),
+                          style: TextStyle(
+                            color: context.colors.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ),
-                  ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (zapAmount != null)
+                          Text(
+                            '⚡ $zapAmount sats',
+                            style: const TextStyle(
+                              color: Color(0xFFECB200),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        if (content.isNotEmpty) ...[
+                          if (zapAmount != null) const SizedBox(width: 12),
+                          Flexible(
+                            child: Text(
+                              content,
+                              style: TextStyle(
+                                color: context.colors.textSecondary,
+                                fontSize: 15,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
                 ),
+              ),
             ],
           ),
         );
@@ -100,6 +137,43 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
     );
   }
 
+  Widget _buildFloatingBackButton(BuildContext context) {
+    final double topPadding = MediaQuery.of(context).padding.top;
+
+    return Positioned(
+      top: topPadding + 8,
+      left: 16,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(25.0),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: context.colors.backgroundTransparent,
+              border: Border.all(
+                color: context.colors.borderLight,
+                width: 1.5,
+              ),
+              borderRadius: BorderRadius.circular(25.0),
+            ),
+            child: Bounce(
+              scaleFactor: 0.85,
+              onTap: () => Navigator.pop(context),
+              behavior: HitTestBehavior.opaque,
+              child: Icon(
+                Icons.arrow_back,
+                color: context.colors.textSecondary,
+                size: 20,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final reactions = widget.dataService.reactionsMap[widget.note.id] ?? [];
@@ -122,55 +196,36 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
       length: 3,
       child: Scaffold(
         backgroundColor: context.colors.background,
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        body: Stack(
           children: [
-            SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Icon(Icons.arrow_back, color: context.colors.textPrimary, size: 24),
-                    ),
-                    const SizedBox(width: 16),
-                    Text(
-                      'Note interactions',
-                      style: TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w700,
-                        color: context.colors.textPrimary,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(height: MediaQuery.of(context).padding.top + 60),
+                TabBar(
+                  indicatorColor: context.colors.textPrimary,
+                  labelColor: context.colors.textPrimary,
+                  unselectedLabelColor: context.colors.textTertiary,
+                  indicatorWeight: 1.5,
+                  labelPadding: const EdgeInsets.symmetric(vertical: 12),
+                  tabs: const [
+                    Tab(text: 'Reactions'),
+                    Tab(text: 'Reposts'),
+                    Tab(text: 'Zaps'),
                   ],
                 ),
-              ),
-            ),
-            TabBar(
-              indicatorColor: context.colors.textPrimary,
-              labelColor: context.colors.textPrimary,
-              unselectedLabelColor: context.colors.textTertiary,
-              indicatorWeight: 1.5,
-              labelPadding: const EdgeInsets.symmetric(vertical: 12),
-              tabs: const [
-                Tab(text: 'Reactions'),
-                Tab(text: 'Reposts'),
-                Tab(text: 'Zaps'),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      _buildList(reactionWidgets, 'No reactions yet.'),
+                      _buildList(repostWidgets, 'No reposts yet.'),
+                      _buildList(zapWidgets, 'No zaps yet.'),
+                    ],
+                  ),
+                ),
               ],
             ),
-            Expanded(
-              child: TabBarView(
-                children: [
-                  _buildList(reactionWidgets, 'No reactions yet.'),
-                  _buildList(repostWidgets, 'No reposts yet.'),
-                  _buildList(zapWidgets, 'No zaps yet.'),
-                ],
-              ),
-            ),
+            _buildFloatingBackButton(context),
           ],
         ),
       ),
