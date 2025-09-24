@@ -4,8 +4,15 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import '../models/user_model.dart';
 import '../services/profile_service.dart';
+import '../services/time_service.dart';
 
 class UserProvider extends ChangeNotifier {
+  void safeNotifyListeners() {
+    if (hasListeners) {
+      notifyListeners();
+    }
+  }
+
   static UserProvider? _instance;
   static UserProvider get instance => _instance ??= UserProvider._internal();
 
@@ -22,7 +29,7 @@ class UserProvider extends ChangeNotifier {
   UserModel? _currentUser;
 
   static const int _maxUsersCache = 1000;
-  DateTime _lastCleanup = DateTime.now();
+  DateTime _lastCleanup = timeService.now;
 
   Map<String, UserModel> get users => Map.unmodifiable(_users);
   bool get isInitialized => _isInitialized;
@@ -37,14 +44,15 @@ class UserProvider extends ChangeNotifier {
     _isInitialized = true;
 
     Timer(const Duration(seconds: 1), () {
-      notifyListeners();
       _startPeriodicUpdates();
     });
   }
 
   void _startPeriodicUpdates() {
-    _periodicTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
-      notifyListeners();
+    _periodicTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
+      if (_users.isNotEmpty) {
+        safeNotifyListeners();
+      }
     });
   }
 
@@ -64,7 +72,7 @@ class UserProvider extends ChangeNotifier {
   Future<void> setCurrentUser(String npub) async {
     _currentUserNpub = npub;
     _currentUser = await loadUser(npub);
-    notifyListeners();
+    safeNotifyListeners();
   }
 
   UserModel? getUser(String identifier) {
@@ -74,8 +82,6 @@ class UserProvider extends ChangeNotifier {
     return _users[primaryKey];
   }
 
-  /// Returns user if exists in cache or can be converted from existing data, null otherwise
-  /// Does not trigger network fetching like loadUser does
   UserModel? getUserIfExists(String identifier) {
     if (identifier.isEmpty) return null;
 
@@ -173,7 +179,7 @@ class UserProvider extends ChangeNotifier {
 
         _users[npubKey] = updatedUser;
         _npubToHexMap[npubKey] = hexKey;
-        notifyListeners();
+        safeNotifyListeners();
 
         return updatedUser;
       }
@@ -189,12 +195,10 @@ class UserProvider extends ChangeNotifier {
     try {
       final profileData = await _profileService.getCachedUserProfile(hexKey);
 
-      // Check if we actually got real profile data or just defaults
       if (profileData['name'] == 'Anonymous' &&
           profileData['profileImage'] == '' &&
           profileData['about'] == '' &&
           profileData['nip05'] == '') {
-        // This means the profile couldn't be fetched, don't cache it
         debugPrint('[UserProvider] Profile not found for $identifier');
         return getUserOrDefault(identifier);
       }
@@ -204,12 +208,12 @@ class UserProvider extends ChangeNotifier {
       _users[npubKey] = user;
       _npubToHexMap[npubKey] = hexKey;
       _performMemoryCleanup();
-      notifyListeners();
+      safeNotifyListeners();
 
       return user;
     } catch (e) {
       debugPrint('[UserProvider] Error loading user $identifier: $e');
-      // Don't cache failed users, just return default without storing
+
       final defaultUser = getUserOrDefault(identifier);
 
       if (defaultUser.npub.isEmpty && npubKey.isNotEmpty) {
@@ -297,7 +301,7 @@ class UserProvider extends ChangeNotifier {
       });
 
       await Future.wait(futures);
-      notifyListeners();
+      safeNotifyListeners();
     } finally {
       _loadingUsers.removeAll(hexKeysToLoad);
     }
@@ -312,7 +316,7 @@ class UserProvider extends ChangeNotifier {
     if (identifier == _currentUserNpub || primaryKey == _currentUserNpub) {
       _currentUser = user;
     }
-    notifyListeners();
+    safeNotifyListeners();
   }
 
   void removeUser(String identifier) {
@@ -325,11 +329,11 @@ class UserProvider extends ChangeNotifier {
       _npubToHexMap.remove(primaryKey);
     }
 
-    notifyListeners();
+    safeNotifyListeners();
   }
 
   void _performMemoryCleanup() {
-    final now = DateTime.now();
+    final now = timeService.now;
     if (now.difference(_lastCleanup).inMinutes < 5) return;
 
     _lastCleanup = now;
@@ -359,7 +363,7 @@ class UserProvider extends ChangeNotifier {
       profileImage: '',
       lud16: '',
       website: '',
-      updatedAt: DateTime.now(),
+      updatedAt: timeService.now,
       nip05Verified: false,
     );
   }
@@ -369,7 +373,7 @@ class UserProvider extends ChangeNotifier {
     _npubToHexMap.clear();
     _loadingUsers.clear();
     _profileService.cleanupCache();
-    notifyListeners();
+    safeNotifyListeners();
   }
 
   @override

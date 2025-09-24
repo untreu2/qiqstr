@@ -6,6 +6,7 @@ import '../models/user_model.dart';
 import '../constants/relays.dart';
 import 'hive_manager.dart';
 import 'nip05_verification_service.dart';
+import 'time_service.dart';
 
 class ProfileService {
   static ProfileService? _instance;
@@ -33,7 +34,7 @@ class ProfileService {
   Future<Map<String, String>> getCachedUserProfile(String npub) async {
     if (_profileCache.containsKey(npub)) {
       final timestamp = _cacheTimestamps[npub];
-      if (timestamp != null && DateTime.now().difference(timestamp) < _cacheTTL) {
+      if (timestamp != null && timeService.difference(timestamp) < _cacheTTL) {
         return _profileCache[npub]!;
       } else {
         _profileCache.remove(npub);
@@ -51,7 +52,7 @@ class ProfileService {
     Future.microtask(() async {
       try {
         final user = _usersBox?.get(npub);
-        if (user != null && DateTime.now().difference(user.updatedAt) < _cacheTTL) {
+        if (user != null && timeService.difference(user.updatedAt) < _cacheTTL) {
           final data = _userModelToMap(user);
           _addToCache(npub, data);
           completer.complete(data);
@@ -136,7 +137,7 @@ class ProfileService {
     }
 
     _profileCache[npub] = data;
-    _cacheTimestamps[npub] = DateTime.now();
+    _cacheTimestamps[npub] = timeService.now;
   }
 
   Future<Map<String, String>?> _fetchUserProfileFromRelay(String npub) async {
@@ -171,7 +172,7 @@ class ProfileService {
     WebSocket? ws;
     try {
       ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 3));
-      final subscriptionId = DateTime.now().millisecondsSinceEpoch.toString();
+      final subscriptionId = timeService.millisecondsSinceEpoch.toString();
       final request = jsonEncode([
         "REQ",
         subscriptionId,
@@ -276,7 +277,7 @@ class ProfileService {
   }
 
   void cleanupCache() {
-    final now = DateTime.now();
+    final now = timeService.now;
     final keysToRemove = <String>[];
 
     for (final entry in _cacheTimestamps.entries) {

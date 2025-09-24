@@ -32,7 +32,6 @@ class NotesListProvider extends BaseProvider {
   List<NoteModel>? _cachedFilteredNotes;
   int _lastNotesLength = 0;
 
-  // Pre-loading state
   bool _isPreloadingDependencies = false;
   final Set<String> _preloadedNoteIds = {};
   final Map<String, String> _preloadedMentions = {};
@@ -125,12 +124,8 @@ class NotesListProvider extends BaseProvider {
     if (_isPreloadingDependencies) return;
 
     if (_cachedFilteredNotes == null || _notes.length != _lastNotesLength) {
-      final List<NoteModel> potentialNotes = [];
-      for (final n in _notes) {
-        if (!n.isReply || n.isRepost) {
-          potentialNotes.add(n);
-        }
-      }
+      final potentialNotes = <NoteModel>[];
+      potentialNotes.addAll(_notes.where((n) => !n.isReply || n.isRepost));
       _cachedFilteredNotes = potentialNotes;
       _lastNotesLength = _notes.length;
     }
@@ -146,28 +141,27 @@ class NotesListProvider extends BaseProvider {
     _isPreloadingDependencies = true;
 
     try {
-      // Extract all dependencies from notes
-      final dependencies = _extractNoteDependencies(notes);
+      final limitedNotes = notes.take(50).toList();
+      final dependencies = _extractNoteDependencies(limitedNotes);
 
-      // Pre-load all dependencies in parallel
-      await Future.wait([
-        _preloadUserProfiles(dependencies.userProfiles),
-        _preloadMentions(dependencies.mentions),
-        _preloadQuotes(dependencies.quotes),
-      ], eagerError: false);
+      Future.microtask(() => _preloadUserProfiles(dependencies.userProfiles));
+      await Future.delayed(const Duration(milliseconds: 10));
 
-      // Only show notes that have all dependencies loaded
-      _filteredNotes = _filterNotesWithLoadedDependencies(notes);
+      Future.microtask(() => _preloadMentions(dependencies.mentions));
+      await Future.delayed(const Duration(milliseconds: 10));
+
+      Future.microtask(() => _preloadQuotes(dependencies.quotes));
+
+      _filteredNotes = notes;
 
       if (_isInitialized) {
-        notifyListeners();
+        safeNotifyListeners();
       }
     } catch (e) {
       debugPrint('[NotesListProvider] Error preloading dependencies: $e');
-      // Fallback to showing notes without full dependencies
       _filteredNotes = notes;
       if (_isInitialized) {
-        notifyListeners();
+        safeNotifyListeners();
       }
     } finally {
       _isPreloadingDependencies = false;
@@ -180,14 +174,12 @@ class NotesListProvider extends BaseProvider {
     final quotes = <String>{};
 
     for (final note in notes) {
-      // Extract user profiles needed
       userProfiles.add(note.author);
       if (note.repostedBy != null) {
         userProfiles.add(note.repostedBy!);
       }
 
       try {
-        // Extract mentions from parsed content
         final parsedContent = note.parsedContentLazy;
         final textParts = (parsedContent['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
 
@@ -205,7 +197,6 @@ class NotesListProvider extends BaseProvider {
           mentions[note.id] = noteMentions;
         }
 
-        // Extract quotes
         final quoteIds = (parsedContent['quoteIds'] as List<dynamic>?)?.cast<String>() ?? [];
         quotes.addAll(quoteIds);
       } catch (e) {
@@ -268,7 +259,7 @@ class NotesListProvider extends BaseProvider {
           final quote = await dataService.getCachedNote(eventId);
           if (quote != null) {
             _preloadedQuotes[quoteId] = quote;
-            // Also pre-load the quote author's profile
+
             if (!_preloadedUserProfiles.contains(quote.author)) {
               await UserProvider.instance.loadUser(quote.author);
               _preloadedUserProfiles.add(quote.author);
@@ -310,12 +301,10 @@ class NotesListProvider extends BaseProvider {
   }
 
   bool _areNoteDependenciesLoaded(NoteModel note) {
-    // Check if already processed
     if (_preloadedNoteIds.contains(note.id)) {
       return true;
     }
 
-    // Check user profiles
     if (!_preloadedUserProfiles.contains(note.author)) {
       final user = UserProvider.instance.getUserIfExists(note.author);
       if (user == null || user.name == 'Anonymous') {
@@ -331,7 +320,6 @@ class NotesListProvider extends BaseProvider {
     }
 
     try {
-      // Check mentions
       final parsedContent = note.parsedContentLazy;
       final textParts = (parsedContent['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
 
@@ -344,7 +332,6 @@ class NotesListProvider extends BaseProvider {
         }
       }
 
-      // Check quotes
       final quoteIds = (parsedContent['quoteIds'] as List<dynamic>?)?.cast<String>() ?? [];
       for (final quoteId in quoteIds) {
         if (!_preloadedQuotes.containsKey(quoteId)) {
@@ -359,7 +346,6 @@ class NotesListProvider extends BaseProvider {
     return true;
   }
 
-  // Getter methods for pre-loaded data
   Map<String, String> getMentionsForNote(String noteId) {
     final result = <String, String>{};
     try {
@@ -391,7 +377,7 @@ class NotesListProvider extends BaseProvider {
 
   void _startPeriodicUpdates() {
     if (dataType == DataType.feed) {
-      createPeriodicTimer(const Duration(seconds: 60), (timer) {
+      createPeriodicTimer(const Duration(minutes: 3), (timer) {
         _refreshNewNotes();
       });
     }
@@ -438,7 +424,6 @@ class NotesListProvider extends BaseProvider {
         debugPrint('[NotesListProvider] Instant display: ${dataService.notes.length} cached notes');
       }
 
-      // Complete non-blocking initialization
       Future.microtask(() async {
         await dataService.initializeLightweight();
         _preloadNoteDependenciesAndFilter();
@@ -447,7 +432,6 @@ class NotesListProvider extends BaseProvider {
           _setLoading(false);
         }
 
-        // All heavy operations run in background without blocking UI
         Future.microtask(() async {
           try {
             if (dataType == DataType.profile) {
@@ -548,7 +532,6 @@ class NotesListProvider extends BaseProvider {
 
       _fetchedInteractions.addAll(newNoteIds);
 
-      // Non-blocking interaction fetching
       Future.microtask(() async {
         await dataService.fetchInteractionsForEvents(newNoteIds, forceLoad: true);
       });
@@ -566,7 +549,8 @@ class NotesListProvider extends BaseProvider {
 
   void _scheduleInteractionCleanup() {
     _interactionCleanupTimer?.cancel();
-    _interactionCleanupTimer = Timer(const Duration(minutes: 5), () {
+
+    _interactionCleanupTimer = Timer(const Duration(minutes: 10), () {
       if (_fetchedInteractions.length > 500) {
         if (_filteredNotes.isNotEmpty) {
           final recentNoteIds = _filteredNotes.take(300).map((note) => note.id).toSet();
@@ -594,7 +578,6 @@ class NotesListProvider extends BaseProvider {
       }
 
       if (authorNpubs.isNotEmpty) {
-        // Non-blocking profile loading
         Future.microtask(() async {
           await UserProvider.instance.loadUsers(authorNpubs.toList());
         });
@@ -654,7 +637,6 @@ class NotesListProvider extends BaseProvider {
   }
 }
 
-// Helper class for organizing note dependencies
 class _NoteDependencies {
   final List<String> userProfiles;
   final Map<String, List<String>> mentions;

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:hive/hive.dart';
 import 'package:qiqstr/models/zap_model.dart';
+import '../services/time_service.dart';
 
 part 'notification_model.g.dart';
 

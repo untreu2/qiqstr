@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../models/note_model.dart';
+import 'time_service.dart';
 
 class CachedMediaInfo {
   final String url;
@@ -17,7 +18,7 @@ class CachedMediaInfo {
     required this.isSuccessful,
     this.accessCount = 1,
     DateTime? lastAccessed,
-  }) : lastAccessed = lastAccessed ?? DateTime.now();
+  }) : lastAccessed = lastAccessed ?? timeService.now;
 
   Map<String, dynamic> toJson() => {
         'url': url,
@@ -56,9 +57,9 @@ class MediaService {
   final Map<String, CachedMediaInfo> _mediaCache = {};
   final Set<String> _currentlyLoading = {};
 
-  static const int _maxCachedUrls = 2000;
-  static const Duration _cacheExpiry = Duration(days: 7);
-  static const Duration _failedRetryInterval = Duration(hours: 6);
+  static const int _maxCachedUrls = 1000;
+  static const Duration _cacheExpiry = Duration(days: 3);
+  static const Duration _failedRetryInterval = Duration(hours: 12);
 
   bool _isInitialized = false;
 
@@ -71,7 +72,7 @@ class MediaService {
 
       if (cachedData != null) {
         final Map<String, dynamic> cacheMap = jsonDecode(cachedData);
-        final now = DateTime.now();
+        final now = timeService.now;
 
         for (final entry in cacheMap.entries) {
           try {
@@ -86,15 +87,12 @@ class MediaService {
             continue;
           }
         }
-
-        print('[MediaService] Loaded ${_mediaCache.length} cached media entries from storage');
       }
 
       _isInitialized = true;
 
       _schedulePeriodicCleanup();
     } catch (e) {
-      print('[MediaService] Error initializing media cache: $e');
       _isInitialized = true;
     }
   }
@@ -169,7 +167,7 @@ class MediaService {
     final cached = _mediaCache[url];
     if (cached == null) return true;
 
-    final now = DateTime.now();
+    final now = timeService.now;
 
     if (_currentlyLoading.contains(url)) return false;
 
@@ -188,7 +186,7 @@ class MediaService {
       if (existing?.isSuccessful == true) {
         _mediaCache[url] = existing!.copyWith(
           accessCount: existing.accessCount + 1,
-          lastAccessed: DateTime.now(),
+          lastAccessed: timeService.now,
         );
         return;
       }
@@ -205,11 +203,10 @@ class MediaService {
             completed = true;
             _mediaCache[url] = CachedMediaInfo(
               url: url,
-              cachedAt: DateTime.now(),
+              cachedAt: timeService.now,
               isSuccessful: true,
             );
             imageStream.removeListener(listener);
-            print('[MediaService] Successfully cached: $url');
           }
         },
         onError: (exception, stackTrace) {
@@ -217,11 +214,10 @@ class MediaService {
             completed = true;
             _mediaCache[url] = CachedMediaInfo(
               url: url,
-              cachedAt: DateTime.now(),
+              cachedAt: timeService.now,
               isSuccessful: false,
             );
             imageStream.removeListener(listener);
-            print('[MediaService] Failed to cache: $url - $exception');
           }
         },
       );
@@ -234,17 +230,16 @@ class MediaService {
         imageStream.removeListener(listener);
         _mediaCache[url] = CachedMediaInfo(
           url: url,
-          cachedAt: DateTime.now(),
+          cachedAt: timeService.now,
           isSuccessful: false,
         );
       }
     } catch (e) {
       _mediaCache[url] = CachedMediaInfo(
         url: url,
-        cachedAt: DateTime.now(),
+        cachedAt: timeService.now,
         isSuccessful: false,
       );
-      print('[MediaService] Exception caching $url: $e');
     } finally {
       _currentlyLoading.remove(url);
     }
@@ -252,7 +247,7 @@ class MediaService {
 
   void _performIntelligentCleanup() {
     Future.microtask(() async {
-      final now = DateTime.now();
+      final now = timeService.now;
       final successfulEntries = <String, CachedMediaInfo>{};
       final failedEntries = <String, CachedMediaInfo>{};
 
@@ -284,17 +279,13 @@ class MediaService {
         for (int i = 0; i < removeCount && i < sortedSuccessful.length; i++) {
           _mediaCache.remove(sortedSuccessful[i].key);
         }
-
-        print('[MediaService] Cleaned up $removeCount old successful cache entries');
       }
 
       for (final url in failedToRemove) {
         _mediaCache.remove(url);
       }
 
-      if (failedToRemove.isNotEmpty) {
-        print('[MediaService] Cleaned up ${failedToRemove.length} expired failed cache entries');
-      }
+      if (failedToRemove.isNotEmpty) {}
 
       await _saveCacheToPersistentStorage();
     });
@@ -310,14 +301,11 @@ class MediaService {
       }
 
       await prefs.setString('media_cache_v2', jsonEncode(cacheMap));
-      print('[MediaService] Saved ${_mediaCache.length} cache entries to persistent storage');
-    } catch (e) {
-      print('[MediaService] Error saving cache to storage: $e');
-    }
+    } catch (e) {}
   }
 
   void _schedulePeriodicCleanup() {
-    Future.delayed(const Duration(hours: 1), () {
+    Future.delayed(const Duration(hours: 2), () {
       if (_isInitialized) {
         _performIntelligentCleanup();
         _schedulePeriodicCleanup();
@@ -375,7 +363,6 @@ class MediaService {
       }
 
       if (failedUrls.isNotEmpty) {
-        print('[MediaService] Retrying ${failedUrls.length} failed URLs');
         cacheMediaUrls(failedUrls, priority: 1);
       }
     });
@@ -420,24 +407,36 @@ class MediaService {
 
   void handleMemoryPressure() {
     Future.microtask(() async {
-      final initialSize = _mediaCache.length;
-
-      final targetSize = (_maxCachedUrls * 0.6).round();
+      final targetSize = (_maxCachedUrls * 0.4).round();
+      const failedTargetSize = 30;
 
       if (_mediaCache.length > targetSize) {
-        final entries = _mediaCache.entries.toList()
-          ..sort((a, b) {
-            final aScore = a.value.accessCount + (DateTime.now().difference(a.value.lastAccessed).inHours > 24 ? 0 : 1);
-            final bScore = b.value.accessCount + (DateTime.now().difference(b.value.lastAccessed).inHours > 24 ? 0 : 1);
-            return aScore.compareTo(bScore);
-          });
+        final now = DateTime.now();
+        final entries = _mediaCache.entries.toList();
 
-        final removeCount = _mediaCache.length - targetSize;
-        for (int i = 0; i < removeCount && i < entries.length; i++) {
-          _mediaCache.remove(entries[i].key);
+        final successfulEntries = entries.where((e) => e.value.isSuccessful).toList();
+        final failedEntries = entries.where((e) => !e.value.isSuccessful).toList();
+
+        failedEntries.sort((a, b) => a.value.cachedAt.compareTo(b.value.cachedAt));
+        final failedRemoveCount = (failedEntries.length - failedTargetSize).clamp(0, failedEntries.length);
+        for (int i = 0; i < failedRemoveCount; i++) {
+          _mediaCache.remove(failedEntries[i].key);
         }
 
-        print('[MediaService] Memory pressure cleanup: removed ${removeCount} entries (${initialSize} -> ${_mediaCache.length})');
+        successfulEntries.sort((a, b) {
+          final aScore = a.value.accessCount * 0.6 +
+              (now.difference(a.value.lastAccessed).inHours < 1 ? 50 : 0) +
+              (now.difference(a.value.lastAccessed).inHours < 24 ? 20 : 0);
+          final bScore = b.value.accessCount * 0.6 +
+              (now.difference(b.value.lastAccessed).inHours < 1 ? 50 : 0) +
+              (now.difference(b.value.lastAccessed).inHours < 24 ? 20 : 0);
+          return aScore.compareTo(bScore);
+        });
+
+        final successfulRemoveCount = (successfulEntries.length - targetSize).clamp(0, successfulEntries.length);
+        for (int i = 0; i < successfulRemoveCount; i++) {
+          _mediaCache.remove(successfulEntries[i].key);
+        }
 
         await _saveCacheToPersistentStorage();
       }
@@ -445,8 +444,6 @@ class MediaService {
   }
 
   void clearCache({bool clearFailed = true}) {
-    final initialSize = _mediaCache.length;
-
     if (clearFailed) {
       _mediaCache.clear();
     } else {
@@ -454,8 +451,6 @@ class MediaService {
     }
 
     _currentlyLoading.clear();
-
-    print('[MediaService] Cache cleared: ${initialSize} -> ${_mediaCache.length} entries');
 
     Future.microtask(() => _saveCacheToPersistentStorage());
   }

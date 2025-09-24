@@ -1,3 +1,5 @@
+import '../time_service.dart';
+
 class DataProcessingTask {
   final String data;
   final String type;

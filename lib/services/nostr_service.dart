@@ -1,12 +1,10 @@
 import 'dart:convert';
 import 'dart:collection';
 import 'package:nostr/nostr.dart';
-import 'package:uuid/uuid.dart';
 import 'package:crypto/crypto.dart';
+import 'package:uuid/uuid.dart';
 
 class NostrService {
-  static final Uuid _uuid = Uuid();
-
   static final Map<String, Event> _eventCache = {};
   static final Map<String, Filter> _filterCache = {};
   static final Map<String, Request> _requestCache = {};
@@ -435,7 +433,9 @@ class NostrService {
     return request;
   }
 
-  static String generateUUID() => _uuid.v4().replaceAll('-', '');
+  static String generateUUID() {
+    return const Uuid().v4().replaceAll('-', '');
+  }
 
   static String serializeEvent(Event event) => event.serialize();
 

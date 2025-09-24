@@ -78,11 +78,10 @@ class NoteProcessor {
     if (_isProcessing || _processingQueue.isEmpty) return;
 
     _isProcessing = true;
-    final stopwatch = Stopwatch()..start();
 
     try {
       final batch = <Map<String, dynamic>>[];
-      while (_processingQueue.isNotEmpty && batch.length < 3) {
+      while (_processingQueue.isNotEmpty && batch.length < 5) {
         batch.add(_processingQueue.removeFirst());
       }
 
@@ -96,12 +95,10 @@ class NoteProcessor {
               rawWs: item['rawWs'] as String?,
             ));
 
-        if (i % 2 == 0) {
+        if (i % 3 == 0) {
           await Future.delayed(Duration.zero);
         }
       }
-
-      print('[NoteProcessor] Processed batch of ${batch.length} events in ${stopwatch.elapsedMilliseconds}ms');
     } finally {
       _isProcessing = false;
 
@@ -118,8 +115,6 @@ class NoteProcessor {
     String? rawWs,
   }) async {
     return Future.microtask(() async {
-      final processingStopwatch = Stopwatch()..start();
-
       try {
         int kind = eventData['kind'] as int;
         final String outerEventAuthor = eventData['pubkey'] as String;
@@ -137,7 +132,6 @@ class NoteProcessor {
             try {
               innerEventData = jsonDecode(repostedEventJsonString) as Map<String, dynamic>;
             } catch (e) {
-              print('[NoteProcessor] Error decoding repost content');
               _metrics.recordSkip('repost_decode_error');
               return;
             }
@@ -230,10 +224,7 @@ class NoteProcessor {
 
           _fetchInteractionsAsync(dataService, newNote.id);
         }
-
-        print('[NoteProcessor] Processed note ${eventId} in ${processingStopwatch.elapsedMilliseconds}ms');
       } catch (e) {
-        print('[NoteProcessor] Error processing note event');
         _metrics.recordSkip('processing_error');
       }
     });
@@ -259,9 +250,7 @@ class NoteProcessor {
             if (_isValidEventData(decodedRawWs)) {
               return decodedRawWs;
             }
-          } catch (e) {
-            print("[NoteProcessor] Error decoding fetchedNote.rawWs");
-          }
+          } catch (e) {}
         }
 
         return {
@@ -357,7 +346,6 @@ class NoteProcessor {
           authorProfile['profileImage'] == '' &&
           authorProfile['about'] == '' &&
           authorProfile['nip05'] == '') {
-        print('[NoteProcessor] Note author profile not found: $noteAuthor');
         return false;
       }
 
@@ -367,15 +355,12 @@ class NoteProcessor {
             reposterProfile['profileImage'] == '' &&
             reposterProfile['about'] == '' &&
             reposterProfile['nip05'] == '') {
-          print('[NoteProcessor] Reposter profile not found: $repostedBy');
           return false;
         }
       }
 
-      print('[NoteProcessor] User profiles validated successfully for note');
       return true;
     } catch (e) {
-      print('[NoteProcessor] Error fetching/validating profiles: $e');
       return false;
     }
   }
@@ -385,9 +370,7 @@ class NoteProcessor {
       Future.microtask(() async {
         try {
           await dataService.notesBox!.put(note.id, note);
-        } catch (e) {
-          print('[NoteProcessor] Error saving note');
-        }
+        } catch (e) {}
       });
     }
   }
@@ -396,9 +379,7 @@ class NoteProcessor {
     Future.microtask(() async {
       try {
         await dataService.fetchInteractionsForEvents([noteId]);
-      } catch (e) {
-        print('[NoteProcessor] Error fetching interactions');
-      }
+      } catch (e) {}
     });
   }
 

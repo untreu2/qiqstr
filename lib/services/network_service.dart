@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import '../constants/relays.dart';
 import 'relay_service.dart';
 import 'nostr_service.dart';
+import 'time_service.dart';
 
 class NetworkService {
   static NetworkService? _instance;
@@ -35,7 +36,6 @@ class NetworkService {
     try {
       await _socketManager.broadcast(message);
     } catch (e) {
-      print('[NetworkService ERROR] Broadcast failed');
       rethrow;
     }
   }
@@ -58,7 +58,6 @@ class NetworkService {
 
         await broadcast(NostrService.serializeEvent(event));
       } catch (e) {
-        print('[NetworkService ERROR] Error sending reaction');
         rethrow;
       }
     });
@@ -88,7 +87,6 @@ class NetworkService {
 
         await broadcast(NostrService.serializeEvent(event));
       } catch (e) {
-        print('[NetworkService ERROR] Error sending reply');
         rethrow;
       }
     });
@@ -121,7 +119,6 @@ class NetworkService {
 
         await broadcast(NostrService.serializeEvent(event));
       } catch (e) {
-        print('[NetworkService ERROR] Error sending repost');
         rethrow;
       }
     });
@@ -144,7 +141,6 @@ class NetworkService {
 
         await broadcast(NostrService.serializeEvent(event));
       } catch (e) {
-        print('[NetworkService ERROR] Error sending note');
         rethrow;
       }
     });
@@ -254,7 +250,7 @@ class NetworkService {
       mimeType = 'video/mp4';
     }
 
-    final expiration = DateTime.now().add(Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000;
+    final expiration = timeService.add(Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000;
 
     final authEvent = Event.from(
       kind: 24242,
@@ -304,7 +300,7 @@ class NetworkService {
   Map<String, dynamic> getNetworkStats() {
     return {
       'connectedRelays': connectedRelaysCount,
-      'status': 'simplified',
+      'status': 'optimized',
     };
   }
 

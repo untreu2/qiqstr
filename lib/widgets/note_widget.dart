@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/note_model.dart';
 import '../models/user_model.dart';
 import '../services/data_service.dart';
+import '../services/time_service.dart';
 import '../theme/theme_manager.dart';
 import '../screens/thread_page.dart';
 import '../providers/user_provider.dart';
@@ -18,7 +19,7 @@ class NoteWidget extends StatefulWidget {
   final Color? containerColor;
   final bool isSmallView;
   final ScrollController? scrollController;
-  final dynamic notesListProvider; // Add notes list provider for pre-loaded data
+  final dynamic notesListProvider;
 
   const NoteWidget({
     super.key,
@@ -41,7 +42,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   @override
   bool get wantKeepAlive => true;
 
-  // Immutable cached values
   late final String _noteId;
   late final String _authorId;
   late final String? _reposterId;
@@ -52,13 +52,11 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   late final String _content;
   late final String _widgetKey;
 
-  // Pre-computed immutable data
   late final String _formattedTimestamp;
   late final Map<String, dynamic> _parsedContent;
   late final bool _shouldTruncate;
   late final Map<String, dynamic>? _truncatedContent;
 
-  // Single consolidated state for all user data
   final ValueNotifier<_NoteState> _stateNotifier = ValueNotifier(_NoteState.initial());
 
   bool _isDisposed = false;
@@ -77,7 +75,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   }
 
   void _precomputeImmutableData() {
-    // Cache all immutable values with null safety
     _noteId = widget.note.id;
     _authorId = widget.note.author;
     _reposterId = widget.note.repostedBy;
@@ -88,7 +85,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     _content = widget.note.content;
     _widgetKey = '${_noteId}_${_authorId}';
 
-    // Pre-compute all derived data safely
     _formattedTimestamp = _calculateTimestamp(_timestamp);
 
     try {
@@ -157,7 +153,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     try {
       final currentState = _stateNotifier.value;
 
-      // Try to get pre-loaded user data first
       UserModel? authorUser;
       UserModel? reposterUser;
 
@@ -168,7 +163,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
         }
       }
 
-      // Fallback to UserProvider if not pre-loaded
       authorUser ??= UserProvider.instance.getUserOrDefault(_authorId);
       if (_reposterId != null) {
         reposterUser ??= UserProvider.instance.getUserOrDefault(_reposterId);
@@ -182,7 +176,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
         replyText: replyText,
       );
 
-      // Only notify if something actually changed
       if (currentState != newState) {
         _stateNotifier.value = newState;
       }
@@ -195,7 +188,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     if (_isDisposed || !mounted) return;
 
     try {
-      // If we have a notes list provider with pre-loaded data, skip async loading
       if (widget.notesListProvider != null) {
         final authorPreloaded = widget.notesListProvider.getPreloadedUser(_authorId);
         final reposterPreloaded = _reposterId != null ? widget.notesListProvider.getPreloadedUser(_reposterId) : null;
@@ -203,12 +195,10 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
         if (authorPreloaded != null &&
             authorPreloaded.name != 'Anonymous' &&
             (_reposterId == null || (reposterPreloaded != null && reposterPreloaded.name != 'Anonymous'))) {
-          // All users are pre-loaded, no need for async loading
           return;
         }
       }
 
-      // Fallback to async loading if not pre-loaded
       final usersToLoad = <String>[_authorId];
       if (_reposterId != null) usersToLoad.add(_reposterId);
       if (_isReply && _parentId != null) usersToLoad.add(_parentId);
@@ -221,7 +211,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
 
   String _calculateTimestamp(DateTime timestamp) {
     try {
-      final d = DateTime.now().difference(timestamp);
+      final d = timeService.difference(timestamp);
       if (d.inSeconds < 5) return 'now';
       if (d.inSeconds < 60) return '${d.inSeconds}s';
       if (d.inMinutes < 60) return '${d.inMinutes}m';
@@ -446,7 +436,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   }
 }
 
-// Safe consolidated state class
 class _NoteState {
   final UserModel? authorUser;
   final UserModel? reposterUser;
@@ -479,7 +468,6 @@ class _NoteState {
   int get hashCode => (authorUser?.hashCode ?? 0) ^ (reposterUser?.hashCode ?? 0) ^ (replyText?.hashCode ?? 0);
 }
 
-// Safe profile section with null-safe cached avatars
 class _SafeProfileSection extends StatelessWidget {
   final ValueNotifier<_NoteState> stateNotifier;
   final bool isRepost;
@@ -488,7 +476,6 @@ class _SafeProfileSection extends StatelessWidget {
   final dynamic colors;
   final String widgetKey;
 
-  // Static cache for profile images
   static final Map<String, Widget> _avatarCache = <String, Widget>{};
 
   const _SafeProfileSection({
@@ -603,7 +590,6 @@ class _SafeProfileSection extends StatelessWidget {
   }
 }
 
-// Safe user info section
 class _SafeUserInfoSection extends StatelessWidget {
   final ValueNotifier<_NoteState> stateNotifier;
   final String formattedTimestamp;
@@ -700,7 +686,6 @@ class _SafeUserInfoSection extends StatelessWidget {
   }
 }
 
-// Safe content section
 class _SafeContentSection extends StatelessWidget {
   final Map<String, dynamic> parsedContent;
   final DataService dataService;

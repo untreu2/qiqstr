@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../time_service.dart';
 
 abstract class ServiceBase {
   bool get isInitialized;

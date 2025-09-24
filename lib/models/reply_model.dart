@@ -96,9 +96,8 @@ class ReplyModel extends HiveObject {
         } else if (tag.length > 2 && (tag[2] == 'root' || tag[2] == 'reply')) {
           if (tag[2] == 'root') rootId = tag[1] as String;
           if (tag[2] == 'reply') parentId = tag[1] as String;
-        } else if (parentId == null) {
-          parentId = tag[1] as String;
-        }
+        } else
+          parentId ??= tag[1] as String;
       }
     }
 

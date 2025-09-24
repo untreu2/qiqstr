@@ -31,7 +31,10 @@ class DataServiceManager {
   }) {
     final key = _generateKey(npub, dataType);
 
+    debugPrint('[DataServiceManager] Creating service for npub: ${npub.substring(0, 8)}..., type: $dataType, key: $key');
+
     if (dataType == DataType.profile) {
+      debugPrint('[DataServiceManager] Profile mode - optimizing memory');
       Future.microtask(() {
         final memoryManager = MemoryManager.instance;
         memoryManager.prepareForProfileTransition();
@@ -44,6 +47,7 @@ class DataServiceManager {
     final service = DataService.instance;
 
     if (dataType == DataType.feed) {
+      debugPrint('[DataServiceManager] Configuring for FEED');
       service.configureForFeed(
         npub: npub,
         onNewNote: onNewNote,
@@ -55,6 +59,7 @@ class DataServiceManager {
         onRepostCountUpdated: onRepostCountUpdated,
       );
     } else {
+      debugPrint('[DataServiceManager] Configuring for PROFILE with npub: ${npub.substring(0, 8)}...');
       service.configureForProfile(
         npub: npub,
         onNewNote: onNewNote,
@@ -70,7 +75,7 @@ class DataServiceManager {
     _activeService = service;
     _activeServiceKey = key;
 
-    debugPrint('[DataServiceManager] Configured fresh singleton service for $key');
+    debugPrint('[DataServiceManager] Configured fresh singleton service for $key - callbacks: ${onNewNote != null ? 'YES' : 'NO'}');
     return service;
   }
 

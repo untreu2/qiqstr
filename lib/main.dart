@@ -16,10 +16,24 @@ import 'providers/relay_provider.dart';
 import 'providers/network_provider.dart';
 import 'providers/media_provider.dart';
 import 'providers/notification_provider.dart';
+import 'services/time_service.dart';
+import 'services/logging_service.dart';
+import 'services/memory_manager.dart';
 
 void main() {
   runZonedGuarded(() {
     WidgetsFlutterBinding.ensureInitialized();
+
+    timeService.startPeriodicRefresh();
+
+    loggingService.configure(
+      level: LogLevel.error,
+      enabled: true,
+    );
+
+    Future.delayed(const Duration(seconds: 5), () {
+      MemoryManager.instance.startProactiveManagement();
+    });
 
     FlutterError.onError = (FlutterErrorDetails details) {
       if (details.exception is SocketException) {
@@ -35,11 +49,11 @@ void main() {
           return true;
         }
 
-        print('Platform error: $error');
+        logError('Platform error', 'Main', error);
         return true;
       };
     } catch (e) {
-      print('Could not set platform error handler: $e');
+      logError('Could not set platform error handler', 'Main', e);
     }
 
     runApp(
@@ -65,7 +79,7 @@ void main() {
       return;
     }
 
-    print('Unhandled error: $error');
+    logError('Unhandled error', 'Main', error);
   });
 }
 

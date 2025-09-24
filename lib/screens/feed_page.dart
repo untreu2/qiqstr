@@ -40,6 +40,27 @@ class FeedPageState extends State<FeedPage> {
         DataServiceManager.instance.getOrCreateService(
           npub: widget.npub,
           dataType: DataType.feed,
+          onNewNote: (_) {
+            if (mounted) setState(() {});
+          },
+          onReactionsUpdated: (_, __) {
+            if (mounted) setState(() {});
+          },
+          onRepliesUpdated: (_, __) {
+            if (mounted) setState(() {});
+          },
+          onRepostsUpdated: (_, __) {
+            if (mounted) setState(() {});
+          },
+          onReactionCountUpdated: (_, __) {
+            if (mounted) setState(() {});
+          },
+          onReplyCountUpdated: (_, __) {
+            if (mounted) setState(() {});
+          },
+          onRepostCountUpdated: (_, __) {
+            if (mounted) setState(() {});
+          },
         );
     _scrollController = ScrollController()..addListener(_scrollListener);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -53,41 +74,46 @@ class FeedPageState extends State<FeedPage> {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
 
       if (widget.dataService != null) {
-        // Non-blocking initialization
-        Future.microtask(() async {
-          try {
-            await userProvider.initialize();
-            if (userProvider.currentUserNpub == widget.npub) {
-              await userProvider.setCurrentUser(widget.npub);
-            }
-          } catch (e) {
-            print('[FeedPage] UserProvider initialization error: $e');
+        try {
+          await userProvider.initialize();
+          if (userProvider.currentUserNpub == widget.npub) {
+            await userProvider.setCurrentUser(widget.npub);
           }
-        });
-        print('[FeedPage] Using provided DataService - skipping initialization');
+        } catch (e) {
+          print('[FeedPage] UserProvider initialization error: $e');
+        }
+        print('[FeedPage] Using provided DataService - initialization complete');
       } else {
-        // Non-blocking initialization
-        Future.microtask(() async {
-          try {
-            await Future.wait([
-              userProvider.initialize(),
-              dataService.initializeLightweight(),
-            ]);
+        try {
+          await Future.wait([
+            userProvider.initialize(),
+            dataService.initializeLightweight(),
+          ]);
 
-            if (userProvider.currentUserNpub == widget.npub) {
-              await userProvider.setCurrentUser(widget.npub);
-            }
-
-            // Schedule heavy operations
-            Future.delayed(const Duration(milliseconds: 100), () {
-              if (mounted) {
-                dataService.initializeHeavyOperations();
-              }
-            });
-          } catch (e) {
-            print('[FeedPage] Background initialization error: $e');
+          if (userProvider.currentUserNpub == widget.npub) {
+            await userProvider.setCurrentUser(widget.npub);
           }
-        });
+
+          if (mounted) {
+            setState(() {});
+          }
+
+          Future.microtask(() async {
+            try {
+              await dataService.initializeHeavyOperations();
+              await dataService.initializeConnections();
+            } catch (e) {
+              print('[FeedPage] Heavy operations error: $e');
+            }
+          });
+        } catch (e) {
+          print('[FeedPage] Initialization error: $e');
+          if (mounted) {
+            setState(() {
+              errorMessage = 'Failed to initialize feed';
+            });
+          }
+        }
       }
     } catch (e) {
       print('[FeedPage] Progressive initialization error: $e');
@@ -124,7 +150,6 @@ class FeedPageState extends State<FeedPage> {
   }
 
   Future<void> _checkFirstOpen() async {
-    // Non-blocking SharedPreferences check
     Future.microtask(() async {
       try {
         final prefs = await SharedPreferences.getInstance();
@@ -306,7 +331,6 @@ class FeedPageState extends State<FeedPage> {
             )
           : RefreshIndicator(
               onRefresh: () async {
-                // Non-blocking refresh
                 Future.microtask(() => dataService.refreshNotes());
               },
               child: CustomScrollView(

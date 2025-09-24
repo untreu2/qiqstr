@@ -54,9 +54,7 @@ class IsolateManager {
               'targetNpubs': event['targetNpubs'] ?? [],
               'priority': event['priority'] ?? 2,
             });
-          } catch (e) {
-            results.add({'error': 'Parse error'});
-          }
+          } catch (e) {}
         }
 
         if (results.isNotEmpty) {
@@ -134,12 +132,10 @@ class IsolateManager {
               _flushBatches();
             } else {
               _batchTimer?.cancel();
-              _batchTimer = Timer(const Duration(milliseconds: 100), _flushBatches);
+              _batchTimer = Timer(const Duration(milliseconds: 50), _flushBatches);
             }
           }
-        } catch (e) {
-          sendPort.send({'error': 'Fetch processor error'});
-        }
+        } catch (e) {}
       }
     });
   }
@@ -220,7 +216,7 @@ class IsolateManager {
     try {
       final jsonData = jsonDecode(data) as List<dynamic>;
 
-      const chunkSize = 50;
+      const chunkSize = 100;
       final chunks = <List<NoteModel>>[];
 
       for (int i = 0; i < jsonData.length; i += chunkSize) {
@@ -234,16 +230,14 @@ class IsolateManager {
       for (final chunk in chunks) {
         sendPort.send({'type': 'cacheload', 'data': chunk});
       }
-    } catch (e) {
-      sendPort.send({'type': 'error', 'data': e.toString()});
-    }
+    } catch (e) {}
   }
 
   static void _processNewNotes(String data, SendPort sendPort) {
     try {
       final jsonData = jsonDecode(data) as List<dynamic>;
 
-      const batchSize = 20;
+      const batchSize = 50;
       for (int i = 0; i < jsonData.length; i += batchSize) {
         final endIndex = (i + batchSize > jsonData.length) ? jsonData.length : i + batchSize;
         final batch = jsonData.sublist(i, endIndex);
@@ -252,8 +246,6 @@ class IsolateManager {
 
         sendPort.send({'type': 'newnotes', 'data': parsedNotes});
       }
-    } catch (e) {
-      sendPort.send({'type': 'error', 'data': e.toString()});
-    }
+    } catch (e) {}
   }
 }

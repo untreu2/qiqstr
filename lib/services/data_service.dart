@@ -30,6 +30,7 @@ import 'hive_manager.dart';
 import '../providers/interactions_provider.dart';
 import '../providers/media_provider.dart';
 import 'nip05_verification_service.dart';
+import 'time_service.dart';
 
 enum DataType { feed, profile, note }
 
@@ -108,10 +109,40 @@ class NoteListNotifier extends ValueNotifier<List<NoteModel>> {
     }
 
     final allNotes = _itemsTree.toList();
-    _cachedFilteredNotes = allNotes.where((note) {
-      return note.author == _npub || (note.isRepost && note.repostedBy == _npub);
-    }).toList();
 
+    final filteredNotes = <NoteModel>[];
+
+    debugPrint('[DataService] Profile filtering for npub: $_npub, total notes: ${allNotes.length}');
+
+    String? npubHex;
+    try {
+      if (_npub.startsWith('npub1')) {
+        npubHex = decodeBasicBech32(_npub, 'npub');
+      } else if (_npub.length == 64) {
+        npubHex = _npub;
+      }
+    } catch (e) {
+      debugPrint('[DataService] Error converting npub for filtering: $e');
+    }
+
+    for (int i = 0; i < allNotes.length; i++) {
+      final note = allNotes[i];
+
+      final isAuthorMatch = note.author == _npub || (npubHex != null && note.author == npubHex);
+      final isRepostMatch = note.isRepost && (note.repostedBy == _npub || (npubHex != null && note.repostedBy == npubHex));
+
+      if (isAuthorMatch || isRepostMatch) {
+        filteredNotes.add(note);
+        if (filteredNotes.length <= 5) {
+          debugPrint(
+              '[DataService] Profile note match: ${note.id.substring(0, 8)}... by ${note.author.substring(0, 8)}... (repost: ${note.isRepost}) - npub: $_npub, hex: ${npubHex?.substring(0, 8)}...');
+        }
+      }
+    }
+
+    debugPrint('[DataService] Profile filtered: ${allNotes.length} → ${filteredNotes.length} notes for npub: ${_npub.substring(0, 8)}...');
+
+    _cachedFilteredNotes = filteredNotes;
     _filterCacheValid = true;
     return _cachedFilteredNotes!;
   }
@@ -139,7 +170,15 @@ class DataService {
   static DataService get instance => _instance;
 
   Timer? _uiThrottleTimer;
-  bool _hasPendingUiUpdate = false;
+
+  Timer? _batchProcessingTimer;
+  final List<Map<String, dynamic>> _eventQueue = [];
+  static const int _maxBatchSize = 25;
+  static const Duration _batchTimeout = Duration(milliseconds: 100);
+
+  Timer? _uiUpdateThrottleTimer;
+  bool _uiUpdatePending = false;
+  static const Duration _uiUpdateThrottle = Duration(milliseconds: 200);
 
   final Set<String> _pendingOptimisticReactionIds = {};
   late Isolate _eventProcessorIsolate;
@@ -193,7 +232,7 @@ class DataService {
 
   Timer? _cacheCleanupTimer;
   Timer? _interactionRefreshTimer;
-  int currentLimit = 800; // Increased to 800 for much more notes in feed
+  int currentLimit = 800;
 
   final Map<String, Completer<Map<String, String>>> _pendingProfileRequests = {};
 
@@ -241,12 +280,9 @@ class DataService {
     Function(String, List<RepostModel>)? onRepostsUpdated,
     Function(String, int)? onRepostCountUpdated,
   }) {
-    print('[DataService] Fast configuring for feed with npub: $npub');
-
     _ensureLoggedInNpub();
 
     if (_currentNpub == npub && _currentDataType == DataType.feed) {
-      print('[DataService] Same feed configuration, skipping clear');
       return;
     }
 
@@ -263,8 +299,6 @@ class DataService {
     _onRepostCountUpdated = onRepostCountUpdated;
 
     _notesNotifier = NoteListNotifier(_currentDataType, _currentNpub);
-
-    print('[DataService] Fast feed configuration completed for: $npub');
   }
 
   void configureForProfile({
@@ -277,15 +311,17 @@ class DataService {
     Function(String, List<RepostModel>)? onRepostsUpdated,
     Function(String, int)? onRepostCountUpdated,
   }) {
-    print('[DataService] Fast configuring for profile with npub: $npub');
-
     _ensureLoggedInNpub();
 
+    debugPrint(
+        '[DataService] Configure for PROFILE: npub=${npub.substring(0, 8)}..., current=${_currentNpub.substring(0, 8)}..., type=${_currentDataType}');
+
     if (_currentNpub == npub && _currentDataType == DataType.profile) {
-      print('[DataService] Same profile configuration, skipping clear');
+      debugPrint('[DataService] Already configured for this profile, skipping');
       return;
     }
 
+    debugPrint('[DataService] Clearing data structures for profile switch');
     _clearDataStructures();
 
     _currentNpub = npub;
@@ -300,49 +336,30 @@ class DataService {
 
     _notesNotifier = NoteListNotifier(_currentDataType, _currentNpub);
 
-    print('[DataService] Fast profile configuration completed for: $npub');
+    debugPrint(
+        '[DataService] Profile configuration complete - npub: ${_currentNpub.substring(0, 8)}..., callbacks: ${_onNewNote != null ? 'SET' : 'NULL'}');
   }
 
-  void _ensureLoggedInNpub() {
-    if (_loggedInNpub.isEmpty) {
-      print('[DataService] Warning: _loggedInNpub not set yet');
-    }
-  }
+  void _ensureLoggedInNpub() {}
 
   void _clearDataStructures() {
-    print('[DataService] Clearing data for profile transitions');
-
     notes.clear();
     eventIds.clear();
     _itemsTree.clear();
     _pendingEvents.clear();
     _pendingOptimisticReactionIds.clear();
 
-    Future.microtask(() {
-      const clearBatchSize = 100;
-      final reactionsKeys = reactionsMap.keys.toList();
-      for (int i = 0; i < reactionsKeys.length; i += clearBatchSize) {
-        final batch = reactionsKeys.skip(i).take(clearBatchSize);
-        for (final key in batch) {
-          reactionsMap.remove(key);
-        }
-        if (i % (clearBatchSize * 2) == 0) {
-          Future.delayed(Duration.zero);
-        }
-      }
-
-      repliesMap.clear();
-      repostsMap.clear();
-      zapsMap.clear();
-      _pendingProfileRequests.clear();
-    });
+    reactionsMap.clear();
+    repliesMap.clear();
+    repostsMap.clear();
+    zapsMap.clear();
+    _pendingProfileRequests.clear();
 
     _notesNotifier?.clearQuietly();
 
     _isClosed = false;
     _isLoadingMore = false;
     _isRefreshing = false;
-    _hasPendingUiUpdate = false;
 
     _batchTimer?.cancel();
     _batchTimer = null;
@@ -350,8 +367,6 @@ class DataService {
     _uiThrottleTimer = null;
     _scrollDebounceTimer?.cancel();
     _scrollDebounceTimer = null;
-
-    print('[DataService] Data clearing completed for smooth transitions');
   }
 
   int get connectedRelaysCount => _socketManager.activeSockets.length;
@@ -361,7 +376,6 @@ class DataService {
     final loggedInNpub = await _secureStorage.read(key: 'npub');
     if (loggedInNpub != null && loggedInNpub.isNotEmpty) {
       _loggedInNpub = loggedInNpub;
-      print('[DataService] Set logged-in user for notifications: $_loggedInNpub');
     }
 
     await initializeLightweight();
@@ -385,13 +399,15 @@ class DataService {
       _profileService = ProfileService.instance;
       await _profileService.initialize();
 
-      // Non-blocking cache loading
-      Future.microtask(() async {
+      Timer(const Duration(milliseconds: 100), () async {
         await loadNotesFromCache((loadedNotes) {});
         await _loadProfilesForNotes();
       });
 
-      print('[DataService] Lightweight initialization completed in ${stopwatch.elapsedMilliseconds}ms');
+      assert(() {
+        print('[DataService] Lightweight initialization completed in ${stopwatch.elapsedMilliseconds}ms');
+        return true;
+      }());
     } catch (e) {
       print('[DataService] Lightweight initialization error');
       rethrow;
@@ -406,7 +422,11 @@ class DataService {
         final loggedInNpub = await _secureStorage.read(key: 'npub');
         if (loggedInNpub != null && loggedInNpub.isNotEmpty) {
           _loggedInNpub = loggedInNpub;
-          print('[DataService] Set logged-in user in heavy operations: $_loggedInNpub');
+
+          assert(() {
+            print('[DataService] Set logged-in user in heavy operations: $_loggedInNpub');
+            return true;
+          }());
         }
       }
 
@@ -420,7 +440,10 @@ class DataService {
 
       _startBasicTimers();
 
-      print('[DataService] Heavy initialization completed');
+      assert(() {
+        print('[DataService] Heavy initialization completed');
+        return true;
+      }());
     } catch (e) {
       print('[DataService] Heavy initialization error');
     }
@@ -432,9 +455,14 @@ class DataService {
 
       if (_socketManager.activeSockets.isNotEmpty) {
         _updateConnectionState(true);
-        print('[DataService] Connections established with ${_socketManager.activeSockets.length} relays');
+
+        assert(() {
+          print('[DataService] Connections established with ${_socketManager.activeSockets.length} relays');
+          return true;
+        }());
       } else {
         _updateConnectionState(false);
+
         print('[DataService] No active connections, using offline mode');
       }
     } catch (e) {
@@ -448,12 +476,15 @@ class DataService {
     connectionStateNotifier.value = isConnected;
 
     if (isConnected) {
-      _lastSuccessfulConnection = DateTime.now();
+      _lastSuccessfulConnection = timeService.now;
       _connectionRetryCount = 0;
       _clearErrorState();
     }
 
-    print('[DataService] Connection state updated: $isConnected');
+    assert(() {
+      print('[DataService] Connection state updated: $isConnected');
+      return true;
+    }());
   }
 
   void _clearErrorState() {
@@ -489,7 +520,7 @@ class DataService {
     if (_isInErrorState) return false;
 
     if (_lastSuccessfulConnection != null) {
-      final timeSinceLastConnection = DateTime.now().difference(_lastSuccessfulConnection!);
+      final timeSinceLastConnection = timeService.difference(_lastSuccessfulConnection!);
       if (timeSinceLastConnection > const Duration(minutes: 5)) {
         return false;
       }
@@ -514,7 +545,6 @@ class DataService {
 
   Future<void> _loadBasicCacheData() async {
     try {
-      // Non-blocking parallel cache loading
       Future.microtask(() async {
         await Future.wait([
           loadReactionsFromCache(),
@@ -524,7 +554,10 @@ class DataService {
         ], eagerError: false);
       });
 
-      print('[DataService] Basic cache loading completed');
+      assert(() {
+        print('[DataService] Basic cache loading completed');
+        return true;
+      }());
     } catch (e) {
       print('[DataService] Error in basic cache loading');
     }
@@ -739,7 +772,7 @@ class DataService {
           banner: '',
           lud16: '',
           website: '',
-          updatedAt: DateTime.now(),
+          updatedAt: timeService.now,
           nip05Verified: false,
         );
       }
@@ -751,13 +784,13 @@ class DataService {
         MaterialPageRoute(builder: (_) => ProfilePage(user: user)),
       );
 
-      if (!profileCache.containsKey(pubHex) || DateTime.now().difference(profileCache[pubHex]!.fetchedAt) > profileCacheTTL) {
+      if (!profileCache.containsKey(pubHex) || timeService.difference(profileCache[pubHex]!.fetchedAt) > profileCacheTTL) {
         Future.microtask(() async {
           try {
             final data = await getCachedUserProfile(pubHex!);
             final fullUser = UserModel.fromCachedProfile(pubHex, data);
 
-            profileCache[pubHex] = CachedProfile(data, DateTime.now());
+            profileCache[pubHex] = CachedProfile(data, timeService.now);
             profilesNotifier.value = {
               ...profilesNotifier.value,
               pubHex: fullUser,
@@ -773,7 +806,7 @@ class DataService {
   }
 
   void _startRealTimeSubscription(List<String> targetNpubs) {
-    final sinceTimestamp = DateTime.now().subtract(const Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000;
+    final sinceTimestamp = timeService.subtract(const Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000;
 
     final filterNotes = NostrService.createNotesFilter(
       authors: targetNpubs,
@@ -804,23 +837,22 @@ class DataService {
   }
 
   void _startPeriodicNoteRefresh(List<String> targetNpubs) {
-    Timer.periodic(const Duration(seconds: 30), (timer) {
+    Timer.periodic(const Duration(minutes: 2), (timer) {
       if (_isClosed) {
         timer.cancel();
         return;
       }
-
-      final recentTimestamp = DateTime.now().subtract(const Duration(minutes: 2)).millisecondsSinceEpoch ~/ 1000;
+      final recentTimestamp = timeService.subtract(const Duration(minutes: 5)).millisecondsSinceEpoch ~/ 1000;
 
       final filterRecent = NostrService.createNotesFilter(
         authors: targetNpubs,
         kinds: [1, 6],
         since: recentTimestamp,
-        limit: 50,
+        limit: 30,
       );
 
       _safeBroadcast(NostrService.serializeRequest(NostrService.createRequest(filterRecent)));
-      print('[DataService] Periodic refresh: Fetching recent notes from last 2 minutes');
+      print('[DataService] Periodic refresh: Every 2 minutes...');
     });
   }
 
@@ -902,14 +934,9 @@ class DataService {
 
         try {
           if (dataType == DataType.profile) {
-            Future.microtask(() async {
-              await _fetchProfileNotes([npub]);
-              if (notes.isNotEmpty) {
-                notes.map((n) => n.id).toList();
-                // Disabled automatic interaction fetching for profile notes
-                // Interactions will only be fetched when entering thread pages
-              }
-            });
+            debugPrint('[DataService] Starting profile network fetch for $npub');
+            await _fetchProfileNotes([npub]);
+            debugPrint('[DataService] Profile network fetch completed - ${notes.length} notes loaded');
           } else {
             await fetchNotes(targetNpubs, initialLoad: true).timeout(
               const Duration(seconds: 8),
@@ -926,7 +953,6 @@ class DataService {
           print('[DataService] Note fetching error: $e, continuing with cached data');
         }
 
-        // Background cache loading - completely non-blocking
         Future.microtask(() async {
           try {
             await Future.wait([
@@ -988,7 +1014,7 @@ class DataService {
   Future<void> _fetchNotes(List<String> authors, {int? limit, DateTime? until}) async {
     if (_isClosed) return;
 
-    final noteLimit = limit ?? (dataType == DataType.profile ? 400 : currentLimit);
+    final noteLimit = limit ?? (dataType == DataType.profile ? 50 : currentLimit);
     final filter = NostrService.createNotesFilter(
       authors: authors,
       kinds: [1, 6],
@@ -999,14 +1025,10 @@ class DataService {
     final request = NostrService.serializeRequest(NostrService.createRequest(filter));
 
     if (dataType == DataType.profile) {
-      await _socketManager.priorityBroadcastToAll(request);
-      print('[DataService] Broadcast to all relays for ${noteLimit} profile notes');
+      _socketManager.priorityBroadcastToAll(request);
+      print('[DataService] Fast parallel broadcast for ${noteLimit} profile notes');
     } else {
       await _safeBroadcast(request);
-    }
-
-    if (dataType == DataType.profile) {
-      print('[DataService] Fetched ${noteLimit} profile notes for display');
     }
   }
 
@@ -1111,7 +1133,7 @@ class DataService {
   Future<void> fetchProfilesBatch(List<String> npubs) async {
     if (_isClosed || npubs.isEmpty) return;
 
-    final now = DateTime.now();
+    final now = timeService.now;
     final uniqueNpubs = npubs.toSet().toList();
     final List<String> needsFetching = [];
 
@@ -1183,32 +1205,31 @@ class DataService {
     try {
       await _eventProcessorReady.future;
 
-      _pendingEvents.add({
+      _eventQueue.add({
         'eventRaw': event,
         'targetNpubs': targetNpubs,
         'priority': 1,
+        'timestamp': timeService.millisecondsSinceEpoch,
       });
 
-      final batchThreshold = dataType == DataType.profile ? 20 : 50;
-      final batchDelay = dataType == DataType.profile ? const Duration(milliseconds: 15) : const Duration(milliseconds: 25);
-
-      if (_pendingEvents.length >= batchThreshold) {
-        Future.microtask(_flushPendingEvents);
+      if (_eventQueue.length >= _maxBatchSize) {
+        _flushEventQueue();
       } else {
-        _batchTimer ??= Timer(batchDelay, _flushPendingEvents);
+        _batchProcessingTimer ??= Timer(_batchTimeout, _flushEventQueue);
       }
     } catch (e) {}
   }
 
-  void _flushPendingEvents() {
-    if (_pendingEvents.isNotEmpty) {
-      final batch = List<Map<String, dynamic>>.from(_pendingEvents);
-      _pendingEvents.clear();
+  void _flushEventQueue() {
+    if (_eventQueue.isEmpty) return;
 
-      Future.microtask(() => _eventProcessorSendPort.send(batch));
-    }
-    _batchTimer?.cancel();
-    _batchTimer = null;
+    _batchProcessingTimer?.cancel();
+    _batchProcessingTimer = null;
+
+    final batch = List<Map<String, dynamic>>.from(_eventQueue);
+    _eventQueue.clear();
+
+    _eventProcessorSendPort.send(batch);
   }
 
   Future<void> _handleFollowingEvent(Map<String, dynamic> eventData) async {
@@ -1223,8 +1244,8 @@ class DataService {
         }
       }
       if (_hiveManager.followingBox != null && _hiveManager.followingBox!.isOpen) {
-        final model = FollowingModel(pubkeys: newFollowing, updatedAt: DateTime.now(), npub: npub);
-        await _hiveManager.followingBox!.put('following_$npub', model);
+        final followingModel = FollowingModel(pubkeys: newFollowing, updatedAt: timeService.now, npub: npub);
+        await _hiveManager.followingBox!.put('following_$npub', followingModel);
         print('[DataService] Following model updated with new event for $npub.');
       }
     } catch (e) {
@@ -1261,8 +1282,6 @@ class DataService {
 
         _hiveManager.reactionsBox?.put(reaction.id, reaction).catchError((e) {});
         fetchProfilesBatch([reaction.author]);
-
-        _hasPendingUiUpdate = true;
       }
     } catch (e) {
       print('[DataService ERROR] Error handling reaction event: $e');
@@ -1292,8 +1311,6 @@ class DataService {
 
         _hiveManager.repostsBox?.put(repost.id, repost).catchError((e) {});
         fetchProfilesBatch([repost.repostedBy]);
-
-        _hasPendingUiUpdate = true;
       }
     } catch (e) {
       print('[DataService ERROR] Error handling repost event: $e');
@@ -1371,7 +1388,6 @@ class DataService {
           notes.add(noteModel);
           notesNotifier.addNoteQuietly(noteModel);
 
-          // Force UI update for new replies
           Future.microtask(() {
             notesNotifier.notifyListenersWithFilteredList();
           });
@@ -1381,9 +1397,6 @@ class DataService {
         _hiveManager.notesBox?.put(noteModel.id, noteModel).catchError((e) {});
         fetchProfilesBatch([reply.author]);
 
-        _hasPendingUiUpdate = true;
-
-        // Force notification for reply events
         Future.microtask(() {
           notesNotifier.notifyListenersWithFilteredList();
         });
@@ -1446,8 +1459,6 @@ class DataService {
         _pendingProfileRequests[author]?.complete(dataToCache);
         _pendingProfileRequests.remove(author);
       }
-
-      _hasPendingUiUpdate = true;
     } catch (e) {
       print('[DataService ERROR] Error handling profile event: $e');
     }
@@ -1461,7 +1472,7 @@ class DataService {
     } catch (e) {
       print('[DataService] ProfileService error, using fallback: $e');
 
-      final now = DateTime.now();
+      final now = timeService.now;
 
       if (profileCache.containsKey(npub)) {
         final cached = profileCache[npub]!;
@@ -1605,7 +1616,7 @@ class DataService {
     following = following.toSet().toList();
 
     if (_hiveManager.followingBox != null && _hiveManager.followingBox!.isOpen) {
-      final newFollowingModel = FollowingModel(pubkeys: following, updatedAt: DateTime.now(), npub: targetNpub);
+      final newFollowingModel = FollowingModel(pubkeys: following, updatedAt: timeService.now, npub: targetNpub);
       await _hiveManager.followingBox!.put('following_$targetNpub', newFollowingModel);
       print('[DataService] Updated Hive following model for $targetNpub.');
     }
@@ -1703,7 +1714,7 @@ class DataService {
     followers = followers.toSet().toList();
 
     if (_hiveManager.followingBox != null && _hiveManager.followingBox!.isOpen) {
-      final followersModel = FollowingModel(pubkeys: followers, updatedAt: DateTime.now(), npub: targetNpub);
+      final followersModel = FollowingModel(pubkeys: followers, updatedAt: timeService.now, npub: targetNpub);
       await _hiveManager.followingBox!.put('followers_$targetNpub', followersModel);
       print('[DataService] Cached followers list for $targetNpub with ${followers.length} followers.');
     }
@@ -1736,7 +1747,7 @@ class DataService {
       }
 
       final until = _getOldestNoteTimestamp();
-      final increment = dataType == DataType.profile ? 200 : 250; // Much larger load more for feed
+      final increment = dataType == DataType.profile ? 30 : 250;
 
       await _fetchNotes(targetNpubs, limit: increment, until: until);
 
@@ -1749,23 +1760,34 @@ class DataService {
   Future<void> _fetchProfileNotes(List<String> authors) async {
     if (_isClosed) return;
 
-    print('[DataService] Profile notes fetch for loading');
+    debugPrint('[DataService] Starting aggressive profile notes fetch for ${authors.first}');
 
-    Future.microtask(() async {
-      final futures = [
-        _fetchNotes(authors, limit: 300),
-        _fetchNotes(authors, limit: 500),
-        _fetchNotes(authors, limit: 800),
-      ];
+    try {
+      final futures = <Future>[];
 
-      await Future.wait(futures, eagerError: false);
+      futures.add(_fetchNotes(authors, limit: 50));
 
-      if (!_isClosed) {
-        await _fetchNotes(authors, limit: 1000);
-      }
-    });
+      futures.add(Future.delayed(const Duration(milliseconds: 500)).then((_) async {
+        if (!_isClosed) {
+          await _fetchNotes(authors, limit: 100);
+          debugPrint('[DataService] Second batch profile fetch completed');
+        }
+      }));
 
-    print('[DataService] Profile notes fetch initiated - loading');
+      futures.add(Future.delayed(const Duration(seconds: 1)).then((_) async {
+        if (!_isClosed) {
+          await _fetchNotes(authors, limit: 200);
+          debugPrint('[DataService] Full profile fetch completed');
+        }
+      }));
+
+      await futures.first;
+      debugPrint('[DataService] Initial profile fetch completed - ${notes.length} notes loaded');
+
+      notesNotifier.notifyListenersWithFilteredList();
+    } catch (e) {
+      debugPrint('[DataService] Profile notes fetch error: $e');
+    }
   }
 
   DateTime? _getOldestNoteTimestamp() {
@@ -1821,7 +1843,7 @@ class DataService {
     if (_isClosed || _isRefreshing) return;
 
     if (_lastRefreshTime != null) {
-      final timeSinceLastRefresh = DateTime.now().difference(_lastRefreshTime!);
+      final timeSinceLastRefresh = timeService.difference(_lastRefreshTime!);
       if (timeSinceLastRefresh < _refreshCooldown) {
         print('[DataService] REFRESH: Cooldown active, skipping refresh');
         return;
@@ -1830,7 +1852,7 @@ class DataService {
 
     _isRefreshing = true;
     isRefreshingNotifier.value = true;
-    _lastRefreshTime = DateTime.now();
+    _lastRefreshTime = timeService.now;
 
     final stopwatch = Stopwatch()..start();
 
@@ -1876,25 +1898,39 @@ class DataService {
   }
 
   Future<void> _refreshProfileNotes(String userNpub, DateTime? since) async {
-    final filter = NostrService.createNotesFilter(
-      authors: [userNpub],
-      kinds: [1, 6],
-      limit: 200,
-      since: since != null ? since.millisecondsSinceEpoch ~/ 1000 : null,
-    );
+    debugPrint('[DataService] REFRESH: Starting aggressive profile refresh for $userNpub');
 
-    final request = NostrService.serializeRequest(NostrService.createRequest(filter));
-    final activeSockets = _socketManager.activeSockets;
+    final filters = [
+      NostrService.createNotesFilter(
+        authors: [userNpub],
+        kinds: [1, 6],
+        limit: 100,
+        since: since != null ? since.millisecondsSinceEpoch ~/ 1000 : null,
+      ),
+      NostrService.createNotesFilter(
+        authors: [userNpub],
+        kinds: [1, 6],
+        limit: 200,
+      ),
+    ];
 
-    final futures = activeSockets.map((ws) {
-      if (ws.readyState == WebSocket.open) {
-        ws.add(request);
+    for (final filter in filters) {
+      final request = NostrService.serializeRequest(NostrService.createRequest(filter));
+
+      try {
+        _socketManager.priorityBroadcastToAll(request);
+        debugPrint('[DataService] Profile refresh request sent to all relays');
+      } catch (e) {
+        debugPrint('[DataService] Profile refresh broadcast error: $e');
       }
-      return Future.value();
-    }).toList();
+    }
 
-    await Future.wait(futures, eagerError: false);
-    print('[DataService] REFRESH: Profile notes request sent to ${activeSockets.length} relays');
+    Future.delayed(const Duration(milliseconds: 1000), () {
+      if (!_isClosed) {
+        notesNotifier.notifyListenersWithFilteredList();
+        debugPrint('[DataService] REFRESH: Profile UI updated after network fetch');
+      }
+    });
   }
 
   Future<void> _refreshFeedNotes(List<String> targetNpubs, DateTime? since) async {
@@ -1922,7 +1958,6 @@ class DataService {
   Future<void> _refreshBasicInteractions() async {
     if (notes.isEmpty) return;
 
-    // Disabled automatic interaction refresh - interactions only fetched for thread pages
     print('[DataService] Automatic interaction refresh disabled - use thread page for interactions');
     return;
   }
@@ -1941,13 +1976,13 @@ class DataService {
 
   bool get canRefresh {
     if (_lastRefreshTime == null) return true;
-    final timeSinceLastRefresh = DateTime.now().difference(_lastRefreshTime!);
+    final timeSinceLastRefresh = timeService.difference(_lastRefreshTime!);
     return timeSinceLastRefresh >= _refreshCooldown;
   }
 
   Duration? get timeUntilNextRefresh {
     if (_lastRefreshTime == null) return null;
-    final timeSinceLastRefresh = DateTime.now().difference(_lastRefreshTime!);
+    final timeSinceLastRefresh = timeService.difference(_lastRefreshTime!);
     if (timeSinceLastRefresh >= _refreshCooldown) return null;
     return _refreshCooldown - timeSinceLastRefresh;
   }
@@ -1968,23 +2003,21 @@ class DataService {
   }
 
   void addNote(NoteModel note) {
-    Future.microtask(() {
-      _itemsTree.add(note);
-      notesNotifier.addNoteQuietly(note);
-    });
+    _itemsTree.add(note);
+    notesNotifier.addNoteQuietly(note);
   }
 
   void _invalidateFilterCache() => notesNotifier._invalidateFilterCache();
 
   void _startCacheCleanup() {
     _cacheCleanupTimer?.cancel();
-    _cacheCleanupTimer = Timer.periodic(const Duration(hours: 2), (timer) async {
+    _cacheCleanupTimer = Timer.periodic(const Duration(hours: 6), (timer) async {
       if (_isClosed) {
         timer.cancel();
         return;
       }
 
-      final now = DateTime.now();
+      final now = timeService.now;
       final cutoffTime = now.subtract(profileCacheTTL);
       profileCache.removeWhere((key, cached) => cached.fetchedAt.isBefore(cutoffTime));
     });
@@ -2016,7 +2049,7 @@ class DataService {
       mimeType = 'video/mp4';
     }
 
-    final expiration = DateTime.now().add(Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000;
+    final expiration = timeService.add(Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000;
 
     final authEvent = Event.from(
       kind: 24242,
@@ -2178,7 +2211,7 @@ class DataService {
 
       final updatedFollowingModel = FollowingModel(
         pubkeys: currentFollowing,
-        updatedAt: DateTime.now(),
+        updatedAt: timeService.now,
         npub: currentUserHex,
       );
       await _hiveManager.followingBox?.put('following_$currentUserHex', updatedFollowingModel);
@@ -2236,7 +2269,7 @@ class DataService {
 
       final updatedFollowingModel = FollowingModel(
         pubkeys: currentFollowing,
-        updatedAt: DateTime.now(),
+        updatedAt: timeService.now,
         npub: currentUserHex,
       );
       await _hiveManager.followingBox?.put('following_$currentUserHex', updatedFollowingModel);
@@ -2620,7 +2653,7 @@ class DataService {
         }
       }
 
-      final timestamp = DateTime.now();
+      final timestamp = timeService.now;
       final eventJson = NostrService.eventToJson(event);
       final newNote = NoteModel(
         id: eventJson['id'],
@@ -2674,7 +2707,7 @@ class DataService {
         }
       }
 
-      final timestamp = DateTime.now();
+      final timestamp = timeService.now;
       final eventJson = NostrService.eventToJson(event);
       final newNote = NoteModel(
         id: eventJson['id'],
@@ -2730,9 +2763,14 @@ class DataService {
 
       List<NoteModel> filteredNotes;
       if (dataType == DataType.profile) {
-        filteredNotes = allNotes.where((note) {
-          return note.author == npub || (note.isRepost && note.repostedBy == npub);
-        }).toList();
+        final profileNotes = <NoteModel>[];
+        for (int i = 0; i < allNotes.length; i++) {
+          final note = allNotes[i];
+          if (note.author == npub || (note.isRepost && note.repostedBy == npub)) {
+            profileNotes.add(note);
+          }
+        }
+        filteredNotes = profileNotes;
       } else {
         filteredNotes = allNotes;
       }
@@ -2743,10 +2781,10 @@ class DataService {
         return bTime.compareTo(aTime);
       });
 
-      final limitedNotes = filteredNotes.take(dataType == DataType.profile ? 200 : 400).toList(); // Even more cache loading for feed
+      final limitedNotes = filteredNotes.take(dataType == DataType.profile ? 50 : 600).toList();
       final newNotes = <NoteModel>[];
 
-      final batchSize = dataType == DataType.profile ? 15 : 20;
+      final batchSize = dataType == DataType.profile ? 10 : 50;
       for (int i = 0; i < limitedNotes.length; i += batchSize) {
         final batch = limitedNotes.skip(i).take(batchSize);
 
@@ -2765,10 +2803,8 @@ class DataService {
           note.zapAmount = zapsMap[note.id]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
         }
 
-        await Future.delayed(Duration.zero);
-
-        if (dataType == DataType.profile && i % (batchSize * 3) == 0) {
-          await Future.delayed(const Duration(milliseconds: 1));
+        if (dataType == DataType.profile && i + batchSize < limitedNotes.length) {
+          await Future.delayed(Duration.zero);
         }
       }
 
@@ -2777,25 +2813,20 @@ class DataService {
         notesNotifier.value = notesNotifier.notes;
         onLoad(newNotes);
 
-        if (dataType == DataType.profile) {
-          _fetchProfilesForVisibleNotes(newNotes);
-        } else {
-          await _fetchProfilesForVisibleNotes(newNotes);
-        }
+        _fetchProfilesForVisibleNotes(newNotes);
 
         profilesNotifier.value = {
           for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data),
         };
 
-        final notesWithMedia = newNotes.where((note) => note.hasMedia).toList();
-        if (notesWithMedia.isNotEmpty) {
-          Future.microtask(() {
+        Future.microtask(() {
+          final notesWithMedia = newNotes.where((n) => n.hasMedia).toList();
+          if (notesWithMedia.isNotEmpty) {
             MediaProvider.instance.cacheImagesFromNotes(notesWithMedia);
-          });
-        }
+          }
+        });
 
-        print(
-            '[DataService] Cached notes loaded (${newNotes.length} notes, ${notesWithMedia.length} with media cached) - ${dataType == DataType.profile ? "PROFILE" : "FEED"} mode');
+        print('[DataService] Fast cache load: ${newNotes.length} notes loaded immediately');
       }
     } catch (e) {
       print('[DataService ERROR] Error loading notes from cache: $e');
@@ -2861,11 +2892,9 @@ class DataService {
     if (_isClosed || eventIds.isEmpty) return;
 
     try {
-      // Optimized batch processing with controlled concurrency
-      const optimizedBatchSize = 8; // Smaller batches for better performance
+      const optimizedBatchSize = 8;
 
       for (int i = 0; i < eventIds.length; i += optimizedBatchSize) {
-        // Simple batch processing without network tracking for now
         final batch = eventIds.skip(i).take(optimizedBatchSize).toList();
 
         await Future.wait([
@@ -2876,7 +2905,7 @@ class DataService {
         ], eagerError: false);
 
         if (i + optimizedBatchSize < eventIds.length) {
-          await Future.delayed(const Duration(milliseconds: 25)); // Longer delay for stability
+          await Future.delayed(const Duration(milliseconds: 25));
         }
       }
     } catch (e) {
@@ -3130,7 +3159,7 @@ class DataService {
       print('[DataService ERROR] Error getting latest notification timestamp from cache: $e');
     }
 
-    sinceTimestamp ??= DateTime.now().subtract(const Duration(days: 1)).millisecondsSinceEpoch ~/ 1000;
+    sinceTimestamp ??= timeService.subtract(const Duration(days: 1)).millisecondsSinceEpoch ~/ 1000;
 
     final filter = NostrService.createNotificationFilter(
       pubkeys: [_loggedInNpub],
@@ -3176,14 +3205,12 @@ class DataService {
               newNoteIds.add(note.id);
               newNotesForMedia.add(note);
 
-              Future.microtask(() => _hiveManager.notesBox?.put(note.id, note));
+              Timer(const Duration(milliseconds: 50), () => _hiveManager.notesBox?.put(note.id, note));
 
               addNote(note);
 
               if (dataType == DataType.profile) {
                 onNewNote?.call(note);
-                // Disabled automatic interaction fetching for new notes
-                // Interactions will only be fetched when entering thread pages
               }
             }
           }
@@ -3194,16 +3221,28 @@ class DataService {
         }
       }
 
+      if (dataType == DataType.profile && newNoteIds.isNotEmpty) {
+        debugPrint('[DataService] PROFILE: Force UI update after ${newNoteIds.length} new notes');
+        Future.microtask(() {
+          notesNotifier.notifyListenersWithFilteredList();
+        });
+      }
+
       if (newNotesForMedia.isNotEmpty) {
-        final notesWithMedia = newNotesForMedia.where((note) => note.hasMedia).toList();
+        final notesWithMedia = <NoteModel>[];
+        for (int i = 0; i < newNotesForMedia.length; i++) {
+          if (newNotesForMedia[i].hasMedia) {
+            notesWithMedia.add(newNotesForMedia[i]);
+          }
+        }
         if (notesWithMedia.isNotEmpty) {
-          Future.microtask(() {
+          Timer(const Duration(milliseconds: 200), () {
             MediaProvider.instance.cacheImagesFromNotes(notesWithMedia);
           });
         }
       }
 
-      print(
+      debugPrint(
           '[DataService] Handled new notes: ${data.length} notes processed, ${newNoteIds.length} added, ${newNotesForMedia.where((n) => n.hasMedia).length} with media cached - ${dataType == DataType.profile ? "PROFILE" : "FEED"} mode');
     }
   }
@@ -3214,126 +3253,136 @@ class DataService {
       final Map<String, dynamic>? eventData = parsedData['eventData'] as Map<String, dynamic>?;
       final List<String> targetNpubs = List<String>.from(parsedData['targetNpubs'] ?? []);
 
-      if (kind == null || eventData == null) {
-        print('[DataService] Skipped event with null kind or data.');
-        return;
-      }
+      if (kind == null || eventData == null) return;
 
       final String eventAuthor = eventData['pubkey'] as String? ?? '';
       if (eventAuthor.isNotEmpty && eventAuthor != npub) {
-        final List<dynamic> eventTags = List<dynamic>.from(eventData['tags'] ?? []);
-        bool isUserPMentioned = eventTags.any((tag) {
-          return tag is List && tag.length >= 2 && tag[0] == 'p' && tag[1] == _loggedInNpub;
-        });
-
-        if (isUserPMentioned && [1, 6, 7, 9735].contains(kind)) {
-          String notificationType;
-          if (kind == 1)
-            notificationType = "mention";
-          else if (kind == 6)
-            notificationType = "repost";
-          else if (kind == 7)
-            notificationType = "reaction";
-          else if (kind == 9735)
-            notificationType = "zap";
-          else
-            return;
-
-          final notification = NotificationModel.fromEvent(eventData, notificationType);
-          final notificationBox = _hiveManager.getNotificationBox(_loggedInNpub);
-          if (notificationBox != null && notificationBox.isOpen) {
-            if (!notificationBox.containsKey(notification.id)) {
-              notificationBox.put(notification.id, notification);
-              print("[DataService] New $notificationType notification stored for $_loggedInNpub: ${notification.id}");
-              _hasPendingUiUpdate = true;
-            }
-          }
-        }
+        _processNotificationFast(eventData, kind, eventAuthor);
       }
 
-      if (kind == 0) {
-        await _handleProfileEvent(eventData);
-      } else if (kind == 3) {
-        await _handleFollowingEvent(eventData);
-      } else if (kind == 7) {
-        await _handleReactionEvent(eventData);
-      } else if (kind == 9735) {
-        await _handleZapEvent(eventData);
-      } else if (kind == 6) {
-        await _handleRepostEvent(eventData);
+      switch (kind) {
+        case 0:
+          _handleProfileEvent(eventData);
+          break;
+        case 3:
+          _handleFollowingEvent(eventData);
+          break;
+        case 7:
+          _handleReactionEvent(eventData);
+          break;
+        case 9735:
+          _handleZapEvent(eventData);
+          break;
+        case 6:
+          _handleRepostEvent(eventData);
+          NoteProcessor.processNoteEvent(this, eventData, targetNpubs, rawWs: jsonEncode(eventData['content']));
+          break;
+        case 1:
+          _processKind1Event(eventData, targetNpubs);
+          break;
+      }
+    } catch (e) {}
 
-        await NoteProcessor.processNoteEvent(this, eventData, targetNpubs, rawWs: jsonEncode(eventData['content']));
-      } else if (kind == 1) {
-        final tags = List<dynamic>.from(eventData['tags'] ?? []);
+    _scheduleUiUpdate();
+  }
 
-        String? rootId;
-        String? replyId;
-        bool isReply = false;
+  void _processNotificationFast(Map<String, dynamic> eventData, int kind, String eventAuthor) {
+    if (![1, 6, 7, 9735].contains(kind)) return;
 
-        for (var tag in tags) {
-          if (tag is List && tag.isNotEmpty && tag[0] == 'e' && tag.length >= 2) {
-            if (tag.length >= 4 && tag[3] == 'mention') continue;
+    final List<dynamic> eventTags = List<dynamic>.from(eventData['tags'] ?? []);
+    bool isUserPMentioned = false;
 
-            if (tag.length >= 4 && tag[3] == 'root') {
-              rootId = tag[1] as String;
-              isReply = true;
-            } else if (tag.length >= 4 && tag[3] == 'reply') {
-              replyId = tag[1] as String;
-              isReply = true;
-            } else if (rootId == null && replyId == null) {
-              replyId = tag[1] as String;
-              isReply = true;
-            }
+    for (var tag in eventTags) {
+      if (tag is List && tag.length >= 2 && tag[0] == 'p' && tag[1] == _loggedInNpub) {
+        isUserPMentioned = true;
+        break;
+      }
+    }
+
+    if (!isUserPMentioned) return;
+
+    String notificationType;
+    switch (kind) {
+      case 1:
+        notificationType = "mention";
+        break;
+      case 6:
+        notificationType = "repost";
+        break;
+      case 7:
+        notificationType = "reaction";
+        break;
+      case 9735:
+        notificationType = "zap";
+        break;
+      default:
+        return;
+    }
+
+    final notification = NotificationModel.fromEvent(eventData, notificationType);
+    final notificationBox = _hiveManager.getNotificationBox(_loggedInNpub);
+    if (notificationBox != null && notificationBox.isOpen && !notificationBox.containsKey(notification.id)) {
+      notificationBox.put(notification.id, notification);
+      _uiUpdatePending = true;
+    }
+  }
+
+  void _processKind1Event(Map<String, dynamic> eventData, List<String> targetNpubs) {
+    final tags = List<dynamic>.from(eventData['tags'] ?? []);
+    String? rootId;
+    String? replyId;
+    bool isReply = false;
+
+    for (var tag in tags) {
+      if (tag is List && tag.length >= 2 && tag[0] == 'e') {
+        if (tag.length >= 4 && tag[3] == 'mention') continue;
+
+        if (tag.length >= 4) {
+          if (tag[3] == 'root') {
+            rootId = tag[1] as String;
+            isReply = true;
+          } else if (tag[3] == 'reply') {
+            replyId = tag[1] as String;
+            isReply = true;
           }
-        }
-
-        if (isReply && replyId != null) {
-          await _handleReplyEvent(eventData, replyId);
-        } else if (isReply && rootId != null && replyId == null) {
-          await _handleReplyEvent(eventData, rootId);
-        } else {
-          await NoteProcessor.processNoteEvent(this, eventData, targetNpubs, rawWs: jsonEncode(eventData));
+        } else if (rootId == null && replyId == null) {
+          replyId = tag[1] as String;
+          isReply = true;
         }
       }
-    } catch (e, stacktrace) {
-      print('[DataService ERROR] Event processing failed: $e');
-      print(stacktrace);
     }
 
-    if (_hasPendingUiUpdate && (_uiThrottleTimer == null || !_uiThrottleTimer!.isActive)) {
-      final throttleDelay = dataType == DataType.profile ? Duration.zero : const Duration(milliseconds: 50);
-
-      _uiThrottleTimer = Timer(throttleDelay, () {
-        if (_isClosed) {
-          return;
-        }
-
-        print('[DataService] ${dataType == DataType.profile ? "PROFILE" : "FEED"} UI update for reply visibility');
-
-        // Updates for both profile and feed types
-        notesNotifier.value = notesNotifier._getFilteredNotesList();
-        profilesNotifier.value = {
-          for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
-        };
-
-        // Additional update
-        Future.microtask(() {
-          notesNotifier.notifyListenersWithFilteredList();
-        });
-
-        Future.microtask(() {
-          final notificationsBox = _hiveManager.getNotificationBox(_loggedInNpub);
-          if (notificationsBox != null && notificationsBox.isOpen) {
-            final allNotifications = notificationsBox.values.toList();
-            allNotifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-            notificationsNotifier.value = allNotifications;
-            _updateUnreadNotificationCount();
-          }
-        });
-
-        _hasPendingUiUpdate = false;
-      });
+    if (isReply && replyId != null) {
+      _handleReplyEvent(eventData, replyId);
+    } else if (isReply && rootId != null && replyId == null) {
+      _handleReplyEvent(eventData, rootId);
+    } else {
+      NoteProcessor.processNoteEvent(this, eventData, targetNpubs, rawWs: jsonEncode(eventData));
     }
+  }
+
+  void _scheduleUiUpdate() {
+    if (!_uiUpdatePending) return;
+
+    _uiUpdateThrottleTimer?.cancel();
+    _uiUpdateThrottleTimer = Timer(_uiUpdateThrottle, () {
+      if (_isClosed || !_uiUpdatePending) return;
+
+      notesNotifier.value = notesNotifier._getFilteredNotesList();
+      profilesNotifier.value = {
+        for (var entry in profileCache.entries) entry.key: UserModel.fromCachedProfile(entry.key, entry.value.data)
+      };
+
+      final notificationsBox = _hiveManager.getNotificationBox(_loggedInNpub);
+      if (notificationsBox != null && notificationsBox.isOpen) {
+        final allNotifications = notificationsBox.values.toList();
+        allNotifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        notificationsNotifier.value = allNotifications;
+        _updateUnreadNotificationCount();
+      }
+
+      _uiUpdatePending = false;
+    });
   }
 
   Future<void> _handleFetchedData(Map<String, dynamic> fetchData) async {
@@ -3491,7 +3540,7 @@ class DataService {
 
     print('[DataService] Manual interaction fetching for ${eventIds.length} notes');
 
-    final now = DateTime.now();
+    final now = timeService.now;
     final noteIdsToFetch = <String>[];
 
     for (final eventId in eventIds) {
@@ -3546,7 +3595,6 @@ class DataService {
       await _updateNoteCounts(eventIds);
       await _updateInteractionsProvider();
 
-      _hasPendingUiUpdate = true;
       Future.microtask(() {
         notesNotifier.value = notesNotifier.notes;
         profilesNotifier.value = {

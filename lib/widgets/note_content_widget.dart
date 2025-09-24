@@ -60,14 +60,12 @@ class _NoteContentWidgetState extends State<NoteContentWidget> with AutomaticKee
     _linkUrls = (widget.parsedContent['linkUrls'] as List<dynamic>?)?.cast<String>() ?? [];
     _quoteIds = (widget.parsedContent['quoteIds'] as List<dynamic>?)?.cast<String>() ?? [];
 
-    // Check if we have mentions to avoid unnecessary future creation
     _hasMentions = _textParts.any((p) => p['type'] == 'mention');
   }
 
   void _scheduleMentionResolution() {
     if (!_hasMentions) return;
 
-    // Try to get pre-loaded mentions first
     if (widget.notesListProvider != null && widget.noteId != null) {
       final preloadedMentions = widget.notesListProvider.getMentionsForNote(widget.noteId!);
       if (preloadedMentions.isNotEmpty) {
@@ -79,7 +77,6 @@ class _NoteContentWidgetState extends State<NoteContentWidget> with AutomaticKee
       }
     }
 
-    // Fallback to async loading
     Future.microtask(() {
       if (!mounted) return;
       _mentionsFuture = _resolveMentions();

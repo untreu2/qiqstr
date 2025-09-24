@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:collection';
 import 'package:qiqstr/constants/relays.dart';
+import 'time_service.dart';
 
 class RelayConnectionStats {
   int connectAttempts = 0;
@@ -67,18 +68,14 @@ class WebSocketManager {
     try {
       final customRelays = await getRelaySetMainSockets();
       if (customRelays.isNotEmpty && !_listEquals(relayUrls, customRelays)) {
-        print('[WebSocketManager] Loading custom relays: $customRelays');
-
         relayUrls.clear();
         _connectionStats.clear();
 
         relayUrls.addAll(customRelays);
         _initializeStats();
-
-        print('[WebSocketManager] Updated to use ${relayUrls.length} custom relays');
       }
     } catch (e) {
-      print('[WebSocketManager] Error loading custom relays: $e');
+      // Silent fail
     }
   }
 
@@ -106,20 +103,20 @@ class WebSocketManager {
   }
 
   void _startMessageProcessing() {
-    _messageProcessingTimer = Timer.periodic(const Duration(milliseconds: 10), (_) {
+    _messageProcessingTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
       Future.microtask(() => _processMessageQueue());
     });
   }
 
   void _startHealthMonitoring() {
-    _healthCheckTimer = Timer.periodic(healthCheckInterval, (_) {
+    _healthCheckTimer = Timer.periodic(const Duration(minutes: 2), (_) {
       Future.microtask(() => _performHealthCheck());
     });
   }
 
   void _performHealthCheck() {
     Future.microtask(() async {
-      final now = DateTime.now();
+      final now = timeService.now;
 
       final entries = _connectionStats.entries.toList();
       const batchSize = 3;
@@ -183,7 +180,6 @@ class WebSocketManager {
     }
 
     if (_webSockets.isNotEmpty) {
-      print('[WebSocketManager] Connections already exist, registering handlers for service: $serviceId');
       return;
     }
 
@@ -293,7 +289,6 @@ class WebSocketManager {
   void unregisterService(String serviceId) {
     _eventHandlers.remove(serviceId);
     _disconnectHandlers.remove(serviceId);
-    print('[WebSocketManager] Unregistered service: $serviceId');
   }
 
   Future<void> executeOnActiveSockets(FutureOr<void> Function(WebSocket ws) action) async {
@@ -501,16 +496,17 @@ class WebSocketManager {
     const baseDelay = 1;
     final maxDelaySeconds = maxBackoffDelay.inSeconds;
     final delay = (baseDelay * pow(2, attempt - 1)).toInt().clamp(1, maxDelaySeconds);
-    final jitter = Random().nextInt((delay ~/ 2).clamp(1, 5));
+    // Simple optimization - avoid excessive Random() creation, use direct calculation
+    final maxJitter = (delay ~/ 2).clamp(1, 5);
+    final jitter = (DateTime.now().millisecondsSinceEpoch % maxJitter);
     return delay + jitter;
   }
 
   Future<void> closeConnections() async {
-    print('[WebSocketManager] closeConnections called - singleton will only close on app termination');
+    // No-op for performance
   }
 
   Future<void> forceCloseConnections() async {
-    print('[WebSocketManager] Force closing all connections for app termination');
     _isClosed = true;
 
     for (final timer in _reconnectTimers.values) {
@@ -521,15 +517,15 @@ class WebSocketManager {
     _messageProcessingTimer?.cancel();
     _healthCheckTimer?.cancel();
 
-    final closeFutures = _webSockets.values.map((ws) async {
+    // Optimized connection closing
+    for (final ws in _webSockets.values) {
       try {
         if (ws.readyState == WebSocket.open || ws.readyState == WebSocket.connecting) {
           await ws.close();
         }
       } catch (e) {}
-    });
+    }
 
-    await Future.wait(closeFutures, eagerError: false);
     _webSockets.clear();
     _messageQueue.clear();
   }
@@ -577,8 +573,6 @@ class WebSocketManager {
       try {
         final customRelays = await getRelaySetMainSockets();
         if (!_listEquals(relayUrls, customRelays)) {
-          print('[WebSocketManager] Reloading custom relays: $customRelays');
-
           final closeFutures = _webSockets.values.map((ws) async {
             try {
               if (ws.readyState == WebSocket.open || ws.readyState == WebSocket.connecting) {
@@ -597,11 +591,9 @@ class WebSocketManager {
 
           relayUrls.addAll(customRelays);
           _initializeStats();
-
-          print('[WebSocketManager] Relay list updated to use ${relayUrls.length} custom relays');
         }
       } catch (e) {
-        print('[WebSocketManager] Error reloading custom relays: $e');
+        // Silent fail
       }
     });
   }
@@ -845,6 +837,6 @@ class PrimalCacheClient {
 
 void unawaited(Future<void> future) {
   future.catchError((error) {
-    print('[RelayService] Background operation failed: $error');
+    // Silent fail
   });
 }

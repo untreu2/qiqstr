@@ -15,9 +15,7 @@ class BatchProcessingService {
       final reactionFilter = NostrService.createReactionFilter(eventIds: [targetEventId], limit: 1);
       final request = NostrService.serializeRequest(NostrService.createRequest(reactionFilter));
       await _networkService.broadcastRequest(request);
-    } catch (e) {
-      print('[BatchProcessingService] Error processing reaction: $e');
-    }
+    } catch (e) {}
   }
 
   Future<void> processUserReply(String parentEventId, String replyContent, String privateKey) async {
@@ -27,9 +25,7 @@ class BatchProcessingService {
       final replyFilter = NostrService.createReplyFilter(eventIds: [parentEventId], limit: 1);
       final request = NostrService.serializeRequest(NostrService.createRequest(replyFilter));
       await _networkService.broadcastRequest(request);
-    } catch (e) {
-      print('[BatchProcessingService] Error processing reply: $e');
-    }
+    } catch (e) {}
   }
 
   Future<void> processUserRepost(String noteId, String noteAuthor, String privateKey) async {
@@ -39,14 +35,11 @@ class BatchProcessingService {
       final repostFilter = NostrService.createRepostFilter(eventIds: [noteId], limit: 1);
       final request = NostrService.serializeRequest(NostrService.createRequest(repostFilter));
       await _networkService.broadcastRequest(request);
-    } catch (e) {
-      print('[BatchProcessingService] Error processing repost: $e');
-    }
+    } catch (e) {}
   }
 
   Future<void> processUserNote(String noteContent, String privateKey) async {
     if (_isClosed) return;
-    print('[BatchProcessingService] User note processed');
   }
 
   Future<void> processUserInteraction(List<String> eventIds, String interactionType) async {
@@ -82,30 +75,20 @@ class BatchProcessingService {
         await _networkService.broadcastRequest(request);
 
         if (i + batchSize < eventIds.length) {
-          await Future.delayed(const Duration(milliseconds: 10));
+          await Future.delayed(const Duration(milliseconds: 5));
         }
       }
-
-      print('[BatchProcessingService] $interactionType processed for ${eventIds.length} events in batches');
-    } catch (e) {
-      print('[BatchProcessingService] Error processing interaction: $e');
-    }
+    } catch (e) {}
   }
 
-  // Cache to track which interactions we've already fetched for visible notes
   final Set<String> _fetchedReactions = {};
   final Set<String> _fetchedReplies = {};
   final Set<String> _fetchedReposts = {};
   final Set<String> _fetchedZaps = {};
 
-  // DISABLED: Automatic interaction fetching for visible notes
-  // Interactions will only be fetched when entering thread pages for better performance
   Future<void> processVisibleNotesInteractions(List<String> visibleEventIds) async {
     if (_isClosed || visibleEventIds.isEmpty) return;
 
-    // Disabled automatic interaction fetching for visible notes
-    // Interactions are now only fetched when entering thread pages
-    print('[BatchProcessingService] Automatic interaction fetching disabled - use manual fetchInteractionsForNotes() for thread pages');
     return;
   }
 
@@ -113,15 +96,12 @@ class BatchProcessingService {
     for (int i = 0; i < eventIds.length; i += batchSize) {
       final batch = eventIds.skip(i).take(batchSize).toList();
 
-      // Process this batch asynchronously for better performance
       Future.microtask(() => _processVisibleBatchInteraction(batch, interactionType));
 
-      // Mark as fetched to avoid duplicate requests
       fetchedCache.addAll(batch);
 
-      // Small delay between batches for better performance
       if (i + batchSize < eventIds.length) {
-        await Future.delayed(const Duration(milliseconds: 5));
+        await Future.delayed(Duration.zero);
       }
     }
   }
@@ -131,17 +111,12 @@ class BatchProcessingService {
     _fetchedReplies.clear();
     _fetchedReposts.clear();
     _fetchedZaps.clear();
-    print('[BatchProcessingService] Cleared visible notes interaction cache');
   }
 
-  // Method to manually fetch interactions for specific notes (e.g., for thread page)
   Future<void> fetchInteractionsForNotes(List<String> eventIds, {bool force = false}) async {
     if (_isClosed || eventIds.isEmpty) return;
 
     try {
-      print('[BatchProcessingService] Manual interaction fetching for ${eventIds.length} notes');
-
-      // Filter out already fetched interactions unless forced
       final needsReactions = force ? eventIds : eventIds.where((id) => !_fetchedReactions.contains(id)).toList();
       final needsReplies = force ? eventIds : eventIds.where((id) => !_fetchedReplies.contains(id)).toList();
       final needsReposts = force ? eventIds : eventIds.where((id) => !_fetchedReposts.contains(id)).toList();
@@ -164,11 +139,7 @@ class BatchProcessingService {
       if (needsZaps.isNotEmpty) {
         await _processInteractionType(needsZaps, 'zap', _fetchedZaps, batchSize);
       }
-
-      print('[BatchProcessingService] Manual interaction fetching completed');
-    } catch (e) {
-      print('[BatchProcessingService] Error in manual interaction fetching: $e');
-    }
+    } catch (e) {}
   }
 
   Future<void> _processVisibleBatchInteraction(List<String> eventIds, String interactionType) async {
@@ -177,7 +148,7 @@ class BatchProcessingService {
     Future.microtask(() async {
       try {
         String request;
-        // Optimized limits for visible notes only - higher limits since we're being selective
+
         switch (interactionType) {
           case 'reaction':
             final filter = NostrService.createReactionFilter(eventIds: eventIds, limit: 50);
@@ -199,19 +170,13 @@ class BatchProcessingService {
             return;
         }
 
-        // Background processing for visible notes - no need to wait
-        _networkService.broadcastRequest(request).catchError((e) {
-          print('[BatchProcessingService] Visible notes $interactionType fetch error: $e');
-        });
-      } catch (e) {
-        print('[BatchProcessingService] Error in visible notes $interactionType processing: $e');
-      }
+        _networkService.broadcastRequest(request).catchError((e) {});
+      } catch (e) {}
     });
   }
 
   void close() {
     _isClosed = true;
     clearVisibleNotesCache();
-    print('[BatchProcessingService] Service closed and caches cleared');
   }
 }

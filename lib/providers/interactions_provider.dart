@@ -7,6 +7,7 @@ import '../models/repost_model.dart';
 import '../models/zap_model.dart';
 import '../services/hive_manager.dart';
 import '../services/data_service.dart';
+import '../services/time_service.dart';
 
 import 'package:rxdart/rxdart.dart';
 
@@ -55,14 +56,12 @@ class InteractionsProvider extends ChangeNotifier {
   Future<void> initialize(String npub, {String dataType = 'Feed'}) async {
     if (_isInitialized) return;
 
-    // Non-blocking initialization
     Future.microtask(() async {
       try {
         if (!_hiveManager.isInitialized) {
           await _hiveManager.initializeBoxes();
         }
 
-        // Load interactions in background completely
         Future.microtask(() async {
           await _loadInteractionsFromHive();
           notifyListeners();
@@ -166,12 +165,10 @@ class InteractionsProvider extends ChangeNotifier {
     }
     _addReactionToCache(reaction);
 
-    // Immediate UI update, background save
     if (_visibleNoteIds.contains(reaction.targetEventId)) {
       _reactionStreamController.add(reaction.targetEventId);
     }
 
-    // Save to disk in background
     Future.microtask(() async {
       try {
         await _reactionsBox?.put(reaction.id, reaction);
@@ -410,12 +407,12 @@ class InteractionsProvider extends ChangeNotifier {
 
   void addOptimisticReaction(String noteId, String userId) {
     final optimisticReaction = ReactionModel(
-      id: 'optimistic_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'optimistic_${timeService.millisecondsSinceEpoch}',
       author: userId,
       content: '+',
       targetEventId: noteId,
-      timestamp: DateTime.now(),
-      fetchedAt: DateTime.now(),
+      timestamp: timeService.now,
+      fetchedAt: timeService.now,
     );
     _addReactionToCache(optimisticReaction);
     _reactionStreamController.add(noteId);
@@ -423,10 +420,10 @@ class InteractionsProvider extends ChangeNotifier {
 
   void addOptimisticRepost(String noteId, String userId) {
     final optimisticRepost = RepostModel(
-      id: 'optimistic_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'optimistic_${timeService.millisecondsSinceEpoch}',
       originalNoteId: noteId,
       repostedBy: userId,
-      repostTimestamp: DateTime.now(),
+      repostTimestamp: timeService.now,
     );
     _addRepostToCache(optimisticRepost);
     _repostStreamController.add(noteId);
@@ -449,11 +446,11 @@ class InteractionsProvider extends ChangeNotifier {
     _userZaps[userId]?.remove(noteId);
 
     final optimisticZap = ZapModel(
-      id: 'optimistic_${DateTime.now().millisecondsSinceEpoch}',
+      id: 'optimistic_${timeService.millisecondsSinceEpoch}',
       sender: userId,
       recipient: '',
       targetEventId: noteId,
-      timestamp: DateTime.now(),
+      timestamp: timeService.now,
       bolt11: '',
       comment: null,
       amount: amount,
@@ -504,10 +501,8 @@ class InteractionsProvider extends ChangeNotifier {
   Future<void> fetchInteractionsForNotes(List<String> noteIds) async {
     if (!_isInitialized || noteIds.isEmpty) return;
 
-    // Only allow interaction fetching from thread pages
     print('[InteractionsProvider] Manual interaction fetching for thread pages - ${noteIds.length} notes');
 
-    // Completely background operation - no UI blocking
     Future.microtask(() async {
       final now = DateTime.now();
       final notesToFetch = <String>[];
@@ -526,7 +521,6 @@ class InteractionsProvider extends ChangeNotifier {
 
           final dataService = DataService.instance;
 
-          // Fire and forget - don't block UI
           Future.microtask(() async {
             await dataService.fetchInteractionsForEvents(notesToFetch, forceLoad: true);
             print('[InteractionsProvider] Thread page interaction fetching completed for ${notesToFetch.length} notes');
@@ -583,7 +577,6 @@ class InteractionsProvider extends ChangeNotifier {
   }
 
   void _startPeriodicUpdates() {
-    // Disabled periodic interaction updates - interactions only fetched for thread pages
     print('[InteractionsProvider] Periodic interaction updates disabled - use thread pages for interactions');
   }
 

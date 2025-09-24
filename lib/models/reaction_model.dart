@@ -1,4 +1,5 @@
 import 'package:hive/hive.dart';
+import '../services/time_service.dart';
 
 part 'reaction_model.g.dart';
 

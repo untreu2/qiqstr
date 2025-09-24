@@ -74,6 +74,8 @@ dependencies:
     html: ^0.15.4
     carbon_icons: ^0.0.1+2
     rxdart: ^0.28.0
+    screenshot: ^3.0.0
+    share_plus: ^12.0.0
 dev_dependencies:
     hive_generator: ^2.0.1
     flutter_test:
