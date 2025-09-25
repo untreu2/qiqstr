@@ -399,10 +399,8 @@ class DataService {
       _profileService = ProfileService.instance;
       await _profileService.initialize();
 
-      Timer(const Duration(milliseconds: 100), () async {
-        await loadNotesFromCache((loadedNotes) {});
-        await _loadProfilesForNotes();
-      });
+      await loadNotesFromCache((loadedNotes) {});
+      await _loadProfilesForNotes();
 
       assert(() {
         print('[DataService] Lightweight initialization completed in ${stopwatch.elapsedMilliseconds}ms');
@@ -871,7 +869,7 @@ class DataService {
       await initialize();
     }
 
-    const maxRetries = 2;
+    const maxRetries = 3;
     const retryDelay = Duration(milliseconds: 500);
 
     for (int attempt = 1; attempt <= maxRetries; attempt++) {
@@ -882,7 +880,7 @@ class DataService {
         if (dataType == DataType.feed) {
           try {
             final following = await getFollowingList(npub).timeout(
-              const Duration(seconds: 8),
+              const Duration(seconds: 12),
               onTimeout: () {
                 print('[DataService] Following list fetch timed out, using cached or minimal list');
                 return [npub];
@@ -938,13 +936,7 @@ class DataService {
             await _fetchProfileNotes([npub]);
             debugPrint('[DataService] Profile network fetch completed - ${notes.length} notes loaded');
           } else {
-            await fetchNotes(targetNpubs, initialLoad: true).timeout(
-              const Duration(seconds: 8),
-              onTimeout: () {
-                print('[DataService] Feed notes fetch timed out, continuing with cached data');
-              },
-            );
-
+            await fetchNotesWithRetry(targetNpubs, initialLoad: true);
             Future.microtask(() {
               _startRealTimeSubscription(targetNpubs);
             });
@@ -1007,6 +999,22 @@ class DataService {
           print('[DataService] Connection initialization failed after $maxRetries attempts');
           rethrow;
         }
+      }
+    }
+  }
+
+  Future<void> fetchNotesWithRetry(List<String> targetNpubs, {bool initialLoad = false, int retryCount = 0}) async {
+    try {
+      await fetchNotes(targetNpubs, initialLoad: initialLoad).timeout(const Duration(seconds: 10));
+      print('[DataService] Notes fetched successfully on attempt ${retryCount + 1}');
+    } catch (e) {
+      print('[DataService] Fetch notes failed: $e, retryCount: $retryCount');
+      if (retryCount < 2) {
+        await Future.delayed(const Duration(seconds: 1));
+        await fetchNotesWithRetry(targetNpubs, initialLoad: initialLoad, retryCount: retryCount + 1);
+      } else {
+        print('[DataService] Fetch notes failed after multiple retries.');
+        rethrow;
       }
     }
   }

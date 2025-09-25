@@ -38,6 +38,9 @@ class NotesListProvider extends BaseProvider {
   final Map<String, NoteModel> _preloadedQuotes = {};
   final Set<String> _preloadedUserProfiles = {};
 
+  int _displayedNotesCount = 25;
+  static const int notesPerPage = 25;
+
   NotesListProvider({
     required this.npub,
     required this.dataType,
@@ -54,7 +57,14 @@ class NotesListProvider extends BaseProvider {
     _initialize();
   }
 
-  List<NoteModel> get notes => _filteredNotes;
+  List<NoteModel> get notes {
+    return _filteredNotes.take(_displayedNotesCount).toList();
+  }
+
+  List<NoteModel> get allFilteredNotes => _filteredNotes;
+
+  bool get hasMoreNotes => _filteredNotes.length > _displayedNotesCount;
+
   bool get isLoading => _isLoading;
   bool get isLoadingMore => _isLoadingMore;
   bool get hasError => _hasError;
@@ -65,6 +75,44 @@ class NotesListProvider extends BaseProvider {
   bool get hasNewNotes => _newNotesCount > 0;
 
   String get currentUserNpub => _currentUserNpub ?? '';
+
+  void loadMoreDisplayedNotes() {
+    if (hasMoreNotes) {
+      _displayedNotesCount += notesPerPage;
+      if (_displayedNotesCount > _filteredNotes.length) {
+        _displayedNotesCount = _filteredNotes.length;
+      }
+      safeNotifyListeners();
+      debugPrint('[NotesListProvider] Displaying $_displayedNotesCount of ${_filteredNotes.length} notes');
+
+      _loadProfilesForNewlyDisplayedNotes();
+    }
+  }
+
+  void _loadProfilesForNewlyDisplayedNotes() {
+    final newlyDisplayedStart = _displayedNotesCount - notesPerPage;
+    final newlyDisplayedNotes = _filteredNotes.skip(newlyDisplayedStart).take(notesPerPage).toList();
+
+    final userNpubs = <String>{};
+    for (final note in newlyDisplayedNotes) {
+      userNpubs.add(note.author);
+      if (note.repostedBy != null) {
+        userNpubs.add(note.repostedBy!);
+      }
+    }
+
+    if (userNpubs.isNotEmpty) {
+      UserProvider.instance.loadUsers(userNpubs.toList()).catchError((e) {
+        handleError('newly displayed notes profile load', e);
+      });
+      debugPrint('[NotesListProvider] Loaded profiles for ${userNpubs.length} newly displayed notes');
+    }
+
+    final noteIds = newlyDisplayedNotes.map((note) => note.id).toList();
+    if (noteIds.isNotEmpty) {
+      fetchInteractionsForNotes(noteIds);
+    }
+  }
 
   void _initialize() {
     dataService.notesNotifier.addListener(_onNotesChanged);
@@ -113,7 +161,6 @@ class NotesListProvider extends BaseProvider {
       final newNoteIds = currentNoteIds.where((id) => !_lastKnownNoteIds.contains(id)).toList();
       if (newNoteIds.isNotEmpty) {
         _newNotesCount += newNoteIds.length;
-        print('[NotesListProvider] Detected ${newNoteIds.length} new notes (total pending: $_newNotesCount)');
       }
     }
 
@@ -287,65 +334,6 @@ class NotesListProvider extends BaseProvider {
     return null;
   }
 
-  List<NoteModel> _filterNotesWithLoadedDependencies(List<NoteModel> notes) {
-    final readyNotes = <NoteModel>[];
-
-    for (final note in notes) {
-      if (_areNoteDependenciesLoaded(note)) {
-        readyNotes.add(note);
-        _preloadedNoteIds.add(note.id);
-      }
-    }
-
-    return readyNotes;
-  }
-
-  bool _areNoteDependenciesLoaded(NoteModel note) {
-    if (_preloadedNoteIds.contains(note.id)) {
-      return true;
-    }
-
-    if (!_preloadedUserProfiles.contains(note.author)) {
-      final user = UserProvider.instance.getUserIfExists(note.author);
-      if (user == null || user.name == 'Anonymous') {
-        return false;
-      }
-    }
-
-    if (note.repostedBy != null && !_preloadedUserProfiles.contains(note.repostedBy!)) {
-      final user = UserProvider.instance.getUserIfExists(note.repostedBy!);
-      if (user == null || user.name == 'Anonymous') {
-        return false;
-      }
-    }
-
-    try {
-      final parsedContent = note.parsedContentLazy;
-      final textParts = (parsedContent['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
-
-      for (final part in textParts) {
-        if (part['type'] == 'mention') {
-          final mentionId = part['id'] as String?;
-          if (mentionId != null && !_preloadedMentions.containsKey(mentionId)) {
-            return false;
-          }
-        }
-      }
-
-      final quoteIds = (parsedContent['quoteIds'] as List<dynamic>?)?.cast<String>() ?? [];
-      for (final quoteId in quoteIds) {
-        if (!_preloadedQuotes.containsKey(quoteId)) {
-          return false;
-        }
-      }
-    } catch (e) {
-      debugPrint('[NotesListProvider] Error checking dependencies for note ${note.id}: $e');
-      return false;
-    }
-
-    return true;
-  }
-
   Map<String, String> getMentionsForNote(String noteId) {
     final result = <String, String>{};
     try {
@@ -396,11 +384,10 @@ class NotesListProvider extends BaseProvider {
   void loadNewNotes() {
     if (_newNotesCount == 0) return;
 
-    print('[NotesListProvider] Loading $_newNotesCount new notes');
-
     _filteredNotes = _cachedFilteredNotes ?? _notes.where((n) => !n.isReply || n.isRepost).toList();
 
     _newNotesCount = 0;
+    _displayedNotesCount = 50;
 
     _lastKnownNoteIds = _filteredNotes.map((n) => n.id).toList();
 
@@ -482,6 +469,7 @@ class NotesListProvider extends BaseProvider {
   void refresh() {
     _notes.clear();
     _filteredNotes.clear();
+    _displayedNotesCount = 50;
     notifyListeners();
 
     dataService.forceRefresh().then((_) {
@@ -494,8 +482,8 @@ class NotesListProvider extends BaseProvider {
   void _loadUserProfiles() {
     if (_filteredNotes.isEmpty) return;
 
-    const int _userProfileBatchSize = 12;
-    final firstBatchNotes = _filteredNotes.take(_userProfileBatchSize).toList();
+    const int userProfileBatchSize = 12;
+    final firstBatchNotes = _filteredNotes.take(userProfileBatchSize).toList();
 
     final userNpubs = <String>{};
     for (final note in firstBatchNotes) {
@@ -504,7 +492,7 @@ class NotesListProvider extends BaseProvider {
         userNpubs.add(note.repostedBy!);
       }
 
-      if (userNpubs.length >= _userProfileBatchSize) break;
+      if (userNpubs.length >= userProfileBatchSize) break;
     }
 
     if (userNpubs.isNotEmpty) {

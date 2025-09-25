@@ -24,27 +24,22 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
   @override
   bool get wantKeepAlive => true;
 
-  // Immutable cached data
   late final ScrollController _scrollController;
   late final String _scrollKey;
   late final NotesListProvider _provider;
 
-  // Static cache for scroll positions
   static final Map<String, double> _globalScrollPositions = {};
 
-  // Performance constants
   static const double _loadMoreThreshold = 200.0;
   static const Duration _scrollSaveDelay = Duration(milliseconds: 0);
   static const Duration _loadMoreDelay = Duration(milliseconds: 100);
 
-  // Minimal state tracking
   Timer? _loadMoreTimer;
   Timer? _scrollSaveTimer;
   bool _isScrollJumping = false;
   double? _lastScrollPosition;
   bool _isInitialized = false;
 
-  // Single consolidated state
   final ValueNotifier<_ListState> _stateNotifier = ValueNotifier(_ListState.initial());
 
   @override
@@ -88,13 +83,13 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
 
     final newState = _ListState(
       notes: List.unmodifiable(_provider.notes),
+      hasMoreNotes: _provider.hasMoreNotes,
       isLoading: _provider.isLoading,
       isLoadingMore: _provider.isLoadingMore,
       hasError: _provider.hasError,
       errorMessage: _provider.errorMessage,
     );
 
-    // Only update if something actually changed
     if (currentState != newState) {
       _stateNotifier.value = newState;
     }
@@ -127,7 +122,6 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
     final currentPosition = _scrollController.position.pixels;
     final maxScrollExtent = _scrollController.position.maxScrollExtent;
 
-    // Anti-jump protection
     if (_lastScrollPosition != null) {
       final jumpThreshold = MediaQuery.of(context).size.height * 0.5;
       final positionDiff = (currentPosition - _lastScrollPosition!).abs();
@@ -144,7 +138,6 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
 
     _lastScrollPosition = currentPosition;
 
-    // Debounced scroll position saving
     _scrollSaveTimer?.cancel();
     _scrollSaveTimer = Timer(_scrollSaveDelay, () {
       if (mounted && !_isScrollJumping) {
@@ -152,7 +145,6 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
       }
     });
 
-    // Debounced load more
     if (maxScrollExtent > 0 && (maxScrollExtent - currentPosition) < _loadMoreThreshold) {
       _loadMoreTimer?.cancel();
       _loadMoreTimer = Timer(_loadMoreDelay, () {
@@ -215,9 +207,9 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
   }
 }
 
-// Immutable state class
 class _ListState {
   final List<dynamic> notes;
+  final bool hasMoreNotes;
   final bool isLoading;
   final bool isLoadingMore;
   final bool hasError;
@@ -225,6 +217,7 @@ class _ListState {
 
   const _ListState({
     required this.notes,
+    required this.hasMoreNotes,
     required this.isLoading,
     required this.isLoadingMore,
     required this.hasError,
@@ -234,6 +227,7 @@ class _ListState {
   factory _ListState.initial() {
     return const _ListState(
       notes: [],
+      hasMoreNotes: false,
       isLoading: false,
       isLoadingMore: false,
       hasError: false,
@@ -247,6 +241,7 @@ class _ListState {
       other is _ListState &&
           runtimeType == other.runtimeType &&
           notes.length == other.notes.length &&
+          hasMoreNotes == other.hasMoreNotes &&
           isLoading == other.isLoading &&
           isLoadingMore == other.isLoadingMore &&
           hasError == other.hasError &&
@@ -256,7 +251,6 @@ class _ListState {
   bool _areNotesEqual(List<dynamic> current, List<dynamic> other) {
     if (current.length != other.length) return false;
 
-    // Quick check - compare first 10 items for visible changes
     const checkCount = 10;
     final actualCheckCount = current.length < checkCount ? current.length : checkCount;
 
@@ -268,10 +262,15 @@ class _ListState {
   }
 
   @override
-  int get hashCode => notes.length.hashCode ^ isLoading.hashCode ^ isLoadingMore.hashCode ^ hasError.hashCode ^ errorMessage.hashCode;
+  int get hashCode =>
+      notes.length.hashCode ^
+      hasMoreNotes.hashCode ^
+      isLoading.hashCode ^
+      isLoadingMore.hashCode ^
+      hasError.hashCode ^
+      errorMessage.hashCode;
 }
 
-// Optimized list view - single ValueListenableBuilder, no nested listeners
 class _OptimizedListView extends StatelessWidget {
   final _ListState state;
   final ScrollController scrollController;
@@ -285,20 +284,29 @@ class _OptimizedListView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final visibleNotes = state.notes;
+    final hasMoreNotes = state.hasMoreNotes;
+
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
-          // Handle load more indicator
-          if (index == state.notes.length) {
-            return state.isLoadingMore ? const _LoadMoreIndicator() : const SizedBox.shrink();
+          if (index == visibleNotes.length) {
+            if (hasMoreNotes) {
+              return _LoadMoreButton(
+                onPressed: () => provider.loadMoreDisplayedNotes(),
+              );
+            } else if (state.isLoadingMore) {
+              return const _LoadMoreIndicator();
+            } else {
+              return const SizedBox.shrink();
+            }
           }
 
-          // Handle out of bounds
-          if (index >= state.notes.length) {
+          if (index >= visibleNotes.length) {
             return const SizedBox.shrink();
           }
 
-          final note = state.notes[index];
+          final note = visibleNotes[index];
 
           return RepaintBoundary(
             key: ValueKey('note_${note.id}'),
@@ -314,21 +322,57 @@ class _OptimizedListView extends StatelessWidget {
                   isSmallView: true,
                   notesListProvider: provider,
                 ),
-                if (index < state.notes.length - 1) const _NoteSeparator(),
+                if (index < visibleNotes.length - 1) const _NoteSeparator(),
               ],
             ),
           );
         },
-        childCount: state.notes.length + (state.isLoadingMore ? 1 : 0),
+        childCount: visibleNotes.length + (hasMoreNotes || state.isLoadingMore ? 1 : 0),
         addAutomaticKeepAlives: true,
-        addRepaintBoundaries: false, // We handle this manually
+        addRepaintBoundaries: false,
         addSemanticIndexes: false,
       ),
     );
   }
 }
 
-// Immutable components
+class _LoadMoreButton extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _LoadMoreButton({
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 20.0),
+      child: Column(
+        children: [
+          ElevatedButton(
+            onPressed: onPressed,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: theme.colorScheme.surface,
+              foregroundColor: theme.colorScheme.onSurface,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(25.0),
+              ),
+            ),
+            child: const Text(
+              'Load more notes',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            ),
+          ),
+          const SizedBox(height: 200),
+        ],
+      ),
+    );
+  }
+}
+
 class _LoadingState extends StatelessWidget {
   const _LoadingState();
 
@@ -477,7 +521,6 @@ class _ErrorState extends StatelessWidget {
   }
 }
 
-// Factory remains the same
 class NoteListWidgetFactory {
   static Widget create({
     required String npub,

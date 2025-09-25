@@ -94,18 +94,12 @@ class FeedPageState extends State<FeedPage> {
             await userProvider.setCurrentUser(widget.npub);
           }
 
+          await dataService.initializeHeavyOperations();
+          await dataService.initializeConnections();
+
           if (mounted) {
             setState(() {});
           }
-
-          Future.microtask(() async {
-            try {
-              await dataService.initializeHeavyOperations();
-              await dataService.initializeConnections();
-            } catch (e) {
-              print('[FeedPage] Heavy operations error: $e');
-            }
-          });
         } catch (e) {
           print('[FeedPage] Initialization error: $e');
           if (mounted) {
