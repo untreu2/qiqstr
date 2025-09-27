@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:qiqstr/models/zap_model.dart';
-import '../services/time_service.dart';
 
 class NotificationModel {
   final String id;
