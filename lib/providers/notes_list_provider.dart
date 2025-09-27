@@ -30,7 +30,6 @@ class NotesListProvider extends BaseProvider {
   List<String> _lastKnownNoteIds = [];
 
   List<NoteModel>? _cachedFilteredNotes;
-  int _lastNotesLength = 0;
 
   bool _isPreloadingDependencies = false;
   final Set<String> _preloadedNoteIds = {};
@@ -38,8 +37,8 @@ class NotesListProvider extends BaseProvider {
   final Map<String, NoteModel> _preloadedQuotes = {};
   final Set<String> _preloadedUserProfiles = {};
 
-  int _displayedNotesCount = 25;
-  static const int notesPerPage = 25;
+  int _displayedNotesCount = 100;
+  static const int notesPerPage = 50;
 
   NotesListProvider({
     required this.npub,
@@ -119,15 +118,9 @@ class NotesListProvider extends BaseProvider {
     _onNotesChanged();
     _loadCurrentUserNpub();
 
-    if (!_isInitialized) {
-      final initDelay = dataType == DataType.profile ? const Duration(milliseconds: 50) : const Duration(milliseconds: 200);
-
-      Timer(initDelay, () {
-        _isInitialized = true;
-        notifyListeners();
-        _startPeriodicUpdates();
-      });
-    }
+    _isInitialized = true;
+    notifyListeners();
+    _startPeriodicUpdates();
   }
 
   Future<void> _loadCurrentUserNpub() async {
@@ -170,15 +163,18 @@ class NotesListProvider extends BaseProvider {
   void _preloadNoteDependenciesAndFilter() {
     if (_isPreloadingDependencies) return;
 
-    if (_cachedFilteredNotes == null || _notes.length != _lastNotesLength) {
-      final potentialNotes = <NoteModel>[];
-      potentialNotes.addAll(_notes.where((n) => !n.isReply || n.isRepost));
-      _cachedFilteredNotes = potentialNotes;
-      _lastNotesLength = _notes.length;
+    final potentialNotes = <NoteModel>[];
+    potentialNotes.addAll(_notes.where((n) => !n.isReply || n.isRepost));
+    _cachedFilteredNotes = potentialNotes;
+
+    _filteredNotes = _cachedFilteredNotes ?? [];
+
+    if (_newNotesCount == 0 && _filteredNotes.isNotEmpty) {
+      Future.microtask(() => _preloadDependenciesForNotes(_filteredNotes));
     }
 
-    if (_newNotesCount == 0) {
-      _preloadDependenciesForNotes(_cachedFilteredNotes ?? []);
+    if (_isInitialized) {
+      safeNotifyListeners();
     }
   }
 
@@ -387,7 +383,7 @@ class NotesListProvider extends BaseProvider {
     _filteredNotes = _cachedFilteredNotes ?? _notes.where((n) => !n.isReply || n.isRepost).toList();
 
     _newNotesCount = 0;
-    _displayedNotesCount = 50;
+    _displayedNotesCount = 100;
 
     _lastKnownNoteIds = _filteredNotes.map((n) => n.id).toList();
 
@@ -409,34 +405,27 @@ class NotesListProvider extends BaseProvider {
       if (dataService.notes.isNotEmpty) {
         _setLoading(false);
         debugPrint('[NotesListProvider] Instant display: ${dataService.notes.length} cached notes');
+        return;
       }
 
+      await dataService.initializeLightweight();
+      _preloadNoteDependenciesAndFilter();
+
+      _setLoading(false);
+
       Future.microtask(() async {
-        await dataService.initializeLightweight();
-        _preloadNoteDependenciesAndFilter();
+        try {
+          await dataService.initializeHeavyOperations();
+          await dataService.initializeConnections();
 
-        if (_isLoading) {
-          _setLoading(false);
-        }
-
-        Future.microtask(() async {
-          try {
-            if (dataType == DataType.profile) {
-              Future.microtask(() => dataService.initializeHeavyOperations());
-              Future.microtask(() => dataService.initializeConnections());
-              debugPrint('[NotesListProvider] Profile: Background operations started');
-            } else {
-              Future.microtask(() => dataService.initializeHeavyOperations());
-              Future.microtask(() => dataService.initializeConnections());
-
-              createTimer(const Duration(milliseconds: 500), _refreshNewNotes);
-              debugPrint('[NotesListProvider] Feed: Background operations started');
-            }
-            _preloadNoteDependenciesAndFilter();
-          } catch (e) {
-            handleError('background initialization', e);
+          if (dataType == DataType.feed) {
+            createTimer(const Duration(milliseconds: 500), _refreshNewNotes);
           }
-        });
+
+          debugPrint('[NotesListProvider] ${dataType.name}: Background operations completed');
+        } catch (e) {
+          handleError('background initialization', e);
+        }
       });
     } catch (e) {
       _setError('Failed to load notes: $e');
@@ -469,7 +458,7 @@ class NotesListProvider extends BaseProvider {
   void refresh() {
     _notes.clear();
     _filteredNotes.clear();
-    _displayedNotesCount = 50;
+    _displayedNotesCount = 100;
     notifyListeners();
 
     dataService.forceRefresh().then((_) {

@@ -1,26 +1,11 @@
-import 'package:hive/hive.dart';
 import '../services/time_service.dart';
 
-part 'reaction_model.g.dart';
-
-@HiveType(typeId: 1)
-class ReactionModel extends HiveObject {
-  @HiveField(0)
+class ReactionModel {
   final String id;
-
-  @HiveField(1)
   final String targetEventId;
-
-  @HiveField(2)
   final String author;
-
-  @HiveField(3)
   final String content;
-
-  @HiveField(4)
   final DateTime timestamp;
-
-  @HiveField(5)
   final DateTime fetchedAt;
 
   ReactionModel({

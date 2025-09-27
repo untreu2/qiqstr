@@ -2,18 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../colors.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-import '../models/note_model.dart';
-import '../models/reaction_model.dart';
-import '../models/reply_model.dart';
-import '../models/repost_model.dart';
-import '../models/user_model.dart';
-import '../models/following_model.dart';
-import '../models/link_preview_model.dart';
-import '../models/zap_model.dart';
-import '../models/notification_model.dart';
 import '../services/data_service.dart';
 import '../services/data_service_manager.dart';
+import '../services/in_memory_data_manager.dart';
 import '../providers/user_provider.dart';
 import '../providers/notes_provider.dart';
 import '../providers/interactions_provider.dart';
@@ -87,7 +78,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<Map<String, dynamic>?> _performInitialization() async {
     try {
-      await _initializeHiveOptimized();
+      await _initializeInMemoryStorage();
 
       final secureStorage = const FlutterSecureStorage();
 
@@ -129,34 +120,15 @@ class _SplashScreenState extends State<SplashScreen> {
     }
   }
 
-  Future<void> _initializeHiveOptimized() async {
-    await Hive.initFlutter();
-
-    final adapters = [
-      () => Hive.registerAdapter(NoteModelAdapter()),
-      () => Hive.registerAdapter(ReactionModelAdapter()),
-      () => Hive.registerAdapter(ReplyModelAdapter()),
-      () => Hive.registerAdapter(RepostModelAdapter()),
-      () => Hive.registerAdapter(UserModelAdapter()),
-      () => Hive.registerAdapter(ZapModelAdapter()),
-      () => Hive.registerAdapter(FollowingModelAdapter()),
-      () => Hive.registerAdapter(LinkPreviewModelAdapter()),
-      () => Hive.registerAdapter(NotificationModelAdapter()),
-    ];
-
-    for (int i = 0; i < adapters.length; i++) {
-      final typeId = i == 8 ? 12 : i;
-      if (!Hive.isAdapterRegistered(typeId)) {
-        adapters[i]();
-      }
-    }
-
-    await Hive.openBox<LinkPreviewModel>('link_preview_cache');
+  Future<void> _initializeInMemoryStorage() async {
+    print('[SplashScreen] Initializing in-memory storage...');
+    await InMemoryDataManager.instance.initializeBoxes();
+    print('[SplashScreen] In-memory storage initialized successfully');
   }
 
   Future<void> _initializeMinimalForNavigation(String npub, DataService dataService) async {
     try {
-      await _openCriticalBoxes(npub);
+      print('[SplashScreen] Initializing providers and services...');
 
       await Future.wait([
         UserProvider.instance.initialize(),
@@ -179,7 +151,7 @@ class _SplashScreenState extends State<SplashScreen> {
     try {
       MemoryManager.instance;
 
-      _openRemainingBoxes(npub);
+      await InMemoryDataManager.instance.initializeNotificationBox(npub);
 
       Future.microtask(() async {
         try {
@@ -197,42 +169,6 @@ class _SplashScreenState extends State<SplashScreen> {
     } catch (e) {
       print('Background initialization error: $e');
     }
-  }
-
-  Future<void> _openCriticalBoxes(String npub) async {
-    Future.microtask(() async {
-      try {
-        await Future.wait([
-          Hive.openBox<UserModel>('users'),
-          Hive.openBox<NoteModel>('notes_Feed_$npub'),
-          Hive.openBox<FollowingModel>('followingBox'),
-        ]);
-      } catch (e) {
-        print('[SplashScreen] Critical boxes opening error: $e');
-      }
-    });
-  }
-
-  void _openRemainingBoxes(String npub) {
-    Future.microtask(() async {
-      final remainingBoxFutures = [
-        Hive.openBox<ReactionModel>('reactions_Feed_$npub'),
-        Hive.openBox<ReplyModel>('replies_Feed_$npub'),
-        Hive.openBox<RepostModel>('reposts_Feed_$npub'),
-        Hive.openBox<NoteModel>('notes_Profile_$npub'),
-        Hive.openBox<ReactionModel>('reactions_Profile_$npub'),
-        Hive.openBox<ReplyModel>('replies_Profile_$npub'),
-        Hive.openBox<RepostModel>('reposts_Profile_$npub'),
-        Hive.openBox<ZapModel>('zaps_$npub'),
-        Hive.openBox<NotificationModel>('notifications_$npub'),
-      ];
-
-      try {
-        await Future.wait(remainingBoxFutures);
-      } catch (e) {
-        print('[SplashScreen] Remaining boxes opening error: $e');
-      }
-    });
   }
 
   void _setupMemoryPressureHandling() {

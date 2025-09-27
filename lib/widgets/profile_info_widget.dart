@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:hive/hive.dart';
+import '../services/in_memory_data_manager.dart';
+
 import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/widgets/note_content_widget.dart';
@@ -36,7 +37,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   bool? _isFollowing;
   String? _currentUserNpub;
-  late Box<FollowingModel> _followingBox;
+  late InMemoryBox<FollowingModel>? _followingBox;
   DataService? _dataService;
 
   bool _copiedToClipboard = false;
@@ -152,8 +153,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       String? currentUserHex = _convertToHex(_currentUserNpub!);
       if (currentUserHex == _userHexKey) return;
 
-      _followingBox = await Hive.openBox<FollowingModel>('followingBox');
-      final model = _followingBox.get('following_$currentUserHex');
+      _followingBox = InMemoryDataManager.instance.followingBox;
+      final model = _followingBox?.get('following_$currentUserHex');
 
       final isFollowing = model?.pubkeys.contains(_userHexKey!) ?? false;
 

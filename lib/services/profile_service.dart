@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:hive/hive.dart';
+
 import '../models/user_model.dart';
 import '../constants/relays.dart';
-import 'hive_manager.dart';
+import 'in_memory_data_manager.dart';
 import 'nip05_verification_service.dart';
 import 'time_service.dart';
 
@@ -14,7 +14,7 @@ class ProfileService {
 
   ProfileService._internal();
 
-  final HiveManager _hiveManager = HiveManager.instance;
+  final InMemoryDataManager _dataManager = InMemoryDataManager.instance;
   final Nip05VerificationService _nip05Service = Nip05VerificationService.instance;
   final Map<String, Map<String, String>> _profileCache = {};
   final Map<String, DateTime> _cacheTimestamps = {};
@@ -23,11 +23,11 @@ class ProfileService {
   final Duration _cacheTTL = const Duration(minutes: 30);
   final int _maxCacheSize = 1000;
 
-  Box<UserModel>? get _usersBox => _hiveManager.usersBox;
+  InMemoryBox<UserModel>? get _usersBox => _dataManager.usersBox;
 
   Future<void> initialize() async {
-    if (!_hiveManager.isInitialized) {
-      await _hiveManager.initializeBoxes();
+    if (!_dataManager.isInitialized) {
+      await _dataManager.initializeBoxes();
     }
   }
 

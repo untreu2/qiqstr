@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
-import 'package:hive/hive.dart';
 import '../models/notification_model.dart';
+import '../services/in_memory_data_manager.dart';
 import '../models/user_model.dart';
 import '../services/data_service.dart';
 import 'user_provider.dart';
@@ -24,7 +24,7 @@ class NotificationProvider extends ChangeNotifier {
 
   NotificationProvider._internal();
 
-  Box<NotificationModel>? _notificationsBox;
+  InMemoryBox<NotificationModel>? _notificationsBox;
   DataService? _dataService;
   UserProvider? _userProvider;
   bool _isInitialized = false;
@@ -77,7 +77,7 @@ class NotificationProvider extends ChangeNotifier {
       _dataService = dataService;
       _userProvider = userProvider;
 
-      _notificationsBox = await Hive.openBox<NotificationModel>('notifications_$npub');
+      _notificationsBox = await InMemoryDataManager.instance.initializeNotificationBox(npub);
 
       await _loadNotifications();
 

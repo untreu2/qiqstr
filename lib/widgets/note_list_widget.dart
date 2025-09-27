@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:async';
 import '../providers/notes_list_provider.dart';
+import '../providers/interactions_provider.dart';
 import '../services/data_service.dart';
 import 'note_widget.dart';
 import 'grid_view_widget.dart';
@@ -42,6 +43,9 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
 
   final ValueNotifier<_ListState> _stateNotifier = ValueNotifier(_ListState.initial());
 
+  Timer? _interactionFetchTimer;
+  final Set<String> _fetchedInteractionNotes = {};
+
   @override
   void initState() {
     super.initState();
@@ -71,6 +75,14 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
   void _setupProviderListener() {
     _provider.addListener(_onProviderChange);
     _syncProviderState();
+
+    InteractionsProvider.instance.addListener(_onInteractionsChanged);
+  }
+
+  void _onInteractionsChanged() {
+    if (mounted) {
+      _stateNotifier.value = _stateNotifier.value;
+    }
   }
 
   void _onProviderChange() {
@@ -101,7 +113,56 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
 
       _provider.fetchInitialNotes();
       _restoreScrollPosition();
+      _startInteractionFetching();
     });
+  }
+
+  void _startInteractionFetching() {
+    _fetchInteractionsForVisibleNotes();
+
+    _interactionFetchTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      _fetchInteractionsForVisibleNotes();
+    });
+  }
+
+  void _fetchInteractionsForVisibleNotes() {
+    final notes = _stateNotifier.value.notes;
+    if (notes.isEmpty) return;
+
+    final visibleNoteIds = notes.take(10).map((note) => (note as dynamic).id as String).toList();
+
+    final newNoteIds = visibleNoteIds.where((id) => !_fetchedInteractionNotes.contains(id)).toList();
+
+    if (newNoteIds.isNotEmpty) {
+      Future.microtask(() async {
+        try {
+          await _provider.dataService.fetchInteractionsForEvents(newNoteIds.cast<String>(), forceLoad: true);
+
+          await InteractionsProvider.instance.fetchInteractionsForNotes(newNoteIds.cast<String>());
+
+          InteractionsProvider.instance.updateVisibleNotes(visibleNoteIds.toSet().cast<String>());
+
+          _fetchedInteractionNotes.addAll(newNoteIds.cast<String>());
+
+          debugPrint('[NoteListWidget] Fetched interactions for ${newNoteIds.length} new notes');
+
+          if (mounted) {
+            _stateNotifier.value = _stateNotifier.value;
+          }
+        } catch (e) {
+          debugPrint('[NoteListWidget] Interaction fetch error: $e');
+        }
+      });
+    }
+
+    if (_fetchedInteractionNotes.length > 500) {
+      final currentNoteIds = visibleNoteIds.toSet().cast<String>();
+      _fetchedInteractionNotes.retainWhere((id) => currentNoteIds.contains(id));
+    }
   }
 
   void _restoreScrollPosition() {
@@ -152,6 +213,10 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
           final state = _stateNotifier.value;
           if (!state.isLoading && !state.isLoadingMore) {
             _provider.fetchMoreNotes();
+
+            Future.delayed(const Duration(milliseconds: 500), () {
+              _fetchInteractionsForVisibleNotes();
+            });
           }
         }
       });
@@ -162,9 +227,11 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
   void dispose() {
     _loadMoreTimer?.cancel();
     _scrollSaveTimer?.cancel();
+    _interactionFetchTimer?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _provider.removeListener(_onProviderChange);
+    InteractionsProvider.instance.removeListener(_onInteractionsChanged);
     _stateNotifier.dispose();
     super.dispose();
   }
@@ -251,7 +318,7 @@ class _ListState {
   bool _areNotesEqual(List<dynamic> current, List<dynamic> other) {
     if (current.length != other.length) return false;
 
-    const checkCount = 10;
+    const checkCount = 5;
     final actualCheckCount = current.length < checkCount ? current.length : checkCount;
 
     for (int i = 0; i < actualCheckCount; i++) {
@@ -418,7 +485,6 @@ class _NoteSeparator extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 24,
-      margin: const EdgeInsets.symmetric(horizontal: 16),
       child: Center(
         child: Container(
           height: 0.5,

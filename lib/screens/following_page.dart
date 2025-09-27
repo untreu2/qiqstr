@@ -1,14 +1,13 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/models/following_model.dart';
 import 'package:qiqstr/screens/profile_page.dart';
 import 'package:qiqstr/services/data_service.dart';
 import 'package:bounce/bounce.dart';
-import 'package:hive/hive.dart';
+
+import '../services/in_memory_data_manager.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 
 class FollowingPage extends StatefulWidget {
@@ -54,14 +53,12 @@ class _FollowingPageState extends State<FollowingPage> {
           } else if (_isValidHex(widget.user.npub)) {
             userHexKey = widget.user.npub;
           }
-        } catch (e) {
-          print('[FollowingPage] Error converting npub to hex: $e');
-        }
+        } catch (e) {}
         targetNpub = userHexKey ?? widget.user.npub;
       }
 
-      final followingBox = await Hive.openBox<FollowingModel>('followingBox');
-      final cachedFollowing = followingBox.get('following_$targetNpub');
+      final followingBox = InMemoryDataManager.instance.followingBox;
+      final cachedFollowing = followingBox?.get('following_$targetNpub');
 
       if (cachedFollowing == null || cachedFollowing.pubkeys.isEmpty) {
         setState(() {
@@ -74,12 +71,12 @@ class _FollowingPageState extends State<FollowingPage> {
       final followingNpubs = cachedFollowing.pubkeys;
       print('[FollowingPage] Found ${followingNpubs.length} following for $targetNpub');
 
-      final usersBox = await Hive.openBox<UserModel>('users');
+      final usersBox = InMemoryDataManager.instance.usersBox;
       final List<UserModel> users = [];
 
       for (final npub in followingNpubs) {
         try {
-          UserModel? user = usersBox.get(npub);
+          UserModel? user = usersBox?.get(npub);
 
           if (user != null) {
             users.add(user);

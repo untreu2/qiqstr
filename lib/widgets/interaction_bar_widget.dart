@@ -40,18 +40,15 @@ class _InteractionBarState extends State<InteractionBar> with AutomaticKeepAlive
   @override
   bool get wantKeepAlive => true;
 
-  // Immutable cached data
   late final String _noteId;
   late final String _currentUserNpub;
   late final DataService? _dataService;
   late final NoteModel? _note;
   late final String _widgetKey;
 
-  // Extreme debouncing for provider updates
   Timer? _updateTimer;
   static const Duration _updateDelay = Duration(milliseconds: 200);
 
-  // Single consolidated state
   final ValueNotifier<_InteractionState> _stateNotifier = ValueNotifier(_InteractionState.initial());
 
   bool _isDisposed = false;
@@ -75,48 +72,39 @@ class _InteractionBarState extends State<InteractionBar> with AutomaticKeepAlive
   }
 
   void _initializeAsync() {
-    if (_currentUserNpub.isEmpty) return;
+    if (_currentUserNpub.isEmpty || _dataService == null) return;
 
     Future.microtask(() {
-      if (_isDisposed) return;
-      _loadInitialState();
-      _setupProviderListener();
+      if (_isDisposed || !mounted) return;
+
+      if (!InteractionsProvider.instance.isInitialized) {
+        Timer.periodic(const Duration(milliseconds: 100), (timer) {
+          if (_isDisposed || !mounted) {
+            timer.cancel();
+            return;
+          }
+
+          if (InteractionsProvider.instance.isInitialized) {
+            timer.cancel();
+            _loadInitialState();
+            _setupProviderListener();
+          }
+        });
+      } else {
+        _loadInitialState();
+        _setupProviderListener();
+      }
     });
   }
 
   void _loadInitialState() {
-    final provider = InteractionsProvider.instance;
+    if (_isDisposed || !mounted) return;
 
-    _stateNotifier.value = _InteractionState(
-      replyCount: provider.getReplyCount(_noteId),
-      repostCount: provider.getRepostCount(_noteId),
-      reactionCount: provider.getReactionCount(_noteId),
-      zapAmount: provider.getZapAmount(_noteId),
-      hasReplied: provider.hasUserReplied(_currentUserNpub, _noteId),
-      hasReposted: provider.hasUserReposted(_currentUserNpub, _noteId),
-      hasReacted: provider.hasUserReacted(_currentUserNpub, _noteId),
-      hasZapped: provider.hasUserZapped(_currentUserNpub, _noteId),
-    );
-  }
-
-  void _setupProviderListener() {
-    InteractionsProvider.instance.addListener(_onProviderUpdate);
-  }
-
-  void _onProviderUpdate() {
-    if (!mounted || _isDisposed || _isUpdating) return;
-
-    // Aggressive debouncing to prevent rapid fire updates
-    _updateTimer?.cancel();
-    _updateTimer = Timer(_updateDelay, () {
-      if (!mounted || _isDisposed) return;
-
-      _isUpdating = true;
-
+    try {
       final provider = InteractionsProvider.instance;
-      final currentState = _stateNotifier.value;
+      if (!provider.isInitialized) return;
 
-      final newState = _InteractionState(
+      _stateNotifier.value = _InteractionState(
         replyCount: provider.getReplyCount(_noteId),
         repostCount: provider.getRepostCount(_noteId),
         reactionCount: provider.getReactionCount(_noteId),
@@ -126,13 +114,58 @@ class _InteractionBarState extends State<InteractionBar> with AutomaticKeepAlive
         hasReacted: provider.hasUserReacted(_currentUserNpub, _noteId),
         hasZapped: provider.hasUserZapped(_currentUserNpub, _noteId),
       );
+    } catch (e) {
+      debugPrint('[InteractionBar] Error loading initial state: $e');
+    }
+  }
 
-      // Only update if something actually changed
-      if (currentState != newState) {
-        _stateNotifier.value = newState;
+  void _setupProviderListener() {
+    if (_isDisposed || !mounted) return;
+
+    try {
+      InteractionsProvider.instance.addListener(_onProviderUpdate);
+    } catch (e) {
+      debugPrint('[InteractionBar] Error setting up provider listener: $e');
+    }
+  }
+
+  void _onProviderUpdate() {
+    if (!mounted || _isDisposed || _isUpdating) return;
+
+    _updateTimer?.cancel();
+    _updateTimer = Timer(_updateDelay, () {
+      if (!mounted || _isDisposed) return;
+
+      _isUpdating = true;
+
+      try {
+        final provider = InteractionsProvider.instance;
+        if (!provider.isInitialized) {
+          _isUpdating = false;
+          return;
+        }
+
+        final currentState = _stateNotifier.value;
+
+        final newState = _InteractionState(
+          replyCount: provider.getReplyCount(_noteId),
+          repostCount: provider.getRepostCount(_noteId),
+          reactionCount: provider.getReactionCount(_noteId),
+          zapAmount: provider.getZapAmount(_noteId),
+          hasReplied: provider.hasUserReplied(_currentUserNpub, _noteId),
+          hasReposted: provider.hasUserReposted(_currentUserNpub, _noteId),
+          hasReacted: provider.hasUserReacted(_currentUserNpub, _noteId),
+          hasZapped: provider.hasUserZapped(_currentUserNpub, _noteId),
+        );
+
+        if (currentState != newState) {
+          _stateNotifier.value = newState;
+        }
+      } catch (e) {
+        debugPrint('[InteractionBar] Error in provider update: $e');
+      } finally {
+        _isUpdating = false;
       }
-
-      _isUpdating = false;
     });
   }
 
@@ -140,8 +173,19 @@ class _InteractionBarState extends State<InteractionBar> with AutomaticKeepAlive
   void dispose() {
     _isDisposed = true;
     _updateTimer?.cancel();
-    InteractionsProvider.instance.removeListener(_onProviderUpdate);
-    _stateNotifier.dispose();
+
+    try {
+      InteractionsProvider.instance.removeListener(_onProviderUpdate);
+    } catch (e) {
+      debugPrint('[InteractionBar] Error removing provider listener: $e');
+    }
+
+    try {
+      _stateNotifier.dispose();
+    } catch (e) {
+      debugPrint('[InteractionBar] Error disposing state notifier: $e');
+    }
+
     super.dispose();
   }
 
@@ -149,7 +193,7 @@ class _InteractionBarState extends State<InteractionBar> with AutomaticKeepAlive
   Widget build(BuildContext context) {
     super.build(context);
 
-    if (!_isInitialized || _currentUserNpub.isEmpty) {
+    if (!_isInitialized || _currentUserNpub.isEmpty || !InteractionsProvider.instance.isInitialized || _dataService == null) {
       return const SizedBox.shrink();
     }
 
@@ -162,7 +206,6 @@ class _InteractionBarState extends State<InteractionBar> with AutomaticKeepAlive
           builder: (context, state, _) {
             final colors = context.colors;
 
-            // Pre-build all static components
             return _StaticInteractionRow(
               state: state,
               noteId: _noteId,
@@ -183,7 +226,6 @@ class _InteractionBarState extends State<InteractionBar> with AutomaticKeepAlive
   }
 }
 
-// Immutable state class
 class _InteractionState {
   final int replyCount;
   final int repostCount;
@@ -244,7 +286,6 @@ class _InteractionState {
       hasZapped.hashCode;
 }
 
-// Completely static interaction row - no nested ValueListenableBuilders
 class _StaticInteractionRow extends StatelessWidget {
   final _InteractionState state;
   final String noteId;
@@ -315,7 +356,7 @@ class _StaticInteractionRow extends StatelessWidget {
         ),
         _UltraStaticButton(
           key: ValueKey('${widgetKey}_stats'),
-          iconPath: null, // Uses Icon instead
+          iconPath: null,
           count: 0,
           isActive: false,
           activeColor: colors.secondary,
@@ -328,62 +369,93 @@ class _StaticInteractionRow extends StatelessWidget {
   }
 
   void _handleReplyTap(BuildContext context) {
-    if (dataService == null) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ShareNotePage(
-          dataService: dataService!,
-          replyToNoteId: noteId,
+    if (dataService == null) {
+      debugPrint('[InteractionBar] Cannot reply - dataService is null');
+      return;
+    }
+    try {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ShareNotePage(
+            dataService: dataService!,
+            replyToNoteId: noteId,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      debugPrint('[InteractionBar] Error navigating to reply: $e');
+    }
   }
 
   void _handleRepostTap(BuildContext context) {
-    if (dataService == null || note == null || state.hasReposted) return;
-    showRepostDialog(
-      context: context,
-      dataService: dataService!,
-      note: note!,
-    );
+    if (dataService == null || note == null || state.hasReposted) {
+      debugPrint(
+          '[InteractionBar] Cannot repost - dataService: ${dataService != null}, note: ${note != null}, hasReposted: ${state.hasReposted}');
+      return;
+    }
+    try {
+      showRepostDialog(
+        context: context,
+        dataService: dataService!,
+        note: note!,
+      );
+    } catch (e) {
+      debugPrint('[InteractionBar] Error showing repost dialog: $e');
+    }
   }
 
   Future<bool> _handleReactionTap() async {
-    if (dataService == null || state.hasReacted) return false;
+    if (dataService == null || state.hasReacted) {
+      debugPrint('[InteractionBar] Cannot react - dataService: ${dataService != null}, hasReacted: ${state.hasReacted}');
+      return false;
+    }
     try {
       await dataService!.sendReaction(noteId, '+');
       return true;
     } catch (e) {
-      debugPrint('Error sending reaction: $e');
+      debugPrint('[InteractionBar] Error sending reaction: $e');
       return false;
     }
   }
 
   void _handleZapTap(BuildContext context) {
-    if (dataService == null || note == null) return;
-    showZapDialog(
-      context: context,
-      dataService: dataService!,
-      note: note!,
-    );
+    if (dataService == null || note == null) {
+      debugPrint('[InteractionBar] Cannot zap - dataService: ${dataService != null}, note: ${note != null}');
+      return;
+    }
+    try {
+      showZapDialog(
+        context: context,
+        dataService: dataService!,
+        note: note!,
+      );
+    } catch (e) {
+      debugPrint('[InteractionBar] Error showing zap dialog: $e');
+    }
   }
 
   void _handleStatsTap(BuildContext context) {
-    if (dataService == null || note == null) return;
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => NoteStatisticsPage(
-          note: note!,
-          dataService: dataService!,
+    if (dataService == null || note == null) {
+      debugPrint('[InteractionBar] Cannot show stats - dataService: ${dataService != null}, note: ${note != null}');
+      return;
+    }
+    try {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => NoteStatisticsPage(
+            note: note!,
+            dataService: dataService!,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      debugPrint('[InteractionBar] Error navigating to stats: $e');
+    }
   }
 }
 
-// Ultra-optimized static button with global caching
 class _UltraStaticButton extends StatelessWidget {
   final String? iconPath;
   final int count;
@@ -393,7 +465,6 @@ class _UltraStaticButton extends StatelessWidget {
   final VoidCallback? onTap;
   final bool isStatsButton;
 
-  // Global static cache - shared across all instances
   static final Map<String, Widget> _globalCache = <String, Widget>{};
 
   const _UltraStaticButton({
@@ -466,7 +537,6 @@ class _UltraStaticButton extends StatelessWidget {
   }
 }
 
-// Smart like button with minimal state management
 class _SmartLikeButton extends StatefulWidget {
   final String iconPath;
   final int count;

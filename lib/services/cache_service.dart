@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:hive/hive.dart';
 import '../models/note_model.dart';
 import '../models/user_model.dart';
 import '../models/reaction_model.dart';
@@ -8,7 +7,7 @@ import '../models/repost_model.dart';
 import '../models/zap_model.dart';
 import '../models/following_model.dart';
 import '../models/notification_model.dart';
-import 'hive_manager.dart';
+import 'in_memory_data_manager.dart';
 
 class CacheService {
   static CacheService? _instance;
@@ -18,18 +17,18 @@ class CacheService {
     _startBasicCleanup();
   }
 
-  final HiveManager _hiveManager = HiveManager.instance;
+  final InMemoryDataManager _dataManager = InMemoryDataManager.instance;
 
-  Box<UserModel>? get usersBox => _hiveManager.usersBox;
-  Box<NoteModel>? get notesBox => _hiveManager.notesBox;
-  Box<ReactionModel>? get reactionsBox => _hiveManager.reactionsBox;
-  Box<ReplyModel>? get repliesBox => _hiveManager.repliesBox;
-  Box<RepostModel>? get repostsBox => _hiveManager.repostsBox;
-  Box<FollowingModel>? get followingBox => _hiveManager.followingBox;
-  Box<ZapModel>? get zapsBox => _hiveManager.zapsBox;
-  Box<NotificationModel>? getNotificationBox(String npub) => _hiveManager.getNotificationBox(npub);
+  InMemoryBox<UserModel>? get usersBox => _dataManager.usersBox;
+  InMemoryBox<NoteModel>? get notesBox => _dataManager.notesBox;
+  InMemoryBox<ReactionModel>? get reactionsBox => _dataManager.reactionsBox;
+  InMemoryBox<ReplyModel>? get repliesBox => _dataManager.repliesBox;
+  InMemoryBox<RepostModel>? get repostsBox => _dataManager.repostsBox;
+  InMemoryBox<FollowingModel>? get followingBox => _dataManager.followingBox;
+  InMemoryBox<ZapModel>? get zapsBox => _dataManager.zapsBox;
+  InMemoryBox<NotificationModel>? getNotificationBox(String npub) => _dataManager.getNotificationBox(npub);
 
-  Box<NotificationModel>? notificationsBox;
+  InMemoryBox<NotificationModel>? notificationsBox;
 
   final Map<String, List<ReactionModel>> reactionsMap = {};
   final Map<String, List<ReplyModel>> repliesMap = {};
@@ -108,11 +107,11 @@ class CacheService {
 
   Future<void> initializeBoxes(String npub, String dataType) async {
     try {
-      if (!_hiveManager.isInitialized) {
-        await _hiveManager.initializeBoxes();
+      if (!_dataManager.isInitialized) {
+        await _dataManager.initializeBoxes();
       }
 
-      await _hiveManager.initializeNotificationBox(npub);
+      await _dataManager.initializeNotificationBox(npub);
 
       if (dataType == 'profile') {
         Future.microtask(() async {

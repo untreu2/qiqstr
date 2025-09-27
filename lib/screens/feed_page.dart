@@ -83,28 +83,39 @@ class FeedPageState extends State<FeedPage> {
           print('[FeedPage] UserProvider initialization error: $e');
         }
         print('[FeedPage] Using provided DataService - initialization complete');
+        setState(() {
+          isLoading = false;
+        });
       } else {
         try {
-          await Future.wait([
-            userProvider.initialize(),
-            dataService.initializeLightweight(),
-          ]);
+          userProvider.initialize().catchError((e) => print('[FeedPage] UserProvider error: $e'));
 
-          if (userProvider.currentUserNpub == widget.npub) {
-            await userProvider.setCurrentUser(widget.npub);
-          }
-
-          await dataService.initializeHeavyOperations();
-          await dataService.initializeConnections();
+          await dataService.initializeLightweight();
 
           if (mounted) {
-            setState(() {});
+            setState(() {
+              isLoading = false;
+            });
+          }
+
+          Future.microtask(() async {
+            try {
+              await dataService.initializeHeavyOperations();
+              await dataService.initializeConnections();
+            } catch (e) {
+              print('[FeedPage] Background initialization error: $e');
+            }
+          });
+
+          if (userProvider.currentUserNpub == widget.npub) {
+            Future.microtask(() => userProvider.setCurrentUser(widget.npub));
           }
         } catch (e) {
-          print('[FeedPage] Initialization error: $e');
+          print('[FeedPage] Fast initialization error: $e');
           if (mounted) {
             setState(() {
               errorMessage = 'Failed to initialize feed';
+              isLoading = false;
             });
           }
         }
@@ -114,6 +125,7 @@ class FeedPageState extends State<FeedPage> {
       if (mounted) {
         setState(() {
           errorMessage = 'Failed to initialize feed';
+          isLoading = false;
         });
       }
     }

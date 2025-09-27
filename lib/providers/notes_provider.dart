@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:collection';
 import 'package:flutter/foundation.dart';
-import 'package:hive/hive.dart';
+
 import '../models/note_model.dart';
 import '../services/data_service.dart';
-import '../services/hive_manager.dart';
+import '../services/in_memory_data_manager.dart';
 import 'base_provider.dart';
 
 class OptimizedNoteStorage {
@@ -120,7 +120,7 @@ class NotesProvider extends BaseProvider with CacheMixin<List<NoteNotifier>> {
   late final OptimizedNoteStorage _storage;
   final Set<String> _loadingNotes = {};
   bool _isInitialized = false;
-  final HiveManager _hiveManager = HiveManager.instance;
+  final InMemoryDataManager _dataManager = InMemoryDataManager.instance;
   String? _currentNpub;
 
   int _dataVersion = 0;
@@ -129,8 +129,8 @@ class NotesProvider extends BaseProvider with CacheMixin<List<NoteNotifier>> {
 
   static int _compareNotesDesc(NoteNotifier a, NoteNotifier b) => b.note.timestamp.compareTo(a.note.timestamp);
 
-  Box<NoteModel>? _feedNotesBox;
-  Box<NoteModel>? _profileNotesBox;
+  InMemoryBox<NoteModel>? _feedNotesBox;
+  InMemoryBox<NoteModel>? _profileNotesBox;
 
   final ValueNotifier<int> _newNoteCountNotifier = ValueNotifier<int>(0);
   ValueListenable<int> get newNoteCountNotifier => _newNoteCountNotifier;
@@ -139,20 +139,14 @@ class NotesProvider extends BaseProvider with CacheMixin<List<NoteNotifier>> {
     if (_isInitialized && _currentNpub == npub) return;
 
     try {
-      if (!_hiveManager.isInitialized) {
-        await _hiveManager.initializeBoxes();
+      if (!_dataManager.isInitialized) {
+        await _dataManager.initializeBoxes();
       }
 
-      final boxFutures = [
-        Hive.openBox<NoteModel>('notes_Feed_$npub'),
-        Hive.openBox<NoteModel>('notes_Profile_$npub'),
-      ];
+      _feedNotesBox = _dataManager.notesBox;
+      _profileNotesBox = _dataManager.notesBox;
 
-      final boxes = await Future.wait(boxFutures);
-      _feedNotesBox = boxes[0];
-      _profileNotesBox = boxes[1];
-
-      await _loadNotesFromHiveOptimized();
+      await _loadNotesFromMemory();
 
       _currentNpub = npub;
       _isInitialized = true;
@@ -165,7 +159,7 @@ class NotesProvider extends BaseProvider with CacheMixin<List<NoteNotifier>> {
     }
   }
 
-  Future<void> _loadNotesFromHiveOptimized() async {
+  Future<void> _loadNotesFromMemory() async {
     final loadingFutures = <Future>[];
 
     void processNotes(Iterable<NoteModel> notes) {
@@ -250,7 +244,7 @@ class NotesProvider extends BaseProvider with CacheMixin<List<NoteNotifier>> {
         await _profileNotesBox!.put(note.id, note);
       }
     } catch (e) {
-      handleError('saving note to Hive', e);
+      handleError('saving note to memory', e);
     }
 
     if (wasNewNote) {
@@ -277,7 +271,7 @@ class NotesProvider extends BaseProvider with CacheMixin<List<NoteNotifier>> {
         await _profileNotesBox!.putAll(notesMap);
       }
     } catch (e) {
-      handleError('saving notes to Hive', e);
+      handleError('saving notes to memory', e);
     }
 
     if (newNotesCount > 0) {

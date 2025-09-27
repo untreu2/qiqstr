@@ -8,7 +8,7 @@ class BatchProcessingService {
 
   BatchProcessingService({required NetworkService networkService}) : _networkService = networkService;
 
-  Future<void> processUserReaction(String targetEventId, String reactionContent, String privateKey) async {
+  Future<void> processUserReaction(String targetEventId, String reactionContent) async {
     if (_isClosed) return;
 
     try {
@@ -18,7 +18,7 @@ class BatchProcessingService {
     } catch (e) {}
   }
 
-  Future<void> processUserReply(String parentEventId, String replyContent, String privateKey) async {
+  Future<void> processUserReply(String parentEventId, String replyContent) async {
     if (_isClosed) return;
 
     try {
@@ -28,7 +28,7 @@ class BatchProcessingService {
     } catch (e) {}
   }
 
-  Future<void> processUserRepost(String noteId, String noteAuthor, String privateKey) async {
+  Future<void> processUserRepost(String noteId, String noteAuthor) async {
     if (_isClosed) return;
 
     try {
@@ -38,7 +38,7 @@ class BatchProcessingService {
     } catch (e) {}
   }
 
-  Future<void> processUserNote(String noteContent, String privateKey) async {
+  Future<void> processUserNote(String noteContent) async {
     if (_isClosed) return;
   }
 

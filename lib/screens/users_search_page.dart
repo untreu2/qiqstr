@@ -2,7 +2,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
-import 'package:hive/hive.dart';
+
+import '../services/in_memory_data_manager.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/screens/profile_page.dart';
@@ -33,8 +34,8 @@ class _UserSearchPageState extends State<UserSearchPage> {
   }
 
   void _loadUsers() async {
-    final box = await Hive.openBox<UserModel>('users');
-    final users = box.values.toList();
+    final box = InMemoryDataManager.instance.usersBox;
+    final users = box?.values.toList() ?? [];
 
     final shuffledUsers = users.toList()..shuffle();
     _randomUsers = shuffledUsers.take(10).toList();
@@ -110,6 +111,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
           lud16: '',
           website: '',
           updatedAt: DateTime.now(),
+          nip05Verified: false,
         ),
       );
 
@@ -140,8 +142,8 @@ class _UserSearchPageState extends State<UserSearchPage> {
       if (profileData['name'] != 'Anonymous' || profileData['about']!.isNotEmpty) {
         final fetchedUser = UserModel.fromCachedProfile(npubQuery, profileData);
 
-        final box = await Hive.openBox<UserModel>('users');
-        await box.put(pubkeyHex, fetchedUser);
+        final box = InMemoryDataManager.instance.usersBox;
+        await box?.put(pubkeyHex, fetchedUser);
 
         _allUsers.add(fetchedUser);
 

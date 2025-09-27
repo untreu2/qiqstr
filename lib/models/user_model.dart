@@ -1,37 +1,13 @@
-import 'package:hive/hive.dart';
-
-part 'user_model.g.dart';
-
-@HiveType(typeId: 4)
-class UserModel extends HiveObject {
-  @HiveField(0)
+class UserModel {
   final String npub;
-
-  @HiveField(1)
   final String name;
-
-  @HiveField(2)
   final String about;
-
-  @HiveField(3)
   final String nip05;
-
-  @HiveField(4)
   final String banner;
-
-  @HiveField(5)
   final String profileImage;
-
-  @HiveField(6)
   final String lud16;
-
-  @HiveField(7)
   final DateTime updatedAt;
-
-  @HiveField(8)
   final String website;
-
-  @HiveField(9)
   final bool nip05Verified;
 
   UserModel({

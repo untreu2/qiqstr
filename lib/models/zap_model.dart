@@ -1,32 +1,13 @@
 import 'dart:convert';
-import 'package:hive/hive.dart';
 
-part 'zap_model.g.dart';
-
-@HiveType(typeId: 5)
-class ZapModel extends HiveObject {
-  @HiveField(0)
+class ZapModel {
   String id;
-
-  @HiveField(1)
   String sender;
-
-  @HiveField(2)
   String recipient;
-
-  @HiveField(3)
   String targetEventId;
-
-  @HiveField(4)
   DateTime timestamp;
-
-  @HiveField(5)
   String bolt11;
-
-  @HiveField(6)
   String? comment;
-
-  @HiveField(7)
   int amount;
 
   ZapModel({
@@ -43,9 +24,7 @@ class ZapModel extends HiveObject {
   factory ZapModel.fromEvent(Map<String, dynamic> event) {
     final tags = (event['tags'] as List).cast<List>();
 
-    String getTagValue(String key) =>
-        tags.firstWhere((t) => t.isNotEmpty && t[0] == key,
-            orElse: () => [key, ''])[1];
+    String getTagValue(String key) => tags.firstWhere((t) => t.isNotEmpty && t[0] == key, orElse: () => [key, ''])[1];
 
     final p = getTagValue('p');
     final e = getTagValue('e');
@@ -60,9 +39,7 @@ class ZapModel extends HiveObject {
       comment = decoded['content'];
       sender = decoded['pubkey'] ?? '';
     } catch (_) {
-      sender = getTagValue('P').isNotEmpty
-          ? getTagValue('P')
-          : event['pubkey'] ?? '';
+      sender = getTagValue('P').isNotEmpty ? getTagValue('P') : event['pubkey'] ?? '';
     }
 
     final amount = parseAmountFromBolt11(bolt11);
@@ -72,8 +49,7 @@ class ZapModel extends HiveObject {
       sender: sender,
       recipient: p,
       targetEventId: e,
-      timestamp:
-          DateTime.fromMillisecondsSinceEpoch(event['created_at'] * 1000),
+      timestamp: DateTime.fromMillisecondsSinceEpoch(event['created_at'] * 1000),
       bolt11: bolt11,
       comment: comment,
       amount: amount,
@@ -82,8 +58,7 @@ class ZapModel extends HiveObject {
 }
 
 int parseAmountFromBolt11(String bolt11) {
-  final match =
-      RegExp(r'^lnbc(\d+)([munp]?)', caseSensitive: false).firstMatch(bolt11);
+  final match = RegExp(r'^lnbc(\d+)([munp]?)', caseSensitive: false).firstMatch(bolt11);
   if (match == null) return 0;
 
   final number = int.tryParse(match.group(1) ?? '') ?? 0;

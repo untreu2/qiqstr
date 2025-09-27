@@ -6,7 +6,8 @@ import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/services/data_service_manager.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/providers/user_provider.dart';
-import 'package:hive/hive.dart';
+import '../services/in_memory_data_manager.dart';
+
 import 'package:file_picker/file_picker.dart';
 
 class EditOwnProfilePage extends StatefulWidget {
@@ -58,8 +59,8 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
     final npub = await _secureStorage.read(key: 'npub');
     if (npub == null) return;
 
-    final usersBox = await Hive.openBox<UserModel>('users');
-    final user = usersBox.get(npub);
+    final usersBox = InMemoryDataManager.instance.usersBox;
+    final user = usersBox?.get(npub);
 
     final dataService = DataServiceManager.instance.getOrCreateService(
       npub: npub,
@@ -147,8 +148,8 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
 
       await Future.delayed(const Duration(milliseconds: 500));
 
-      final usersBox = await Hive.openBox<UserModel>('users');
-      final updatedUser = usersBox.get(_dataService!.npub);
+      final usersBox = InMemoryDataManager.instance.usersBox;
+      final updatedUser = usersBox?.get(_dataService!.npub);
 
       if (updatedUser != null) {
         _dataService!.profilesNotifier.value = {
@@ -170,7 +171,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
           updatedAt: DateTime.now(),
         );
 
-        await usersBox.put(_dataService!.npub, newUser);
+        await usersBox?.put(_dataService!.npub, newUser);
 
         _dataService!.profilesNotifier.value = {
           ..._dataService!.profilesNotifier.value,

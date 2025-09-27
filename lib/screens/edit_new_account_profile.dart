@@ -5,7 +5,8 @@ import 'package:qiqstr/services/data_service.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/providers/user_provider.dart';
 import 'package:qiqstr/screens/suggested_follows_page.dart';
-import 'package:hive/hive.dart';
+
+import '../services/in_memory_data_manager.dart';
 import 'package:file_picker/file_picker.dart';
 
 class EditNewAccountProfilePage extends StatefulWidget {
@@ -100,7 +101,7 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
 
         await Future.delayed(const Duration(milliseconds: 500));
 
-        final usersBox = await Hive.openBox<UserModel>('users');
+        final usersBox = InMemoryDataManager.instance.usersBox;
         final newUser = UserModel(
           npub: widget.npub,
           name: _nameController.text.trim(),
@@ -113,7 +114,7 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
           updatedAt: DateTime.now(),
         );
 
-        await usersBox.put(widget.npub, newUser);
+        await usersBox?.put(widget.npub, newUser);
 
         widget.dataService.profilesNotifier.value = {
           ...widget.dataService.profilesNotifier.value,

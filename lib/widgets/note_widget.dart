@@ -410,12 +410,14 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                             RepaintBoundary(
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 4),
-                                child: InteractionBar(
-                                  noteId: _noteId,
-                                  currentUserNpub: widget.currentUserNpub,
-                                  dataService: widget.dataService,
-                                  note: widget.note,
-                                ),
+                                child: widget.currentUserNpub.isNotEmpty && widget.dataService != null && widget.note != null
+                                    ? InteractionBar(
+                                        noteId: _noteId,
+                                        currentUserNpub: widget.currentUserNpub,
+                                        dataService: widget.dataService,
+                                        note: widget.note,
+                                      )
+                                    : const SizedBox(height: 32),
                               ),
                             ),
                           ],

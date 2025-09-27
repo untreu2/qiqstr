@@ -1,28 +1,10 @@
-import 'package:hive/hive.dart';
-
-part 'reply_model.g.dart';
-
-@HiveType(typeId: 2)
-class ReplyModel extends HiveObject {
-  @HiveField(0)
+class ReplyModel {
   final String id;
-
-  @HiveField(1)
   final String author;
-
-  @HiveField(2)
   final String content;
-
-  @HiveField(3)
   final DateTime timestamp;
-
-  @HiveField(4)
   final String parentEventId;
-
-  @HiveField(5)
   final String? rootEventId;
-
-  @HiveField(6)
   final DateTime fetchedAt;
 
   ReplyModel({

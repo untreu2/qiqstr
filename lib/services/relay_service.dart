@@ -74,9 +74,7 @@ class WebSocketManager {
         relayUrls.addAll(customRelays);
         _initializeStats();
       }
-    } catch (e) {
-      // Silent fail
-    }
+    } catch (e) {}
   }
 
   bool _listEquals(List<String> a, List<String> b) {
@@ -496,15 +494,13 @@ class WebSocketManager {
     const baseDelay = 1;
     final maxDelaySeconds = maxBackoffDelay.inSeconds;
     final delay = (baseDelay * pow(2, attempt - 1)).toInt().clamp(1, maxDelaySeconds);
-    // Simple optimization - avoid excessive Random() creation, use direct calculation
+
     final maxJitter = (delay ~/ 2).clamp(1, 5);
     final jitter = (DateTime.now().millisecondsSinceEpoch % maxJitter);
     return delay + jitter;
   }
 
-  Future<void> closeConnections() async {
-    // No-op for performance
-  }
+  Future<void> closeConnections() async {}
 
   Future<void> forceCloseConnections() async {
     _isClosed = true;
@@ -517,7 +513,6 @@ class WebSocketManager {
     _messageProcessingTimer?.cancel();
     _healthCheckTimer?.cancel();
 
-    // Optimized connection closing
     for (final ws in _webSockets.values) {
       try {
         if (ws.readyState == WebSocket.open || ws.readyState == WebSocket.connecting) {
@@ -592,9 +587,7 @@ class WebSocketManager {
           relayUrls.addAll(customRelays);
           _initializeStats();
         }
-      } catch (e) {
-        // Silent fail
-      }
+      } catch (e) {}
     });
   }
 }
@@ -836,7 +829,5 @@ class PrimalCacheClient {
 }
 
 void unawaited(Future<void> future) {
-  future.catchError((error) {
-    // Silent fail
-  });
+  future.catchError((error) {});
 }

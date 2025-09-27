@@ -1,18 +1,7 @@
-import 'package:hive/hive.dart';
-part 'repost_model.g.dart';
-
-@HiveType(typeId: 3)
-class RepostModel extends HiveObject {
-  @HiveField(0)
+class RepostModel {
   final String id;
-
-  @HiveField(1)
   final String originalNoteId;
-
-  @HiveField(2)
   final String repostedBy;
-
-  @HiveField(3)
   final DateTime repostTimestamp;
 
   RepostModel({
@@ -22,8 +11,7 @@ class RepostModel extends HiveObject {
     required this.repostTimestamp,
   });
 
-  factory RepostModel.fromEvent(
-      Map<String, dynamic> eventData, String originalNoteId) {
+  factory RepostModel.fromEvent(Map<String, dynamic> eventData, String originalNoteId) {
     return RepostModel(
       id: eventData['id'] as String,
       originalNoteId: originalNoteId,

@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:hive/hive.dart';
+
 import '../models/reaction_model.dart';
 import '../models/reply_model.dart';
 import '../models/repost_model.dart';
 import '../models/zap_model.dart';
-import '../services/hive_manager.dart';
+import '../services/in_memory_data_manager.dart';
 import '../services/data_service.dart';
 import '../services/time_service.dart';
 
@@ -41,15 +41,15 @@ class InteractionsProvider extends ChangeNotifier {
   final Map<String, Set<String>> _userZaps = {};
 
   bool _isInitialized = false;
-  final HiveManager _hiveManager = HiveManager.instance;
+  final InMemoryDataManager _dataManager = InMemoryDataManager.instance;
 
   final Set<String> _fetchedInteractionNotes = {};
   final Map<String, DateTime> _lastManualFetch = {};
 
-  Box<ReactionModel>? get _reactionsBox => _hiveManager.reactionsBox;
-  Box<ReplyModel>? get _repliesBox => _hiveManager.repliesBox;
-  Box<RepostModel>? get _repostsBox => _hiveManager.repostsBox;
-  Box<ZapModel>? get _zapsBox => _hiveManager.zapsBox;
+  InMemoryBox<ReactionModel>? get _reactionsBox => _dataManager.reactionsBox;
+  InMemoryBox<ReplyModel>? get _repliesBox => _dataManager.repliesBox;
+  InMemoryBox<RepostModel>? get _repostsBox => _dataManager.repostsBox;
+  InMemoryBox<ZapModel>? get _zapsBox => _dataManager.zapsBox;
 
   bool get isInitialized => _isInitialized;
 
@@ -58,8 +58,8 @@ class InteractionsProvider extends ChangeNotifier {
 
     Future.microtask(() async {
       try {
-        if (!_hiveManager.isInitialized) {
-          await _hiveManager.initializeBoxes();
+        if (!_dataManager.isInitialized) {
+          await _dataManager.initializeBoxes();
         }
 
         Future.microtask(() async {

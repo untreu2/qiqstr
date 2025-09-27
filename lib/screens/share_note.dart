@@ -4,7 +4,8 @@ import 'package:bounce/bounce.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:hive/hive.dart';
+
+import '../services/in_memory_data_manager.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import '../services/data_service.dart';
 import '../models/user_model.dart';
@@ -175,10 +176,10 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   Future<void> _loadUsers() async {
     try {
-      final box = await Hive.openBox<UserModel>('users');
+      final box = InMemoryDataManager.instance.usersBox;
       if (mounted) {
         setState(() {
-          _allUsers = box.values.toList();
+          _allUsers = box?.values.toList() ?? [];
         });
       }
     } catch (e) {

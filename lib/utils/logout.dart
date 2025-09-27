@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:hive/hive.dart';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:qiqstr/screens/login_page.dart';
+import '../services/in_memory_data_manager.dart';
 
 class Logout {
   static Future<void> performLogout(BuildContext context) async {
     try {
-      await Hive.deleteFromDisk();
+      await InMemoryDataManager.instance.closeAllBoxes();
       print('Hive storage cleared successfully.');
 
       const storage = FlutterSecureStorage();

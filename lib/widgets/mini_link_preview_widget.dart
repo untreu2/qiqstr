@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import '../theme/theme_manager.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../services/in_memory_data_manager.dart';
 
 import '../models/link_preview_model.dart';
 
@@ -40,19 +40,18 @@ class _MiniLinkPreviewWidgetState extends State<MiniLinkPreviewWidget> {
   String? _imageUrl;
   bool _isLoading = true;
 
-  late final Box<LinkPreviewModel> _cacheBox;
+  late final InMemoryBox<LinkPreviewModel>? _cacheBox;
 
   @override
   void initState() {
     super.initState();
-    _cacheBox = Hive.box<LinkPreviewModel>('link_preview_cache');
+    _cacheBox = InMemoryDataManager.instance.getLinkPreviewBox();
     _loadPreview();
   }
 
   void _loadPreview() {
-    final cached = _cacheBox.get(widget.url);
+    final cached = _cacheBox?.get(widget.url);
     if (cached != null) {
-      // Non-blocking cache load
       Future.microtask(() {
         if (mounted) {
           setState(() {
@@ -75,7 +74,7 @@ class _MiniLinkPreviewWidgetState extends State<MiniLinkPreviewWidget> {
         if (!mounted) return;
 
         if (model != null) {
-          await _cacheBox.put(widget.url, model);
+          await _cacheBox?.put(widget.url, model);
           if (mounted) {
             setState(() {
               _title = model.title;

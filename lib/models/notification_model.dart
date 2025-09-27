@@ -1,37 +1,16 @@
 import 'dart:convert';
-import 'package:hive/hive.dart';
 import 'package:qiqstr/models/zap_model.dart';
 import '../services/time_service.dart';
 
-part 'notification_model.g.dart';
-
-@HiveType(typeId: 12)
-class NotificationModel extends HiveObject {
-  @HiveField(0)
+class NotificationModel {
   final String id;
-
-  @HiveField(1)
   final String targetEventId;
-
-  @HiveField(2)
   final String author;
-
-  @HiveField(3)
   final String type;
-
-  @HiveField(4)
   final String content;
-
-  @HiveField(5)
   final DateTime timestamp;
-
-  @HiveField(6)
   final DateTime fetchedAt;
-
-  @HiveField(7)
   bool isRead;
-
-  @HiveField(8)
   final int amount;
 
   NotificationModel({

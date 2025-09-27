@@ -1,77 +1,28 @@
-import 'package:hive/hive.dart';
 import '../utils/string_optimizer.dart';
 
-part 'note_model.g.dart';
-
-@HiveType(typeId: 0)
-class NoteModel extends HiveObject {
-  @HiveField(0)
+class NoteModel {
   final String id;
-
-  @HiveField(1)
   final String content;
-
-  @HiveField(2)
   final String author;
-
-  @HiveField(3)
   final DateTime timestamp;
-
-  @HiveField(4)
   final bool isRepost;
-
-  @HiveField(5)
   final String? repostedBy;
-
-  @HiveField(6)
   final DateTime? repostTimestamp;
-
-  @HiveField(7)
   int repostCount;
-
-  @HiveField(8)
   final String? rawWs;
-
-  @HiveField(9)
   int reactionCount;
-
-  @HiveField(10)
   int replyCount;
-
-  @HiveField(12)
   bool hasMedia;
-
-  @HiveField(13)
   double? estimatedHeight;
-
-  @HiveField(14)
   bool isVideo;
-
-  @HiveField(15)
   String? videoUrl;
-
-  @HiveField(16)
   int zapAmount;
-
-  @HiveField(17)
   final bool isReply;
-
-  @HiveField(18)
   final String? parentId;
-
-  @HiveField(19)
   final String? rootId;
-
-  @HiveField(20)
   List<String> replyIds;
-
-  @HiveField(21)
   List<Map<String, String>> eTags;
-
-  @HiveField(22)
   List<Map<String, String>> pTags;
-
-  @HiveField(23)
   String? replyMarker;
 
   static final Map<String, Map<String, dynamic>> _globalParseCache = {};

@@ -1,7 +1,8 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:hive/hive.dart';
+
+import '../services/in_memory_data_manager.dart';
 import 'package:qiqstr/constants/suggestions.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/services/profile_service.dart';
@@ -54,8 +55,8 @@ class _SuggestedFollowsPageState extends State<SuggestedFollowsPage> {
         final user = UserModel.fromCachedProfile(npubKey, profileData);
         users.add(user);
 
-        final box = await Hive.openBox<UserModel>('users');
-        await box.put(pubkeyHex, user);
+        final box = InMemoryDataManager.instance.usersBox;
+        await box?.put(pubkeyHex, user);
 
         print('Successfully loaded user: ${user.name.isNotEmpty ? user.name : 'Anonymous'} (${pubkeyHex.substring(0, 8)}...)');
       } catch (e) {
