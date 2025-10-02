@@ -1,392 +1,190 @@
-import 'dart:async';
 import 'dart:convert';
-import 'dart:collection';
-
-import 'package:qiqstr/models/note_model.dart';
-import 'package:qiqstr/services/data_service.dart';
-
-class NoteProcessorMetrics {
-  int notesProcessed = 0;
-  int notesSkipped = 0;
-  int repostsProcessed = 0;
-  int repliesProcessed = 0;
-  int profilesFetched = 0;
-  final Map<String, int> skipReasons = {};
-
-  void recordSkip(String reason) {
-    notesSkipped++;
-    skipReasons[reason] = (skipReasons[reason] ?? 0) + 1;
-  }
-
-  Map<String, dynamic> getStats() {
-    return {
-      'notesProcessed': notesProcessed,
-      'notesSkipped': notesSkipped,
-      'repostsProcessed': repostsProcessed,
-      'repliesProcessed': repliesProcessed,
-      'profilesFetched': profilesFetched,
-      'skipReasons': Map<String, int>.from(skipReasons),
-    };
-  }
-}
+import 'package:flutter/foundation.dart';
+import '../models/note_model.dart';
+import 'time_service.dart';
 
 class NoteProcessor {
-  static final NoteProcessorMetrics _metrics = NoteProcessorMetrics();
-  static final Queue<Map<String, dynamic>> _processingQueue = Queue();
-  static bool _isProcessing = false;
+  static final TimeService timeService = TimeService.instance;
 
-  static final Set<String> _recentlyProcessed = {};
-  static Timer? _cleanupTimer;
-
-  static void _startCleanupTimer() {
-    _cleanupTimer ??= Timer.periodic(const Duration(minutes: 5), (_) {
-      if (_recentlyProcessed.length > 1000) {
-        _recentlyProcessed.clear();
-      }
-    });
-  }
-
-  static NoteProcessorMetrics get metrics => _metrics;
-
-  static Future<void> processNoteEvent(
-    DataService dataService,
+  /// Process a note event (kind 1) or reposted note content
+  static void processNoteEvent(
+    dynamic dataService,
     Map<String, dynamic> eventData,
     List<String> targetNpubs, {
     String? rawWs,
-  }) async {
-    _startCleanupTimer();
-
-    final eventId = eventData['id'] as String?;
-    if (eventId != null && _recentlyProcessed.contains(eventId)) {
-      _metrics.recordSkip('already_processed');
-      return;
-    }
-
-    _processingQueue.add({
-      'eventData': eventData,
-      'targetNpubs': targetNpubs,
-      'rawWs': rawWs,
-      'dataService': dataService,
-    });
-
-    if (!_isProcessing) {
-      _processQueue();
-    }
-  }
-
-  static void _processQueue() async {
-    if (_isProcessing || _processingQueue.isEmpty) return;
-
-    _isProcessing = true;
-
+    String? repostedBy,
+    DateTime? repostTimestamp,
+  }) {
     try {
-      final batch = <Map<String, dynamic>>[];
-      while (_processingQueue.isNotEmpty && batch.length < 5) {
-        batch.add(_processingQueue.removeFirst());
+      final noteId = eventData['id'] as String;
+      final author = eventData['pubkey'] as String;
+      final content = eventData['content'] as String;
+      final createdAt = eventData['created_at'] as int;
+      final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
+
+      // Skip if we already have this note
+      if (dataService.eventIds.contains(noteId)) {
+        return;
       }
 
-      for (int i = 0; i < batch.length; i++) {
-        final item = batch[i];
+      // Check if this note is a reply using NIP-10 rules
+      final replyInfo = _analyzeReplyStructure(eventData);
 
-        Future.microtask(() => _processNoteEventInternal(
-              item['dataService'] as DataService,
-              item['eventData'] as Map<String, dynamic>,
-              List<String>.from(item['targetNpubs']),
-              rawWs: item['rawWs'] as String?,
-            ));
+      final noteModel = NoteModel(
+        id: noteId,
+        content: content,
+        author: author,
+        timestamp: timestamp,
+        isRepost: repostedBy != null,
+        repostedBy: repostedBy,
+        repostTimestamp: repostTimestamp,
+        isReply: replyInfo.isReply,
+        parentId: replyInfo.parentId,
+        rootId: replyInfo.rootId,
+        rawWs: rawWs ?? jsonEncode(eventData),
+        eTags: replyInfo.eTags,
+        pTags: replyInfo.pTags,
+        replyMarker: replyInfo.replyMarker,
+      );
 
-        if (i % 3 == 0) {
-          await Future.delayed(Duration.zero);
-        }
+      // Set media detection
+      noteModel.hasMedia = noteModel.hasMediaLazy;
+
+      // Add to data structures
+      dataService.notes.add(noteModel);
+      dataService.eventIds.add(noteModel.id);
+      dataService.addNote(noteModel);
+
+      // Cache the note
+      dataService._dataManager.notesBox?.put(noteModel.id, noteModel).catchError((e) {
+        debugPrint('[NoteProcessor] Error caching note: $e');
+      });
+
+      // Notify listeners if it's a new note for the current user
+      if (dataService.onNewNote != null) {
+        dataService.onNewNote!(noteModel);
       }
-    } finally {
-      _isProcessing = false;
 
-      if (_processingQueue.isNotEmpty) {
-        Future.microtask(_processQueue);
-      }
+      debugPrint('[NoteProcessor] Processed ${replyInfo.isReply ? 'reply' : 'note'}: ${noteId.substring(0, 8)}... '
+          '${repostedBy != null ? 'reposted by ${repostedBy.substring(0, 8)}...' : ''}');
+    } catch (e) {
+      debugPrint('[NoteProcessor] Error processing note event: $e');
     }
   }
 
-  static Future<void> _processNoteEventInternal(
-    DataService dataService,
-    Map<String, dynamic> eventData,
-    List<String> targetNpubs, {
-    String? rawWs,
-  }) async {
-    return Future.microtask(() async {
-      try {
-        int kind = eventData['kind'] as int;
-        final String outerEventAuthor = eventData['pubkey'] as String;
-        bool isOuterEventRepost = kind == 6;
-        Map<String, dynamic>? innerEventData;
-        DateTime? repostTimestamp;
-        String? repostedEventJsonString;
+  /// Analyze a note's reply structure according to NIP-10
+  static ReplyInfo _analyzeReplyStructure(Map<String, dynamic> eventData) {
+    final tags = List<dynamic>.from(eventData['tags'] ?? []);
 
-        if (isOuterEventRepost) {
-          _metrics.repostsProcessed++;
-          repostTimestamp = DateTime.fromMillisecondsSinceEpoch(eventData['created_at'] * 1000);
-          repostedEventJsonString = eventData['content'] as String?;
-
-          if (repostedEventJsonString != null && repostedEventJsonString.isNotEmpty) {
-            try {
-              innerEventData = jsonDecode(repostedEventJsonString) as Map<String, dynamic>;
-            } catch (e) {
-              _metrics.recordSkip('repost_decode_error');
-              return;
-            }
-          }
-
-          if (innerEventData == null) {
-            innerEventData = await _fetchOriginalEventData(dataService, eventData);
-            if (innerEventData == null) {
-              _metrics.recordSkip('repost_original_not_found');
-              return;
-            }
-          }
-
-          eventData = innerEventData;
-          kind = eventData['kind'] as int? ?? 1;
-        }
-
-        final eventId = eventData['id'] as String?;
-        if (eventId == null) {
-          _metrics.recordSkip('missing_event_id');
-          return;
-        }
-
-        _recentlyProcessed.add(eventId);
-
-        final String noteAuthor = eventData['pubkey'] as String;
-        final noteContentRaw = eventData['content'];
-        String noteContent = noteContentRaw is String ? noteContentRaw : jsonEncode(noteContentRaw);
-        final tags = eventData['tags'] as List<dynamic>? ?? [];
-
-        if (dataService.eventIds.contains(eventId)) {
-          _metrics.recordSkip('already_exists');
-          return;
-        }
-
-        if (noteContent.trim().isEmpty) {
-          _metrics.recordSkip('empty_content');
-          return;
-        }
-
-        if (!_isValidTarget(dataService, targetNpubs, outerEventAuthor, noteAuthor, isOuterEventRepost)) {
-          _metrics.recordSkip('invalid_target');
-          return;
-        }
-
-        final timestamp = DateTime.fromMillisecondsSinceEpoch((eventData['created_at'] as int) * 1000);
-
-        final tagInfo = await _parseReplyTagsAsync(tags);
-        final bool isActualReply = tagInfo['isReply'] as bool;
-        final String? rootId = tagInfo['rootId'] as String?;
-        final String? parentId = tagInfo['parentId'] as String?;
-
-        if (isActualReply) {
-          _metrics.repliesProcessed++;
-        }
-
-        final newNote = NoteModel(
-          id: eventId,
-          content: noteContent,
-          author: noteAuthor,
-          timestamp: timestamp,
-          isRepost: isOuterEventRepost,
-          repostedBy: isOuterEventRepost ? outerEventAuthor : null,
-          repostTimestamp: isOuterEventRepost ? repostTimestamp : null,
-          rawWs: isOuterEventRepost ? repostedEventJsonString : rawWs,
-          isReply: isActualReply,
-          rootId: rootId,
-          parentId: parentId,
-        );
-
-        newNote.hasMedia = newNote.hasMediaLazy;
-
-        if (!dataService.eventIds.contains(newNote.id)) {
-          final profilesFetched = await _fetchProfilesAndValidate(dataService, noteAuthor, isOuterEventRepost ? outerEventAuthor : null);
-
-          if (!profilesFetched) {
-            _metrics.recordSkip('profile_fetch_failed');
-            return;
-          }
-
-          dataService.notes.add(newNote);
-          dataService.eventIds.add(newNote.id);
-
-          _saveNoteAsync(dataService, newNote);
-
-          dataService.addNote(newNote);
-          dataService.onNewNote?.call(newNote);
-
-          _metrics.notesProcessed++;
-
-          _fetchInteractionsAsync(dataService, newNote.id);
-        }
-      } catch (e) {
-        _metrics.recordSkip('processing_error');
-      }
-    });
-  }
-
-  static Future<Map<String, dynamic>?> _fetchOriginalEventData(DataService dataService, Map<String, dynamic> eventData) async {
-    String? originalEventId;
-    final tags = eventData['tags'] as List<dynamic>? ?? [];
-
-    for (var tag in tags) {
-      if (tag is List && tag.length >= 2 && tag[0] == 'e') {
-        originalEventId = tag[1] as String?;
-        break;
-      }
-    }
-
-    if (originalEventId != null) {
-      final fetchedNote = await dataService.fetchNoteByIdIndependently(originalEventId);
-      if (fetchedNote != null) {
-        if (fetchedNote.rawWs != null && fetchedNote.rawWs!.isNotEmpty) {
-          try {
-            final decodedRawWs = jsonDecode(fetchedNote.rawWs!) as Map<String, dynamic>;
-            if (_isValidEventData(decodedRawWs)) {
-              return decodedRawWs;
-            }
-          } catch (e) {}
-        }
-
-        return {
-          'id': fetchedNote.id,
-          'pubkey': fetchedNote.author,
-          'content': fetchedNote.content,
-          'created_at': fetchedNote.timestamp.millisecondsSinceEpoch ~/ 1000,
-          'kind': 1,
-          'tags': [],
-        };
-      }
-    }
-
-    return null;
-  }
-
-  static bool _isValidEventData(Map<String, dynamic> data) {
-    return data.containsKey('id') &&
-        data.containsKey('pubkey') &&
-        data.containsKey('content') &&
-        data.containsKey('created_at') &&
-        data.containsKey('kind') &&
-        data.containsKey('tags');
-  }
-
-  static bool _isValidTarget(
-    DataService dataService,
-    List<String> targetNpubs,
-    String outerEventAuthor,
-    String noteAuthor,
-    bool isOuterEventRepost,
-  ) {
-    if (dataService.dataType == DataType.feed) {
-      if (isOuterEventRepost) {
-        return targetNpubs.contains(outerEventAuthor) || targetNpubs.contains(noteAuthor);
-      } else {
-        return targetNpubs.contains(noteAuthor);
-      }
-    } else if (dataService.dataType == DataType.profile) {
-      if (isOuterEventRepost) {
-        return outerEventAuthor == dataService.npub || noteAuthor == dataService.npub;
-      } else {
-        return noteAuthor == dataService.npub;
-      }
-    }
-    return true;
-  }
-
-  static Map<String, dynamic> _parseReplyTags(List<dynamic> tags) {
     String? rootId;
     String? parentId;
+    String? replyMarker;
     bool isReply = false;
+    List<Map<String, String>> eTags = [];
+    List<Map<String, String>> pTags = [];
 
+    // Process all tags
     for (var tag in tags) {
-      if (tag is List && tag.length >= 4 && tag[0] == 'e') {
-        if (tag[3] == 'root') {
-          rootId = tag[1] as String?;
-          isReply = true;
-        } else if (tag[3] == 'reply') {
-          parentId = tag[1] as String?;
+      if (tag is List && tag.isNotEmpty) {
+        if (tag[0] == 'e' && tag.length >= 2) {
+          final eTag = <String, String>{
+            'eventId': tag[1] as String,
+            'relayUrl': tag.length > 2 ? (tag[2] as String? ?? '') : '',
+            'marker': tag.length > 3 ? (tag[3] as String? ?? '') : '',
+            'pubkey': tag.length > 4 ? (tag[4] as String? ?? '') : '',
+          };
+          eTags.add(eTag);
+
+          // Check for NIP-10 markers
+          if (tag.length >= 4) {
+            final marker = tag[3] as String;
+            if (marker == 'root') {
+              rootId = tag[1] as String;
+              replyMarker = 'root';
+              isReply = true;
+            } else if (marker == 'reply') {
+              parentId = tag[1] as String;
+              replyMarker = 'reply';
+              isReply = true;
+            } else if (marker == 'mention') {
+              // This is just a mention, not a reply
+              continue;
+            }
+          } else {
+            // Legacy positional e-tags (deprecated but still supported)
+            if (!isReply) {
+              // First e-tag without marker is considered the parent/root
+              parentId = tag[1] as String;
+              isReply = true;
+            }
+          }
+        } else if (tag[0] == 'p' && tag.length >= 2) {
+          final pTag = <String, String>{
+            'pubkey': tag[1] as String,
+            'relayUrl': tag.length > 2 ? (tag[2] as String? ?? '') : '',
+            'petname': tag.length > 3 ? (tag[3] as String? ?? '') : '',
+          };
+          pTags.add(pTag);
         }
       }
     }
 
-    return {
-      'isReply': isReply,
-      'rootId': rootId,
-      'parentId': parentId ?? (isReply ? rootId : null),
-    };
+    // If we have both root and reply markers, use the appropriate parent
+    if (rootId != null && parentId != null) {
+      // This is a reply in a thread, parentId is the immediate parent
+      // rootId stays as the thread root
+    } else if (rootId != null && parentId == null) {
+      // This is a direct reply to the root
+      parentId = rootId;
+    }
+
+    return ReplyInfo(
+      isReply: isReply,
+      rootId: rootId,
+      parentId: parentId,
+      eTags: eTags,
+      pTags: pTags,
+      replyMarker: replyMarker,
+    );
   }
 
-  static Future<Map<String, dynamic>> _parseReplyTagsAsync(List<dynamic> tags) async {
-    return Future.microtask(() => _parseReplyTags(tags));
-  }
-
-  static Future<bool> _fetchProfilesAndValidate(
-    DataService dataService,
-    String noteAuthor,
-    String? repostedBy,
-  ) async {
+  /// Check if a repost content contains a reply
+  static bool isRepostOfReply(String repostContent) {
     try {
-      final authorsToFetch = <String>{noteAuthor};
-      if (repostedBy != null) {
-        authorsToFetch.add(repostedBy);
-      }
-
-      _metrics.profilesFetched += authorsToFetch.length;
-
-      await dataService.fetchProfilesBatch(authorsToFetch.toList());
-
-      final authorProfile = await dataService.getCachedUserProfile(noteAuthor);
-      if (authorProfile['name'] == 'Anonymous' &&
-          authorProfile['profileImage'] == '' &&
-          authorProfile['about'] == '' &&
-          authorProfile['nip05'] == '') {
-        return false;
-      }
-
-      if (repostedBy != null) {
-        final reposterProfile = await dataService.getCachedUserProfile(repostedBy);
-        if (reposterProfile['name'] == 'Anonymous' &&
-            reposterProfile['profileImage'] == '' &&
-            reposterProfile['about'] == '' &&
-            reposterProfile['nip05'] == '') {
-          return false;
-        }
-      }
-
-      return true;
+      final contentJson = jsonDecode(repostContent) as Map<String, dynamic>;
+      final replyInfo = _analyzeReplyStructure(contentJson);
+      return replyInfo.isReply;
     } catch (e) {
+      debugPrint('[NoteProcessor] Error checking if repost is reply: $e');
       return false;
     }
   }
 
-  static void _saveNoteAsync(DataService dataService, NoteModel note) {
-    if (dataService.notesBox != null && dataService.notesBox!.isOpen) {
-      Future.microtask(() async {
-        try {
-          await dataService.notesBox!.put(note.id, note);
-        } catch (e) {}
-      });
+  /// Extract the original note from repost content
+  static Map<String, dynamic>? extractOriginalNoteFromRepost(String repostContent) {
+    try {
+      return jsonDecode(repostContent) as Map<String, dynamic>;
+    } catch (e) {
+      debugPrint('[NoteProcessor] Error extracting original note from repost: $e');
+      return null;
     }
   }
+}
 
-  static void _fetchInteractionsAsync(DataService dataService, String noteId) {
-    Future.microtask(() async {
-      try {
-        await dataService.fetchInteractionsForEvents([noteId]);
-      } catch (e) {}
-    });
-  }
+class ReplyInfo {
+  final bool isReply;
+  final String? rootId;
+  final String? parentId;
+  final List<Map<String, String>> eTags;
+  final List<Map<String, String>> pTags;
+  final String? replyMarker;
 
-  static void dispose() {
-    _cleanupTimer?.cancel();
-    _cleanupTimer = null;
-    _recentlyProcessed.clear();
-    _processingQueue.clear();
-  }
+  ReplyInfo({
+    required this.isReply,
+    this.rootId,
+    this.parentId,
+    required this.eTags,
+    required this.pTags,
+    this.replyMarker,
+  });
 }

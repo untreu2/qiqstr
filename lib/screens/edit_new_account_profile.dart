@@ -1,22 +1,20 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../theme/theme_manager.dart';
-import 'package:provider/provider.dart';
-import 'package:qiqstr/services/data_service.dart';
-import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/providers/user_provider.dart';
-import 'package:qiqstr/screens/suggested_follows_page.dart';
-
-import '../services/in_memory_data_manager.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:provider/provider.dart';
+import '../theme/theme_manager.dart';
+import '../models/user_model.dart';
+import '../screens/suggested_follows_page.dart';
+import '../core/di/app_di.dart';
+import '../data/repositories/user_repository.dart';
+import '../services/media_service.dart';
 
 class EditNewAccountProfilePage extends StatefulWidget {
   final String npub;
-  final DataService dataService;
 
   const EditNewAccountProfilePage({
     super.key,
     required this.npub,
-    required this.dataService,
   });
 
   @override
@@ -34,6 +32,13 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
 
   bool _isSaving = false;
   bool _isUploadingPicture = false;
+
+  late final UserRepository _userRepository;
+  @override
+  void initState() {
+    super.initState();
+    _userRepository = AppDI.get<UserRepository>();
+  }
 
   @override
   void dispose() {
@@ -56,15 +61,33 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
         type: FileType.image,
       );
       if (result != null && result.files.single.path != null) {
+        // Use legacy Blossom upload pattern exactly
+        const blossomUrl = 'https://blossom.primal.net'; // Default Blossom server
         final filePath = result.files.single.path!;
-        final url = await widget.dataService.sendMedia(filePath, 'https://blossom.primal.net');
-        setState(() {
-          _pictureController.text = url;
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Profile image uploaded successfully.')),
-          );
+
+        try {
+          final mediaUrl = await MediaService().sendMedia(filePath, blossomUrl);
+          setState(() {
+            _pictureController.text = mediaUrl;
+          });
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Profile image uploaded successfully.')),
+            );
+          }
+          if (kDebugMode) {
+            print('[EditNewAccountProfile] Media uploaded successfully: $mediaUrl');
+          }
+        } catch (uploadError) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Upload failed: $uploadError')),
+            );
+          }
+          setState(() {
+            _pictureController.text = ''; // Clear on upload failure
+          });
         }
       }
     } catch (e) {
@@ -84,44 +107,54 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
     setState(() => _isSaving = true);
 
     try {
-      if (_nameController.text.trim().isNotEmpty ||
-          _aboutController.text.trim().isNotEmpty ||
-          _pictureController.text.trim().isNotEmpty ||
-          _lud16Controller.text.trim().isNotEmpty ||
-          _websiteController.text.trim().isNotEmpty) {
-        await widget.dataService.sendProfileEdit(
-          name: _nameController.text.trim(),
-          about: _aboutController.text.trim(),
-          picture: _pictureController.text.trim(),
-          nip05: '',
-          banner: '',
-          lud16: _lud16Controller.text.trim(),
-          website: _websiteController.text.trim(),
-        );
+      // Always create and send profile update to establish user presence on relays
+      final updatedUser = UserModel(
+        pubkeyHex: widget.npub,
+        name: _nameController.text.trim().isNotEmpty ? _nameController.text.trim() : 'New User',
+        about: _aboutController.text.trim(),
+        profileImage: _pictureController.text.trim(),
+        nip05: '',
+        banner: '',
+        lud16: _lud16Controller.text.trim(),
+        website: _websiteController.text.trim(),
+        updatedAt: DateTime.now(),
+      );
 
-        await Future.delayed(const Duration(milliseconds: 500));
+      debugPrint('[EditNewAccountProfile] Updating profile: ${updatedUser.name}');
+      debugPrint(
+          '[EditNewAccountProfile] Profile data: name=${updatedUser.name}, about=${updatedUser.about}, image=${updatedUser.profileImage}');
 
-        final usersBox = InMemoryDataManager.instance.usersBox;
-        final newUser = UserModel(
-          npub: widget.npub,
-          name: _nameController.text.trim(),
-          about: _aboutController.text.trim(),
-          profileImage: _pictureController.text.trim(),
-          nip05: '',
-          banner: '',
-          lud16: _lud16Controller.text.trim(),
-          website: _websiteController.text.trim(),
-          updatedAt: DateTime.now(),
-        );
+      // Send profile update to relays
+      final result = await _userRepository.updateUserProfile(updatedUser);
 
-        await usersBox?.put(widget.npub, newUser);
+      result.fold(
+        (success) {
+          debugPrint('[EditNewAccountProfile] Profile updated successfully');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Profile updated successfully!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        },
+        (error) {
+          debugPrint('[EditNewAccountProfile] Profile update failed: $error');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Profile update failed: $error'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          // Don't return - still continue to next page even if profile update fails
+        },
+      );
 
-        widget.dataService.profilesNotifier.value = {
-          ...widget.dataService.profilesNotifier.value,
-          newUser.npub: newUser,
-        };
-        UserProvider.instance.updateUser(widget.npub, newUser);
-      }
+      // Small delay to let the profile update propagate
+      await Future.delayed(const Duration(milliseconds: 500));
 
       if (mounted) {
         Navigator.pushReplacement(
@@ -129,18 +162,26 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
           MaterialPageRoute(
             builder: (_) => SuggestedFollowsPage(
               npub: widget.npub,
-              dataService: widget.dataService,
             ),
           ),
         );
       }
     } catch (e) {
-      print('[EditNewAccountProfile] Error saving profile: $e');
+      debugPrint('[EditNewAccountProfile] Error saving profile: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to update profile: ${e.toString()}'),
             backgroundColor: Colors.red,
+          ),
+        );
+        // Still continue to next page even on error
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => SuggestedFollowsPage(
+              npub: widget.npub,
+            ),
           ),
         );
       }
@@ -155,7 +196,6 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
       MaterialPageRoute(
         builder: (_) => SuggestedFollowsPage(
           npub: widget.npub,
-          dataService: widget.dataService,
         ),
       ),
     );

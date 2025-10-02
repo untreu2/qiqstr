@@ -2,22 +2,18 @@ import 'package:flutter/material.dart';
 import '../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/screens/profile_page.dart';
-import 'package:qiqstr/services/data_service.dart';
+import '../models/user_model.dart';
+import '../screens/profile_page.dart';
 import 'package:bounce/bounce.dart';
-
-import '../services/in_memory_data_manager.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
+import '../core/di/app_di.dart';
+import '../data/repositories/user_repository.dart';
 
 class FollowingPage extends StatefulWidget {
   final UserModel user;
-  final DataService? dataService;
 
   const FollowingPage({
     super.key,
     required this.user,
-    this.dataService,
   });
 
   @override
@@ -29,9 +25,16 @@ class _FollowingPageState extends State<FollowingPage> {
   bool _isLoading = true;
   String? _error;
 
+  // User profile loading states (like note_content_widget.dart)
+  final Map<String, UserModel> _loadedUsers = {};
+  final Map<String, bool> _loadingStates = {};
+
+  late final UserRepository _userRepository;
+
   @override
   void initState() {
     super.initState();
+    _userRepository = AppDI.get<UserRepository>();
     _loadFollowingUsers();
   }
 
@@ -42,95 +45,107 @@ class _FollowingPageState extends State<FollowingPage> {
         _error = null;
       });
 
-      String targetNpub;
-      if (widget.dataService != null) {
-        targetNpub = widget.dataService!.npub;
-      } else {
-        String? userHexKey;
-        try {
-          if (widget.user.npub.startsWith('npub1')) {
-            userHexKey = decodeBasicBech32(widget.user.npub, 'npub');
-          } else if (_isValidHex(widget.user.npub)) {
-            userHexKey = widget.user.npub;
-          }
-        } catch (e) {}
-        targetNpub = userHexKey ?? widget.user.npub;
+      debugPrint('[FollowingPage] Loading following users for: ${widget.user.npub}');
+
+      // Get the basic following list (just npub list)
+      final result = await _userRepository.getFollowingListForUser(widget.user.npub);
+
+      if (mounted) {
+        result.fold(
+          (users) {
+            debugPrint('[FollowingPage] Successfully loaded ${users.length} basic following users');
+            setState(() {
+              _followingUsers = users;
+              _isLoading = false;
+            });
+
+            // Preload individual user profiles (like note_content_widget.dart)
+            _preloadUserProfiles();
+          },
+          (error) {
+            debugPrint('[FollowingPage] Error loading following users: $error');
+            setState(() {
+              _error = error;
+              _isLoading = false;
+              _followingUsers = [];
+            });
+          },
+        );
       }
-
-      final followingBox = InMemoryDataManager.instance.followingBox;
-      final cachedFollowing = followingBox?.get('following_$targetNpub');
-
-      if (cachedFollowing == null || cachedFollowing.pubkeys.isEmpty) {
+    } catch (e) {
+      debugPrint('[FollowingPage] Exception: $e');
+      if (mounted) {
         setState(() {
-          _followingUsers = [];
+          _error = e.toString();
           _isLoading = false;
         });
-        return;
       }
-
-      final followingNpubs = cachedFollowing.pubkeys;
-      print('[FollowingPage] Found ${followingNpubs.length} following for $targetNpub');
-
-      final usersBox = InMemoryDataManager.instance.usersBox;
-      final List<UserModel> users = [];
-
-      for (final npub in followingNpubs) {
-        try {
-          UserModel? user = usersBox?.get(npub);
-
-          if (user != null) {
-            users.add(user);
-          } else {
-            users.add(UserModel(
-              npub: npub,
-              name: 'Unknown User',
-              about: '',
-              profileImage: '',
-              nip05: '',
-              banner: '',
-              lud16: '',
-              website: '',
-              updatedAt: DateTime.now(),
-            ));
-          }
-        } catch (e) {
-          print('[FollowingPage] Error loading profile for $npub: $e');
-          users.add(UserModel(
-            npub: npub,
-            name: 'Unknown User',
-            about: '',
-            profileImage: '',
-            nip05: '',
-            banner: '',
-            lud16: '',
-            website: '',
-            updatedAt: DateTime.now(),
-          ));
-        }
-      }
-
-      users.sort((a, b) {
-        final aName = a.name.isNotEmpty ? a.name : 'Unknown User';
-        final bName = b.name.isNotEmpty ? b.name : 'Unknown User';
-        return aName.toLowerCase().compareTo(bName.toLowerCase());
-      });
-
-      setState(() {
-        _followingUsers = users;
-        _isLoading = false;
-      });
-    } catch (e) {
-      print('[FollowingPage] Error: $e');
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
     }
   }
 
-  bool _isValidHex(String value) {
-    if (value.isEmpty || value.length != 64) return false;
-    return RegExp(r'^[0-9a-fA-F]+$').hasMatch(value);
+  /// Preload user profiles for all following users (like note_content_widget.dart)
+  void _preloadUserProfiles() {
+    for (final user in _followingUsers) {
+      _loadUserProfile(user.npub);
+    }
+  }
+
+  /// Load individual user profile (like note_content_widget.dart _loadMentionUser)
+  Future<void> _loadUserProfile(String npub) async {
+    if (_loadingStates[npub] == true || _loadedUsers.containsKey(npub)) {
+      return; // Already loading or loaded
+    }
+
+    _loadingStates[npub] = true;
+
+    try {
+      debugPrint('[FollowingPage] Loading profile for: $npub');
+      final userResult = await _userRepository.getUserProfile(npub);
+
+      if (mounted) {
+        userResult.fold(
+          (user) {
+            debugPrint('[FollowingPage] Loaded profile for: ${user.name}');
+            setState(() {
+              _loadedUsers[npub] = user;
+              _loadingStates[npub] = false;
+
+              // Update the user in the following list
+              final index = _followingUsers.indexWhere((u) => u.npub == npub);
+              if (index != -1) {
+                _followingUsers[index] = user;
+              }
+            });
+          },
+          (error) {
+            debugPrint('[FollowingPage] Error loading profile for $npub: $error');
+            // Create fallback user (like note_content_widget.dart)
+            setState(() {
+              _loadedUsers[npub] = UserModel(
+                pubkeyHex: npub,
+                name: npub.length > 8 ? npub.substring(0, 8) : npub,
+                about: '',
+                profileImage: '',
+                banner: '',
+                website: '',
+                nip05: '',
+                lud16: '',
+                updatedAt: DateTime.now(),
+                nip05Verified: false,
+              );
+              _loadingStates[npub] = false;
+            });
+          },
+        );
+      }
+    } catch (e) {
+      debugPrint('[FollowingPage] Exception loading profile for $npub: $e');
+      if (mounted) {
+        setState(() {
+          _loadingStates[npub] = false;
+        });
+      }
+    }
   }
 
   Widget _buildHeader(BuildContext context) {
@@ -174,12 +189,28 @@ class _FollowingPageState extends State<FollowingPage> {
   }
 
   Widget _buildUserTile(BuildContext context, UserModel user) {
+    // Check loading state for this specific user (like note_content_widget.dart)
+    final isLoading = _loadingStates[user.npub] == true;
+    final loadedUser = _loadedUsers[user.npub] ?? user;
+
+    // Determine display name based on loaded data
+    String displayName;
+    if (isLoading) {
+      displayName = '${user.npub.substring(0, 16)}... (Loading)';
+    } else if (loadedUser.name.isNotEmpty) {
+      // Use the actual loaded name regardless of length
+      displayName = loadedUser.name.length > 25 ? '${loadedUser.name.substring(0, 25)}...' : loadedUser.name;
+    } else {
+      // Fallback to npub prefix if no name available
+      displayName = user.npub.startsWith('npub1') ? '${user.npub.substring(0, 16)}...' : 'Unknown User';
+    }
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => ProfilePage(user: user),
+            builder: (_) => ProfilePage(user: loadedUser),
           ),
         );
       },
@@ -189,9 +220,9 @@ class _FollowingPageState extends State<FollowingPage> {
           children: [
             CircleAvatar(
               radius: 28,
-              backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
+              backgroundImage: loadedUser.profileImage.isNotEmpty ? CachedNetworkImageProvider(loadedUser.profileImage) : null,
               backgroundColor: Colors.grey.shade800,
-              child: user.profileImage.isEmpty
+              child: loadedUser.profileImage.isEmpty
                   ? Icon(
                       Icons.person,
                       size: 32,
@@ -209,21 +240,21 @@ class _FollowingPageState extends State<FollowingPage> {
                     children: [
                       Flexible(
                         child: Text(
-                          user.name.isNotEmpty ? (user.name.length > 25 ? '${user.name.substring(0, 25)}...' : user.name) : 'Unknown User',
+                          displayName,
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
-                            color: context.colors.textPrimary,
+                            color: isLoading ? context.colors.textSecondary : context.colors.textPrimary,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (user.nip05.isNotEmpty) ...[
+                      if (loadedUser.nip05.isNotEmpty) ...[
                         Flexible(
                           child: Padding(
                             padding: const EdgeInsets.only(left: 8),
                             child: Text(
-                              '• ${user.nip05}',
+                              '• ${loadedUser.nip05}',
                               style: TextStyle(fontSize: 14, color: context.colors.secondary),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -232,6 +263,30 @@ class _FollowingPageState extends State<FollowingPage> {
                       ],
                     ],
                   ),
+                  // Show loading indicator if this specific profile is loading (like note_content_widget.dart)
+                  if (isLoading) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.5,
+                            color: context.colors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Loading profile...',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.colors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:collection';
+import 'package:flutter/foundation.dart';
 import 'package:qiqstr/constants/relays.dart';
 import 'time_service.dart';
 
@@ -32,9 +33,9 @@ class WebSocketManager {
   final Map<String, WebSocket> _webSockets = {};
   final Map<String, Timer> _reconnectTimers = {};
   final Map<String, RelayConnectionStats> _connectionStats = {};
-  final Duration connectionTimeout;
-  final int maxReconnectAttempts;
-  final Duration maxBackoffDelay;
+  final Duration connectionTimeout = const Duration(seconds: 3);
+  final int maxReconnectAttempts = 5;
+  final Duration maxBackoffDelay = const Duration(minutes: 2);
   bool _isClosed = false;
 
   final Queue<String> _messageQueue = Queue();
@@ -42,14 +43,9 @@ class WebSocketManager {
   bool _isProcessingMessages = false;
 
   Timer? _healthCheckTimer;
-  final Duration healthCheckInterval;
+  final Duration healthCheckInterval = const Duration(minutes: 1);
 
-  WebSocketManager._internal({
-    this.connectionTimeout = const Duration(seconds: 3),
-    this.maxReconnectAttempts = 5,
-    this.maxBackoffDelay = const Duration(minutes: 2),
-    this.healthCheckInterval = const Duration(minutes: 1),
-  }) {
+  WebSocketManager._internal() {
     _initializeWithDefaultRelays();
   }
 
@@ -74,7 +70,9 @@ class WebSocketManager {
         relayUrls.addAll(customRelays);
         _initializeStats();
       }
-    } catch (e) {}
+    } catch (e) {
+      // Silently ignore relay loading errors
+    }
   }
 
   bool _listEquals(List<String> a, List<String> b) {
@@ -83,15 +81,6 @@ class WebSocketManager {
       if (a[i] != b[i]) return false;
     }
     return true;
-  }
-
-  void _initializeWithRelays(List<String> urls) {
-    if (relayUrls.isEmpty) {
-      relayUrls.addAll(urls);
-      _initializeStats();
-      _startMessageProcessing();
-      _startHealthMonitoring();
-    }
   }
 
   void _initializeStats() {
@@ -149,7 +138,9 @@ class WebSocketManager {
 
     try {
       await _connectSingleRelay(url, null, null);
-    } catch (e) {}
+    } catch (e) {
+      // Reconnection failed, will retry based on backoff strategy
+    }
   }
 
   List<WebSocket> get activeSockets => _webSockets.values.where((ws) => ws.readyState == WebSocket.open).toList();
@@ -222,19 +213,25 @@ class WebSocketManager {
                   try {
                     handler(event, relayUrl);
                   } catch (e) {
-                    print('[WebSocketManager] Error in event handler: $e');
+                    if (kDebugMode) {
+                      print('[WebSocketManager] Error in event handler: $e');
+                    }
                   }
                 }
               }
 
               onEvent?.call(event, relayUrl);
             }
-          } catch (e) {}
+          } catch (e) {
+            // Error in event handler, log and continue
+          }
         },
         onDone: () {
           try {
             _handleDisconnection(relayUrl, onDisconnected);
-          } catch (e) {}
+          } catch (e) {
+            // Connection error handling
+          }
         },
         onError: (error) {
           try {
@@ -243,7 +240,9 @@ class WebSocketManager {
             } else {
               _handleDisconnection(relayUrl, onDisconnected);
             }
-          } catch (e) {}
+          } catch (e) {
+            // Error handling during disconnection
+          }
         },
         cancelOnError: false,
       );
@@ -276,7 +275,9 @@ class WebSocketManager {
         try {
           handler(relayUrl);
         } catch (e) {
-          print('[WebSocketManager] Error in disconnect handler: $e');
+          if (kDebugMode) {
+            print('[WebSocketManager] Error in disconnect handler: $e');
+          }
         }
       }
     }
@@ -448,11 +449,15 @@ class WebSocketManager {
                   try {
                     handler(event, relayUrl);
                   } catch (e) {
-                    print('[WebSocketManager] Error in reconnection event handler: $e');
+                    if (kDebugMode) {
+                      print('[WebSocketManager] Error in reconnection event handler: $e');
+                    }
                   }
                 }
               }
-            } catch (e) {}
+            } catch (e) {
+              // Event handler error during reconnection
+            }
           },
           onDone: () {
             try {
@@ -460,7 +465,9 @@ class WebSocketManager {
                 _handleDisconnection(relayUrl, null);
                 reconnectRelay(relayUrl, targetNpubs, attempt: attempt + 1);
               }
-            } catch (e) {}
+            } catch (e) {
+              // Disconnection handling error
+            }
           },
           onError: (error) {
             try {
@@ -473,7 +480,9 @@ class WebSocketManager {
                   reconnectRelay(relayUrl, targetNpubs, attempt: attempt + 1);
                 }
               }
-            } catch (e) {}
+            } catch (e) {
+              // Error handling during reconnection
+            }
           },
           cancelOnError: false,
         );
@@ -518,7 +527,9 @@ class WebSocketManager {
         if (ws.readyState == WebSocket.open || ws.readyState == WebSocket.connecting) {
           await ws.close();
         }
-      } catch (e) {}
+      } catch (e) {
+        // WebSocket close error, connection already closed
+      }
     }
 
     _webSockets.clear();
@@ -544,7 +555,7 @@ class WebSocketManager {
         'disconnections': stats.disconnections,
         'messagesSent': stats.messagesSent,
         'messagesReceived': stats.messagesReceived,
-        'successRate': (stats.successRate * 100).toStringAsFixed(1) + '%',
+        'successRate': '${(stats.successRate * 100).toStringAsFixed(1)}%',
         'isHealthy': stats.isHealthy,
         'isConnected': _webSockets.containsKey(url),
         'totalUptime': stats.totalUptime.inSeconds,
@@ -573,7 +584,9 @@ class WebSocketManager {
               if (ws.readyState == WebSocket.open || ws.readyState == WebSocket.connecting) {
                 await ws.close();
               }
-            } catch (e) {}
+            } catch (e) {
+              // WebSocket close error during reload
+            }
           });
           await Future.wait(closeFutures, eagerError: false);
 
@@ -587,7 +600,9 @@ class WebSocketManager {
           relayUrls.addAll(customRelays);
           _initializeStats();
         }
-      } catch (e) {}
+      } catch (e) {
+        // Error during relay reload
+      }
     });
   }
 }
@@ -779,7 +794,9 @@ class PrimalCacheClient {
         onDone: () {
           try {
             if (!completer.isCompleted) completer.complete(null);
-          } catch (e) {}
+          } catch (e) {
+            // Cache client disconnection error
+          }
         },
         cancelOnError: false,
       );

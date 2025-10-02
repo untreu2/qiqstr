@@ -32,21 +32,36 @@ class ZapModel {
     final descriptionJson = getTagValue('description');
 
     String? comment;
-    String sender = '';
+    String sender = event['pubkey'] ?? ''; // Default to wallet pubkey
 
-    try {
-      final decoded = jsonDecode(descriptionJson);
-      comment = decoded['content'];
-      sender = decoded['pubkey'] ?? '';
-    } catch (_) {
-      sender = getTagValue('P').isNotEmpty ? getTagValue('P') : event['pubkey'] ?? '';
+    // Extract real zapper from description tag (NIP-57 compliant)
+    if (descriptionJson.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(descriptionJson);
+
+        // Extract the real zapper's pubkey from the zap request
+        if (decoded.containsKey('pubkey')) {
+          sender = decoded['pubkey'] as String;
+        }
+
+        // Extract zap comment from the zap request content
+        if (decoded.containsKey('content')) {
+          final requestContent = decoded['content'] as String;
+          if (requestContent.isNotEmpty) {
+            comment = requestContent;
+          }
+        }
+      } catch (_) {
+        // Keep sender as wallet pubkey fallback
+        sender = getTagValue('P').isNotEmpty ? getTagValue('P') : event['pubkey'] ?? '';
+      }
     }
 
     final amount = parseAmountFromBolt11(bolt11);
 
     return ZapModel(
       id: event['id'],
-      sender: sender,
+      sender: sender, // Now contains real zapper, not wallet
       recipient: p,
       targetEventId: e,
       timestamp: DateTime.fromMillisecondsSinceEpoch(event['created_at'] * 1000),

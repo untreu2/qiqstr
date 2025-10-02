@@ -2,31 +2,27 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../services/in_memory_data_manager.dart';
-
 import 'package:nostr_nip19/nostr_nip19.dart';
-import 'package:qiqstr/models/note_model.dart';
-import 'package:qiqstr/widgets/note_content_widget.dart';
-import '../theme/theme_manager.dart';
-import '../models/user_model.dart';
-import '../models/following_model.dart';
-import '../screens/edit_profile.dart';
-import '../services/data_service.dart';
-import '../providers/user_provider.dart';
-import '../screens/following_page.dart';
-import 'photo_viewer_widget.dart';
-import 'profile_image_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import '../models/user_model.dart';
+import '../theme/theme_manager.dart';
+import '../screens/edit_profile.dart';
+import '../screens/following_page.dart';
+import '../widgets/photo_viewer_widget.dart';
+import '../core/di/app_di.dart';
+import '../data/repositories/auth_repository.dart';
+import '../data/repositories/user_repository.dart';
+import '../data/services/nostr_data_service.dart';
 
 class ProfileInfoWidget extends StatefulWidget {
   final UserModel user;
-  final DataService? sharedDataService;
+  final Function(String)? onNavigateToProfile;
 
   const ProfileInfoWidget({
     super.key,
     required this.user,
-    this.sharedDataService,
+    this.onNavigateToProfile,
   });
 
   @override
@@ -34,11 +30,10 @@ class ProfileInfoWidget extends StatefulWidget {
 }
 
 class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   bool? _isFollowing;
   String? _currentUserNpub;
-  late InMemoryBox<FollowingModel>? _followingBox;
-  DataService? _dataService;
+  late AuthRepository _authRepository;
+  late UserRepository _userRepository;
 
   bool _copiedToClipboard = false;
   bool _isInitialized = false;
@@ -49,34 +44,36 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   String? _userHexKey;
 
-  void _navigateToProfile(String npub) {
-    if (_dataService != null) {
-      _dataService!.openUserProfile(context, npub);
-    }
-  }
+  // Add state management for user profile data like note_widget.dart
+  final ValueNotifier<UserModel> _userNotifier = ValueNotifier(UserModel(
+    pubkeyHex: '',
+    name: '',
+    about: '',
+    profileImage: '',
+    banner: '',
+    website: '',
+    nip05: '',
+    lud16: '',
+    updatedAt: DateTime.now(),
+    nip05Verified: false,
+  ));
+
+  bool _isLoadingProfile = false;
+  StreamSubscription<UserModel>? _userStreamSubscription;
 
   Widget _buildBioContent(UserModel user) {
-    if (_dataService == null || user.about.isEmpty) {
+    if (user.about.isEmpty) {
       return const SizedBox.shrink();
     }
 
-    final tempNote = NoteModel(
-      id: 'bio_${user.npub}',
-      author: user.npub,
-      content: user.about,
-      timestamp: DateTime.now(),
-      isReply: false,
-      isRepost: false,
-    );
-
-    final parsedBioContent = tempNote.parsedContentLazy;
-
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2.0),
-      child: NoteContentWidget(
-        parsedContent: parsedBioContent,
-        dataService: _dataService!,
-        onNavigateToMentionProfile: _navigateToProfile,
+      child: Text(
+        user.about,
+        style: TextStyle(
+          color: context.colors.textPrimary,
+          fontSize: 14,
+        ),
       ),
     );
   }
@@ -84,29 +81,32 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   @override
   void initState() {
     super.initState();
+    _authRepository = AppDI.get<AuthRepository>();
+    _userRepository = AppDI.get<UserRepository>();
 
-    if (widget.sharedDataService != null) {
-      _dataService = widget.sharedDataService;
-    }
-
-    _userHexKey = _convertToHex(widget.user.npub);
-
+    _userHexKey = _convertToHex(widget.user.pubkeyHex);
     _startProgressiveInitialization();
+    _setupUserStreamListener();
   }
 
   @override
   void didUpdateWidget(ProfileInfoWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-
-    if (widget.sharedDataService != null && _dataService == null) {
-      _dataService = widget.sharedDataService;
-    }
   }
 
   void _startProgressiveInitialization() {
+    // Initialize with the provided user data immediately
+    _userNotifier.value = widget.user;
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _initBasicData();
+      }
+    });
+
+    Future.delayed(const Duration(milliseconds: 50), () {
+      if (mounted) {
+        _loadUserProfileAsync(); // Load fresh profile data
       }
     });
 
@@ -121,12 +121,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         _loadFollowerCounts();
       }
     });
-
-    Future.delayed(const Duration(milliseconds: 200), () {
-      if (mounted) {
-        UserProvider.instance.loadUser(widget.user.npub);
-      }
-    });
   }
 
   void _initBasicData() {
@@ -135,14 +129,69 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     });
   }
 
+  Future<void> _loadUserProfileAsync() async {
+    if (_isLoadingProfile || !mounted) return;
+
+    try {
+      _isLoadingProfile = true;
+      debugPrint('[ProfileInfoWidget] Loading fresh profile data for: ${_userNotifier.value.pubkeyHex}');
+
+      // Use UserRepository to load fresh user data (same as note_widget.dart)
+      final result = await _userRepository.getUserProfile(_userNotifier.value.pubkeyHex);
+
+      result.fold(
+        (updatedUser) {
+          debugPrint('[ProfileInfoWidget] Fresh profile loaded: ${updatedUser.name}');
+          if (mounted) {
+            _userNotifier.value = updatedUser;
+          }
+        },
+        (error) {
+          debugPrint('[ProfileInfoWidget] Failed to load fresh profile: $error');
+          // Keep the original user data if fresh load fails
+        },
+      );
+    } catch (e) {
+      debugPrint('[ProfileInfoWidget] Load user profile async error: $e');
+    } finally {
+      _isLoadingProfile = false;
+    }
+  }
+
+  /// Setup listener for UserRepository stream to get real-time profile updates
+  void _setupUserStreamListener() {
+    _userStreamSubscription = _userRepository.currentUserStream.listen(
+      (updatedUser) {
+        // Only update if this is the same user being displayed
+        if (updatedUser.pubkeyHex == widget.user.pubkeyHex || updatedUser.pubkeyHex == _userNotifier.value.pubkeyHex) {
+          debugPrint('[ProfileInfoWidget] Received updated user data from stream: ${updatedUser.name}');
+          if (mounted) {
+            _userNotifier.value = updatedUser;
+            // Refresh counts and other data that might have changed
+            _loadFollowerCounts();
+          }
+        }
+      },
+      onError: (error) {
+        debugPrint('[ProfileInfoWidget] Error in user stream: $error');
+      },
+    );
+  }
+
   @override
   void dispose() {
+    _userStreamSubscription?.cancel();
+    _userNotifier.dispose();
     super.dispose();
   }
 
   Future<void> _initFollowStatusAsync() async {
     try {
-      _currentUserNpub = await _secureStorage.read(key: 'npub');
+      final result = await _authRepository.getCurrentUserNpub();
+      result.fold(
+        (npub) => _currentUserNpub = npub,
+        (error) => _currentUserNpub = null,
+      );
 
       if (mounted) {
         setState(() {});
@@ -153,22 +202,91 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       String? currentUserHex = _convertToHex(_currentUserNpub!);
       if (currentUserHex == _userHexKey) return;
 
-      _followingBox = InMemoryDataManager.instance.followingBox;
-      final model = _followingBox?.get('following_$currentUserHex');
+      // Check if current user follows this profile user
+      await _checkFollowStatus();
 
-      final isFollowing = model?.pubkeys.contains(_userHexKey!) ?? false;
+      // Check if this profile user follows the current user
+      await _checkIfUserFollowsMe();
+    } catch (e) {
+      debugPrint('[ProfileInfoWidget] Follow status init error: $e');
+    }
+  }
 
+  Future<void> _checkFollowStatus() async {
+    try {
+      if (_currentUserNpub == null) return;
+
+      // Use UserRepository.isFollowing method (cleaner MVVM approach)
+      final followStatusResult = await _userRepository.isFollowing(_userNotifier.value.pubkeyHex);
+
+      followStatusResult.fold(
+        (isFollowing) {
+          debugPrint('[ProfileInfoWidget] Follow check result: $isFollowing for ${_userNotifier.value.pubkeyHex}');
+
+          if (mounted) {
+            setState(() {
+              _isFollowing = isFollowing;
+            });
+          }
+        },
+        (error) {
+          debugPrint('[ProfileInfoWidget] Error checking follow status: $error');
+          if (mounted) {
+            setState(() {
+              _isFollowing = false;
+            });
+          }
+        },
+      );
+    } catch (e) {
+      debugPrint('[ProfileInfoWidget] Error checking follow status: $e');
+    }
+  }
+
+  Future<void> _checkIfUserFollowsMe() async {
+    try {
+      if (_currentUserNpub == null) return;
+
+      debugPrint('[ProfileInfoWidget] Checking if ${_userNotifier.value.pubkeyHex} follows $_currentUserNpub');
+
+      // Get the profile user's following list to check if current user is in it
+      final nostrDataService = AppDI.get<NostrDataService>();
+      final followingResult = await nostrDataService.getFollowingList(_userNotifier.value.pubkeyHex);
+
+      followingResult.fold(
+        (followingHexList) {
+          // Convert current user npub to hex for comparison
+          final currentUserHex = _convertToHex(_currentUserNpub!);
+
+          // Check if current user's hex is in the profile user's following list
+          final doesFollow = currentUserHex != null && followingHexList.contains(currentUserHex);
+
+          debugPrint('[ProfileInfoWidget] Does ${_userNotifier.value.pubkeyHex} follow $_currentUserNpub? $doesFollow');
+          debugPrint('[ProfileInfoWidget] Current user hex: $currentUserHex');
+          debugPrint('[ProfileInfoWidget] Following list length: ${followingHexList.length}');
+
+          if (mounted) {
+            setState(() {
+              _doesUserFollowMe = doesFollow;
+            });
+          }
+        },
+        (error) {
+          debugPrint('[ProfileInfoWidget] Error checking if user follows me: $error');
+          if (mounted) {
+            setState(() {
+              _doesUserFollowMe = false;
+            });
+          }
+        },
+      );
+    } catch (e) {
+      debugPrint('[ProfileInfoWidget] Error checking if user follows me: $e');
       if (mounted) {
         setState(() {
-          _isFollowing = isFollowing;
+          _doesUserFollowMe = false;
         });
       }
-
-      if (_dataService == null) {
-        print('[ProfileInfoWidget] No shared DataService available for follow status operations');
-      }
-    } catch (e) {
-      print('[ProfileInfoWidget] Follow status init error: $e');
     }
   }
 
@@ -185,62 +303,122 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         return npub;
       }
     } catch (e) {
-      print('[ProfileInfoWidget] Error converting npub to hex: $e');
+      debugPrint('[ProfileInfoWidget] Error converting npub to hex: $e');
     }
     return npub;
   }
 
   Future<void> _toggleFollow() async {
-    if (_currentUserNpub == null || _dataService == null || _userHexKey == null) return;
+    if (_currentUserNpub == null || _userHexKey == null) {
+      debugPrint('[ProfileInfoWidget] Toggle follow aborted - missing current user or hex key');
+      return;
+    }
 
+    final originalFollowState = _isFollowing;
+    final operationName = originalFollowState == true ? 'UNFOLLOW' : 'FOLLOW';
+
+    debugPrint('=== [ProfileInfoWidget] $operationName OPERATION START ===');
+    debugPrint('[ProfileInfoWidget] Original follow state: $originalFollowState');
+    debugPrint('[ProfileInfoWidget] Current user npub: $_currentUserNpub');
+    debugPrint('[ProfileInfoWidget] Target user npub: ${_userNotifier.value.pubkeyHex}');
+    debugPrint('[ProfileInfoWidget] Target user hex: $_userHexKey');
+
+    // Optimistic UI update
     setState(() {
       _isFollowing = !_isFollowing!;
     });
 
-    try {
-      print('[ProfileInfoWidget] Toggle follow for hex: $_userHexKey');
-      print('[ProfileInfoWidget] Current follow state: $_isFollowing');
+    debugPrint('[ProfileInfoWidget] UI optimistically updated to: $_isFollowing');
 
-      if (_isFollowing!) {
-        await _dataService!.sendFollow(_userHexKey!);
-        print('[ProfileInfoWidget] Sent follow request');
-      } else {
-        await _dataService!.sendUnfollow(_userHexKey!);
-        print('[ProfileInfoWidget] Sent unfollow request');
-      }
+    try {
+      // Ensure we're using the correct format for follow operations
+      final currentUser = _userNotifier.value;
+      final targetNpub = currentUser.pubkeyHex.startsWith('npub1')
+          ? currentUser.pubkeyHex
+          : (_userHexKey != null && _userHexKey!.length == 64)
+              ? _getNpubBech32(_userHexKey!)
+              : currentUser.pubkeyHex;
+
+      debugPrint('[ProfileInfoWidget] Using npub for operation: $targetNpub');
+
+      final result =
+          originalFollowState == true ? await _userRepository.unfollowUser(targetNpub) : await _userRepository.followUser(targetNpub);
+
+      debugPrint('[ProfileInfoWidget] Repository operation completed');
+
+      result.fold(
+        (_) {
+          debugPrint('[ProfileInfoWidget] Follow toggle successful');
+          // Refresh follow status to ensure accuracy (increased delay for relay propagation)
+          Future.delayed(const Duration(milliseconds: 1000), () {
+            if (mounted) {
+              _checkFollowStatus();
+            }
+          });
+        },
+        (error) {
+          debugPrint('[ProfileInfoWidget] Follow toggle error: $error');
+
+          // Show error with correct operation name (based on ORIGINAL state)
+          final operationName = originalFollowState == true ? 'unfollow' : 'follow';
+          debugPrint('[ProfileInfoWidget] Operation that failed: $operationName');
+
+          // Revert optimistic update
+          setState(() {
+            _isFollowing = originalFollowState;
+          });
+
+          // Show error to user
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to $operationName user: $error'),
+                backgroundColor: context.colors.error,
+              ),
+            );
+          }
+        },
+      );
     } catch (e) {
-      print('[ProfileInfoWidget] Follow toggle error: $e');
+      debugPrint('[ProfileInfoWidget] Follow toggle exception: $e');
+      // Revert optimistic update
       setState(() {
-        _isFollowing = !_isFollowing!;
+        _isFollowing = originalFollowState;
       });
     }
   }
 
   Future<void> _loadFollowerCounts() async {
-    if (_dataService == null) return;
-
     try {
-      final dataServiceNpub = _dataService!.npub;
-      final followingCount = await _dataService!.getFollowingCount(dataServiceNpub);
+      // Get THIS profile user's following list (how many they follow)
+      // Use NostrDataService directly for follow counts (read-only operation)
+      final nostrDataService = AppDI.get<NostrDataService>();
+      final followingResult = await nostrDataService.getFollowingList(_userNotifier.value.pubkeyHex);
 
-      bool? doesUserFollowMe;
-      if (_currentUserNpub != null && _currentUserNpub != dataServiceNpub) {
-        print('[ProfileInfoWidget] Checking if $dataServiceNpub follows $_currentUserNpub');
-        doesUserFollowMe = await _dataService!.isUserFollowing(dataServiceNpub, _currentUserNpub!);
-        print('[ProfileInfoWidget] Result: $doesUserFollowMe');
-      }
-
-      if (mounted) {
-        setState(() {
-          _followingCount = followingCount;
-          _doesUserFollowMe = doesUserFollowMe;
-          _isLoadingCounts = false;
-        });
-      }
+      followingResult.fold(
+        (followingHexList) {
+          if (mounted) {
+            setState(() {
+              _followingCount = followingHexList.length;
+              _isLoadingCounts = false;
+            });
+          }
+        },
+        (error) {
+          debugPrint('[ProfileInfoWidget] Error loading following count: $error');
+          if (mounted) {
+            setState(() {
+              _followingCount = 0;
+              _isLoadingCounts = false;
+            });
+          }
+        },
+      );
     } catch (e) {
-      print('[ProfileInfoWidget] Error loading following count: $e');
+      debugPrint('[ProfileInfoWidget] Error loading following count: $e');
       if (mounted) {
         setState(() {
+          _followingCount = 0;
           _isLoadingCounts = false;
         });
       }
@@ -249,11 +427,10 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: UserProvider.instance,
-      builder: (context, _) {
-        final user = UserProvider.instance.getUser(widget.user.npub) ?? widget.user;
-        final npubBech32 = _getNpubBech32(user.npub);
+    return ValueListenableBuilder<UserModel>(
+      valueListenable: _userNotifier,
+      builder: (context, user, _) {
+        final npubBech32 = _getNpubBech32(user.pubkeyHex);
         final screenWidth = MediaQuery.of(context).size.width;
         final websiteUrl = user.website.isNotEmpty && !(user.website.startsWith("http://") || user.website.startsWith("https://"))
             ? "https://${user.website}"
@@ -312,23 +489,129 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     );
   }
 
+  // Static cache for avatar widgets (same as note_widget.dart)
+  static final Map<String, Widget> _avatarCache = <String, Widget>{};
+
+  Widget _getCachedAvatar(String imageUrl, double radius, String cacheKey) {
+    return _avatarCache.putIfAbsent(cacheKey, () {
+      try {
+        Widget avatarWidget;
+
+        if (imageUrl.isEmpty) {
+          avatarWidget = CircleAvatar(
+            radius: radius,
+            backgroundColor: context.colors.surfaceTransparent,
+            child: Icon(
+              Icons.person,
+              size: radius,
+              color: context.colors.textSecondary,
+            ),
+          );
+        } else {
+          avatarWidget = ClipOval(
+            child: CachedNetworkImage(
+              imageUrl: imageUrl,
+              width: radius * 2,
+              height: radius * 2,
+              fit: BoxFit.cover,
+              fadeInDuration: Duration.zero,
+              fadeOutDuration: Duration.zero,
+              memCacheWidth: (radius * 4).round(),
+              memCacheHeight: (radius * 4).round(),
+              maxWidthDiskCache: (radius * 6).round(),
+              maxHeightDiskCache: (radius * 6).round(),
+              placeholder: (context, url) => Container(
+                width: radius * 2,
+                height: radius * 2,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: context.colors.surfaceTransparent,
+                ),
+                child: Icon(
+                  Icons.person,
+                  size: radius,
+                  color: context.colors.textSecondary,
+                ),
+              ),
+              errorWidget: (context, url, error) => Container(
+                width: radius * 2,
+                height: radius * 2,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: context.colors.surfaceTransparent,
+                ),
+                child: Icon(
+                  Icons.person,
+                  size: radius,
+                  color: context.colors.textSecondary,
+                ),
+              ),
+            ),
+          );
+        }
+
+        // Add border if needed
+        if (radius > 30) {
+          // Only for large avatars
+          avatarWidget = Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: context.colors.background,
+                width: 3,
+              ),
+            ),
+            child: avatarWidget,
+          );
+        }
+
+        return avatarWidget;
+      } catch (e) {
+        debugPrint('[ProfileInfoWidget] Avatar cache error: $e');
+        return CircleAvatar(
+          radius: radius,
+          backgroundColor: context.colors.surfaceTransparent,
+          child: Icon(
+            Icons.person,
+            size: radius,
+            color: context.colors.textSecondary,
+          ),
+        );
+      }
+    });
+  }
+
   Widget _buildAvatar(UserModel user) {
-    return ProfileImageHelper.large(
-      imageUrl: user.profileImage,
-      npub: user.npub,
-      backgroundColor: context.colors.surfaceTransparent,
-      borderWidth: 3,
-      borderColor: context.colors.background,
-      onTap: user.profileImage.isNotEmpty
-          ? () {
+    return ValueListenableBuilder<UserModel>(
+      valueListenable: _userNotifier,
+      builder: (context, currentUser, _) {
+        final avatarRadius = 40.0;
+        final cacheKey = 'profile_large_${currentUser.pubkeyHex}_${currentUser.profileImage.hashCode}';
+
+        Widget avatar = RepaintBoundary(
+          child: _getCachedAvatar(
+            currentUser.profileImage,
+            avatarRadius,
+            cacheKey,
+          ),
+        );
+
+        if (currentUser.profileImage.isNotEmpty) {
+          return GestureDetector(
+            onTap: () {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => PhotoViewerWidget(imageUrls: [user.profileImage]),
+                  builder: (_) => PhotoViewerWidget(imageUrls: [currentUser.profileImage]),
                 ),
               );
-            }
-          : null,
+            },
+            child: avatar,
+          );
+        }
+
+        return avatar;
+      },
     );
   }
 
@@ -388,6 +671,9 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   }
 
   Widget _buildOptimizedBanner(BuildContext context, UserModel user, double screenWidth) {
+    // Calculate 36:9 aspect ratio height
+    final double bannerHeight = screenWidth * (5 / 10);
+
     return GestureDetector(
       onTap: () {
         if (user.banner.isNotEmpty) {
@@ -401,28 +687,28 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       },
       child: user.banner.isNotEmpty
           ? CachedNetworkImage(
-              key: ValueKey('banner_image_${user.npub}_${user.banner.hashCode}'),
+              key: ValueKey('banner_image_${user.pubkeyHex}_${user.banner.hashCode}'),
               imageUrl: user.banner,
               width: screenWidth,
-              height: 130,
+              height: bannerHeight,
               fit: BoxFit.cover,
               fadeInDuration: Duration.zero,
               placeholderFadeInDuration: Duration.zero,
-              memCacheHeight: 260,
-              maxHeightDiskCache: 400,
+              memCacheHeight: (bannerHeight * 2).round(),
+              maxHeightDiskCache: (bannerHeight * 3).round(),
               placeholder: (_, __) => Container(
-                height: 130,
+                height: bannerHeight,
                 width: screenWidth,
                 color: context.colors.grey700,
               ),
               errorWidget: (_, __, ___) => Container(
-                height: 130,
+                height: bannerHeight,
                 width: screenWidth,
                 color: context.colors.background,
               ),
             )
           : Container(
-              height: 130,
+              height: bannerHeight,
               width: screenWidth,
               color: context.colors.background,
             ),
@@ -430,13 +716,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   }
 
   Widget _buildAvatarAndActionsRow(BuildContext context, UserModel user) {
-    print('[ProfileInfoWidget] Current user npub: $_currentUserNpub');
-    print('[ProfileInfoWidget] Viewing user npub: ${widget.user.npub}');
-    print('[ProfileInfoWidget] Are they equal: ${widget.user.npub == _currentUserNpub}');
-    print('[ProfileInfoWidget] IsFollowing: $_isFollowing');
-
     final isOwnProfile = _isCurrentUserProfile();
-    print('[ProfileInfoWidget] Is own profile: $isOwnProfile');
 
     return Row(
       children: [
@@ -586,8 +866,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                 context,
                 MaterialPageRoute(
                   builder: (_) => FollowingPage(
-                    user: widget.user,
-                    dataService: _dataService,
+                    user: _userNotifier.value,
                   ),
                 ),
               );
@@ -613,7 +892,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               ],
             ),
           ),
-          if (_doesUserFollowMe == true && _currentUserNpub != null && _currentUserNpub != widget.user.npub) ...[
+          if (_doesUserFollowMe == true && _currentUserNpub != null && _currentUserNpub != _userNotifier.value.pubkeyHex) ...[
             Text(
               ' • ',
               style: TextStyle(
@@ -645,7 +924,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       try {
         return encodeBasicBech32(identifier, "npub");
       } catch (e) {
-        print('[ProfileInfoWidget] Error converting hex to npub: $e');
+        debugPrint('[ProfileInfoWidget] Error converting hex to npub: $e');
         return identifier;
       }
     }

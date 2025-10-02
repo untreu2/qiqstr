@@ -1,28 +1,38 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:qiqstr/screens/login_page.dart';
-import '../services/in_memory_data_manager.dart';
+import '../screens/login_page.dart';
+import '../core/di/app_di.dart';
+import '../data/repositories/auth_repository.dart';
 
 class Logout {
   static Future<void> performLogout(BuildContext context) async {
-    try {
-      await InMemoryDataManager.instance.closeAllBoxes();
-      print('Hive storage cleared successfully.');
+    // Store references before async operations
+    final navigator = Navigator.of(context);
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
 
+    try {
+      // Clear authentication via repository
+      final authRepository = AppDI.get<AuthRepository>();
+      await authRepository.logout();
+
+      // Clear secure storage
       const storage = FlutterSecureStorage();
       await storage.deleteAll();
-      print('Secure storage cleared successfully.');
+      if (kDebugMode) {
+        print('Secure storage cleared successfully.');
+      }
 
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => LoginPage()),
+      navigator.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LoginPage()),
         (Route<dynamic> route) => false,
       );
     } catch (e) {
-      print('Error during logout: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error during logout. Please try again.')),
+      if (kDebugMode) {
+        print('Error during logout: $e');
+      }
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(content: Text('Error during logout. Please try again.')),
       );
     }
   }

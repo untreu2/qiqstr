@@ -1,28 +1,29 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as provider;
 import 'colors.dart';
 import 'theme/theme_manager.dart' as theme;
-import 'screens/splash_screen.dart';
-import 'providers/user_provider.dart';
-import 'providers/notes_provider.dart';
-import 'providers/interactions_provider.dart';
-import 'providers/content_cache_provider.dart';
-import 'providers/relay_provider.dart';
-import 'providers/network_provider.dart';
-import 'providers/media_provider.dart';
-import 'providers/notification_provider.dart';
+import 'screens/home_navigator.dart';
+import 'screens/login_page.dart';
 import 'services/time_service.dart';
 import 'services/logging_service.dart';
-import 'services/memory_manager.dart';
+import 'core/di/app_di.dart';
+import 'data/services/nostr_data_service.dart';
+import 'data/services/auth_service.dart';
+import 'data/repositories/notification_repository.dart';
 
 void main() {
-  runZonedGuarded(() {
+  runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
+
+    // Initialize dependency injection
+    await AppDI.initialize();
+
+    // Eagerly initialize NostrDataService to start relay connections immediately
+    AppDI.get<NostrDataService>();
 
     timeService.startPeriodicRefresh();
 
@@ -30,10 +31,6 @@ void main() {
       level: LogLevel.error,
       enabled: true,
     );
-
-    Future.delayed(const Duration(seconds: 5), () {
-      MemoryManager.instance.startProactiveManagement();
-    });
 
     FlutterError.onError = (FlutterErrorDetails details) {
       if (details.exception is SocketException) {
@@ -56,21 +53,16 @@ void main() {
       logError('Could not set platform error handler', 'Main', e);
     }
 
+    // Check for existing nsec to determine initial route
+    final initialHome = await _determineInitialHome();
+
     runApp(
       provider.MultiProvider(
         providers: [
           provider.ChangeNotifierProvider(create: (context) => theme.ThemeManager()),
-          provider.ChangeNotifierProvider.value(value: UserProvider.instance),
-          provider.ChangeNotifierProvider.value(value: NotesProvider.instance),
-          provider.ChangeNotifierProvider.value(value: InteractionsProvider.instance),
-          provider.ChangeNotifierProvider.value(value: ContentCacheProvider.instance),
-          provider.ChangeNotifierProvider.value(value: RelayProvider.instance),
-          provider.ChangeNotifierProvider.value(value: NetworkProvider.instance),
-          provider.ChangeNotifierProvider.value(value: MediaProvider.instance),
-          provider.ChangeNotifierProvider.value(value: NotificationProvider.instance),
         ],
-        child: const ProviderScope(
-          child: QiqstrApp(home: SplashScreen()),
+        child: ProviderScope(
+          child: QiqstrApp(home: initialHome),
         ),
       ),
     );
@@ -81,6 +73,92 @@ void main() {
 
     logError('Unhandled error', 'Main', error);
   });
+}
+
+/// Determine the initial home widget based on authentication status
+Future<Widget> _determineInitialHome() async {
+  try {
+    final authService = AppDI.get<AuthService>();
+
+    // Check for stored nsec
+    final nsecResult = await authService.getUserNsec();
+
+    if (nsecResult.isSuccess && nsecResult.data != null && nsecResult.data!.isNotEmpty) {
+      // nsec exists, get npub and go directly to feed
+      final npubResult = await authService.getCurrentUserNpub();
+
+      if (npubResult.isSuccess && npubResult.data != null && npubResult.data!.isNotEmpty) {
+        debugPrint(' [Main] Found stored credentials, navigating directly to HomeNavigator');
+
+        // Start listening for notifications automatically for authenticated users
+        await _initializeNotifications();
+
+        return HomeNavigator(npub: npubResult.data!);
+      }
+    }
+
+    debugPrint(' [Main] No valid credentials found, showing LoginPage');
+    return const LoginPage();
+  } catch (e) {
+    debugPrint(' [Main] Error checking authentication: $e, defaulting to LoginPage');
+    return const LoginPage();
+  }
+}
+
+/// Initialize notifications for authenticated users
+Future<void> _initializeNotifications() async {
+  try {
+    debugPrint(' [Main] Initializing notifications...');
+
+    // Initialize notification repository
+    final notificationRepository = AppDI.get<NotificationRepository>();
+
+    // Start fetching notifications automatically - this will start listening
+    final result = await notificationRepository.getNotifications(limit: 50);
+
+    if (result.isSuccess) {
+      debugPrint(' [Main] Notifications initialized successfully: ${result.data?.length ?? 0} notifications');
+
+      // Start background listening for new notifications
+      _startBackgroundNotificationListening();
+    } else {
+      debugPrint(' [Main] Failed to initialize notifications: ${result.error}');
+    }
+  } catch (e) {
+    debugPrint(' [Main] Error initializing notifications: $e');
+  }
+}
+
+/// Start background notification listening
+void _startBackgroundNotificationListening() {
+  try {
+    debugPrint(' [Main] Starting background notification listening...');
+
+    final notificationRepository = AppDI.get<NotificationRepository>();
+
+    // Listen to notification stream in background
+    notificationRepository.notificationsStream.listen(
+      (notifications) {
+        debugPrint(' [Main] Background notification update: ${notifications.length} notifications');
+      },
+      onError: (error) {
+        debugPrint(' [Main] Background notification error: $error');
+      },
+    );
+
+    // Periodically refresh notifications every 30 seconds
+    Timer.periodic(const Duration(seconds: 30), (timer) async {
+      try {
+        await notificationRepository.refreshNotifications();
+      } catch (e) {
+        debugPrint(' [Main] Error in periodic notification refresh: $e');
+      }
+    });
+
+    debugPrint(' [Main] Background notification listening started successfully');
+  } catch (e) {
+    debugPrint(' [Main] Error starting background notification listening: $e');
+  }
 }
 
 class QiqstrApp extends ConsumerWidget {

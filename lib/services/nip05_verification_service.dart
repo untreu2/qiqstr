@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:nostr_nip19/nostr_nip19.dart';
 
@@ -61,13 +62,17 @@ class Nip05VerificationService {
       );
 
       if (response.isRedirect) {
-        print('[NIP-05] Verification failed: HTTP redirects are not allowed');
+        if (kDebugMode) {
+          print('[NIP-05] Verification failed: HTTP redirects are not allowed');
+        }
         _cacheResult(cacheKey, false);
         return false;
       }
 
       if (response.statusCode != 200) {
-        print('[NIP-05] Verification failed: HTTP ${response.statusCode}');
+        if (kDebugMode) {
+          print('[NIP-05] Verification failed: HTTP ${response.statusCode}');
+        }
         _cacheResult(cacheKey, false);
         return false;
       }
@@ -76,21 +81,27 @@ class Nip05VerificationService {
       try {
         jsonData = jsonDecode(response.body) as Map<String, dynamic>;
       } catch (e) {
-        print('[NIP-05] Verification failed: Invalid JSON response');
+        if (kDebugMode) {
+          print('[NIP-05] Verification failed: Invalid JSON response');
+        }
         _cacheResult(cacheKey, false);
         return false;
       }
 
       final names = jsonData['names'] as Map<String, dynamic>?;
       if (names == null) {
-        print('[NIP-05] Verification failed: Missing "names" field');
+        if (kDebugMode) {
+          print('[NIP-05] Verification failed: Missing "names" field');
+        }
         _cacheResult(cacheKey, false);
         return false;
       }
 
       final expectedPubkey = names[localPart] as String?;
       if (expectedPubkey == null) {
-        print('[NIP-05] Verification failed: Local part "$localPart" not found in names');
+        if (kDebugMode) {
+          print('[NIP-05] Verification failed: Local part "$localPart" not found in names');
+        }
         _cacheResult(cacheKey, false);
         return false;
       }
@@ -98,17 +109,27 @@ class Nip05VerificationService {
       final isVerified = expectedPubkey.toLowerCase() == publicKeyHex.toLowerCase();
 
       if (isVerified) {
-        print('[NIP-05] Verification successful for $nip05');
+        if (kDebugMode) {
+          print('[NIP-05] Verification successful for $nip05');
+        }
       } else {
-        print('[NIP-05] Verification failed: Public key mismatch');
-        print('[NIP-05] Expected: $expectedPubkey');
-        print('[NIP-05] Provided: $publicKeyHex');
+        if (kDebugMode) {
+          print('[NIP-05] Verification failed: Public key mismatch');
+        }
+        if (kDebugMode) {
+          print('[NIP-05] Expected: $expectedPubkey');
+        }
+        if (kDebugMode) {
+          print('[NIP-05] Provided: $publicKeyHex');
+        }
       }
 
       _cacheResult(cacheKey, isVerified);
       return isVerified;
     } catch (e) {
-      print('[NIP-05] Verification error for $nip05: $e');
+      if (kDebugMode) {
+        print('[NIP-05] Verification error for $nip05: $e');
+      }
       _cacheResult('$nip05:$publicKeyHex', false);
       return false;
     }
@@ -137,7 +158,9 @@ class Nip05VerificationService {
       }
       return null;
     } catch (e) {
-      print('[NIP-05] Error converting npub to hex: $e');
+      if (kDebugMode) {
+        print('[NIP-05] Error converting npub to hex: $e');
+      }
       return null;
     }
   }
@@ -150,7 +173,9 @@ class Nip05VerificationService {
   Future<bool> verifyNip05WithNpub(String nip05, String npub) async {
     final hexKey = _npubToHex(npub);
     if (hexKey == null) {
-      print('[NIP-05] Invalid npub format: $npub');
+      if (kDebugMode) {
+        print('[NIP-05] Invalid npub format: $npub');
+      }
       return false;
     }
     return await verifyNip05(nip05, hexKey);

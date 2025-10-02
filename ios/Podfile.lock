@@ -140,7 +140,7 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/wakelock_plus/ios"
 
 SPEC CHECKSUMS:
-  better_player_plus: 89f911bd69171edfe6d2ee689014355036bffdb0
+  better_player_plus: 47532407ba72a21c91e44b45536582ce7d55cd96
   Cache: 4ca7e00363fca5455f26534e5607634c820ffc2d
   DKImagePickerController: 946cec48c7873164274ecc4624d19e3da4c1ef3c
   DKPhotoGallery: b3834fecb755ee09a593d7c9e389d8b5d6deed60

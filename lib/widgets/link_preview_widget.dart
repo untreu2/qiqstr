@@ -4,8 +4,6 @@ import '../theme/theme_manager.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:url_launcher/url_launcher.dart';
-import '../services/in_memory_data_manager.dart';
-
 import '../models/link_preview_model.dart';
 
 Future<LinkPreviewModel?> _fetchAndParseLink(String url) async {
@@ -22,7 +20,9 @@ Future<LinkPreviewModel?> _fetchAndParseLink(String url) async {
 
       return LinkPreviewModel(title: parsedTitle, imageUrl: parsedImage);
     }
-  } catch (e) {}
+  } catch (e) {
+    // Silently ignore link parsing errors to prevent disrupting UI rendering
+  }
   return null;
 }
 
@@ -40,17 +40,17 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
   String? _imageUrl;
   bool _isLoading = true;
 
-  late final InMemoryBox<LinkPreviewModel>? _cacheBox;
+  // Simple in-memory cache
+  static final Map<String, LinkPreviewModel> _cache = {};
 
   @override
   void initState() {
     super.initState();
-    _cacheBox = InMemoryDataManager.instance.getLinkPreviewBox();
     _loadPreview();
   }
 
   void _loadPreview() {
-    final cached = _cacheBox?.get(widget.url);
+    final cached = _cache[widget.url];
     if (cached != null) {
       Future.microtask(() {
         if (mounted) {
@@ -74,7 +74,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
         if (!mounted) return;
 
         if (model != null) {
-          await _cacheBox?.put(widget.url, model);
+          _cache[widget.url] = model;
           if (mounted) {
             setState(() {
               _title = model.title;

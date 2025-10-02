@@ -1,26 +1,24 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:qiqstr/screens/feed_page.dart';
 import 'package:bounce/bounce.dart';
+import 'package:provider/provider.dart';
+import 'package:carbon_icons/carbon_icons.dart';
+
+import 'package:qiqstr/screens/feed_page.dart';
 import 'package:qiqstr/screens/users_search_page.dart';
 import 'package:qiqstr/screens/notification_page.dart';
 import 'package:qiqstr/screens/share_note.dart';
 import 'package:qiqstr/screens/wallet_page.dart';
-import 'package:qiqstr/services/data_service.dart';
 import '../theme/theme_manager.dart';
-import 'package:provider/provider.dart';
-import 'package:carbon_icons/carbon_icons.dart';
 
 class HomeNavigator extends StatefulWidget {
   final String npub;
-  final DataService dataService;
 
   const HomeNavigator({
-    Key? key,
+    super.key,
     required this.npub,
-    required this.dataService,
-  }) : super(key: key);
+  });
 
   @override
   State<HomeNavigator> createState() => _HomeNavigatorState();
@@ -31,10 +29,10 @@ class _HomeNavigatorState extends State<HomeNavigator> {
   final GlobalKey<FeedPageState> _feedPageKey = GlobalKey<FeedPageState>();
 
   late final List<Widget> _pages = [
-    FeedPage(key: _feedPageKey, npub: widget.npub, dataService: widget.dataService),
+    FeedPage(key: _feedPageKey, npub: widget.npub),
     const UserSearchPage(),
     const WalletPage(),
-    NotificationPage(dataService: widget.dataService),
+    const NotificationPage(),
   ];
 
   Widget _buildCustomBottomBar() {
@@ -59,7 +57,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                     child: Container(
                       height: 70,
                       decoration: BoxDecoration(
-                        color: context.colors.surface.withOpacity(0.6),
+                        color: context.colors.surface.withValues(alpha: 0.6),
                         border: Border.all(
                           color: context.colors.borderLight,
                           width: 1.5,
@@ -76,35 +74,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                               key: ValueKey('nav_item_$index'),
                               child: Bounce(
                                 scaleFactor: 0.85,
-                                onTap: () {
-                                  if (index == 2) {
-                                    if (mounted) {
-                                      setState(() {
-                                        _currentIndex = index;
-                                      });
-                                    }
-                                  } else if (index == 3) {
-                                    widget.dataService.markAllUserNotificationsAsRead().then((_) {
-                                      if (mounted) setState(() => _currentIndex = index);
-                                    });
-                                  } else if (index == 0) {
-                                    if (_currentIndex == 0) {
-                                      _feedPageKey.currentState?.scrollToTop();
-                                    } else {
-                                      if (mounted) {
-                                        setState(() {
-                                          _currentIndex = index;
-                                        });
-                                      }
-                                    }
-                                  } else {
-                                    if (mounted) {
-                                      setState(() {
-                                        _currentIndex = index;
-                                      });
-                                    }
-                                  }
-                                },
+                                onTap: () => _handleNavigation(index),
                                 behavior: HitTestBehavior.opaque,
                                 child: SizedBox.expand(
                                   child: Column(
@@ -112,65 +82,11 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                                     children: [
                                       if (index == 3)
                                         RepaintBoundary(
-                                          child: Stack(
-                                            clipBehavior: Clip.none,
-                                            children: [
-                                              SvgPicture.asset(
-                                                item['icon'] as String,
-                                                width: 20,
-                                                height: 20,
-                                                color: isSelected ? context.colors.accent : context.colors.textPrimary,
-                                              ),
-                                              ValueListenableBuilder<int>(
-                                                valueListenable: widget.dataService.unreadNotificationsCountNotifier,
-                                                builder: (context, count, child) {
-                                                  if (count == 0) {
-                                                    return const SizedBox.shrink();
-                                                  }
-                                                  return Positioned(
-                                                    top: -4,
-                                                    right: -5,
-                                                    child: RepaintBoundary(
-                                                      child: Container(
-                                                        padding: const EdgeInsets.all(1),
-                                                        decoration: BoxDecoration(
-                                                          color: context.colors.surface,
-                                                          shape: BoxShape.circle,
-                                                          border: Border.all(color: context.colors.textPrimary, width: 0.5),
-                                                        ),
-                                                        constraints: const BoxConstraints(
-                                                          minWidth: 14,
-                                                          minHeight: 14,
-                                                        ),
-                                                        child: Text('$count',
-                                                            style: TextStyle(
-                                                              color: context.colors.textPrimary,
-                                                              fontSize: 9,
-                                                              fontWeight: FontWeight.bold,
-                                                            ),
-                                                            textAlign: TextAlign.center),
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                            ],
-                                          ),
+                                          child: _buildNotificationIcon(item['icon'] as String, isSelected),
                                         )
                                       else
                                         RepaintBoundary(
-                                          child: item['type'] == 'carbon'
-                                              ? Icon(
-                                                  CarbonIcons.flash,
-                                                  size: 22,
-                                                  color: isSelected ? context.colors.accent : context.colors.textPrimary,
-                                                )
-                                              : SvgPicture.asset(
-                                                  item['icon'] as String,
-                                                  width: 20,
-                                                  height: 20,
-                                                  color: isSelected ? context.colors.accent : context.colors.textPrimary,
-                                                ),
+                                          child: _buildRegularIcon(item, isSelected),
                                         ),
                                     ],
                                   ),
@@ -186,56 +102,112 @@ class _HomeNavigatorState extends State<HomeNavigator> {
               ),
             ),
             const SizedBox(width: 8),
-            RepaintBoundary(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(35.0),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
-                  child: Container(
-                    width: 70,
-                    height: 70,
-                    decoration: BoxDecoration(
-                      color: context.colors.surface.withOpacity(0.6),
-                      border: Border.all(
-                        color: context.colors.borderLight,
-                        width: 1.5,
-                      ),
-                      borderRadius: BorderRadius.circular(35.0),
-                    ),
-                    child: Bounce(
-                      scaleFactor: 0.85,
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => ShareNotePage(dataService: widget.dataService),
-                          ),
-                        );
-                      },
-                      behavior: HitTestBehavior.opaque,
-                      child: SizedBox.expand(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            RepaintBoundary(
-                              child: SvgPicture.asset(
-                                'assets/new_post_button.svg',
-                                width: 24,
-                                height: 24,
-                                color: context.colors.textPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
+            _buildPostButton(),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildNotificationIcon(String iconPath, bool isSelected) {
+    return SvgPicture.asset(
+      iconPath,
+      width: 20,
+      height: 20,
+      colorFilter: ColorFilter.mode(
+        isSelected ? context.colors.accent : context.colors.textPrimary,
+        BlendMode.srcIn,
+      ),
+    );
+  }
+
+  Widget _buildRegularIcon(Map<String, dynamic> item, bool isSelected) {
+    if (item['type'] == 'carbon') {
+      return Icon(
+        CarbonIcons.flash,
+        size: 22,
+        color: isSelected ? context.colors.accent : context.colors.textPrimary,
+      );
+    } else {
+      return SvgPicture.asset(
+        item['icon'] as String,
+        width: 20,
+        height: 20,
+        colorFilter: ColorFilter.mode(
+          isSelected ? context.colors.accent : context.colors.textPrimary,
+          BlendMode.srcIn,
+        ),
+      );
+    }
+  }
+
+  Widget _buildPostButton() {
+    return RepaintBoundary(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(35.0),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
+          child: Container(
+            width: 70,
+            height: 70,
+            decoration: BoxDecoration(
+              color: context.colors.surface.withValues(alpha: 0.6),
+              border: Border.all(
+                color: context.colors.borderLight,
+                width: 1.5,
+              ),
+              borderRadius: BorderRadius.circular(35.0),
+            ),
+            child: Bounce(
+              scaleFactor: 0.85,
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ShareNotePage(),
+                  ),
+                );
+              },
+              behavior: HitTestBehavior.opaque,
+              child: SizedBox.expand(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    RepaintBoundary(
+                      child: SvgPicture.asset(
+                        'assets/new_post_button.svg',
+                        width: 24,
+                        height: 24,
+                        colorFilter: ColorFilter.mode(
+                          context.colors.textPrimary,
+                          BlendMode.srcIn,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _handleNavigation(int index) {
+    if (index == 3) {
+      // Notification tab - just navigate
+      if (mounted) setState(() => _currentIndex = index);
+    } else if (index == 0) {
+      // Feed tab - scroll to top if already selected
+      if (_currentIndex == 0) {
+        _feedPageKey.currentState?.scrollToTop();
+      } else {
+        if (mounted) setState(() => _currentIndex = index);
+      }
+    } else {
+      // Other tabs
+      if (mounted) setState(() => _currentIndex = index);
+    }
   }
 
   @override

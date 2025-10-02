@@ -1,183 +1,112 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
-import '../services/in_memory_data_manager.dart';
-import 'package:qiqstr/constants/suggestions.dart';
-import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/services/profile_service.dart';
-import 'package:qiqstr/screens/home_navigator.dart';
-import 'package:qiqstr/services/data_service.dart';
-import 'package:qiqstr/services/data_service_manager.dart';
-import 'package:qiqstr/theme/theme_manager.dart';
-import 'package:nostr/nostr.dart';
+import '../models/user_model.dart';
+import '../screens/home_navigator.dart';
+import '../theme/theme_manager.dart';
+import '../core/ui/ui_state_builder.dart';
+import '../core/di/app_di.dart';
+import '../presentation/viewmodels/suggested_follows_viewmodel.dart';
+import '../presentation/providers/viewmodel_provider.dart';
 
-class SuggestedFollowsPage extends StatefulWidget {
+class SuggestedFollowsPage extends StatelessWidget {
   final String npub;
-  final DataService dataService;
 
   const SuggestedFollowsPage({
     super.key,
     required this.npub,
-    required this.dataService,
   });
 
   @override
-  State<SuggestedFollowsPage> createState() => _SuggestedFollowsPageState();
-}
-
-class _SuggestedFollowsPageState extends State<SuggestedFollowsPage> {
-  List<UserModel> _suggestedUsers = [];
-  Set<String> _selectedUsers = {};
-  bool _isLoading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadSuggestedUsers();
-  }
-
-  final Map<String, String> _npubToHexMap = {};
-
-  Future<void> _loadSuggestedUsers() async {
-    setState(() => _isLoading = true);
-
-    final profileService = ProfileService.instance;
-    final List<UserModel> users = [];
-
-    for (String pubkeyHex in suggestedUsers) {
-      try {
-        final profileData = await profileService.getCachedUserProfile(pubkeyHex);
-        final npubKey = Nip19.encodePubkey(pubkeyHex);
-
-        _npubToHexMap[npubKey] = pubkeyHex;
-
-        final user = UserModel.fromCachedProfile(npubKey, profileData);
-        users.add(user);
-
-        final box = InMemoryDataManager.instance.usersBox;
-        await box?.put(pubkeyHex, user);
-
-        print('Successfully loaded user: ${user.name.isNotEmpty ? user.name : 'Anonymous'} (${pubkeyHex.substring(0, 8)}...)');
-      } catch (e) {
-        print('Error loading user $pubkeyHex: $e');
-
-        try {
-          final npubKey = Nip19.encodePubkey(pubkeyHex);
-          _npubToHexMap[npubKey] = pubkeyHex;
-
-          final fallbackUser = UserModel(
-            npub: npubKey,
-            name: 'User ${users.length + 1}',
-            about: 'A Nostr user',
-            profileImage: '',
-            nip05: '',
-            banner: '',
-            lud16: '',
-            website: '',
-            updatedAt: DateTime.now(),
-          );
-          users.add(fallbackUser);
-          print('Added fallback user for $pubkeyHex');
-        } catch (fallbackError) {
-          print('Failed to create fallback user for $pubkeyHex: $fallbackError');
-        }
-      }
-    }
-
-    print('Total suggested users loaded: ${users.length}');
-    setState(() {
-      _suggestedUsers = users;
-
-      _selectedUsers = users.map((user) => user.npub).toSet();
-      _isLoading = false;
-    });
-  }
-
-  void _toggleUserSelection(String npub) {
-    setState(() {
-      if (_selectedUsers.contains(npub)) {
-        _selectedUsers.remove(npub);
-      } else {
-        _selectedUsers.add(npub);
-      }
-    });
-  }
-
-  Future<void> _continueToHome() async {
-    setState(() => _isLoading = true);
-
-    try {
-      if (_selectedUsers.isNotEmpty) {
-        print('Following ${_selectedUsers.length} selected users...');
-
-        for (String npub in _selectedUsers) {
-          try {
-            final hexPubkey = _npubToHexMap[npub];
-            if (hexPubkey != null) {
-              await widget.dataService.sendFollow(hexPubkey);
-              print('Successfully followed user: $npub (hex: ${hexPubkey.substring(0, 8)}...)');
-            } else {
-              print('Warning: Could not find hex pubkey for $npub');
-            }
-          } catch (e) {
-            print('Error following user $npub: $e');
-          }
-        }
-
-        print('Finished following process');
-
-        await Future.delayed(const Duration(seconds: 2));
-      }
-
-      print('Closing current DataService...');
-      await widget.dataService.closeConnections();
-
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      print('Creating new DataService for feed mode...');
-      final feedDataService = DataServiceManager.instance.getOrCreateService(
-        npub: widget.npub,
-        dataType: DataType.feed,
-      );
-
-      print('Initializing new DataService...');
-      await feedDataService.initialize();
-
-      final followingList = await feedDataService.getFollowingList(widget.npub);
-      print('Following list loaded with ${followingList.length} users: $followingList');
-
-      print('New DataService initialized successfully with ${feedDataService.notes.length} cached notes');
-
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => HomeNavigator(
-              npub: widget.npub,
-              dataService: feedDataService,
+  Widget build(BuildContext context) {
+    return ViewModelBuilder<SuggestedFollowsViewModel>(
+      create: () => SuggestedFollowsViewModel(
+        userRepository: AppDI.get(),
+        authRepository: AppDI.get(),
+        nostrDataService: AppDI.get(),
+      ),
+      builder: (context, viewModel) {
+        return Scaffold(
+          backgroundColor: context.colors.background,
+          body: UIStateBuilder<List<UserModel>>(
+            state: viewModel.suggestedUsersState,
+            builder: (context, users) => _buildContent(context, viewModel, users),
+            loading: () => Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: context.colors.primary),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Loading suggested users...',
+                    style: TextStyle(
+                      color: context.colors.textSecondary,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            error: (error) => Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 64, color: context.colors.error),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Failed to load suggested users',
+                    style: TextStyle(color: context.colors.error, fontSize: 18),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    error,
+                    style: TextStyle(color: context.colors.textSecondary),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => viewModel.loadSuggestedUsers(),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+            empty: (message) => Center(
+              child: Text(
+                message ?? 'No suggested users available at the moment.',
+                style: TextStyle(
+                  color: context.colors.textSecondary,
+                  fontSize: 16,
+                ),
+              ),
             ),
           ),
         );
-      }
-    } catch (e) {
-      print('Error in continue process: $e');
-
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => HomeNavigator(
-              npub: widget.npub,
-              dataService: widget.dataService,
-            ),
-          ),
-        );
-      }
-    }
+      },
+    );
   }
 
-  Widget _buildHeader() {
+  Widget _buildContent(BuildContext context, SuggestedFollowsViewModel viewModel, List<UserModel> users) {
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(context),
+                const SizedBox(height: 48),
+                ...users.map((user) => _buildUserTile(context, viewModel, user)),
+                const SizedBox(height: 120),
+              ],
+            ),
+          ),
+        ),
+        _buildBottomSection(context, viewModel),
+      ],
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 100, 24, 0),
       child: Column(
@@ -196,8 +125,8 @@ class _SuggestedFollowsPageState extends State<SuggestedFollowsPage> {
     );
   }
 
-  Widget _buildUserTile(UserModel user) {
-    final isSelected = _selectedUsers.contains(user.npub);
+  Widget _buildUserTile(BuildContext context, SuggestedFollowsViewModel viewModel, UserModel user) {
+    final isSelected = viewModel.selectedUsers.contains(user.npub);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
@@ -213,7 +142,7 @@ class _SuggestedFollowsPageState extends State<SuggestedFollowsPage> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: () => _toggleUserSelection(user.npub),
+          onTap: () => viewModel.toggleUserSelection(user.npub),
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
@@ -279,7 +208,7 @@ class _SuggestedFollowsPageState extends State<SuggestedFollowsPage> {
                     ),
                   ),
                   child: isSelected
-                      ? Icon(
+                      ? const Icon(
                           Icons.check,
                           color: Colors.white,
                           size: 16,
@@ -294,12 +223,7 @@ class _SuggestedFollowsPageState extends State<SuggestedFollowsPage> {
     );
   }
 
-  Future<void> _skipToHome() async {
-    _selectedUsers.clear();
-    await _continueToHome();
-  }
-
-  Widget _buildBottomSection() {
+  Widget _buildBottomSection(BuildContext context, SuggestedFollowsViewModel viewModel) {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
       decoration: BoxDecoration(
@@ -312,7 +236,11 @@ class _SuggestedFollowsPageState extends State<SuggestedFollowsPage> {
         mainAxisSize: MainAxisSize.min,
         children: [
           GestureDetector(
-            onTap: _skipToHome,
+            onTap: viewModel.isProcessing
+                ? null
+                : () async {
+                    await _skipToHome(context, viewModel);
+                  },
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -334,7 +262,11 @@ class _SuggestedFollowsPageState extends State<SuggestedFollowsPage> {
           ),
           const SizedBox(height: 12),
           GestureDetector(
-            onTap: _continueToHome,
+            onTap: viewModel.isProcessing
+                ? null
+                : () async {
+                    await _continueToHome(context, viewModel);
+                  },
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -344,14 +276,23 @@ class _SuggestedFollowsPageState extends State<SuggestedFollowsPage> {
                 borderRadius: BorderRadius.circular(25),
                 border: Border.all(color: context.colors.borderAccent),
               ),
-              child: Text(
-                'Continue',
-                style: TextStyle(
-                  color: context.colors.background,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              child: viewModel.isProcessing
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
+                      ),
+                    )
+                  : Text(
+                      'Continue',
+                      style: TextStyle(
+                        color: context.colors.background,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
             ),
           ),
         ],
@@ -359,59 +300,22 @@ class _SuggestedFollowsPageState extends State<SuggestedFollowsPage> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: context.colors.background,
-      body: _isLoading
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: context.colors.primary),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Loading suggested users...',
-                    style: TextStyle(
-                      color: context.colors.textSecondary,
-                      fontSize: 16,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          : Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildHeader(),
-                        const SizedBox(height: 48),
-                        if (_suggestedUsers.isEmpty)
-                          Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Text(
-                                'No suggested users available at the moment.',
-                                style: TextStyle(
-                                  color: context.colors.textSecondary,
-                                  fontSize: 16,
-                                ),
-                              ),
-                            ),
-                          )
-                        else
-                          ...(_suggestedUsers.map((user) => _buildUserTile(user))),
-                        const SizedBox(height: 120),
-                      ],
-                    ),
-                  ),
-                ),
-                _buildBottomSection(),
-              ],
-            ),
+  Future<void> _skipToHome(BuildContext context, SuggestedFollowsViewModel viewModel) async {
+    viewModel.skipToHome();
+    _navigateToHome(context);
+  }
+
+  Future<void> _continueToHome(BuildContext context, SuggestedFollowsViewModel viewModel) async {
+    viewModel.followSelectedUsers();
+    _navigateToHome(context);
+  }
+
+  void _navigateToHome(BuildContext context) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => HomeNavigator(npub: npub),
+      ),
     );
   }
 }

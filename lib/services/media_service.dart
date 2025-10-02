@@ -2,6 +2,10 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'dart:io';
+import 'package:crypto/crypto.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:nostr/nostr.dart';
 import '../models/note_model.dart';
 import 'time_service.dart';
 
@@ -301,7 +305,9 @@ class MediaService {
       }
 
       await prefs.setString('media_cache_v2', jsonEncode(cacheMap));
-    } catch (e) {}
+    } catch (e) {
+      // Silently ignore cache persistence errors to avoid disrupting app functionality
+    }
   }
 
   void _schedulePeriodicCleanup() {
@@ -453,6 +459,81 @@ class MediaService {
     _currentlyLoading.clear();
 
     Future.microtask(() => _saveCacheToPersistentStorage());
+  }
+
+  /// Send media to Blossom server - matches legacy DataService.sendMedia exactly
+  Future<String> sendMedia(String filePath, String blossomUrl) async {
+    const secureStorage = FlutterSecureStorage();
+
+    final privateKey = await secureStorage.read(key: 'privateKey');
+    if (privateKey == null || privateKey.isEmpty) {
+      throw Exception('Private key not found.');
+    }
+
+    final file = File(filePath);
+    if (!await file.exists()) {
+      throw Exception('File not found: $filePath');
+    }
+
+    final fileBytes = await file.readAsBytes();
+    final sha256Hash = sha256.convert(fileBytes).toString();
+
+    // Determine MIME type (matches legacy exactly)
+    String mimeType = 'application/octet-stream';
+    final lowerPath = filePath.toLowerCase();
+    if (lowerPath.endsWith('.jpg') || lowerPath.endsWith('.jpeg')) {
+      mimeType = 'image/jpeg';
+    } else if (lowerPath.endsWith('.png')) {
+      mimeType = 'image/png';
+    } else if (lowerPath.endsWith('.gif')) {
+      mimeType = 'image/gif';
+    } else if (lowerPath.endsWith('.mp4')) {
+      mimeType = 'video/mp4';
+    }
+
+    // Create Blossom auth event (kind 24242) - matches legacy exactly
+    final expiration = timeService.add(Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000;
+
+    final authEvent = Event.from(
+      kind: 24242,
+      content: 'Upload ${file.uri.pathSegments.last}',
+      tags: [
+        ['t', 'upload'],
+        ['x', sha256Hash],
+        ['expiration', expiration.toString()],
+      ],
+      privkey: privateKey,
+    );
+
+    final encodedAuth = base64.encode(utf8.encode(jsonEncode(authEvent.toJson())));
+    final authHeader = 'Nostr $encodedAuth';
+
+    // Upload to Blossom server (matches legacy exactly)
+    final cleanedUrl = blossomUrl.replaceAll(RegExp(r'/+$'), '');
+    final uri = Uri.parse('$cleanedUrl/upload');
+
+    final httpClient = HttpClient();
+    final request = await httpClient.putUrl(uri);
+
+    request.headers.set(HttpHeaders.authorizationHeader, authHeader);
+    request.headers.set(HttpHeaders.contentTypeHeader, mimeType);
+    request.headers.set(HttpHeaders.contentLengthHeader, fileBytes.length);
+
+    request.add(fileBytes);
+
+    final response = await request.close();
+    final responseBody = await response.transform(utf8.decoder).join();
+
+    if (response.statusCode != 200) {
+      throw Exception('Upload failed with status ${response.statusCode}: $responseBody');
+    }
+
+    final decoded = jsonDecode(responseBody);
+    if (decoded is Map && decoded.containsKey('url')) {
+      return decoded['url'];
+    }
+
+    throw Exception('Upload succeeded but response does not contain a valid URL.');
   }
 
   Future<void> dispose() async {

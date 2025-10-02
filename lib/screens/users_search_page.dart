@@ -1,14 +1,11 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
-
-import '../services/in_memory_data_manager.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/screens/profile_page.dart';
-import 'package:qiqstr/services/profile_service.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
+import '../models/user_model.dart';
+import '../screens/profile_page.dart';
+import '../core/di/app_di.dart';
+import '../data/repositories/user_repository.dart';
 
 class UserSearchPage extends StatefulWidget {
   const UserSearchPage({super.key});
@@ -19,181 +16,55 @@ class UserSearchPage extends StatefulWidget {
 
 class _UserSearchPageState extends State<UserSearchPage> {
   final TextEditingController _searchController = TextEditingController();
-  List<UserModel> _allUsers = [];
   List<UserModel> _filteredUsers = [];
-  List<UserModel> _randomUsers = [];
-  bool _isSearchingNpub = false;
-  UserModel? _npubSearchResult;
-  String? _lastNpubQuery;
+  bool _isSearching = false;
+  String? _error;
+
+  late final UserRepository _userRepository;
 
   @override
   void initState() {
     super.initState();
-    _loadUsers();
+    _userRepository = AppDI.get<UserRepository>();
     _searchController.addListener(_onSearchChanged);
-  }
-
-  void _loadUsers() async {
-    final box = InMemoryDataManager.instance.usersBox;
-    final users = box?.values.toList() ?? [];
-
-    final shuffledUsers = users.toList()..shuffle();
-    _randomUsers = shuffledUsers.take(10).toList();
-
-    setState(() {
-      _allUsers = users;
-      _filteredUsers = _randomUsers;
-    });
   }
 
   void _onSearchChanged() {
     final query = _searchController.text.trim();
-    if (query.isEmpty) {
-      setState(() {
-        _filteredUsers = _randomUsers;
-        _isSearchingNpub = false;
-        _npubSearchResult = null;
-        _lastNpubQuery = null;
-      });
-      return;
-    }
-
-    if (_isNpubFormat(query)) {
-      _searchByNpub(query);
-    } else {
-      _searchLocalUsers(query);
-    }
+    _searchUsers(query);
   }
 
-  bool _isNpubFormat(String query) {
-    return query.startsWith('npub1') && query.length > 10;
-  }
-
-  void _searchLocalUsers(String query) {
-    final queryLower = query.toLowerCase();
-    final filtered = _allUsers.where((user) {
-      return user.name.toLowerCase().contains(queryLower) ||
-          user.nip05.toLowerCase().contains(queryLower) ||
-          user.npub.toLowerCase().contains(queryLower);
-    }).toList();
-
-    filtered.sort((a, b) => _searchScore(a, queryLower).compareTo(_searchScore(b, queryLower)));
-
+  Future<void> _searchUsers(String query) async {
     setState(() {
-      _filteredUsers = filtered;
-      _isSearchingNpub = false;
-      _npubSearchResult = null;
-      _lastNpubQuery = null;
-    });
-  }
-
-  Future<void> _searchByNpub(String npubQuery) async {
-    if (_lastNpubQuery == npubQuery && _npubSearchResult != null) {
-      return;
-    }
-
-    setState(() {
-      _isSearchingNpub = true;
-      _lastNpubQuery = npubQuery;
-      _npubSearchResult = null;
+      _isSearching = true;
+      _error = null;
     });
 
     try {
-      final existingUser = _allUsers.firstWhere(
-        (user) => user.npub.toLowerCase() == npubQuery.toLowerCase(),
-        orElse: () => UserModel(
-          npub: '',
-          name: '',
-          about: '',
-          profileImage: '',
-          nip05: '',
-          banner: '',
-          lud16: '',
-          website: '',
-          updatedAt: DateTime.now(),
-          nip05Verified: false,
-        ),
-      );
+      final result = await _userRepository.searchUsers(query);
 
-      if (existingUser.npub.isNotEmpty) {
-        setState(() {
-          _filteredUsers = [existingUser];
-          _isSearchingNpub = false;
-          _npubSearchResult = existingUser;
-        });
-        return;
-      }
-
-      String? pubkeyHex;
-      try {
-        pubkeyHex = decodeBasicBech32(npubQuery, 'npub');
-      } catch (e) {
-        setState(() {
-          _isSearchingNpub = false;
-          _filteredUsers = [];
-        });
-        _showErrorSnackBar('Invalid npub format');
-        return;
-      }
-
-      final profileService = ProfileService.instance;
-      final profileData = await profileService.getCachedUserProfile(pubkeyHex);
-
-      if (profileData['name'] != 'Anonymous' || profileData['about']!.isNotEmpty) {
-        final fetchedUser = UserModel.fromCachedProfile(npubQuery, profileData);
-
-        final box = InMemoryDataManager.instance.usersBox;
-        await box?.put(pubkeyHex, fetchedUser);
-
-        _allUsers.add(fetchedUser);
-
-        setState(() {
-          _filteredUsers = [fetchedUser];
-          _isSearchingNpub = false;
-          _npubSearchResult = fetchedUser;
-        });
-      } else {
-        setState(() {
-          _isSearchingNpub = false;
-          _filteredUsers = [];
-        });
-        _showErrorSnackBar('User not found');
+      if (mounted) {
+        result.fold(
+          (users) => setState(() {
+            _filteredUsers = users;
+            _isSearching = false;
+          }),
+          (error) => setState(() {
+            _error = error;
+            _isSearching = false;
+            _filteredUsers = [];
+          }),
+        );
       }
     } catch (e) {
-      setState(() {
-        _isSearchingNpub = false;
-        _filteredUsers = [];
-      });
-      _showErrorSnackBar('Error fetching user: ${e.toString()}');
+      if (mounted) {
+        setState(() {
+          _error = 'Search failed: $e';
+          _isSearching = false;
+          _filteredUsers = [];
+        });
+      }
     }
-  }
-
-  void _showErrorSnackBar(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: context.colors.error.withOpacity(0.9),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
-  }
-
-  int _searchScore(UserModel user, String query) {
-    final name = user.name.toLowerCase();
-    final nip05 = user.nip05.toLowerCase();
-    final npub = user.npub.toLowerCase();
-
-    if (name == query) return 0;
-    if (nip05 == query) return 1;
-    if (npub == query) return 2;
-    if (name.contains(query)) return 3;
-    if (nip05.contains(query)) return 4;
-    if (npub.contains(query)) return 5;
-
-    return 6;
   }
 
   Widget _buildHeader(BuildContext context) {
@@ -216,7 +87,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
             ],
           ),
           Text(
-            "There are ${_allUsers.length} users cached on your device.",
+            "Search for users by entering their npub.",
             style: TextStyle(
               fontSize: 14,
               color: context.colors.textSecondary,
@@ -235,7 +106,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
         controller: _searchController,
         style: TextStyle(color: context.colors.textPrimary),
         decoration: InputDecoration(
-          hintText: 'Search users by name or public key...',
+          hintText: 'Enter npub to search for users...',
           hintStyle: TextStyle(color: context.colors.textTertiary),
           prefixIcon: Icon(Icons.search, color: context.colors.textPrimary),
           filled: true,
@@ -319,7 +190,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
   }
 
   Widget _buildSearchResults(BuildContext context) {
-    if (_isSearchingNpub) {
+    if (_isSearching) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -327,7 +198,75 @@ class _UserSearchPageState extends State<UserSearchPage> {
             CircularProgressIndicator(color: context.colors.primary),
             const SizedBox(height: 16),
             Text(
-              'Searching for user...',
+              'Searching for users...',
+              style: TextStyle(color: context.colors.textSecondary),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 48,
+              color: context.colors.error,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Search Error',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: context.colors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _error!,
+              style: TextStyle(color: context.colors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => _searchUsers(_searchController.text.trim()),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: context.colors.accent,
+                foregroundColor: context.colors.background,
+              ),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_filteredUsers.isEmpty && _searchController.text.trim().isNotEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.search_off,
+              size: 48,
+              color: context.colors.textSecondary,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No users found',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: context.colors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Try searching with a different term.',
               style: TextStyle(color: context.colors.textSecondary),
             ),
           ],
@@ -337,9 +276,29 @@ class _UserSearchPageState extends State<UserSearchPage> {
 
     if (_filteredUsers.isEmpty) {
       return Center(
-        child: Text(
-          'No users found.',
-          style: TextStyle(color: context.colors.textSecondary),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.people_outline,
+              size: 48,
+              color: context.colors.textSecondary,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              _searchController.text.trim().isEmpty ? 'Start typing to search users' : 'No users found',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: context.colors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _searchController.text.trim().isEmpty ? 'Enter an npub to find users.' : 'Enter a valid npub to search.',
+              style: TextStyle(color: context.colors.textSecondary),
+            ),
+          ],
         ),
       );
     }
@@ -372,6 +331,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
             children: [
               _buildHeader(context),
               _buildSearchInput(context),
+              const SizedBox(height: 16),
               Expanded(
                 child: _buildSearchResults(context),
               ),

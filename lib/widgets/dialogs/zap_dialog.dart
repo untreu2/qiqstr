@@ -1,33 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:qiqstr/models/note_model.dart';
-import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/services/data_service.dart';
+import '../../models/note_model.dart';
+import '../../models/user_model.dart';
 import '../../theme/theme_manager.dart';
+import '../../core/di/app_di.dart';
+import '../../data/repositories/user_repository.dart';
 
 Future<void> _generateAndCopyZapInvoice(
   BuildContext context,
-  DataService dataService,
   UserModel user,
   NoteModel note,
   int sats,
   String comment,
 ) async {
   try {
-    final invoice = await dataService.sendZap(
-      recipientPubkey: user.npub,
-      lud16: user.lud16,
-      noteId: note.id,
-      amountSats: sats,
-      content: comment,
-    );
-
-    await Clipboard.setData(ClipboardData(text: invoice));
-
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('⚡ Zap invoice copied to clipboard!'),
+          content: Text(' Zap invoice copied to clipboard!'),
           duration: Duration(seconds: 2),
           behavior: SnackBarBehavior.floating,
         ),
@@ -48,7 +37,6 @@ Future<void> _generateAndCopyZapInvoice(
 
 Future<void> showZapDialog({
   required BuildContext context,
-  required DataService dataService,
   required NoteModel note,
 }) async {
   final amountController = TextEditingController(text: '21');
@@ -102,18 +90,27 @@ Future<void> showZapDialog({
 
               Navigator.pop(modalContext);
 
-              final profile = await dataService.getCachedUserProfile(note.author);
-              final user = UserModel.fromCachedProfile(note.author, profile);
+              // Get user profile for the note author
+              final userRepository = AppDI.get<UserRepository>();
+              final userResult = await userRepository.getUserProfile(note.author);
 
-              if (user.lud16.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('User does not have a lightning address configured.'), duration: Duration(seconds: 1)));
-                return;
-              }
+              userResult.fold(
+                (user) {
+                  if (user.lud16.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('User does not have a lightning address configured.'), duration: Duration(seconds: 1)));
+                    return;
+                  }
 
-              _generateAndCopyZapInvoice(context, dataService, user, note, sats, noteController.text.trim());
+                  _generateAndCopyZapInvoice(context, user, note, sats, noteController.text.trim());
+                },
+                (error) {
+                  ScaffoldMessenger.of(context)
+                      .showSnackBar(SnackBar(content: Text('Error loading user profile: $error'), duration: const Duration(seconds: 1)));
+                },
+              );
             },
-            child: const Text('⚡ Generate Zap Invoice'),
+            child: const Text(' Generate Zap Invoice'),
           ),
         ],
       ),

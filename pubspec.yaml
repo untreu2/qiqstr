@@ -73,6 +73,7 @@ dependencies:
     rxdart: ^0.28.0
     screenshot: ^3.0.0
     share_plus: ^12.0.0
+    get_it: ^8.0.0
 dev_dependencies:
     flutter_test:
         sdk: flutter

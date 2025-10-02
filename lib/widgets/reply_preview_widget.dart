@@ -3,17 +3,18 @@ import '../theme/theme_manager.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/note_model.dart';
 import '../models/user_model.dart';
-import '../services/data_service.dart';
+import '../core/di/app_di.dart';
+import '../data/repositories/note_repository.dart';
+import '../data/repositories/user_repository.dart';
+import '../screens/profile_page.dart';
 import 'note_content_widget.dart';
 
 class ReplyPreviewWidget extends StatelessWidget {
   final String noteId;
-  final DataService dataService;
 
   const ReplyPreviewWidget({
     super.key,
     required this.noteId,
-    required this.dataService,
   });
 
   String _formatTimestamp(DateTime timestamp) {
@@ -28,10 +29,24 @@ class ReplyPreviewWidget extends StatelessWidget {
     return '${(d.inDays / 365).floor()}y';
   }
 
+  void _navigateToProfile(BuildContext context, String npub) {
+    AppDI.get<UserRepository>().getUserProfile(npub).then((result) {
+      result.fold(
+        (user) => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => ProfilePage(user: user),
+          ),
+        ),
+        (error) => debugPrint('[ReplyPreviewWidget] Error navigating to profile: $error'),
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<NoteModel?>(
-      future: dataService.getCachedNote(noteId),
+      future: AppDI.get<NoteRepository>().getNoteById(noteId).then((result) => result.fold((note) => note, (error) => null)),
       builder: (context, snapshot) {
         if (!snapshot.hasData || snapshot.data == null) {
           return Container(
@@ -46,14 +61,14 @@ class ReplyPreviewWidget extends StatelessWidget {
         final note = snapshot.data!;
         final parsed = note.parsedContentLazy;
 
-        return FutureBuilder<Map<String, String>>(
-          future: dataService.getCachedUserProfile(note.author),
+        return FutureBuilder<UserModel?>(
+          future: AppDI.get<UserRepository>().getUserProfile(note.author).then((result) => result.fold((user) => user, (error) => null)),
           builder: (context, userSnapshot) {
             String authorName = 'Unknown';
             String authorImage = '';
 
-            if (userSnapshot.hasData) {
-              final user = UserModel.fromCachedProfile(note.author, userSnapshot.data!);
+            if (userSnapshot.hasData && userSnapshot.data != null) {
+              final user = userSnapshot.data!;
               authorName = user.name;
               authorImage = user.profileImage;
             }
@@ -89,7 +104,7 @@ class ReplyPreviewWidget extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: context.colors.grey900.withOpacity(0.3),
+                    color: context.colors.grey900.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: context.colors.grey800, width: 0.5),
                   ),
@@ -127,9 +142,9 @@ class ReplyPreviewWidget extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       NoteContentWidget(
+                        noteId: note.id,
                         parsedContent: parsed,
-                        dataService: dataService,
-                        onNavigateToMentionProfile: (id) => dataService.openUserProfile(context, id),
+                        onNavigateToMentionProfile: (npub) => _navigateToProfile(context, npub),
                       ),
                     ],
                   ),

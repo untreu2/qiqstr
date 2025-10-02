@@ -73,7 +73,9 @@ class NetworkBatchProcessor {
       if (socket.readyState == WebSocket.open) {
         socket.add(message);
       }
-    } catch (e) {}
+    } catch (e) {
+      // Silently ignore WebSocket send errors to prevent disrupting batch processing
+    }
   }
 
   void dispose() {
@@ -183,7 +185,9 @@ class _PooledConnection {
   void dispose() {
     try {
       socket.close();
-    } catch (e) {}
+    } catch (e) {
+      // Silently ignore errors during WebSocket cleanup to ensure disposal completes
+    }
   }
 }
 

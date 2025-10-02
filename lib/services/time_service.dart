@@ -175,22 +175,23 @@ class TimeUtils {
     final d = timeService.difference(timestamp);
     String result;
 
-    if (d.inSeconds < 5)
+    if (d.inSeconds < 5) {
       result = 'now';
-    else if (d.inSeconds < 60)
+    } else if (d.inSeconds < 60) {
       result = '${d.inSeconds}s';
-    else if (d.inMinutes < 60)
+    } else if (d.inMinutes < 60) {
       result = '${d.inMinutes}m';
-    else if (d.inHours < 24)
+    } else if (d.inHours < 24) {
       result = '${d.inHours}h';
-    else if (d.inDays < 7)
+    } else if (d.inDays < 7) {
       result = '${d.inDays}d';
-    else if (d.inDays < 30)
+    } else if (d.inDays < 30) {
       result = '${d.inDays ~/ 7}w';
-    else if (d.inDays < 365)
+    } else if (d.inDays < 365) {
       result = '${d.inDays ~/ 30}mo';
-    else
+    } else {
       result = '${d.inDays ~/ 365}y';
+    }
 
     if (_relativeTimeCache.length > 1000) {
       _relativeTimeCache.clear();

@@ -1,57 +1,56 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:collection/collection.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
-import 'package:qiqstr/services/data_service.dart';
-import 'package:qiqstr/widgets/link_preview_widget.dart';
-import 'package:qiqstr/widgets/media_preview_widget.dart';
-import 'package:qiqstr/widgets/quote_widget.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:nostr_nip19/nostr_nip19.dart';
 import '../theme/theme_manager.dart';
+import '../core/di/app_di.dart';
+import '../data/repositories/user_repository.dart';
+import '../models/user_model.dart';
+import 'link_preview_widget.dart';
+import 'media_preview_widget.dart';
 import 'mini_link_preview_widget.dart';
+import 'quote_widget.dart';
 
 enum NoteContentSize { small, big }
 
 class NoteContentWidget extends StatefulWidget {
   final Map<String, dynamic> parsedContent;
-  final DataService dataService;
-  final void Function(String mentionId) onNavigateToMentionProfile;
+  final String noteId;
+  final void Function(String mentionId)? onNavigateToMentionProfile;
   final void Function(String noteId)? onShowMoreTap;
   final NoteContentSize size;
-  final dynamic notesListProvider;
-  final String? noteId;
 
   const NoteContentWidget({
     super.key,
     required this.parsedContent,
-    required this.dataService,
-    required this.onNavigateToMentionProfile,
+    required this.noteId,
+    this.onNavigateToMentionProfile,
     this.onShowMoreTap,
     this.size = NoteContentSize.small,
-    this.notesListProvider,
-    this.noteId,
   });
 
   @override
   State<NoteContentWidget> createState() => _NoteContentWidgetState();
 }
 
-class _NoteContentWidgetState extends State<NoteContentWidget> with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-
-  Future<Map<String, String>>? _mentionsFuture;
+class _NoteContentWidgetState extends State<NoteContentWidget> {
   late final List<dynamic> _textParts;
   late final List<String> _mediaUrls;
   late final List<String> _linkUrls;
   late final List<String> _quoteIds;
-  bool _hasMentions = false;
+
+  // User cache for mentions
+  final Map<String, UserModel> _mentionUsers = {};
+  final Map<String, bool> _mentionLoadingStates = {};
+  late final UserRepository _userRepository;
 
   @override
   void initState() {
     super.initState();
+    _userRepository = AppDI.get<UserRepository>();
     _processParsedContent();
-    _scheduleMentionResolution();
+    _preloadMentionUsers();
   }
 
   void _processParsedContent() {
@@ -59,212 +58,126 @@ class _NoteContentWidgetState extends State<NoteContentWidget> with AutomaticKee
     _mediaUrls = (widget.parsedContent['mediaUrls'] as List<dynamic>?)?.cast<String>() ?? [];
     _linkUrls = (widget.parsedContent['linkUrls'] as List<dynamic>?)?.cast<String>() ?? [];
     _quoteIds = (widget.parsedContent['quoteIds'] as List<dynamic>?)?.cast<String>() ?? [];
-
-    _hasMentions = _textParts.any((p) => p['type'] == 'mention');
   }
 
-  void _scheduleMentionResolution() {
-    if (!_hasMentions) return;
-
-    if (widget.notesListProvider != null && widget.noteId != null) {
-      final preloadedMentions = widget.notesListProvider.getMentionsForNote(widget.noteId!);
-      if (preloadedMentions.isNotEmpty) {
-        _mentionsFuture = Future.value(preloadedMentions);
-        if (mounted) {
-          setState(() {});
-        }
-        return;
-      }
-    }
-
-    Future.microtask(() {
-      if (!mounted) return;
-      _mentionsFuture = _resolveMentions();
-      if (mounted) {
-        setState(() {});
-      }
-    });
-  }
-
-  @override
-  void didUpdateWidget(NoteContentWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!const DeepCollectionEquality().equals(widget.parsedContent, oldWidget.parsedContent)) {
-      _processParsedContent();
-      _scheduleMentionResolution();
-    }
-  }
-
-  Future<Map<String, String>> _resolveMentions() async {
+  /// Extract pubkey from bech32 mention (npub1 or nprofile1)
+  String? _extractPubkey(String bech32) {
     try {
-      final mentionIds = _textParts.where((p) => p['type'] == 'mention').map((p) => p['id'] as String).toList();
-      if (mentionIds.isEmpty) return {};
+      debugPrint('[NoteContentWidget] Extracting pubkey from: $bech32');
 
-      return await widget.dataService.resolveMentions(mentionIds);
+      if (bech32.startsWith('npub1')) {
+        // npub1 için: decodeBasicBech32 ile hex alıyoruz
+        final decoded = decodeBasicBech32(bech32, 'npub');
+        debugPrint('[NoteContentWidget] npub1 decoded to: $decoded');
+        return decoded;
+      } else if (bech32.startsWith('nprofile1')) {
+        // nprofile1 için: decodeTlvBech32Full ile decode edip 0. indeksteki type_0_main alıyoruz
+        debugPrint('[NoteContentWidget] Decoding nprofile1...');
+        final result = decodeTlvBech32Full(bech32, 'nprofile');
+        debugPrint('[NoteContentWidget] nprofile1 full result: $result');
+
+        final pubkey = result['type_0_main'];
+        debugPrint('[NoteContentWidget] nprofile1 extracted pubkey: $pubkey');
+        return pubkey;
+      }
+
+      debugPrint('[NoteContentWidget] Unknown bech32 format: $bech32');
     } catch (e) {
-      debugPrint('[NoteContentWidget] Error resolving mentions: $e');
-      return {};
+      debugPrint('[NoteContentWidget] Bech32 decode error: $e');
+      debugPrint('[NoteContentWidget] Error type: ${e.runtimeType}');
+    }
+    return null;
+  }
+
+  /// Preload user profiles for all mentions
+  void _preloadMentionUsers() {
+    final mentionIds = _textParts.where((part) => part['type'] == 'mention').map((part) => part['id'] as String).toSet();
+
+    for (final mentionId in mentionIds) {
+      // Extract actual pubkey from bech32 if needed
+      final actualPubkey = _extractPubkey(mentionId) ?? mentionId;
+      debugPrint('[NoteContentWidget] Preloading mention - original: $mentionId, extracted: $actualPubkey');
+      _loadMentionUser(actualPubkey);
+    }
+  }
+
+  /// Load user profile for mention
+  Future<void> _loadMentionUser(String pubkeyHex) async {
+    debugPrint('[NoteContentWidget] Loading user for pubkey: $pubkeyHex');
+
+    if (_mentionLoadingStates[pubkeyHex] == true || _mentionUsers.containsKey(pubkeyHex)) {
+      debugPrint('[NoteContentWidget] User already loading or loaded for: $pubkeyHex');
+      return; // Already loading or loaded
+    }
+
+    _mentionLoadingStates[pubkeyHex] = true;
+
+    try {
+      // UserRepository npub formatında bekliyor, hex'i npub'a encode edelim
+      final npubEncoded = encodeBasicBech32(pubkeyHex, 'npub');
+      debugPrint('[NoteContentWidget] Encoded hex $pubkeyHex to npub: $npubEncoded');
+
+      final userResult = await _userRepository.getUserProfile(npubEncoded);
+      debugPrint('[NoteContentWidget] User repository result for $npubEncoded: ${userResult.isSuccess}');
+
+      if (mounted) {
+        userResult.fold(
+          (user) {
+            debugPrint('[NoteContentWidget] Successfully loaded user: ${user.name} for pubkey: $pubkeyHex');
+            setState(() {
+              _mentionUsers[pubkeyHex] = user;
+              _mentionLoadingStates[pubkeyHex] = false;
+            });
+          },
+          (error) {
+            debugPrint('[NoteContentWidget] Failed to load user, creating fallback for: $pubkeyHex, error: $error');
+            // Create fallback user
+            setState(() {
+              _mentionUsers[pubkeyHex] = UserModel(
+                pubkeyHex: pubkeyHex,
+                name: pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex,
+                about: '',
+                profileImage: '',
+                banner: '',
+                website: '',
+                nip05: '',
+                lud16: '',
+                updatedAt: DateTime.now(),
+                nip05Verified: false,
+              );
+              _mentionLoadingStates[pubkeyHex] = false;
+            });
+          },
+        );
+      }
+    } catch (e) {
+      debugPrint('[NoteContentWidget] Exception loading user for $pubkeyHex: $e');
+      if (mounted) {
+        setState(() {
+          _mentionLoadingStates[pubkeyHex] = false;
+        });
+      }
     }
   }
 
   double get _fontSize => widget.size == NoteContentSize.big ? 18.0 : 16.0;
 
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-
-    return RepaintBoundary(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_textParts.isNotEmpty)
-            RepaintBoundary(
-              child: _hasMentions && _mentionsFuture != null
-                  ? FutureBuilder<Map<String, String>>(
-                      future: _mentionsFuture,
-                      builder: (context, snapshot) {
-                        final mentionsMap = snapshot.data ?? {};
-                        return _RichTextContent(
-                          parsedContent: widget.parsedContent,
-                          mentions: mentionsMap,
-                          fontSize: _fontSize,
-                          onNavigateToMentionProfile: widget.onNavigateToMentionProfile,
-                          onShowMoreTap: widget.onShowMoreTap,
-                        );
-                      },
-                    )
-                  : _RichTextContent(
-                      parsedContent: widget.parsedContent,
-                      mentions: const {},
-                      fontSize: _fontSize,
-                      onNavigateToMentionProfile: widget.onNavigateToMentionProfile,
-                      onShowMoreTap: widget.onShowMoreTap,
-                    ),
-            ),
-          if (_mediaUrls.isNotEmpty)
-            RepaintBoundary(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: MediaPreviewWidget(mediaUrls: _mediaUrls),
-              ),
-            ),
-          if (_linkUrls.isNotEmpty && _mediaUrls.isEmpty)
-            RepaintBoundary(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: _linkUrls.length > 1
-                      ? _linkUrls
-                          .map((u) => Padding(
-                                padding: const EdgeInsets.only(bottom: 8.0),
-                                child: MiniLinkPreviewWidget(url: u),
-                              ))
-                          .toList()
-                      : _linkUrls.map((u) => LinkPreviewWidget(url: u)).toList(),
-                ),
-              ),
-            ),
-          if (_quoteIds.isNotEmpty)
-            RepaintBoundary(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: _quoteIds
-                    .map((q) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: QuoteWidget(
-                            bech32: q,
-                            dataService: widget.dataService,
-                            notesListProvider: widget.notesListProvider,
-                          ),
-                        ))
-                    .toList(),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RichTextContent extends StatefulWidget {
-  final Map<String, dynamic> parsedContent;
-  final Map<String, String> mentions;
-  final double fontSize;
-  final void Function(String mentionId) onNavigateToMentionProfile;
-  final void Function(String noteId)? onShowMoreTap;
-
-  const _RichTextContent({
-    required this.parsedContent,
-    required this.mentions,
-    required this.fontSize,
-    required this.onNavigateToMentionProfile,
-    this.onShowMoreTap,
-  });
-
-  @override
-  State<_RichTextContent> createState() => _RichTextContentState();
-}
-
-class _RichTextContentState extends State<_RichTextContent> with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-
-  static final _globalTextScaleFactor = WidgetsBinding.instance.platformDispatcher.textScaleFactor;
-  static final Map<String, TextStyle> _textStyleCache = <String, TextStyle>{};
-  static final Map<String, TapGestureRecognizer> _recognizerCache = <String, TapGestureRecognizer>{};
-
-  late double _currentFontSize;
-  late List<InlineSpan> _spans;
-  late Map<String, dynamic> _cachedContent;
-  late Map<String, String> _cachedMentions;
-  @override
-  void initState() {
-    super.initState();
-    _currentFontSize = widget.fontSize * _globalTextScaleFactor;
-    _cachedContent = Map.from(widget.parsedContent);
-    _cachedMentions = Map.from(widget.mentions);
-    _spans = _buildSpans();
-  }
-
-  @override
-  void didUpdateWidget(_RichTextContent oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!const DeepCollectionEquality().equals(widget.parsedContent, _cachedContent) ||
-        !const DeepCollectionEquality().equals(widget.mentions, _cachedMentions) ||
-        widget.fontSize != oldWidget.fontSize) {
-      _currentFontSize = widget.fontSize * _globalTextScaleFactor;
-      _cachedContent.clear();
-      _cachedContent.addAll(widget.parsedContent);
-      _cachedMentions.clear();
-      _cachedMentions.addAll(widget.mentions);
-      _spans = _buildSpans();
-    }
-  }
-
-  TextStyle _getCachedTextStyle(String key, Color color, {FontWeight? fontWeight}) {
-    final cacheKey = '$key-$color-$fontWeight-$_currentFontSize';
-    return _textStyleCache.putIfAbsent(
-        cacheKey,
-        () => TextStyle(
-              fontSize: _currentFontSize,
-              color: color,
-              fontWeight: fontWeight,
-            ));
-  }
-
-  TapGestureRecognizer _getCachedRecognizer(String key, VoidCallback onTap) {
-    return _recognizerCache.putIfAbsent(key, () => TapGestureRecognizer()..onTap = onTap);
-  }
-
   Future<void> _onOpenLink(LinkableElement link) async {
-    final url = Uri.parse(link.url);
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url);
-    } else {
+    try {
+      final url = Uri.parse(link.url);
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not launch ${link.url}')),
+          );
+        }
+      }
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not launch ${link.url}')),
+          SnackBar(content: Text('Error opening link: $e')),
         );
       }
     }
@@ -272,12 +185,12 @@ class _RichTextContentState extends State<_RichTextContent> with AutomaticKeepAl
 
   void _onHashtagTap(String hashtag) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Designing: Hashtags for $hashtag')),
+      SnackBar(content: Text('Hashtag: $hashtag')),
     );
   }
 
   List<InlineSpan> _buildSpans() {
-    final parts = (_cachedContent['textParts'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+    final parts = _textParts;
     final spans = <InlineSpan>[];
     final colors = context.colors;
 
@@ -292,7 +205,10 @@ class _RichTextContentState extends State<_RichTextContent> with AutomaticKeepAl
           if (m.start > last) {
             spans.add(TextSpan(
               text: text.substring(last, m.start),
-              style: _getCachedTextStyle('text', colors.textPrimary),
+              style: TextStyle(
+                fontSize: _fontSize,
+                color: colors.textPrimary,
+              ),
             ));
           }
 
@@ -302,14 +218,22 @@ class _RichTextContentState extends State<_RichTextContent> with AutomaticKeepAl
           if (urlMatch != null) {
             spans.add(TextSpan(
               text: urlMatch,
-              style: _getCachedTextStyle('url', colors.accent),
-              recognizer: _getCachedRecognizer('url_$urlMatch', () => _onOpenLink(LinkableElement(urlMatch, urlMatch))),
+              style: TextStyle(
+                fontSize: _fontSize,
+                color: colors.accent,
+                decoration: TextDecoration.underline,
+              ),
+              recognizer: TapGestureRecognizer()..onTap = () => _onOpenLink(LinkableElement(urlMatch, urlMatch)),
             ));
           } else if (hashtagMatch != null) {
             spans.add(TextSpan(
               text: hashtagMatch,
-              style: _getCachedTextStyle('hashtag', colors.accent),
-              recognizer: _getCachedRecognizer('hashtag_$hashtagMatch', () => _onHashtagTap(hashtagMatch)),
+              style: TextStyle(
+                fontSize: _fontSize,
+                color: colors.accent,
+                fontWeight: FontWeight.w500,
+              ),
+              recognizer: TapGestureRecognizer()..onTap = () => _onHashtagTap(hashtagMatch),
             ));
           }
           last = m.end;
@@ -318,23 +242,55 @@ class _RichTextContentState extends State<_RichTextContent> with AutomaticKeepAl
         if (last < text.length) {
           spans.add(TextSpan(
             text: text.substring(last),
-            style: _getCachedTextStyle('text', colors.textPrimary),
+            style: TextStyle(
+              fontSize: _fontSize,
+              color: colors.textPrimary,
+            ),
           ));
         }
       } else if (p['type'] == 'mention') {
         final id = p['id'] as String;
-        final displayName = _cachedMentions[id] ?? '${id.substring(0, 8)}...';
+        // Extract actual pubkey from bech32 if needed
+        final actualPubkey = _extractPubkey(id) ?? id;
+        final user = _mentionUsers[actualPubkey];
+        final isLoading = _mentionLoadingStates[actualPubkey] == true;
+
+        String displayText;
+        if (isLoading) {
+          displayText = '@loading...';
+        } else if (user != null) {
+          // Use real user name, truncate if too long
+          final userName = user.name.isNotEmpty ? user.name : (id.length > 8 ? id.substring(0, 8) : id);
+          displayText = userName.length > 15 ? '@${userName.substring(0, 15)}...' : '@$userName';
+        } else {
+          // Fallback to ID
+          displayText = '@${id.length > 8 ? id.substring(0, 8) : id}...';
+        }
+
         spans.add(TextSpan(
-          text: '@$displayName',
-          style: _getCachedTextStyle('mention', colors.accent, fontWeight: FontWeight.w500),
-          recognizer: _getCachedRecognizer('mention_$id', () => widget.onNavigateToMentionProfile(id)),
+          text: displayText,
+          style: TextStyle(
+            fontSize: _fontSize,
+            color: colors.accent,
+            fontWeight: FontWeight.w500,
+          ),
+          recognizer: TapGestureRecognizer()
+            ..onTap = () {
+              // Navigation için de npub formatında gönder
+              final npubForNavigation = encodeBasicBech32(actualPubkey, 'npub');
+              debugPrint('[NoteContentWidget] Navigating to profile with npub: $npubForNavigation');
+              widget.onNavigateToMentionProfile?.call(npubForNavigation);
+            },
         ));
       } else if (p['type'] == 'show_more') {
-        final noteId = p['noteId'] as String;
         spans.add(TextSpan(
           text: p['text'] as String,
-          style: _getCachedTextStyle('show_more', colors.accent, fontWeight: FontWeight.w500),
-          recognizer: _getCachedRecognizer('show_more_$noteId', () => widget.onShowMoreTap?.call(noteId)),
+          style: TextStyle(
+            fontSize: _fontSize,
+            color: colors.accent,
+            fontWeight: FontWeight.w500,
+          ),
+          recognizer: TapGestureRecognizer()..onTap = () => widget.onShowMoreTap?.call(widget.noteId),
         ));
       }
     }
@@ -343,16 +299,55 @@ class _RichTextContentState extends State<_RichTextContent> with AutomaticKeepAl
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Text content
+        if (_textParts.isNotEmpty)
+          RichText(
+            text: TextSpan(children: _buildSpans()),
+            textHeightBehavior: const TextHeightBehavior(
+              applyHeightToFirstAscent: false,
+              applyHeightToLastDescent: false,
+            ),
+          ),
 
-    return RepaintBoundary(
-      child: RichText(
-        text: TextSpan(children: _spans),
-        textHeightBehavior: const TextHeightBehavior(
-          applyHeightToFirstAscent: false,
-          applyHeightToLastDescent: false,
-        ),
-      ),
+        // Media content
+        if (_mediaUrls.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: MediaPreviewWidget(mediaUrls: _mediaUrls),
+          ),
+
+        // Link previews (only if no media)
+        if (_linkUrls.isNotEmpty && _mediaUrls.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: _linkUrls.length > 1
+                  ? _linkUrls
+                      .map((url) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8.0),
+                            child: MiniLinkPreviewWidget(url: url),
+                          ))
+                      .toList()
+                  : _linkUrls.map((url) => LinkPreviewWidget(url: url)).toList(),
+            ),
+          ),
+
+        // Quote content
+        if (_quoteIds.isNotEmpty)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: _quoteIds
+                .map((quoteId) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: QuoteWidget(bech32: quoteId),
+                    ))
+                .toList(),
+          ),
+      ],
     );
   }
 }

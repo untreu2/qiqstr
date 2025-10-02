@@ -54,21 +54,21 @@ class AppColors {
 
   static const Color notificationBackground = Colors.grey;
 
-  static Color get backgroundTransparent => Colors.black.withOpacity(0.3);
+  static Color get backgroundTransparent => Colors.black.withValues(alpha: 0.3);
   static Color get surfaceTransparent => Colors.transparent;
-  static Color get overlayTransparent => Colors.black.withOpacity(0.7);
-  static Color get borderTransparent => Colors.white.withOpacity(0.2);
-  static Color get hoverTransparent => Colors.white.withOpacity(0.05);
+  static Color get overlayTransparent => Colors.black.withValues(alpha: 0.7);
+  static Color get borderTransparent => Colors.white.withValues(alpha: 0.2);
+  static Color get hoverTransparent => Colors.white.withValues(alpha: 0.05);
 
   static const List<Color> backgroundGradient = [
     Colors.black,
     Colors.black,
   ];
 
-  static Color get cardBackground => Colors.black.withOpacity(0.3);
+  static Color get cardBackground => Colors.black.withValues(alpha: 0.3);
   static Color get cardBorder => Colors.grey.shade800;
   static Color get profileBorder => Colors.black;
-  static Color get videoBorder => Colors.white.withOpacity(0.2);
+  static Color get videoBorder => Colors.white.withValues(alpha: 0.2);
 
   static const Color sliderActive = Colors.amber;
   static const Color sliderInactive = Colors.white24;
@@ -142,21 +142,21 @@ class AppColorsLight {
 
   static const Color notificationBackground = Color(0xFFF0F0F0);
 
-  static Color get backgroundTransparent => Colors.white.withOpacity(0.3);
+  static Color get backgroundTransparent => Colors.white.withValues(alpha: 0.3);
   static Color get surfaceTransparent => Colors.transparent;
-  static Color get overlayTransparent => Colors.white.withOpacity(0.7);
-  static Color get borderTransparent => Colors.black.withOpacity(0.2);
-  static Color get hoverTransparent => Colors.black.withOpacity(0.05);
+  static Color get overlayTransparent => Colors.white.withValues(alpha: 0.7);
+  static Color get borderTransparent => Colors.black.withValues(alpha: 0.2);
+  static Color get hoverTransparent => Colors.black.withValues(alpha: 0.05);
 
   static const List<Color> backgroundGradient = [
     Colors.white,
     Color(0xFFF8F8F8),
   ];
 
-  static Color get cardBackground => Colors.grey.shade100.withOpacity(0.5);
+  static Color get cardBackground => Colors.grey.shade100.withValues(alpha: 0.5);
   static Color get cardBorder => Colors.grey.shade300;
   static Color get profileBorder => Colors.white;
-  static Color get videoBorder => Colors.black.withOpacity(0.2);
+  static Color get videoBorder => Colors.black.withValues(alpha: 0.2);
 
   static const Color sliderActive = Colors.amber;
   static const Color sliderInactive = Colors.black26;

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 const List<String> criticalErrors = [
   'ERROR',
   'CRITICAL',
@@ -20,17 +22,23 @@ void safeLog(String message, [String? tag]) {
   final taggedMessage = tag != null ? '[$tag] $message' : message;
 
   if (criticalErrors.any((error) => message.toLowerCase().contains(error.toLowerCase()))) {
-    print(taggedMessage);
+    if (kDebugMode) {
+      print(taggedMessage);
+    }
     return;
   }
 
   if (importantStates.any((state) => message.toLowerCase().contains(state.toLowerCase()))) {
-    print(taggedMessage);
+    if (kDebugMode) {
+      print(taggedMessage);
+    }
     return;
   }
 
   assert(() {
-    print(taggedMessage);
+    if (kDebugMode) {
+      print(taggedMessage);
+    }
     return true;
   }());
 }
@@ -38,7 +46,9 @@ void safeLog(String message, [String? tag]) {
 void debugLog(String message, [String? tag]) {
   assert(() {
     final taggedMessage = tag != null ? '[$tag] $message' : message;
-    print(taggedMessage);
+    if (kDebugMode) {
+      print(taggedMessage);
+    }
     return true;
   }());
 }

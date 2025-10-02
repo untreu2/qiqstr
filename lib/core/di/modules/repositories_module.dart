@@ -1,0 +1,39 @@
+import '../app_di.dart';
+import '../../../data/repositories/auth_repository.dart';
+import '../../../data/repositories/note_repository.dart';
+import '../../../data/repositories/user_repository.dart';
+import '../../../data/repositories/notification_repository.dart';
+import '../../../data/services/auth_service.dart';
+import '../../../data/services/validation_service.dart';
+import '../../../data/services/network_service.dart';
+import '../../../data/services/nostr_data_service.dart';
+
+/// Module for registering all repositories
+class RepositoriesModule extends DIModule {
+  @override
+  Future<void> register() async {
+    // Register repositories with their dependencies
+    AppDI.registerLazySingleton<AuthRepository>(() => AuthRepository(
+          authService: AppDI.get<AuthService>(),
+          validationService: AppDI.get<ValidationService>(),
+        ));
+
+    AppDI.registerLazySingleton<NoteRepository>(() => NoteRepository(
+          networkService: AppDI.get<NetworkService>(),
+          nostrDataService: AppDI.get<NostrDataService>(),
+        ));
+
+    AppDI.registerLazySingleton<UserRepository>(() => UserRepository(
+          authService: AppDI.get<AuthService>(),
+          validationService: AppDI.get<ValidationService>(),
+          nostrDataService: AppDI.get<NostrDataService>(),
+        ));
+
+    AppDI.registerLazySingleton<NotificationRepository>(() => NotificationRepository(
+          authService: AppDI.get<AuthService>(),
+          networkService: AppDI.get<NetworkService>(),
+          validationService: AppDI.get<ValidationService>(),
+          nostrDataService: AppDI.get<NostrDataService>(),
+        ));
+  }
+}

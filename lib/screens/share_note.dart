@@ -1,26 +1,23 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:bounce/bounce.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
-import '../services/in_memory_data_manager.dart';
+import '../core/di/app_di.dart';
+import '../data/services/nostr_data_service.dart';
+import '../data/repositories/user_repository.dart';
+import '../data/repositories/note_repository.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
-import '../services/data_service.dart';
 import '../models/user_model.dart';
-import '../widgets/quote_widget.dart';
-import '../widgets/reply_preview_widget.dart';
 import '../theme/theme_manager.dart';
+import '../widgets/back_button_widget.dart';
 
 class ShareNotePage extends StatefulWidget {
-  final DataService dataService;
   final String? initialText;
   final String? replyToNoteId;
 
   const ShareNotePage({
     super.key,
-    required this.dataService,
     this.initialText,
     this.replyToNoteId,
   });
@@ -77,9 +74,15 @@ class _ShareNotePageState extends State<ShareNotePage> {
   String _userSearchQuery = '';
   final Map<String, String> _mentionMap = {};
 
+  // New system services
+  late NostrDataService _dataService;
+  late UserRepository _userRepository;
+  late NoteRepository _noteRepository;
+
   @override
   void initState() {
     super.initState();
+    _initializeServices();
     _initializeController();
     _loadInitialData();
     _setupTextListener();
@@ -90,6 +93,12 @@ class _ShareNotePageState extends State<ShareNotePage> {
   void dispose() {
     _cleanupResources();
     super.dispose();
+  }
+
+  void _initializeServices() {
+    _dataService = AppDI.get<NostrDataService>();
+    _userRepository = AppDI.get<UserRepository>();
+    _noteRepository = AppDI.get<NoteRepository>();
   }
 
   void _initializeController() {
@@ -145,22 +154,40 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Future<void> _processMentions(String text) async {
-    final mentionRegex = RegExp(_mentionPattern);
-    final matches = mentionRegex.allMatches(text);
+    try {
+      final mentionRegex = RegExp(_mentionPattern);
+      final matches = mentionRegex.allMatches(text);
 
-    final npubs = matches.map((m) => m.group(1)!).toList();
-    final resolvedNames = await widget.dataService.resolveMentions(npubs);
+      final npubs = matches.map((m) => m.group(1)!).toList();
 
-    String newText = text;
-    for (var match in matches.toList().reversed) {
-      final npub = match.group(1)!;
-      final username = _formatUsername(resolvedNames[npub] ?? npub.substring(0, _npubPreviewLength));
-      final mentionKey = '@$username';
-      _mentionMap[mentionKey] = 'nostr:$npub';
-      newText = newText.replaceRange(match.start, match.end, mentionKey);
+      // Use new system for mention resolution - fetch user profiles
+      final Map<String, String> resolvedNames = {};
+      for (final npub in npubs) {
+        try {
+          final userResult = await _userRepository.getUserProfile(npub);
+          if (userResult.isSuccess && userResult.data != null) {
+            resolvedNames[npub] = userResult.data!.name;
+          } else {
+            resolvedNames[npub] = npub.substring(0, _npubPreviewLength);
+          }
+        } catch (e) {
+          resolvedNames[npub] = npub.substring(0, _npubPreviewLength);
+        }
+      }
+
+      String newText = text;
+      for (var match in matches.toList().reversed) {
+        final npub = match.group(1)!;
+        final username = _formatUsername(resolvedNames[npub] ?? npub.substring(0, _npubPreviewLength));
+        final mentionKey = '@$username';
+        _mentionMap[mentionKey] = 'nostr:$npub';
+        newText = newText.replaceRange(match.start, match.end, mentionKey);
+      }
+
+      _setTextContent(newText);
+    } catch (e) {
+      _showErrorSnackBar('$_errorInitializingText: ${e.toString()}');
     }
-
-    _setTextContent(newText);
   }
 
   String _formatUsername(String username) {
@@ -176,10 +203,11 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   Future<void> _loadUsers() async {
     try {
-      final box = InMemoryDataManager.instance.usersBox;
+      // Get cached users from NostrDataService
+      final cachedUsers = _dataService.cachedUsers;
       if (mounted) {
         setState(() {
-          _allUsers = box?.values.toList() ?? [];
+          _allUsers = cachedUsers;
         });
       }
     } catch (e) {
@@ -257,11 +285,17 @@ class _ShareNotePageState extends State<ShareNotePage> {
     }
 
     try {
-      final url = await widget.dataService.sendMedia(file.path!, _serverUrl);
-      if (mounted) {
-        setState(() {
-          _mediaUrls.add(url);
-        });
+      // Use legacy Blossom upload pattern
+      final mediaResult = await _dataService.sendMedia(file.path!, _serverUrl);
+      if (mediaResult.isSuccess && mediaResult.data != null) {
+        if (mounted) {
+          setState(() {
+            _mediaUrls.add(mediaResult.data!);
+          });
+        }
+        debugPrint('[ShareNotePage] Media uploaded successfully: ${mediaResult.data}');
+      } else {
+        throw Exception(mediaResult.error ?? 'Upload failed');
       }
     } catch (e) {
       _showErrorSnackBar('$_errorUploadingFile ${file.name}: ${e.toString()}');
@@ -340,68 +374,43 @@ class _ShareNotePageState extends State<ShareNotePage> {
     final mediaPart = _mediaUrls.isNotEmpty ? "\n\n${_mediaUrls.join("\n")}" : "";
 
     String quotePart = "";
-    if (hasQuote) {
-      quotePart = "";
+    if (hasQuote && widget.initialText != null) {
+      // Convert hex ID to nostr:note1 format and add as text
+      final hexId = widget.initialText!.replaceFirst('nostr:', '');
+      try {
+        final note1Id = encodeBasicBech32(hexId, 'note');
+        quotePart = "\n\nnostr:$note1Id";
+        debugPrint('[ShareNotePage] Added quote as text: nostr:$note1Id');
+      } catch (e) {
+        debugPrint('[ShareNotePage] Error encoding hex to note1: $e');
+        quotePart = "\n\nnostr:$hexId"; // Fallback to original
+      }
     }
 
     return "$noteText$mediaPart$quotePart".trim();
   }
 
-  Future<void> _sendQuoteNote(String content) async {
-    if (widget.initialText == null || !widget.initialText!.startsWith('nostr:')) {
-      throw Exception('Invalid quote content');
-    }
-
-    final quotedEventBech32 = widget.initialText!.replaceFirst('nostr:', '');
-
-    try {
-      String? quotedEventId;
-      String? quotedEventPubkey;
-
-      if (quotedEventBech32.startsWith('note1')) {
-        quotedEventId = _decodeNote1(quotedEventBech32);
-      } else if (quotedEventBech32.startsWith('nevent1')) {
-        final decoded = _decodeNevent1(quotedEventBech32);
-        quotedEventId = decoded['eventId'];
-        quotedEventPubkey = decoded['pubkey'];
-      }
-
-      if (quotedEventId == null) {
-        throw Exception('Could not decode quoted event ID');
-      }
-
-      await widget.dataService.sendQuote(quotedEventId, quotedEventPubkey, content);
-    } catch (e) {
-      throw Exception('Failed to send quote: $e');
-    }
-  }
-
-  String? _decodeNote1(String note1) {
-    try {
-      return note1;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  Map<String, String?> _decodeNevent1(String nevent1) {
-    try {
-      return {
-        'eventId': nevent1,
-        'pubkey': null,
-      };
-    } catch (e) {
-      return {'eventId': null, 'pubkey': null};
-    }
-  }
-
   Future<void> _sendNote(String content) async {
     if (_isReply()) {
-      await widget.dataService.sendReply(widget.replyToNoteId!, content);
-    } else if (_hasQuoteContent()) {
-      await _sendQuoteNote(content);
+      // Use new system for reply posting
+      final result = await _noteRepository.postReply(
+        content: content,
+        rootId: widget.replyToNoteId!,
+        parentAuthor: 'unknown',
+        relayUrls: ['wss://relay.damus.io'],
+      );
+
+      if (result.isError) {
+        throw Exception(result.error ?? 'Failed to post reply');
+      }
     } else {
-      await widget.dataService.shareNote(content);
+      // Always send as regular note (quote is now just text in content)
+      debugPrint('[ShareNotePage] Sending as regular note with content: ${content.length > 100 ? content.substring(0, 100) : content}...');
+      final result = await _noteRepository.postNote(content: content);
+
+      if (result.isError) {
+        throw Exception(result.error ?? 'Failed to post note');
+      }
     }
   }
 
@@ -549,7 +558,24 @@ class _ShareNotePageState extends State<ShareNotePage> {
     final text = _noteController.text;
     final username = _formatUsername(user.name);
     final mentionKey = '@$username';
-    final npubBech32 = encodeBasicBech32(user.npub, 'npub');
+
+    // Use hex pubkey if available, otherwise try to convert npub to hex
+    String npubBech32;
+    if (user.pubkeyHex.isNotEmpty) {
+      // Use hex pubkey to encode to npub format
+      npubBech32 = encodeBasicBech32(user.pubkeyHex, 'npub');
+    } else if (user.npub.startsWith('npub1')) {
+      // Already in bech32 format, use directly
+      npubBech32 = user.npub;
+    } else {
+      // Fallback: try to encode assuming it's hex
+      try {
+        npubBech32 = encodeBasicBech32(user.npub, 'npub');
+      } catch (e) {
+        // If all fails, use the raw value
+        npubBech32 = user.npub;
+      }
+    }
 
     _mentionMap[mentionKey] = 'nostr:$npubBech32';
 
@@ -601,7 +627,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
       body: Stack(
         children: [
           _buildMainScaffold(),
-          _buildFloatingBackButton(context),
+          const BackButtonWidget(),
         ],
       ),
     );
@@ -627,64 +653,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
     return AppBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
-      leading: _buildAppBarBackButton(),
+      leading: const BackButtonWidget(type: BackButtonType.appBar),
       actions: [_buildAppBarActions()],
-    );
-  }
-
-  Widget _buildAppBarBackButton() {
-    return Padding(
-      padding: const EdgeInsets.only(left: 8.0),
-      child: Semantics(
-        label: 'Go back to previous screen',
-        button: true,
-        child: IconButton(
-          icon: Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: context.colors.textPrimary,
-            size: 20,
-          ),
-          onPressed: () => Navigator.pop(context),
-          tooltip: 'Go back',
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFloatingBackButton(BuildContext context) {
-    final double topPadding = MediaQuery.of(context).padding.top;
-
-    return Positioned(
-      top: topPadding + 8,
-      left: 16,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(25.0),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: context.colors.backgroundTransparent,
-              border: Border.all(
-                color: context.colors.borderLight,
-                width: 1.5,
-              ),
-              borderRadius: BorderRadius.circular(25.0),
-            ),
-            child: Bounce(
-              scaleFactor: 0.85,
-              onTap: () => Navigator.pop(context),
-              behavior: HitTestBehavior.opaque,
-              child: Icon(
-                Icons.arrow_back,
-                color: context.colors.textSecondary,
-                size: 20,
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -824,9 +794,27 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Widget _buildReplyPreview() {
-    return ReplyPreviewWidget(
-      noteId: widget.replyToNoteId!,
-      dataService: widget.dataService,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.colors.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: context.colors.border),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.reply, size: 16, color: context.colors.textSecondary),
+          const SizedBox(width: 8),
+          Text(
+            'Replying to note',
+            style: TextStyle(
+              color: context.colors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -935,11 +923,26 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Widget _buildQuoteWidget() {
+    if (widget.initialText == null || !widget.initialText!.startsWith('nostr:')) {
+      return const SizedBox.shrink();
+    }
+
     return Padding(
       padding: const EdgeInsets.only(top: 16),
-      child: QuoteWidget(
-        bech32: widget.initialText!.replaceFirst('nostr:', ''),
-        dataService: widget.dataService,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: context.colors.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: context.colors.border),
+        ),
+        child: Text(
+          'Quoting: ${widget.initialText!.replaceFirst('nostr:', '').substring(0, 8)}...',
+          style: TextStyle(
+            color: context.colors.textSecondary,
+            fontSize: 12,
+          ),
+        ),
       ),
     );
   }

@@ -1,133 +1,79 @@
-import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:provider/provider.dart';
-import 'package:carbon_icons/carbon_icons.dart';
-import 'package:qiqstr/widgets/note_list_widget.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:qiqstr/widgets/note_list_widget.dart' as widgets;
 import 'package:qiqstr/widgets/sidebar_widget.dart';
-import 'package:qiqstr/services/data_service.dart';
-import 'package:qiqstr/services/data_service_manager.dart';
-import 'package:qiqstr/providers/user_provider.dart';
 import '../theme/theme_manager.dart';
+import '../models/note_model.dart';
+import '../models/user_model.dart';
+import '../core/ui/ui_state_builder.dart';
+import '../core/di/app_di.dart';
+import '../presentation/providers/viewmodel_provider.dart';
+import '../presentation/viewmodels/feed_viewmodel.dart';
+import '../data/repositories/auth_repository.dart';
+import '../data/repositories/user_repository.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
-  final DataService? dataService;
-  const FeedPage({Key? key, required this.npub, this.dataService}) : super(key: key);
+  const FeedPage({super.key, required this.npub});
 
   @override
   FeedPageState createState() => FeedPageState();
 }
 
 class FeedPageState extends State<FeedPage> {
-  late DataService dataService;
-  bool isLoading = true;
-  String? errorMessage;
-  bool isFirstOpen = false;
-
   late ScrollController _scrollController;
   bool _showAppBar = true;
-  NoteViewMode _currentViewMode = NoteViewMode.text;
+  bool isFirstOpen = false;
+
+  // Legacy interface requirements
+  final ValueNotifier<List<NoteModel>> _notesNotifier = ValueNotifier([]);
+  final Map<String, UserModel> _profiles = {};
+
+  UserModel? _currentUser;
+  StreamSubscription<UserModel>? _userStreamSubscription;
+  late UserRepository _userRepository;
 
   @override
   void initState() {
     super.initState();
-
-    dataService = widget.dataService ??
-        DataServiceManager.instance.getOrCreateService(
-          npub: widget.npub,
-          dataType: DataType.feed,
-          onNewNote: (_) {
-            if (mounted) setState(() {});
-          },
-          onReactionsUpdated: (_, __) {
-            if (mounted) setState(() {});
-          },
-          onRepliesUpdated: (_, __) {
-            if (mounted) setState(() {});
-          },
-          onRepostsUpdated: (_, __) {
-            if (mounted) setState(() {});
-          },
-          onReactionCountUpdated: (_, __) {
-            if (mounted) setState(() {});
-          },
-          onReplyCountUpdated: (_, __) {
-            if (mounted) setState(() {});
-          },
-          onRepostCountUpdated: (_, __) {
-            if (mounted) setState(() {});
-          },
-        );
+    _userRepository = AppDI.get<UserRepository>();
     _scrollController = ScrollController()..addListener(_scrollListener);
+    _loadInitialUser();
+    _setupUserStreamListener();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeProgressively();
       _checkFirstOpen();
     });
   }
 
-  Future<void> _initializeProgressively() async {
-    try {
-      final userProvider = Provider.of<UserProvider>(context, listen: false);
-
-      if (widget.dataService != null) {
-        try {
-          await userProvider.initialize();
-          if (userProvider.currentUserNpub == widget.npub) {
-            await userProvider.setCurrentUser(widget.npub);
-          }
-        } catch (e) {
-          print('[FeedPage] UserProvider initialization error: $e');
-        }
-        print('[FeedPage] Using provided DataService - initialization complete');
-        setState(() {
-          isLoading = false;
-        });
-      } else {
-        try {
-          userProvider.initialize().catchError((e) => print('[FeedPage] UserProvider error: $e'));
-
-          await dataService.initializeLightweight();
-
-          if (mounted) {
-            setState(() {
-              isLoading = false;
-            });
-          }
-
-          Future.microtask(() async {
-            try {
-              await dataService.initializeHeavyOperations();
-              await dataService.initializeConnections();
-            } catch (e) {
-              print('[FeedPage] Background initialization error: $e');
-            }
+  void _setupUserStreamListener() {
+    _userStreamSubscription = _userRepository.currentUserStream.listen(
+      (updatedUser) {
+        debugPrint('[FeedPage] Received updated user data from stream: ${updatedUser.name}');
+        if (mounted) {
+          setState(() {
+            _currentUser = updatedUser;
+            // Update profiles map for consistency
+            _profiles[updatedUser.npub] = updatedUser;
           });
-
-          if (userProvider.currentUserNpub == widget.npub) {
-            Future.microtask(() => userProvider.setCurrentUser(widget.npub));
-          }
-        } catch (e) {
-          print('[FeedPage] Fast initialization error: $e');
-          if (mounted) {
-            setState(() {
-              errorMessage = 'Failed to initialize feed';
-              isLoading = false;
-            });
-          }
         }
-      }
-    } catch (e) {
-      print('[FeedPage] Progressive initialization error: $e');
-      if (mounted) {
-        setState(() {
-          errorMessage = 'Failed to initialize feed';
-          isLoading = false;
-        });
-      }
+      },
+      onError: (error) {
+        debugPrint('[FeedPage] Error in user stream: $error');
+      },
+    );
+  }
+
+  Future<void> _loadInitialUser() async {
+    final user = await _getCurrentUser();
+    if (mounted && user != null) {
+      setState(() {
+        _currentUser = user;
+        _profiles[user.npub] = user;
+      });
     }
   }
 
@@ -142,16 +88,13 @@ class FeedPageState extends State<FeedPage> {
         _showAppBar = true;
       });
     }
-
-    dataService.onScrollPositionChanged(
-      _scrollController.position.pixels,
-      _scrollController.position.maxScrollExtent,
-    );
   }
 
   @override
   void dispose() {
+    _userStreamSubscription?.cancel();
     _scrollController.dispose();
+    _notesNotifier.dispose();
     super.dispose();
   }
 
@@ -169,7 +112,7 @@ class FeedPageState extends State<FeedPage> {
           await prefs.setBool('feed_page_opened', true);
         }
       } catch (e) {
-        print('[FeedPage] First open check error: $e');
+        // Silent error - not critical
       }
     });
   }
@@ -190,131 +133,102 @@ class FeedPageState extends State<FeedPage> {
     }
   }
 
-  Widget _buildViewModeToggle(dynamic colors) {
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.surface.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: colors.border.withOpacity(0.3),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildToggleButton(
-            icon: CarbonIcons.list,
-            isSelected: _currentViewMode == NoteViewMode.text,
-            onTap: () => _setViewMode(NoteViewMode.text),
-            colors: colors,
-          ),
-          _buildToggleButton(
-            icon: CarbonIcons.grid,
-            isSelected: _currentViewMode == NoteViewMode.grid,
-            onTap: () => _setViewMode(NoteViewMode.grid),
-            colors: colors,
-          ),
-        ],
-      ),
-    );
-  }
+  Future<UserModel?> _getCurrentUser() async {
+    try {
+      final authRepository = AppDI.get<AuthRepository>();
+      final userRepository = AppDI.get<UserRepository>();
 
-  Widget _buildToggleButton({
-    required IconData icon,
-    required bool isSelected,
-    required VoidCallback onTap,
-    required dynamic colors,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 36,
-        height: 32,
-        decoration: BoxDecoration(
-          color: isSelected ? colors.primary.withOpacity(0.2) : Colors.transparent,
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Icon(
-          icon,
-          size: 18,
-          color: isSelected ? colors.primary : colors.iconSecondary,
-        ),
-      ),
-    );
-  }
+      final npubResult = await authRepository.getCurrentUserNpub();
+      if (npubResult.isError || npubResult.data == null) {
+        return null;
+      }
 
-  void _setViewMode(NoteViewMode mode) {
-    if (_currentViewMode != mode) {
-      setState(() {
-        _currentViewMode = mode;
-      });
+      final userResult = await userRepository.getUserProfile(npubResult.data!);
+      return userResult.fold(
+        (user) => user,
+        (error) => null,
+      );
+    } catch (e) {
+      debugPrint('Error getting current user: $e');
+      return null;
     }
   }
 
   Widget _buildHeader(BuildContext context, double topPadding) {
     final colors = context.colors;
 
-    return ClipRRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
-        child: Container(
-          width: double.infinity,
-          color: colors.background.withOpacity(0.6),
-          padding: EdgeInsets.fromLTRB(16, topPadding + 4, 16, 8),
-          child: Column(
-            children: [
-              SizedBox(
-                height: 40,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Builder(
-                        builder: (context) => Consumer<UserProvider>(
-                          builder: (context, userProvider, child) {
-                            final user = userProvider.getUserOrDefault(widget.npub);
-                            return GestureDetector(
-                              onTap: () => Scaffold.of(context).openDrawer(),
-                              child: CircleAvatar(
-                                radius: 16,
-                                backgroundColor: colors.avatarPlaceholder,
-                                backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
-                                child: user.profileImage.isEmpty ? Icon(Icons.person, color: colors.iconPrimary, size: 18) : null,
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                    Center(
-                      child: GestureDetector(
-                        onTap: () {
-                          _scrollController.animateTo(
-                            0,
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeOut,
-                          );
-                        },
-                        child: SvgPicture.asset(
-                          'assets/main_icon_white.svg',
-                          width: 30,
-                          height: 30,
-                          color: colors.iconPrimary,
-                        ),
-                      ),
-                    ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: _buildViewModeToggle(colors),
-                    ),
-                  ],
+    return Container(
+      width: double.infinity,
+      color: colors.background.withValues(alpha: 0.8),
+      padding: EdgeInsets.fromLTRB(16, topPadding + 4, 16, 8),
+      child: Column(
+        children: [
+          SizedBox(
+            height: 40,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: GestureDetector(
+                    onTap: () => Scaffold.of(context).openDrawer(),
+                    child: _currentUser != null
+                        ? Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: colors.avatarPlaceholder,
+                              image: _currentUser!.profileImage.isNotEmpty == true
+                                  ? DecorationImage(
+                                      image: NetworkImage(_currentUser!.profileImage),
+                                      fit: BoxFit.cover,
+                                    )
+                                  : null,
+                            ),
+                            child: _currentUser!.profileImage.isEmpty != false
+                                ? Icon(
+                                    Icons.person,
+                                    size: 20,
+                                    color: colors.textSecondary,
+                                  )
+                                : null,
+                          )
+                        : Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: colors.avatarPlaceholder,
+                            ),
+                            child: CircularProgressIndicator(
+                              color: colors.accent,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                  ),
                 ),
-              ),
-            ],
+                Center(
+                  child: GestureDetector(
+                    onTap: () {
+                      _scrollController.animateTo(
+                        0,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOut,
+                      );
+                    },
+                    child: SvgPicture.asset(
+                      'assets/main_icon_white.svg',
+                      width: 30,
+                      height: 30,
+                      colorFilter: ColorFilter.mode(colors.iconPrimary, BlendMode.srcIn),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -325,49 +239,100 @@ class FeedPageState extends State<FeedPage> {
     final double headerHeight = topPadding + 55;
     final colors = context.colors;
 
-    return Scaffold(
-      backgroundColor: colors.background,
-      drawer: const SidebarWidget(),
-      body: errorMessage != null
-          ? Center(
-              child: Text(
-                errorMessage!,
-                style: TextStyle(color: colors.textSecondary),
-              ),
-            )
-          : RefreshIndicator(
-              onRefresh: () async {
-                Future.microtask(() => dataService.refreshNotes());
-              },
-              child: CustomScrollView(
-                key: const PageStorageKey<String>('feed_scroll'),
-                controller: _scrollController,
-                physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                cacheExtent: 1500,
-                slivers: [
-                  SliverPersistentHeader(
-                    floating: true,
-                    delegate: _PinnedHeaderDelegate(
-                      height: headerHeight,
-                      child: AnimatedOpacity(
-                        opacity: _showAppBar ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 300),
-                        child: _buildHeader(context, topPadding),
+    return ViewModelBuilder<FeedViewModel>(
+      create: () => AppDI.get<FeedViewModel>(),
+      onModelReady: (viewModel) {
+        // Initialize once when ViewModel is ready
+        viewModel.initializeWithUser(widget.npub);
+      },
+      builder: (context, viewModel) {
+        return Scaffold(
+          backgroundColor: colors.background,
+          drawer: const SidebarWidget(),
+          body: UIStateBuilder<List<NoteModel>>(
+            state: viewModel.feedState,
+            builder: (context, notes) {
+              return RefreshIndicator(
+                onRefresh: viewModel.refreshFeed,
+                child: CustomScrollView(
+                  key: const PageStorageKey<String>('feed_scroll'),
+                  controller: _scrollController,
+                  physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                  cacheExtent: 1500,
+                  slivers: [
+                    SliverPersistentHeader(
+                      floating: true,
+                      delegate: _PinnedHeaderDelegate(
+                        height: headerHeight,
+                        child: AnimatedOpacity(
+                          opacity: _showAppBar ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 300),
+                          child: _buildHeader(context, topPadding),
+                        ),
                       ),
                     ),
+                    const SliverToBoxAdapter(
+                      child: SizedBox(height: 8),
+                    ),
+                    // Use existing NoteListWidget with notes
+                    Builder(
+                      builder: (context) {
+                        // Update notesNotifier when notes change
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (_notesNotifier.value != notes) {
+                            _notesNotifier.value = notes;
+                          }
+                        });
+
+                        return widgets.NoteListWidget(
+                          notes: notes,
+                          currentUserNpub: viewModel.currentUserNpub,
+                          notesNotifier: _notesNotifier,
+                          profiles: _profiles,
+                          isLoading: viewModel.isLoadingMore,
+                          hasMore: viewModel.canLoadMore,
+                          onLoadMore: notes.length >= 20 ? viewModel.loadMoreNotes : null,
+                          scrollController: _scrollController,
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              );
+            },
+            loading: () => const Center(
+              child: CircularProgressIndicator(),
+            ),
+            error: (message) => Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    message,
+                    style: TextStyle(color: colors.textSecondary),
+                    textAlign: TextAlign.center,
                   ),
-                  const SliverToBoxAdapter(
-                    child: SizedBox(height: 8),
-                  ),
-                  NoteListWidgetFactory.create(
-                    npub: widget.npub,
-                    dataType: DataType.feed,
-                    sharedDataService: dataService,
-                    viewMode: _currentViewMode,
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () {
+                      final viewModel = context.read<FeedViewModel>();
+                      viewModel.refreshFeed();
+                    },
+                    child: const Text('Retry'),
                   ),
                 ],
               ),
             ),
+            empty: (message) => Center(
+              child: Text(
+                message ?? 'Your feed is empty',
+                style: TextStyle(color: colors.textSecondary),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

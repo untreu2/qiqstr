@@ -15,7 +15,7 @@ class PhotoViewerWidget extends StatefulWidget {
   });
 
   @override
-  _PhotoViewerWidgetState createState() => _PhotoViewerWidgetState();
+  State<PhotoViewerWidget> createState() => _PhotoViewerWidgetState();
 }
 
 class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
@@ -69,7 +69,7 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
                       ),
                     ),
                     child: Container(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                     ),
                   ),
                 ),
@@ -119,9 +119,9 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withValues(alpha: 0.2),
                         width: 1.5,
                       ),
                       borderRadius: BorderRadius.circular(25.0),

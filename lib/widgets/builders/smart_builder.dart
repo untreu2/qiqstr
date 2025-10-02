@@ -1,16 +1,16 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import '../../providers/user_provider.dart';
-import '../../providers/interactions_provider.dart';
+import '../../core/di/app_di.dart';
+import '../../data/repositories/user_repository.dart';
 
+/// Smart builder widget that efficiently rebuilds when specific data changes
 class SmartBuilder<T extends Listenable> extends StatefulWidget {
   const SmartBuilder({
-    Key? key,
+    super.key,
     required this.listenable,
     required this.builder,
     this.selector,
     this.child,
-  }) : super(key: key);
+  });
 
   final T listenable;
   final Widget Function(BuildContext context, Widget? child) builder;
@@ -66,13 +66,15 @@ class _SmartBuilderState<T extends Listenable> extends State<SmartBuilder<T>> {
   }
 }
 
+/// Builder for user-related widgets
+/// Uses UserRepository stream for efficient user data updates
 class UserBuilder extends StatelessWidget {
   const UserBuilder({
-    Key? key,
+    super.key,
     required this.userId,
     required this.builder,
     this.child,
-  }) : super(key: key);
+  });
 
   final String userId;
   final Widget Function(BuildContext context, Widget? child) builder;
@@ -80,26 +82,24 @@ class UserBuilder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SmartBuilder(
-      listenable: UserProvider.instance,
-      selector: (previous, current) {
-        final prevUser = (previous).getUser(userId);
-        final currUser = (current).getUser(userId);
-        return prevUser != currUser;
+    return StreamBuilder(
+      stream: AppDI.get<UserRepository>().currentUserStream,
+      builder: (context, snapshot) {
+        return builder(context, child);
       },
-      builder: builder,
-      child: child,
     );
   }
 }
 
+/// Builder for interaction-related widgets (reactions, replies, etc.)
+/// Simplified for MVVM architecture - interactions are now handled in ViewModels
 class InteractionBuilder extends StatelessWidget {
   const InteractionBuilder({
-    Key? key,
+    super.key,
     required this.noteId,
     required this.builder,
     this.child,
-  }) : super(key: key);
+  });
 
   final String noteId;
   final Widget Function(BuildContext context, Widget? child) builder;
@@ -107,30 +107,21 @@ class InteractionBuilder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SmartBuilder(
-      listenable: InteractionsProvider.instance,
-      selector: (previous, current) {
-        final prev = previous;
-        final curr = current;
-        return prev.getReactionCount(noteId) != curr.getReactionCount(noteId) ||
-            prev.getReplyCount(noteId) != curr.getReplyCount(noteId) ||
-            prev.getRepostCount(noteId) != curr.getRepostCount(noteId) ||
-            prev.getZapAmount(noteId) != curr.getZapAmount(noteId);
-      },
-      builder: builder,
-      child: child,
-    );
+    // In MVVM architecture, interactions are handled by ViewModels
+    // This builder is kept for compatibility but simplified
+    return builder(context, child);
   }
 }
 
+/// Multi-builder combining user and interaction data
 class MultiBuilder extends StatelessWidget {
   const MultiBuilder({
-    Key? key,
+    super.key,
     required this.userId,
     required this.noteId,
     required this.builder,
     this.child,
-  }) : super(key: key);
+  });
 
   final String userId;
   final String noteId;

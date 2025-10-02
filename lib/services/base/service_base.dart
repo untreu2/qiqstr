@@ -1,5 +1,6 @@
 import 'dart:async';
-import '../time_service.dart';
+
+import 'package:flutter/foundation.dart';
 
 abstract class ServiceBase {
   bool get isInitialized;
@@ -61,11 +62,15 @@ abstract class LifecycleService implements ServiceBase {
   Future<void> onClose();
 
   Future<void> onInitializeError(Object error) async {
-    print('[${runtimeType}] Initialization error: $error');
+    if (kDebugMode) {
+      print('[$runtimeType] Initialization error: $error');
+    }
   }
 
   Future<void> onCloseError(Object error) async {
-    print('[${runtimeType}] Close error: $error');
+    if (kDebugMode) {
+      print('[$runtimeType] Close error: $error');
+    }
   }
 
   void addSubscription(StreamSubscription subscription) {
@@ -82,10 +87,10 @@ abstract class LifecycleService implements ServiceBase {
 
   void ensureInitialized() {
     if (!_isInitialized) {
-      throw StateError('Service ${runtimeType} is not initialized');
+      throw StateError('Service $runtimeType is not initialized');
     }
     if (_isClosed) {
-      throw StateError('Service ${runtimeType} is closed');
+      throw StateError('Service $runtimeType is closed');
     }
   }
 }

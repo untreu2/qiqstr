@@ -1,10 +1,6 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:nostr/nostr.dart';
-import 'package:qiqstr/services/data_service.dart';
-import 'package:qiqstr/services/data_service_manager.dart';
+import 'package:qiqstr/data/services/auth_service.dart';
 import 'package:qiqstr/screens/home_navigator.dart';
 import 'package:qiqstr/screens/edit_new_account_profile.dart';
 
@@ -14,21 +10,18 @@ class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
   @override
-  _LoginPageState createState() => _LoginPageState();
+  State<LoginPage> createState() => _LoginPageState();
 }
 
 class _LoginPageState extends State<LoginPage> {
   final TextEditingController _nsecController = TextEditingController();
   String _message = '';
   bool _isLoading = false;
-  DataService? _tempService;
-
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final AuthService _authService = AuthService.instance;
 
   @override
   void dispose() {
     _nsecController.dispose();
-    _tempService?.closeConnections();
     super.dispose();
   }
 
@@ -36,9 +29,17 @@ class _LoginPageState extends State<LoginPage> {
     if (_nsecController.text.trim().isEmpty) return;
     setState(() => _isLoading = true);
     try {
-      final nsecHex = Nip19.decodePrivkey(_nsecController.text.trim());
-      if (nsecHex.isEmpty) throw Exception('Invalid nsec format.');
-      await _login(nsecHex);
+      final result = await _authService.loginWithNsec(_nsecController.text.trim());
+      if (result.isSuccess) {
+        await _navigateToHome(result.data!);
+      } else {
+        if (mounted) {
+          setState(() {
+            _message = 'Error: ${result.error}';
+            _isLoading = false;
+          });
+        }
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -52,8 +53,17 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _createNewAccount() async {
     setState(() => _isLoading = true);
     try {
-      final keychain = Keychain.generate();
-      await _loginNewAccount(keychain.private);
+      final result = await _authService.createNewAccount();
+      if (result.isSuccess) {
+        await _navigateToProfileSetup(result.data!);
+      } else {
+        if (mounted) {
+          setState(() {
+            _message = 'Error: ${result.error}';
+            _isLoading = false;
+          });
+        }
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -64,73 +74,29 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  Future<void> _loginNewAccount(String nsecHex) async {
-    try {
-      final keychain = Keychain(nsecHex);
-      final npubHex = keychain.public;
-
-      await _secureStorage.write(key: 'privateKey', value: nsecHex);
-      await _secureStorage.write(key: 'npub', value: npubHex);
-
-      final dataService = DataServiceManager.instance.getOrCreateService(
-        npub: npubHex,
-        dataType: DataType.feed,
-      );
-      await dataService.initialize();
-
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => EditNewAccountProfilePage(
-              npub: npubHex,
-              dataService: dataService,
-            ),
+  Future<void> _navigateToProfileSetup(String npub) async {
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => EditNewAccountProfilePage(
+            npub: npub,
           ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _message = 'Error: Account creation failed.';
-          _isLoading = false;
-        });
-      }
+        ),
+      );
     }
   }
 
-  Future<void> _login(String nsecHex) async {
-    try {
-      final keychain = Keychain(nsecHex);
-      final npubHex = keychain.public;
-
-      await _secureStorage.write(key: 'privateKey', value: nsecHex);
-      await _secureStorage.write(key: 'npub', value: npubHex);
-
-      final dataService = DataServiceManager.instance.getOrCreateService(
-        npub: npubHex,
-        dataType: DataType.feed,
-      );
-      await dataService.initialize();
-
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => HomeNavigator(
-              npub: npubHex,
-              dataService: dataService,
-            ),
+  Future<void> _navigateToHome(String npub) async {
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => HomeNavigator(
+            npub: npub,
           ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _message = 'Error: Login failed.';
-          _isLoading = false;
-        });
-      }
+        ),
+      );
     }
   }
 
@@ -144,7 +110,7 @@ class _LoginPageState extends State<LoginPage> {
             'assets/main_icon_white.svg',
             height: 100,
             width: 100,
-            color: context.colors.textPrimary,
+            colorFilter: ColorFilter.mode(context.colors.textPrimary, BlendMode.srcIn),
           ),
           const SizedBox(height: 40),
           TextField(

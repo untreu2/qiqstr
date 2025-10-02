@@ -87,8 +87,12 @@ List<T> mergeSortedLists<T>(List<T> list1, List<T> list2, int Function(T, T) com
     }
   }
 
-  while (i < list1.length) result.add(list1[i++]);
-  while (j < list2.length) result.add(list2[j++]);
+  while (i < list1.length) {
+    result.add(list1[i++]);
+  }
+  while (j < list2.length) {
+    result.add(list2[j++]);
+  }
 
   return result;
 }

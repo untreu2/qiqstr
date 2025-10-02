@@ -3,18 +3,19 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:bounce/bounce.dart';
 import '../models/note_model.dart';
-import '../services/data_service.dart';
 import '../models/user_model.dart';
 import '../theme/theme_manager.dart';
+import '../core/di/app_di.dart';
+import '../data/repositories/user_repository.dart';
+import '../data/services/nostr_data_service.dart';
+import '../screens/profile_page.dart';
 
 class NoteStatisticsPage extends StatefulWidget {
   final NoteModel note;
-  final DataService dataService;
 
   const NoteStatisticsPage({
     super.key,
     required this.note,
-    required this.dataService,
   });
 
   @override
@@ -22,15 +23,70 @@ class NoteStatisticsPage extends StatefulWidget {
 }
 
 class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
-  Future<UserModel> _getUser(String npub) async {
-    final cached = await widget.dataService.getCachedUserProfile(npub);
-    return UserModel.fromCachedProfile(npub, cached);
+  late final UserRepository _userRepository;
+  late final NostrDataService _nostrDataService;
+
+  @override
+  void initState() {
+    super.initState();
+    _userRepository = AppDI.get<UserRepository>();
+    _nostrDataService = AppDI.get<NostrDataService>();
+
+    // IMMEDIATELY fetch fresh interactions for this note when stats page opens
+    _fetchInteractionsForNote();
   }
 
-  void _navigateToProfile(String npub) {
+  /// Fetch fresh interactions for the note
+  Future<void> _fetchInteractionsForNote() async {
+    try {
+      debugPrint(' [NoteStatisticsPage] Fetching fresh interactions for note: ${widget.note.id}');
+      await _nostrDataService.fetchInteractionsForNotes([widget.note.id]);
+
+      // Update UI after fetching
+      if (mounted) {
+        setState(() {});
+      }
+
+      debugPrint(' [NoteStatisticsPage] Fresh interactions fetched');
+    } catch (e) {
+      debugPrint(' [NoteStatisticsPage] Error fetching interactions: $e');
+    }
+  }
+
+  Future<UserModel> _getUser(String npub) async {
+    final result = await _userRepository.getUserProfile(npub);
+    return result.fold(
+      (user) => user,
+      (error) => UserModel(
+        pubkeyHex: npub,
+        name: '',
+        about: '',
+        profileImage: '',
+        nip05: '',
+        banner: '',
+        lud16: '',
+        website: '',
+        updatedAt: DateTime.now(),
+      ),
+    );
+  }
+
+  Future<void> _navigateToProfile(String npub) async {
     try {
       if (mounted) {
-        widget.dataService.openUserProfile(context, npub);
+        debugPrint('[NoteStatisticsPage] Navigating to profile: $npub');
+
+        // Get user profile for navigation
+        final user = await _getUser(npub);
+
+        if (mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ProfilePage(user: user),
+            ),
+          );
+        }
       }
     } catch (e) {
       debugPrint('[NoteStatisticsPage] Navigate to profile error: $e');
@@ -84,7 +140,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                       children: [
                         if (zapAmount != null)
                           Text(
-                            '⚡ $zapAmount sats',
+                            ' $zapAmount sats',
                             style: const TextStyle(
                               color: Color(0xFFECB200),
                               fontSize: 15,
@@ -176,19 +232,34 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final reactions = widget.dataService.reactionsMap[widget.note.id] ?? [];
-    final reposts = widget.dataService.repostsMap[widget.note.id] ?? [];
-    final zaps = widget.dataService.zapsMap[widget.note.id] ?? [];
+    // Get real interaction data from NostrDataService
+    final reactions = _nostrDataService.getReactionsForNote(widget.note.id);
+    final reposts = _nostrDataService.getRepostsForNote(widget.note.id);
+    final zaps = _nostrDataService.getZapsForNote(widget.note.id);
 
-    final reactionWidgets = reactions.map((r) => _buildEntry(npub: r.author, content: r.content)).toList();
+    debugPrint(
+        '[NoteStatisticsPage] Displaying interactions: ${reactions.length} reactions, ${reposts.length} reposts, ${zaps.length} zaps');
 
-    final repostWidgets = reposts.map((r) => _buildEntry(npub: r.repostedBy, content: '')).toList();
+    // Build interaction widgets
+    final reactionWidgets = reactions
+        .map((reaction) => _buildEntry(
+              npub: reaction.author,
+              content: reaction.content,
+            ))
+        .toList();
+
+    final repostWidgets = reposts
+        .map((repost) => _buildEntry(
+              npub: repost.author, // ReactionModel has author field
+              content: 'Reposted',
+            ))
+        .toList();
 
     final zapWidgets = zaps
-        .map((z) => _buildEntry(
-              npub: z.sender,
-              zapAmount: z.amount,
-              content: z.comment ?? '',
+        .map((zap) => _buildEntry(
+              npub: zap.sender,
+              content: zap.comment ?? '',
+              zapAmount: zap.amount,
             ))
         .toList();
 
@@ -208,10 +279,10 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                   unselectedLabelColor: context.colors.textTertiary,
                   indicatorWeight: 1.5,
                   labelPadding: const EdgeInsets.symmetric(vertical: 12),
-                  tabs: const [
-                    Tab(text: 'Reactions'),
-                    Tab(text: 'Reposts'),
-                    Tab(text: 'Zaps'),
+                  tabs: [
+                    Tab(text: 'Reactions (${reactions.length})'),
+                    Tab(text: 'Reposts (${reposts.length})'),
+                    Tab(text: 'Zaps (${zaps.length})'),
                   ],
                 ),
                 Expanded(

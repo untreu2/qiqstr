@@ -255,6 +255,39 @@ class NostrService {
     return event;
   }
 
+  static Event createBlossomAuthEvent({
+    required String content,
+    required String sha256Hash,
+    required int expiration,
+    required String privateKey,
+  }) {
+    final tags = [
+      ['t', 'upload'],
+      ['x', sha256Hash],
+      ['expiration', expiration.toString()],
+    ];
+
+    final cacheKey = _generateEventCacheKey(24242, content, privateKey, tags);
+
+    if (_eventCache.containsKey(cacheKey)) {
+      _cacheHits++;
+      return _eventCache[cacheKey]!;
+    }
+
+    _cacheMisses++;
+    _eventsCreated++;
+
+    final event = Event.from(
+      kind: 24242,
+      tags: tags,
+      content: content,
+      privkey: privateKey,
+    );
+
+    _addToEventCache(cacheKey, event);
+    return event;
+  }
+
   static Filter createNotesFilter({
     List<String>? authors,
     List<int>? kinds,
@@ -475,18 +508,20 @@ class NostrService {
   }) {
     List<List<String>> tags = [];
 
+    // Working format: 5-element e tags with empty relay URL
     if (replyId != null && replyId != rootId) {
-      tags.add(['e', rootId, '', 'root']);
-      tags.add(['e', replyId, '', 'reply']);
+      // Thread reply: both root and reply tags
+      tags.add(['e', rootId, '', 'root', parentAuthor]);
+      tags.add(['e', replyId, '', 'reply', parentAuthor]);
     } else {
-      tags.add(['e', rootId, '', 'root']);
+      // Direct reply to root
+      tags.add(['e', rootId, '', 'root', parentAuthor]);
     }
 
-    tags.add(['p', parentAuthor, '', 'mention']);
+    // Add p tag (2 elements only, no relay info)
+    tags.add(['p', parentAuthor]);
 
-    for (final relayUrl in relayUrls) {
-      tags.add(['r', relayUrl]);
-    }
+    // Note: NO r tags in working format!
 
     return tags;
   }
@@ -568,7 +603,10 @@ class NostrService {
 
   static String _generateEventCacheKey(int kind, String content, String privateKey, List<List<String>>? tags) {
     final tagsStr = tags?.map((tag) => tag.join(':')).join('|') ?? '';
-    return 'event_${kind}_${content.hashCode}_${privateKey.hashCode}_${tagsStr.hashCode}';
+    // SECURITY FIX: Use public key instead of private key for cache key
+    final keychain = Keychain(privateKey);
+    final publicKeyHash = keychain.public.hashCode;
+    return 'event_${kind}_${content.hashCode}_${publicKeyHash}_${tagsStr.hashCode}';
   }
 
   static String _generateFilterCacheKey(String type, Map<String, dynamic> params) {

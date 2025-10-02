@@ -1,14 +1,13 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:bounce/bounce.dart';
-import 'package:qiqstr/services/data_service.dart';
-import 'package:qiqstr/services/data_service_manager.dart';
-import 'package:qiqstr/services/memory_manager.dart';
-import 'package:qiqstr/widgets/note_list_widget.dart';
-import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/widgets/profile_info_widget.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
 import '../theme/theme_manager.dart';
+import '../models/user_model.dart';
+import '../models/note_model.dart';
+import '../widgets/profile_info_widget.dart';
+import '../widgets/back_button_widget.dart';
+import 'package:qiqstr/widgets/note_list_widget.dart' as widgets;
+import '../core/di/app_di.dart';
+import '../presentation/viewmodels/profile_viewmodel.dart';
+import '../core/ui/ui_state_builder.dart';
 
 class ProfilePage extends StatefulWidget {
   final UserModel user;
@@ -20,28 +19,39 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  DataService? dataService;
   late ScrollController _scrollController;
-  bool _profileInfoLoaded = false;
-  String? _userHexKey;
+  late ProfileViewModel _profileViewModel;
+
+  // Legacy interface requirements for NoteListWidget
+  final ValueNotifier<List<NoteModel>> _notesNotifier = ValueNotifier([]);
+  final Map<String, UserModel> _profiles = {};
 
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController()..addListener(_scrollListener);
-    _userHexKey = _convertNpubToHex(widget.user.npub);
-    _initializeImmediately();
+    _scrollController = ScrollController();
+
+    // Initialize ProfileViewModel
+    _profileViewModel = AppDI.get<ProfileViewModel>();
+    _profileViewModel.initialize();
+
+    // Add this user to profiles map for legacy interface
+    _profiles[widget.user.npub] = widget.user;
+
+    // Initialize ProfileViewModel with user and load notes
+    _profileViewModel.initializeWithUser(widget.user.npub);
   }
 
   @override
   void dispose() {
     _scrollController.dispose();
-
-    if (_userHexKey != null || widget.user.npub.isNotEmpty) {
-      DataServiceManager.instance.releaseProfileService(_userHexKey ?? widget.user.npub);
-    }
-
+    _notesNotifier.dispose();
+    _profileViewModel.dispose();
     super.dispose();
+  }
+
+  void _onRetry() {
+    _profileViewModel.onRetry();
   }
 
   @override
@@ -50,187 +60,18 @@ class _ProfilePageState extends State<ProfilePage> {
       backgroundColor: context.colors.background,
       body: Stack(
         children: [
-          _buildStagedContent(context),
-          _buildFloatingBackButton(context),
+          _buildContent(context),
+          const BackButtonWidget.floating(
+            topOffset: 6,
+          ),
         ],
       ),
     );
   }
 
-  String? _convertNpubToHex(String npub) {
-    try {
-      if (npub.startsWith('npub1')) {
-        return decodeBasicBech32(npub, 'npub');
-      } else if (_isValidHex(npub)) {
-        return npub;
-      }
-    } catch (e) {
-      print('[ProfilePage] Error converting npub to hex: $e');
-    }
-    return npub;
-  }
-
-  bool _isValidHex(String value) {
-    if (value.isEmpty || value.length != 64) return false;
-    return RegExp(r'^[0-9a-fA-F]+$').hasMatch(value);
-  }
-
-  void _initializeImmediately() {
-    Future.microtask(() {
-      try {
-        final memoryManager = MemoryManager.instance;
-        memoryManager.prepareForProfileTransition();
-        memoryManager.optimizeForProfileView();
-      } catch (e) {
-        print('[ProfilePage] Memory optimization error: $e');
-      }
-    });
-
-    _createDataServiceEarly();
-    if (mounted) {
-      setState(() {
-        _profileInfoLoaded = true;
-      });
-    }
-
-    _startNotesLoading();
-  }
-
-  Future<void> _createDataServiceEarly() async {
-    try {
-      dataService = DataServiceManager.instance.getOrCreateService(
-        npub: _userHexKey ?? widget.user.npub,
-        dataType: DataType.profile,
-        onNewNote: (_) {
-          if (mounted) setState(() {});
-        },
-        onReactionsUpdated: (_, __) {
-          if (mounted) setState(() {});
-        },
-        onRepliesUpdated: (_, __) {
-          if (mounted) setState(() {});
-        },
-        onRepostsUpdated: (_, __) {
-          if (mounted) setState(() {});
-        },
-        onReactionCountUpdated: (_, __) {
-          if (mounted) setState(() {});
-        },
-        onReplyCountUpdated: (_, __) {
-          if (mounted) setState(() {});
-        },
-        onRepostCountUpdated: (_, __) {
-          if (mounted) setState(() {});
-        },
-      );
-
-      await dataService!.initializeLightweight();
-      if (mounted) {
-        setState(() {});
-      }
-
-      print('[ProfilePage] Ultra-fast service created for smooth transition: ${_userHexKey ?? widget.user.npub}');
-    } catch (e) {
-      print('[ProfilePage] Early DataService creation error: $e');
-    }
-  }
-
-  Future<void> _startNotesLoading() async {
-    try {
-      dataService = DataServiceManager.instance.getOrCreateService(
-        npub: _userHexKey ?? widget.user.npub,
-        dataType: DataType.profile,
-        onNewNote: (_) {
-          if (mounted) setState(() {});
-        },
-        onReactionsUpdated: (_, __) {
-          if (mounted) setState(() {});
-        },
-        onRepliesUpdated: (_, __) {
-          if (mounted) setState(() {});
-        },
-        onRepostsUpdated: (_, __) {
-          if (mounted) setState(() {});
-        },
-        onReactionCountUpdated: (_, __) {
-          if (mounted) setState(() {});
-        },
-        onReplyCountUpdated: (_, __) {
-          if (mounted) setState(() {});
-        },
-        onRepostCountUpdated: (_, __) {
-          if (mounted) setState(() {});
-        },
-      );
-
-      await dataService!.initializeLightweight();
-
-      if (mounted && dataService != null) {
-        // Non-blocking background initialization
-        Future.microtask(() async {
-          try {
-            final heavyOpsFuture = dataService!.initializeHeavyOperations();
-            final connectionsFuture = Future.delayed(const Duration(milliseconds: 10)).then((_) => dataService!.initializeConnections());
-
-            await Future.wait([heavyOpsFuture, connectionsFuture], eagerError: false);
-          } catch (e) {
-            print('[ProfilePage] Ultra-fast parallel initialization error: $e');
-          }
-        });
-      }
-    } catch (e) {
-      print('[ProfilePage] Notes loading error: $e');
-    }
-  }
-
-  void _scrollListener() {
-    dataService?.onScrollPositionChanged(
-      _scrollController.position.pixels,
-      _scrollController.position.maxScrollExtent,
-    );
-  }
-
-  Widget _buildFloatingBackButton(BuildContext context) {
-    final double topPadding = MediaQuery.of(context).padding.top;
-    return Positioned(
-      top: topPadding - 8,
-      left: 16,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(25.0),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: context.colors.backgroundTransparent,
-              border: Border.all(color: context.colors.borderLight, width: 1.5),
-              borderRadius: BorderRadius.circular(25.0),
-            ),
-            child: Bounce(
-              scaleFactor: 0.85,
-              onTap: () => Navigator.pop(context),
-              behavior: HitTestBehavior.opaque,
-              child: Icon(
-                Icons.arrow_back,
-                color: context.colors.textSecondary,
-                size: 20,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStagedContent(BuildContext context) {
+  Widget _buildContent(BuildContext context) {
     return RefreshIndicator(
-      onRefresh: () async {
-        if (dataService != null) {
-          // Non-blocking refresh
-          Future.microtask(() => dataService!.refreshNotes());
-        }
-      },
+      onRefresh: () async => _onRetry(),
       child: CustomScrollView(
         controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(
@@ -241,17 +82,109 @@ class _ProfilePageState extends State<ProfilePage> {
           SliverToBoxAdapter(
             child: ProfileInfoWidget(
               user: widget.user,
-              sharedDataService: dataService,
+              onNavigateToProfile: (npub) {
+                // Navigate to another profile
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ProfilePage(
+                      user: UserModel(
+                        pubkeyHex: npub,
+                        name: npub.length > 8 ? npub.substring(0, 8) : npub,
+                        about: '',
+                        profileImage: '',
+                        banner: '',
+                        website: '',
+                        nip05: '',
+                        lud16: '',
+                        updatedAt: DateTime.now(),
+                        nip05Verified: false,
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ),
-          if (_profileInfoLoaded && dataService != null)
-            NoteListWidgetFactory.create(
-              npub: _userHexKey ?? widget.user.npub,
-              dataType: DataType.profile,
-              sharedDataService: dataService,
-            ),
+          _buildProfileNotes(context),
         ],
       ),
+    );
+  }
+
+  Widget _buildProfileNotes(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _profileViewModel,
+      builder: (context, child) {
+        return SliverUIStateBuilder<List<NoteModel>>(
+          state: _profileViewModel.profileNotesState,
+          builder: (context, notes) {
+            // Update notesNotifier for legacy interface
+            _notesNotifier.value = notes;
+
+            // Use the same NoteListWidget structure as other pages
+            return widgets.NoteListWidget(
+              notes: notes,
+              currentUserNpub: widget.user.npub,
+              notesNotifier: _notesNotifier,
+              profiles: _profiles,
+              isLoading: false,
+              hasMore: false,
+              scrollController: _scrollController,
+            );
+          },
+          loading: () => const Center(
+            child: Padding(
+              padding: EdgeInsets.all(32.0),
+              child: CircularProgressIndicator(),
+            ),
+          ),
+          error: (error) => Center(
+            child: Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 48,
+                    color: context.colors.error,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error loading notes',
+                    style: TextStyle(
+                      color: context.colors.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    error,
+                    style: TextStyle(color: context.colors.textSecondary),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _onRetry,
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          empty: (message) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Text(
+                message ?? 'No notes from this user yet',
+                style: TextStyle(color: context.colors.textSecondary),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

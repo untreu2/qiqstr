@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const List<String> _defaultRelaySetMainSockets = [
@@ -24,7 +25,9 @@ Future<List<String>> getRelaySetMainSockets() async {
       return customRelays;
     }
   } catch (e) {
-    print('[Relays] Error loading custom relays: $e');
+    if (kDebugMode) {
+      print('[Relays] Error loading custom relays: $e');
+    }
   }
   return List.from(_defaultRelaySetMainSockets);
 }

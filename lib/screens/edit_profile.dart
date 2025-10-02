@@ -1,26 +1,38 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:qiqstr/services/data_service.dart';
-import 'package:qiqstr/services/data_service_manager.dart';
-import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/providers/user_provider.dart';
-import '../services/in_memory_data_manager.dart';
-
+import '../core/di/app_di.dart';
+import '../presentation/viewmodels/edit_profile_viewmodel.dart';
+import '../data/repositories/user_repository.dart';
 import 'package:file_picker/file_picker.dart';
+import '../services/media_service.dart';
 
-class EditOwnProfilePage extends StatefulWidget {
+class EditOwnProfilePage extends StatelessWidget {
   const EditOwnProfilePage({super.key});
 
   @override
-  State<EditOwnProfilePage> createState() => _EditOwnProfilePageState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider<EditProfileViewModel>(
+      create: (_) {
+        final viewModel = AppDI.get<EditProfileViewModel>();
+        viewModel.initialize();
+        return viewModel;
+      },
+      child: const _EditProfileContent(),
+    );
+  }
 }
 
-class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
-  final _formKey = GlobalKey<FormState>();
-  final _secureStorage = const FlutterSecureStorage();
+class _EditProfileContent extends StatefulWidget {
+  const _EditProfileContent();
 
+  @override
+  State<_EditProfileContent> createState() => _EditProfileContentState();
+}
+
+class _EditProfileContentState extends State<_EditProfileContent> {
+  final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _aboutController = TextEditingController();
   final _pictureController = TextEditingController();
@@ -29,22 +41,20 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
   final _lud16Controller = TextEditingController();
   final _websiteController = TextEditingController();
 
-  DataService? _dataService;
-
-  bool _isSaving = false;
   bool _isLoading = true;
-  bool _isUploadingPicture = false;
   bool _isUploadingBanner = false;
+
+  late final UserRepository _userRepository;
 
   @override
   void initState() {
     super.initState();
+    _userRepository = AppDI.get<UserRepository>();
     _loadUser();
   }
 
   @override
   void dispose() {
-    _dataService?.closeConnections();
     _nameController.dispose();
     _aboutController.dispose();
     _pictureController.dispose();
@@ -56,30 +66,31 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
   }
 
   Future<void> _loadUser() async {
-    final npub = await _secureStorage.read(key: 'npub');
-    if (npub == null) return;
+    try {
+      final currentUserResult = await _userRepository.getCurrentUser();
 
-    final usersBox = InMemoryDataManager.instance.usersBox;
-    final user = usersBox?.get(npub);
+      if (currentUserResult.isSuccess && currentUserResult.data != null) {
+        final user = currentUserResult.data!;
 
-    final dataService = DataServiceManager.instance.getOrCreateService(
-      npub: npub,
-      dataType: DataType.profile,
-    );
-    await dataService.initialize();
-    await dataService.initializeConnections();
-
-    setState(() {
-      _dataService = dataService;
-      _nameController.text = user?.name ?? '';
-      _aboutController.text = user?.about ?? '';
-      _pictureController.text = user?.profileImage ?? '';
-      _nip05Controller.text = user?.nip05 ?? '';
-      _bannerController.text = user?.banner ?? '';
-      _lud16Controller.text = user?.lud16 ?? '';
-      _websiteController.text = user?.website ?? '';
-      _isLoading = false;
-    });
+        setState(() {
+          _nameController.text = user.name;
+          _aboutController.text = user.about;
+          _pictureController.text = user.profileImage;
+          _nip05Controller.text = user.nip05;
+          _bannerController.text = user.banner;
+          _lud16Controller.text = user.lud16;
+          _websiteController.text = user.website;
+          _isLoading = false;
+        });
+      } else {
+        setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('[EditProfile] Error loading user: $e');
+      }
+      setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _pickAndUploadMedia({
@@ -87,9 +98,10 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
     required String label,
     required bool isPicture,
   }) async {
+    final viewModel = context.read<EditProfileViewModel>();
+
     setState(() {
       if (isPicture) {
-        _isUploadingPicture = true;
         _pictureController.text = 'Uploading...';
       } else {
         _isUploadingBanner = true;
@@ -102,15 +114,38 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
         type: FileType.image,
       );
       if (result != null && result.files.single.path != null) {
+        // Use legacy Blossom upload pattern exactly
+        const blossomUrl = 'https://blossom.primal.net'; // Default Blossom server
         final filePath = result.files.single.path!;
-        final url = await _dataService!.sendMedia(filePath, 'https://blossom.primal.net');
-        setState(() {
-          controller.text = url;
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('$label uploaded successfully.')),
-          );
+
+        try {
+          final mediaUrl = await MediaService().sendMedia(filePath, blossomUrl);
+          setState(() {
+            controller.text = mediaUrl;
+          });
+
+          // Update the ViewModel with the new URL
+          if (isPicture) {
+            viewModel.updatePicture(mediaUrl);
+          }
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('$label uploaded successfully.')),
+            );
+          }
+          if (kDebugMode) {
+            print('[EditProfile] Media uploaded successfully: $mediaUrl');
+          }
+        } catch (uploadError) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Upload failed: $uploadError')),
+            );
+          }
+          setState(() {
+            controller.text = ''; // Clear on upload failure
+          });
         }
       }
     } catch (e) {
@@ -122,7 +157,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
     } finally {
       setState(() {
         if (isPicture) {
-          _isUploadingPicture = false;
+          // Picture upload state is handled by viewModel
         } else {
           _isUploadingBanner = false;
         }
@@ -131,66 +166,54 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
   }
 
   Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate() || _isSaving) return;
+    if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isSaving = true);
+    final viewModel = context.read<EditProfileViewModel>();
+
+    // Update viewModel with current form values
+    viewModel.updateName(_nameController.text.trim());
+    viewModel.updateAbout(_aboutController.text.trim());
+    viewModel.updatePicture(_pictureController.text.trim());
+    viewModel.updateLud16(_lud16Controller.text.trim());
+    viewModel.updateWebsite(_websiteController.text.trim());
 
     try {
-      await _dataService!.sendProfileEdit(
+      // Use the enhanced update method that includes all fields
+      final result = await _userRepository.updateProfile(
         name: _nameController.text.trim(),
         about: _aboutController.text.trim(),
-        picture: _pictureController.text.trim(),
-        nip05: _nip05Controller.text.trim(),
+        profileImage: _pictureController.text.trim(),
         banner: _bannerController.text.trim(),
-        lud16: _lud16Controller.text.trim(),
         website: _websiteController.text.trim(),
+        nip05: _nip05Controller.text.trim(),
+        lud16: _lud16Controller.text.trim(),
       );
 
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      final usersBox = InMemoryDataManager.instance.usersBox;
-      final updatedUser = usersBox?.get(_dataService!.npub);
-
-      if (updatedUser != null) {
-        _dataService!.profilesNotifier.value = {
-          ..._dataService!.profilesNotifier.value,
-          updatedUser.npub: updatedUser,
-        };
-
-        UserProvider.instance.updateUser(_dataService!.npub, updatedUser);
-      } else {
-        final newUser = UserModel(
-          npub: _dataService!.npub,
-          name: _nameController.text.trim(),
-          about: _aboutController.text.trim(),
-          profileImage: _pictureController.text.trim(),
-          nip05: _nip05Controller.text.trim(),
-          banner: _bannerController.text.trim(),
-          lud16: _lud16Controller.text.trim(),
-          website: _websiteController.text.trim(),
-          updatedAt: DateTime.now(),
-        );
-
-        await usersBox?.put(_dataService!.npub, newUser);
-
-        _dataService!.profilesNotifier.value = {
-          ..._dataService!.profilesNotifier.value,
-          newUser.npub: newUser,
-        };
-        UserProvider.instance.updateUser(_dataService!.npub, newUser);
-      }
-
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile updated successfully!'),
-            backgroundColor: Colors.green,
-          ),
+        result.fold(
+          (updatedUser) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Profile updated successfully!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+            Navigator.pop(context);
+          },
+          (error) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Failed to update profile: $error'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          },
         );
-        Navigator.pop(context);
       }
     } catch (e) {
-      print('[EditProfile] Error saving profile: $e');
+      if (kDebugMode) {
+        print('[EditProfile] Error saving profile: $e');
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -199,8 +222,6 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
           ),
         );
       }
-    } finally {
-      setState(() => _isSaving = false);
     }
   }
 
@@ -237,8 +258,8 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeManager>(
-      builder: (context, themeManager, child) {
+    return Consumer<EditProfileViewModel>(
+      builder: (context, viewModel, child) {
         if (_isLoading) {
           return Scaffold(
             backgroundColor: context.colors.background,
@@ -260,7 +281,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
             ),
             actions: [
               GestureDetector(
-                onTap: _isSaving ? null : _saveProfile,
+                onTap: viewModel.isSaving ? null : _saveProfile,
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   height: 34,
@@ -273,7 +294,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: _isSaving
+                    children: viewModel.isSaving
                         ? [
                             SizedBox(
                               width: 18,
@@ -321,6 +342,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                     decoration: _inputDecoration(context, 'Username'),
                     style: TextStyle(color: context.colors.textPrimary),
                     maxLength: 50,
+                    onChanged: (value) => viewModel.updateName(value),
                     validator: (value) {
                       if (value != null && value.trim().length > 50) {
                         return 'Username must be 50 characters or less';
@@ -335,6 +357,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                     style: TextStyle(color: context.colors.textPrimary),
                     maxLines: 3,
                     maxLength: 300,
+                    onChanged: (value) => viewModel.updateAbout(value),
                     validator: (value) {
                       if (value != null && value.trim().length > 300) {
                         return 'Bio must be 300 characters or less';
@@ -345,11 +368,11 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _pictureController,
-                    enabled: !_isUploadingPicture,
+                    enabled: !viewModel.isUploadingPicture,
                     decoration: _inputDecoration(
                       context,
                       'Profile image URL',
-                      onUpload: _isUploadingPicture
+                      onUpload: viewModel.isUploadingPicture
                           ? null
                           : () => _pickAndUploadMedia(
                                 controller: _pictureController,
@@ -358,6 +381,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                               ),
                     ),
                     style: TextStyle(color: context.colors.textPrimary),
+                    onChanged: (value) => viewModel.updatePicture(value),
                     validator: (value) {
                       if (value != null && value.trim().isNotEmpty) {
                         final uri = Uri.tryParse(value.trim());
@@ -399,6 +423,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                     controller: _lud16Controller,
                     decoration: _inputDecoration(context, 'Lightning address'),
                     style: TextStyle(color: context.colors.textPrimary),
+                    onChanged: (value) => viewModel.updateLud16(value),
                     validator: (value) {
                       if (value != null && value.trim().isNotEmpty) {
                         final lud16 = value.trim();
@@ -414,6 +439,7 @@ class _EditOwnProfilePageState extends State<EditOwnProfilePage> {
                     controller: _websiteController,
                     decoration: _inputDecoration(context, 'Website'),
                     style: TextStyle(color: context.colors.textPrimary),
+                    onChanged: (value) => viewModel.updateWebsite(value),
                     validator: (value) {
                       if (value != null && value.trim().isNotEmpty) {
                         final website = value.trim();

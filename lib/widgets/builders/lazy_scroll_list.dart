@@ -11,7 +11,7 @@ class LazyScrollList extends StatefulWidget {
   final bool isLoading;
 
   const LazyScrollList({
-    Key? key,
+    super.key,
     required this.items,
     required this.itemBuilder,
     this.estimatedItemHeight = 200.0,
@@ -19,7 +19,7 @@ class LazyScrollList extends StatefulWidget {
     this.controller,
     this.onLoadMore,
     this.isLoading = false,
-  }) : super(key: key);
+  });
 
   @override
   State<LazyScrollList> createState() => _LazyScrollListState();
@@ -162,10 +162,10 @@ class _MeasuredItem extends StatefulWidget {
   final VoidCallback onMeasured;
 
   const _MeasuredItem({
-    Key? key,
+    super.key,
     required this.child,
     required this.onMeasured,
-  }) : super(key: key);
+  });
 
   @override
   State<_MeasuredItem> createState() => _MeasuredItemState();
@@ -194,13 +194,13 @@ class LazyNotesList extends StatelessWidget {
   final bool isLoading;
 
   const LazyNotesList({
-    Key? key,
+    super.key,
     required this.notes,
     required this.itemBuilder,
     this.controller,
     this.onLoadMore,
     this.isLoading = false,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

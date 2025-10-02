@@ -1,11 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:nostr/nostr.dart';
 import '../theme/theme_manager.dart';
 import '../constants/relays.dart';
-import '../services/data_service.dart';
-import '../services/data_service_manager.dart';
+import '../core/di/app_di.dart';
+import '../data/repositories/auth_repository.dart';
 import '../services/nostr_service.dart';
 import '../services/relay_service.dart';
 import 'dart:convert';
@@ -23,7 +23,6 @@ class RelayPage extends StatefulWidget {
 
 class _RelayPageState extends State<RelayPage> {
   final TextEditingController _addRelayController = TextEditingController();
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   List<String> _relays = [];
   List<Map<String, dynamic>> _userRelays = [];
   bool _isLoading = true;
@@ -35,9 +34,13 @@ class _RelayPageState extends State<RelayPage> {
   final List<WebSocket> _activeConnections = [];
   final List<StreamSubscription> _activeSubscriptions = [];
 
+  // New system services
+  late AuthRepository _authRepository;
+
   @override
   void initState() {
     super.initState();
+    _initializeServices();
     _loadRelays();
   }
 
@@ -61,6 +64,10 @@ class _RelayPageState extends State<RelayPage> {
 
     _addRelayController.dispose();
     super.dispose();
+  }
+
+  void _initializeServices() {
+    _authRepository = AppDI.get<AuthRepository>();
   }
 
   Future<void> _loadRelays() async {
@@ -102,27 +109,22 @@ class _RelayPageState extends State<RelayPage> {
     });
 
     try {
-      final privateKey = await _secureStorage.read(key: 'privateKey');
-      if (privateKey == null) {
+      final privateKeyResult = await _authRepository.getCurrentUserPrivateKey();
+      if (privateKeyResult.isError || privateKeyResult.data == null) {
         _showSnackBar('Private key not found. Please set up your profile first', isError: true);
         return;
       }
 
-      final npub = await _secureStorage.read(key: 'npub');
-      if (npub == null) {
+      final npubResult = await _authRepository.getCurrentUserNpub();
+      if (npubResult.isError || npubResult.data == null) {
         _showSnackBar('Please set up your profile first', isError: true);
         return;
       }
 
-      final dataService = DataServiceManager.instance.getOrCreateService(
-        npub: npub,
-        dataType: DataType.profile,
-      );
-      await dataService.initialize();
-      await dataService.initializeConnections();
+      final privateKey = privateKeyResult.data!;
 
+      // Create relay tags for kind 10002 event (like legacy)
       List<List<String>> relayTags = [];
-
       for (String relay in _relays) {
         relayTags.add(['r', relay]);
       }
@@ -143,11 +145,13 @@ class _RelayPageState extends State<RelayPage> {
 
       _showSnackBar('Relay list published successfully (${relayTags.length} relays in list)');
 
-      print('Relay list event published: ${event.id}');
-
-      await dataService.closeConnections();
+      if (kDebugMode) {
+        print('Relay list event published: ${event.id}');
+      }
     } catch (e) {
-      print('Error publishing relays: $e');
+      if (kDebugMode) {
+        print('Error publishing relays: $e');
+      }
       _showSnackBar('Error publishing relay list: ${e.toString()}', isError: true);
     } finally {
       if (mounted) {
@@ -169,9 +173,13 @@ class _RelayPageState extends State<RelayPage> {
       final results = await Future.wait(broadcastFutures, eagerError: false);
       final successfulBroadcasts = results.where((success) => success).length;
 
-      print('Relay list event broadcasted to $successfulBroadcasts/${_relays.length} relays');
+      if (kDebugMode) {
+        print('Relay list event broadcasted to $successfulBroadcasts/${_relays.length} relays');
+      }
     } catch (e) {
-      print('Error during relay list broadcast: $e');
+      if (kDebugMode) {
+        print('Error during relay list broadcast: $e');
+      }
     }
   }
 
@@ -187,7 +195,9 @@ class _RelayPageState extends State<RelayPage> {
       }
       return false;
     } catch (e) {
-      print('Failed to send relay list event to $relayUrl: $e');
+      if (kDebugMode) {
+        print('Failed to send relay list event to $relayUrl: $e');
+      }
       try {
         await ws?.close();
       } catch (_) {}
@@ -210,18 +220,13 @@ class _RelayPageState extends State<RelayPage> {
     setState(() => _isFetchingUserRelays = true);
 
     try {
-      final npub = await _secureStorage.read(key: 'npub');
-      if (npub == null) {
+      final npubResult = await _authRepository.getCurrentUserNpub();
+      if (npubResult.isError || npubResult.data == null) {
         throw Exception('User not logged in');
       }
 
-      final dataService = DataServiceManager.instance.getOrCreateService(
-        npub: npub,
-        dataType: DataType.profile,
-      );
-      await dataService.initialize();
-
-      final userRelayList = await _fetchRelayListMetadata(dataService, npub);
+      final npub = npubResult.data!;
+      final userRelayList = await _fetchRelayListMetadata(npub);
 
       if (userRelayList.isNotEmpty) {
         setState(() {
@@ -245,8 +250,6 @@ class _RelayPageState extends State<RelayPage> {
           );
         }
       }
-
-      await dataService.closeConnections();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -258,10 +261,13 @@ class _RelayPageState extends State<RelayPage> {
     }
   }
 
-  Future<List<Map<String, dynamic>>> _fetchRelayListMetadata(DataService dataService, String npub) async {
+  Future<List<Map<String, dynamic>>> _fetchRelayListMetadata(String npub) async {
     final List<Map<String, dynamic>> relayList = [];
 
     try {
+      // Convert npub to hex if needed
+      final pubkeyHex = _authRepository.npubToHex(npub) ?? npub;
+
       for (final relayUrl in relaySetMainSockets) {
         WebSocket? ws;
         StreamSubscription? sub;
@@ -279,7 +285,7 @@ class _RelayPageState extends State<RelayPage> {
             "REQ",
             subscriptionId,
             {
-              "authors": [npub],
+              "authors": [pubkeyHex],
               "kinds": [10002],
               "limit": 1
             }
@@ -355,7 +361,9 @@ class _RelayPageState extends State<RelayPage> {
             }
           }
         } catch (e) {
-          print('Error fetching from relay $relayUrl: $e');
+          if (kDebugMode) {
+            print('Error fetching from relay $relayUrl: $e');
+          }
 
           try {
             await sub?.cancel();
@@ -368,7 +376,9 @@ class _RelayPageState extends State<RelayPage> {
         }
       }
     } catch (e) {
-      print('Error in _fetchRelayListMetadata: $e');
+      if (kDebugMode) {
+        print('Error in _fetchRelayListMetadata: $e');
+      }
     }
 
     return relayList;
@@ -534,13 +544,14 @@ class _RelayPageState extends State<RelayPage> {
           ),
           GestureDetector(
             onTap: () async {
+              final scaffoldMessenger = ScaffoldMessenger.of(context);
               Navigator.pop(context);
               setState(() {
                 _relays = List.from(relaySetMainSockets);
               });
               await _saveRelays();
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
+                scaffoldMessenger.showSnackBar(
                   const SnackBar(content: Text('Relays reset to defaults')),
                 );
               }
@@ -697,7 +708,7 @@ class _RelayPageState extends State<RelayPage> {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: _isFetchingUserRelays ? context.colors.surface.withOpacity(0.5) : context.colors.overlayLight,
+                      color: _isFetchingUserRelays ? context.colors.surface.withValues(alpha: 0.5) : context.colors.overlayLight,
                       borderRadius: BorderRadius.circular(25),
                       border: Border.all(color: context.colors.borderAccent),
                     ),
@@ -736,7 +747,7 @@ class _RelayPageState extends State<RelayPage> {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: _isPublishingRelays ? context.colors.surface.withOpacity(0.5) : context.colors.overlayLight,
+                      color: _isPublishingRelays ? context.colors.surface.withValues(alpha: 0.5) : context.colors.overlayLight,
                       borderRadius: BorderRadius.circular(25),
                       border: Border.all(color: context.colors.borderAccent),
                     ),
@@ -862,7 +873,7 @@ class _RelayPageState extends State<RelayPage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: context.colors.accent.withOpacity(0.1),
+                  color: context.colors.accent.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -918,9 +929,9 @@ class _RelayPageState extends State<RelayPage> {
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: isUserRelay ? context.colors.accent.withOpacity(0.1) : context.colors.surface,
+          color: isUserRelay ? context.colors.accent.withValues(alpha: 0.1) : context.colors.surface,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: isUserRelay ? context.colors.accent.withOpacity(0.3) : context.colors.border),
+          border: Border.all(color: isUserRelay ? context.colors.accent.withValues(alpha: 0.3) : context.colors.border),
         ),
         child: Icon(
           isUserRelay ? Icons.cloud_sync : Icons.router,
@@ -942,7 +953,7 @@ class _RelayPageState extends State<RelayPage> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: context.colors.accent.withOpacity(0.1),
+                    color: context.colors.accent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(

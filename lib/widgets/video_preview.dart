@@ -31,7 +31,7 @@ class _VPState extends State<VP> {
     if (isNowVisible && !_hasStartedInit) {
       _hasStartedInit = true;
 
-      _controller = VideoPlayerController.network(widget.url)
+      _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
         ..setLooping(true)
         ..setVolume(0)
         ..initialize().then((_) {
@@ -130,7 +130,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.network(widget.url)
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
       ..initialize().then((_) {
         setState(() => _isInitialized = true);
         _controller.setVolume(1);
@@ -196,7 +196,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black.withOpacity(1.0 - (_dragOffset.abs() / 300).clamp(0.0, 1.0)),
+      backgroundColor: Colors.black.withValues(alpha: 1.0 - (_dragOffset.abs() / 300).clamp(0.0, 1.0)),
       body: GestureDetector(
         onTap: _showControlsAndResetTimer,
         onVerticalDragUpdate: _handleVerticalDragUpdate,
@@ -213,7 +213,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                       child: ImageFiltered(
                         imageFilter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
                         child: Container(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           child: VideoPlayer(_controller),
                         ),
                       ),
@@ -247,9 +247,9 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.3),
+                            color: Colors.black.withValues(alpha: 0.3),
                             border: Border.all(
-                              color: Colors.white.withOpacity(0.2),
+                              color: Colors.white.withValues(alpha: 0.2),
                               width: 1.5,
                             ),
                             borderRadius: BorderRadius.circular(25.0),

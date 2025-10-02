@@ -1,15 +1,15 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
-import 'package:qiqstr/models/note_model.dart';
-import 'package:qiqstr/services/data_service.dart';
-import 'package:qiqstr/screens/share_note.dart';
-import 'package:qiqstr/providers/interactions_provider.dart';
-import 'package:qiqstr/providers/user_provider.dart';
+import '../../models/note_model.dart';
+import '../../screens/share_note.dart';
 import '../../theme/theme_manager.dart';
+import '../../core/di/app_di.dart';
+import '../../data/repositories/note_repository.dart';
+import '../../data/repositories/auth_repository.dart';
 
 Future<void> showRepostDialog({
   required BuildContext context,
-  required DataService dataService,
   required NoteModel note,
 }) async {
   return showModalBottomSheet(
@@ -26,7 +26,7 @@ Future<void> showRepostDialog({
           title: Text('Repost', style: TextStyle(color: context.colors.textPrimary, fontSize: 16)),
           onTap: () async {
             Navigator.pop(modalContext);
-            await _performOptimisticRepost(context, dataService, note);
+            await _performRepost(context, note);
           },
         ),
         ListTile(
@@ -41,7 +41,6 @@ Future<void> showRepostDialog({
               context,
               MaterialPageRoute(
                 builder: (_) => ShareNotePage(
-                  dataService: dataService,
                   initialText: quoteText,
                 ),
               ),
@@ -54,21 +53,41 @@ Future<void> showRepostDialog({
   );
 }
 
-Future<void> _performOptimisticRepost(
+Future<void> _performRepost(
   BuildContext context,
-  DataService dataService,
   NoteModel note,
 ) async {
-  final currentUserNpub = UserProvider.instance.currentUser?.npub;
-  if (currentUserNpub == null) return;
-
-  InteractionsProvider.instance.addOptimisticRepost(note.id, currentUserNpub);
+  // Store reference before async operations
+  final scaffoldMessenger = ScaffoldMessenger.of(context);
 
   try {
-    await dataService.sendRepost(note);
-  } catch (e) {
-    print('Error sending repost: $e');
+    final authRepository = AppDI.get<AuthRepository>();
+    final noteRepository = AppDI.get<NoteRepository>();
 
-    InteractionsProvider.instance.removeOptimisticRepost(note.id, currentUserNpub);
+    final currentUserResult = await authRepository.getCurrentUserNpub();
+    if (currentUserResult.isError || currentUserResult.data == null) {
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(content: Text('Please log in to repost')),
+      );
+      return;
+    }
+
+    final result = await noteRepository.repostNote(note.id);
+    if (result.isError) {
+      scaffoldMessenger.showSnackBar(
+        SnackBar(content: Text('Failed to repost: ${result.error}')),
+      );
+    } else {
+      scaffoldMessenger.showSnackBar(
+        const SnackBar(content: Text('Note reposted successfully')),
+      );
+    }
+  } catch (e) {
+    if (kDebugMode) {
+      print('Error reposting note: $e');
+    }
+    scaffoldMessenger.showSnackBar(
+      const SnackBar(content: Text('Failed to repost note')),
+    );
   }
 }

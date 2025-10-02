@@ -1,30 +1,97 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:qiqstr/models/user_model.dart';
-import 'package:qiqstr/screens/profile_page.dart';
-import 'package:qiqstr/screens/relay_page.dart';
-import 'package:qiqstr/utils/logout.dart';
+import '../models/user_model.dart';
+import '../screens/profile_page.dart';
+import '../screens/relay_page.dart';
+import '../utils/logout.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/theme_manager.dart';
-import '../providers/user_provider.dart';
-import 'package:qiqstr/screens/keys_page.dart';
+import '../screens/keys_page.dart';
 import 'package:carbon_icons/carbon_icons.dart';
-import 'profile_image_widget.dart';
+import '../core/di/app_di.dart';
+import '../data/repositories/auth_repository.dart';
+import '../data/repositories/user_repository.dart';
 
-class SidebarWidget extends StatelessWidget {
+class SidebarWidget extends StatefulWidget {
   const SidebarWidget({super.key});
 
   @override
+  State<SidebarWidget> createState() => _SidebarWidgetState();
+}
+
+class _SidebarWidgetState extends State<SidebarWidget> {
+  late UserRepository _userRepository;
+  UserModel? _currentUser;
+  StreamSubscription<UserModel>? _userStreamSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _userRepository = AppDI.get<UserRepository>();
+    _loadInitialUser();
+    _setupUserStreamListener();
+  }
+
+  @override
+  void dispose() {
+    _userStreamSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _setupUserStreamListener() {
+    _userStreamSubscription = _userRepository.currentUserStream.listen(
+      (updatedUser) {
+        debugPrint('[SidebarWidget] Received updated user data from stream: ${updatedUser.name}');
+        if (mounted) {
+          setState(() {
+            _currentUser = updatedUser;
+          });
+        }
+      },
+      onError: (error) {
+        debugPrint('[SidebarWidget] Error in user stream: $error');
+      },
+    );
+  }
+
+  Future<void> _loadInitialUser() async {
+    try {
+      final authRepository = AppDI.get<AuthRepository>();
+
+      final npubResult = await authRepository.getCurrentUserNpub();
+      if (npubResult.isError || npubResult.data == null) {
+        return;
+      }
+
+      final userResult = await _userRepository.getUserProfile(npubResult.data!);
+      userResult.fold(
+        (user) {
+          if (mounted) {
+            setState(() {
+              _currentUser = user;
+            });
+          }
+        },
+        (error) {
+          debugPrint('[SidebarWidget] Error loading initial user: $error');
+        },
+      );
+    } catch (e) {
+      debugPrint('[SidebarWidget] Error getting current user: $e');
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Consumer2<ThemeManager, UserProvider>(
-      builder: (context, themeManager, userProvider, child) {
+    return Consumer<ThemeManager>(
+      builder: (context, themeManager, child) {
         final colors = themeManager.colors;
-        final currentUser = userProvider.currentUser;
 
         return Drawer(
           child: Container(
             color: colors.background,
-            child: currentUser == null
+            child: _currentUser == null
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -43,8 +110,8 @@ class SidebarWidget extends StatelessWidget {
                   )
                 : Column(
                     children: [
-                      _UserProfileHeader(user: currentUser, colors: colors),
-                      _SidebarContent(user: currentUser, colors: colors),
+                      _UserProfileHeader(user: _currentUser!, colors: colors),
+                      _SidebarContent(user: _currentUser!, colors: colors),
                     ],
                   ),
           ),
@@ -66,11 +133,26 @@ class _UserProfileHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 60, 16, 16),
       child: Row(
         children: [
-          ProfileImageWidget(
-            imageUrl: user.profileImage,
-            npub: user.npub,
-            size: ProfileImageSize.large,
-            backgroundColor: colors.avatarPlaceholder,
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: colors.avatarPlaceholder,
+              image: user.profileImage.isNotEmpty
+                  ? DecorationImage(
+                      image: NetworkImage(user.profileImage),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
+            ),
+            child: user.profileImage.isEmpty
+                ? Icon(
+                    Icons.person,
+                    size: 30,
+                    color: colors.textSecondary,
+                  )
+                : null,
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -197,7 +279,10 @@ Widget _buildSidebarItem({
             svgAsset!,
             width: 22,
             height: 22,
-            color: iconColor ?? colors.iconPrimary,
+            colorFilter: ColorFilter.mode(
+              iconColor ?? colors.iconPrimary,
+              BlendMode.srcIn,
+            ),
           ),
     title: Text(
       label,
@@ -225,7 +310,7 @@ Widget _buildThemeToggle(AppThemeColors colors) {
         trailing: Switch(
           value: themeManager.isDarkMode,
           onChanged: (value) => themeManager.toggleTheme(),
-          activeColor: colors.accent,
+          activeThumbColor: colors.accent,
           inactiveThumbColor: colors.textSecondary,
           inactiveTrackColor: colors.border,
         ),

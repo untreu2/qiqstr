@@ -1,11 +1,11 @@
-import 'dart:ui';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:nostr/nostr.dart';
 import 'package:qiqstr/theme/theme_manager.dart';
+import '../widgets/back_button_widget.dart';
 import 'package:provider/provider.dart';
-import 'package:bounce/bounce.dart';
 
 class KeysPage extends StatefulWidget {
   const KeysPage({super.key});
@@ -28,13 +28,22 @@ class _KeysPageState extends State<KeysPage> {
 
   Future<void> _loadKeys() async {
     try {
-      final nsecHex = await _secureStorage.read(key: 'privateKey');
-      final npubHex = await _secureStorage.read(key: 'npub');
+      // Read hex private key and npub from storage
+      final hexPrivateKey = await _secureStorage.read(key: 'privateKey');
+      final npubBech32 = await _secureStorage.read(key: 'npub');
 
-      if (nsecHex != null && npubHex != null) {
+      if (hexPrivateKey != null && npubBech32 != null) {
+        // Generate nsec from hex private key dynamically
+        String nsecBech32;
+        try {
+          nsecBech32 = Nip19.encodePrivkey(hexPrivateKey);
+        } catch (e) {
+          nsecBech32 = 'Error encoding nsec';
+        }
+
         setState(() {
-          _nsecBech32 = Nip19.encodePrivkey(nsecHex);
-          _npubBech32 = Nip19.encodePubkey(npubHex);
+          _nsecBech32 = nsecBech32;
+          _npubBech32 = npubBech32;
         });
       } else {
         setState(() {
@@ -47,7 +56,9 @@ class _KeysPageState extends State<KeysPage> {
         _nsecBech32 = 'Error loading keys';
         _npubBech32 = 'Error loading keys';
       });
-      print('Error loading keys: \$e');
+      if (kDebugMode) {
+        print('Error loading keys: \$e');
+      }
     }
   }
 
@@ -58,7 +69,7 @@ class _KeysPageState extends State<KeysPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${keyType.toUpperCase()} copied to clipboard!'),
-        backgroundColor: context.colors.success.withOpacity(0.9),
+        backgroundColor: context.colors.success.withValues(alpha: 0.9),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         margin: const EdgeInsets.all(16),
@@ -72,43 +83,6 @@ class _KeysPageState extends State<KeysPage> {
         setState(() => _copiedKeyType = null);
       }
     });
-  }
-
-  Widget _buildFloatingBackButton(BuildContext context) {
-    final double topPadding = MediaQuery.of(context).padding.top;
-
-    return Positioned(
-      top: topPadding + 8,
-      left: 16,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(25.0),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: context.colors.backgroundTransparent,
-              border: Border.all(
-                color: context.colors.borderLight,
-                width: 1.5,
-              ),
-              borderRadius: BorderRadius.circular(25.0),
-            ),
-            child: Bounce(
-              scaleFactor: 0.85,
-              onTap: () => Navigator.pop(context),
-              behavior: HitTestBehavior.opaque,
-              child: Icon(
-                Icons.arrow_back,
-                color: context.colors.textSecondary,
-                size: 20,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _buildKeyDisplayCard(BuildContext context, String title, String value, String keyType, bool isCopied) {
@@ -159,7 +133,7 @@ class _KeysPageState extends State<KeysPage> {
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
-        color: context.colors.surface.withOpacity(0.5),
+        color: context.colors.surface.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(12.0),
         border: Border.all(color: context.colors.border),
       ),
@@ -252,7 +226,7 @@ class _KeysPageState extends State<KeysPage> {
             ],
           ),
         ),
-        _buildFloatingBackButton(context),
+        const BackButtonWidget(topOffset: 12),
       ],
     );
   }
