@@ -508,60 +508,29 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             ),
           );
         } else {
-          avatarWidget = ClipOval(
-            child: CachedNetworkImage(
-              imageUrl: imageUrl,
-              width: radius * 2,
-              height: radius * 2,
-              fit: BoxFit.cover,
-              fadeInDuration: Duration.zero,
-              fadeOutDuration: Duration.zero,
-              memCacheWidth: (radius * 4).round(),
-              memCacheHeight: (radius * 4).round(),
-              maxWidthDiskCache: (radius * 6).round(),
-              maxHeightDiskCache: (radius * 6).round(),
-              placeholder: (context, url) => Container(
+          avatarWidget = CircleAvatar(
+            radius: radius,
+            backgroundColor: context.colors.surfaceTransparent,
+            child: ClipOval(
+              child: CachedNetworkImage(
+                imageUrl: imageUrl,
                 width: radius * 2,
                 height: radius * 2,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: context.colors.surfaceTransparent,
-                ),
-                child: Icon(
+                fit: BoxFit.cover,
+                fadeInDuration: Duration.zero,
+                fadeOutDuration: Duration.zero,
+                placeholder: (context, url) => Icon(
                   Icons.person,
                   size: radius,
                   color: context.colors.textSecondary,
                 ),
-              ),
-              errorWidget: (context, url, error) => Container(
-                width: radius * 2,
-                height: radius * 2,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: context.colors.surfaceTransparent,
-                ),
-                child: Icon(
+                errorWidget: (context, url, error) => Icon(
                   Icons.person,
                   size: radius,
                   color: context.colors.textSecondary,
                 ),
               ),
             ),
-          );
-        }
-
-        // Add border if needed
-        if (radius > 30) {
-          // Only for large avatars
-          avatarWidget = Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: context.colors.background,
-                width: 3,
-              ),
-            ),
-            child: avatarWidget,
           );
         }
 
