@@ -35,6 +35,7 @@ class FeedPageState extends State<FeedPage> {
 
   UserModel? _currentUser;
   StreamSubscription<UserModel>? _userStreamSubscription;
+  StreamSubscription<Map<String, UserModel>>? _profilesStreamSubscription;
   late UserRepository _userRepository;
 
   @override
@@ -93,6 +94,7 @@ class FeedPageState extends State<FeedPage> {
   @override
   void dispose() {
     _userStreamSubscription?.cancel();
+    _profilesStreamSubscription?.cancel();
     _scrollController.dispose();
     _notesNotifier.dispose();
     super.dispose();
@@ -152,6 +154,23 @@ class FeedPageState extends State<FeedPage> {
       debugPrint('Error getting current user: $e');
       return null;
     }
+  }
+
+  void _setupProfilesStreamListener(FeedViewModel viewModel) {
+    _profilesStreamSubscription = viewModel.profilesStream.listen(
+      (profiles) {
+        debugPrint('[FeedPage] Received profiles update: ${profiles.length} profiles');
+        if (mounted) {
+          setState(() {
+            // Update profiles map with new data
+            _profiles.addAll(profiles);
+          });
+        }
+      },
+      onError: (error) {
+        debugPrint('[FeedPage] Error in profiles stream: $error');
+      },
+    );
   }
 
   Widget _buildHeader(BuildContext context, double topPadding) {
@@ -244,6 +263,9 @@ class FeedPageState extends State<FeedPage> {
       onModelReady: (viewModel) {
         // Initialize once when ViewModel is ready
         viewModel.initializeWithUser(widget.npub);
+
+        // Setup profiles stream listener
+        _setupProfilesStreamListener(viewModel);
       },
       builder: (context, viewModel) {
         return Scaffold(

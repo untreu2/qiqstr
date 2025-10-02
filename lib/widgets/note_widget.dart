@@ -219,6 +219,22 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     if (_isDisposed || !mounted) return;
 
     try {
+      // Check if we already have profiles data (from FeedViewModel batch loading)
+      final authorUser = widget.profiles[_authorId];
+      final reposterUser = _reposterId != null ? widget.profiles[_reposterId] : null;
+
+      // If we have complete profile data, no need to load anything
+      if (authorUser != null &&
+          authorUser.name != 'Anonymous' &&
+          authorUser.name != _authorId.substring(0, 8) && // Not a fallback user
+          (_reposterId == null || (reposterUser != null && reposterUser.name != 'Anonymous'))) {
+        debugPrint('[NoteWidget] Using cached profiles from FeedViewModel for ${_noteId.substring(0, 8)}');
+        return;
+      }
+
+      debugPrint('[NoteWidget] Loading missing profiles for ${_noteId.substring(0, 8)}');
+
+      // Check preloaded users if available
       if (widget.notesListProvider != null) {
         final authorPreloaded = widget.notesListProvider.getPreloadedUser(_authorId);
         final reposterPreloaded = _reposterId != null ? widget.notesListProvider.getPreloadedUser(_reposterId) : null;
@@ -230,31 +246,42 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
         }
       }
 
-      // Use UserRepository to load users instead of DataService
-      final authorResult = await _userRepository.getUserProfile(_authorId);
-      authorResult.fold(
-        (user) {
-          if (mounted && !_isDisposed) {
-            // Update the profiles map and trigger update
-            widget.profiles[_authorId] = user;
-            _updateUserData();
-          }
-        },
-        (error) => debugPrint('[NoteWidget] Failed to load author: $error'),
-      );
-
-      if (_reposterId != null) {
-        final reposterId = _reposterId;
-        final reposterResult = await _userRepository.getUserProfile(reposterId);
-        reposterResult.fold(
+      // Only load author if not already cached or is fallback
+      if (authorUser == null || authorUser.name == 'Anonymous' || authorUser.name == _authorId.substring(0, 8)) {
+        debugPrint('[NoteWidget] Loading author profile: ${_authorId.substring(0, 8)}...');
+        final authorResult = await _userRepository.getUserProfile(_authorId);
+        authorResult.fold(
           (user) {
             if (mounted && !_isDisposed) {
-              widget.profiles[reposterId] = user;
+              // Update the profiles map and trigger update
+              widget.profiles[_authorId] = user;
               _updateUserData();
             }
           },
-          (error) => debugPrint('[NoteWidget] Failed to load reposter: $error'),
+          (error) => debugPrint('[NoteWidget] Failed to load author: $error'),
         );
+      }
+
+      // Only load reposter if needed and not already cached or is fallback
+      if (_reposterId != null) {
+        final reposterId = _reposterId;
+        final currentReposterUser = widget.profiles[reposterId];
+
+        if (currentReposterUser == null ||
+            currentReposterUser.name == 'Anonymous' ||
+            currentReposterUser.name == reposterId.substring(0, 8)) {
+          debugPrint('[NoteWidget] Loading reposter profile: ${reposterId.substring(0, 8)}...');
+          final reposterResult = await _userRepository.getUserProfile(reposterId);
+          reposterResult.fold(
+            (user) {
+              if (mounted && !_isDisposed) {
+                widget.profiles[reposterId] = user;
+                _updateUserData();
+              }
+            },
+            (error) => debugPrint('[NoteWidget] Failed to load reposter: $error'),
+          );
+        }
       }
     } catch (e) {
       debugPrint('[NoteWidget] Load users async error: $e');

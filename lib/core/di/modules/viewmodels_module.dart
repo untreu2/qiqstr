@@ -26,6 +26,7 @@ class ViewModelsModule extends DIModule {
     AppDI.registerFactory<FeedViewModel>(() => FeedViewModel(
           noteRepository: AppDI.get<NoteRepository>(),
           authRepository: AppDI.get<AuthRepository>(),
+          userRepository: AppDI.get<UserRepository>(),
         ));
 
     AppDI.registerFactory<ProfileViewModel>(() => ProfileViewModel(

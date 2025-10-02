@@ -7,19 +7,24 @@ import '../../core/base/ui_state.dart';
 import '../../core/base/app_error.dart';
 import '../../data/repositories/note_repository.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../../data/repositories/user_repository.dart';
 import '../../models/note_model.dart';
+import '../../models/user_model.dart';
 
 /// ViewModel for the feed screen
 /// Handles feed loading, real-time updates, and user interactions
 class FeedViewModel extends BaseViewModel with CommandMixin {
   final NoteRepository _noteRepository;
   final AuthRepository _authRepository;
+  final UserRepository _userRepository;
 
   FeedViewModel({
     required NoteRepository noteRepository,
     required AuthRepository authRepository,
+    required UserRepository userRepository,
   })  : _noteRepository = noteRepository,
-        _authRepository = authRepository;
+        _authRepository = authRepository,
+        _userRepository = userRepository;
 
   // State
   UIState<List<NoteModel>> _feedState = const InitialState();
@@ -27,6 +32,14 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
   UIState<String> _currentUserState = const InitialState();
   UIState<String> get currentUserState => _currentUserState;
+
+  // Profiles state for batch user loading
+  final Map<String, UserModel> _profiles = {};
+  Map<String, UserModel> get profiles => Map.unmodifiable(_profiles);
+
+  // Stream controller for profile updates
+  final StreamController<Map<String, UserModel>> _profilesController = StreamController<Map<String, UserModel>>.broadcast();
+  Stream<Map<String, UserModel>> get profilesStream => _profilesController.stream;
 
   NoteViewMode _viewMode = NoteViewMode.list;
   NoteViewMode get viewMode => _viewMode;
@@ -133,8 +146,8 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
         limit: 50,
       );
 
-      result.fold(
-        (notes) {
+      await result.fold(
+        (notes) async {
           debugPrint(' [FeedViewModel] Repository returned ${notes.length} notes');
 
           if (notes.isEmpty) {
@@ -143,12 +156,15 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           } else {
             debugPrint(' [FeedViewModel] Setting loaded state with ${notes.length} real notes');
             _feedState = LoadedState(notes);
+
+            // Load user profiles for all note authors
+            await _loadUserProfilesForNotes(notes);
           }
 
           // Start real-time updates AFTER successful load
           _subscribeToRealTimeUpdates();
         },
-        (error) {
+        (error) async {
           debugPrint(' [FeedViewModel] Error loading feed: $error');
           _feedState = ErrorState(error);
         },
@@ -186,6 +202,10 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           if (newNotes.isNotEmpty) {
             final allNotes = [...currentNotes, ...newNotes];
             _feedState = LoadedState(allNotes);
+
+            // Load user profiles for new notes asynchronously
+            _loadUserProfilesForNotes(newNotes);
+
             safeNotifyListeners();
           }
         },
@@ -249,9 +269,96 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   /// Get error message if any
   String? get errorMessage => _feedState.error;
 
+  /// Load user profiles for given notes
+  Future<void> _loadUserProfilesForNotes(List<NoteModel> notes) async {
+    try {
+      debugPrint('[FeedViewModel] Loading user profiles for ${notes.length} notes');
+
+      // Extract unique author IDs
+      final Set<String> authorIds = {};
+      for (final note in notes) {
+        authorIds.add(note.author);
+        if (note.repostedBy != null) {
+          authorIds.add(note.repostedBy!);
+        }
+      }
+
+      debugPrint('[FeedViewModel] Found ${authorIds.length} unique authors to load');
+
+      // Load profiles in batches to avoid overwhelming the network
+      final futures = <Future<void>>[];
+
+      for (final authorId in authorIds) {
+        // Skip if already cached
+        if (_profiles.containsKey(authorId)) {
+          continue;
+        }
+
+        // Add to batch loading
+        futures.add(_loadSingleUserProfile(authorId));
+      }
+
+      // Wait for all profiles to load (with reasonable timeout)
+      if (futures.isNotEmpty) {
+        await Future.wait(futures).timeout(
+          const Duration(seconds: 10),
+          onTimeout: () {
+            debugPrint('[FeedViewModel] Profile loading timed out, continuing with partial data');
+            return [];
+          },
+        );
+      }
+
+      // Notify listeners about profile updates
+      _profilesController.add(Map.from(_profiles));
+
+      debugPrint('[FeedViewModel] Loaded ${_profiles.length} total user profiles');
+    } catch (e) {
+      debugPrint('[FeedViewModel] Error loading user profiles: $e');
+      // Don't fail the entire feed load for profile errors
+    }
+  }
+
+  /// Load a single user profile
+  Future<void> _loadSingleUserProfile(String authorId) async {
+    try {
+      final result = await _userRepository.getUserProfile(authorId);
+      result.fold(
+        (user) {
+          _profiles[authorId] = user;
+          debugPrint('[FeedViewModel] Loaded profile for ${user.name} (${authorId.substring(0, 8)}...)');
+        },
+        (error) {
+          debugPrint('[FeedViewModel] Failed to load profile for ${authorId.substring(0, 8)}...: $error');
+          // Create a fallback user
+          _profiles[authorId] = UserModel(
+            pubkeyHex: authorId,
+            name: authorId.length > 8 ? authorId.substring(0, 8) : authorId,
+            about: '',
+            profileImage: '',
+            banner: '',
+            website: '',
+            nip05: '',
+            lud16: '',
+            updatedAt: DateTime.now(),
+            nip05Verified: false,
+          );
+        },
+      );
+    } catch (e) {
+      debugPrint('[FeedViewModel] Exception loading profile for ${authorId.substring(0, 8)}...: $e');
+    }
+  }
+
   @override
   void onRetry() {
     _loadFeed();
+  }
+
+  @override
+  void dispose() {
+    _profilesController.close();
+    super.dispose();
   }
 }
 
