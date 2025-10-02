@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -15,6 +16,8 @@ import '../presentation/providers/viewmodel_provider.dart';
 import '../presentation/viewmodels/feed_viewmodel.dart';
 import '../data/repositories/auth_repository.dart';
 import '../data/repositories/user_repository.dart';
+import '../services/relay_service.dart';
+import '../constants/relays.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -28,6 +31,8 @@ class FeedPageState extends State<FeedPage> {
   late ScrollController _scrollController;
   bool _showAppBar = true;
   bool isFirstOpen = false;
+  int _connectedRelayCount = 0;
+  Timer? _relayCountTimer;
 
   // Legacy interface requirements
   final ValueNotifier<List<NoteModel>> _notesNotifier = ValueNotifier([]);
@@ -37,14 +42,17 @@ class FeedPageState extends State<FeedPage> {
   StreamSubscription<UserModel>? _userStreamSubscription;
   StreamSubscription<Map<String, UserModel>>? _profilesStreamSubscription;
   late UserRepository _userRepository;
+  late WebSocketManager _webSocketManager;
 
   @override
   void initState() {
     super.initState();
     _userRepository = AppDI.get<UserRepository>();
+    _webSocketManager = WebSocketManager.instance;
     _scrollController = ScrollController()..addListener(_scrollListener);
     _loadInitialUser();
     _setupUserStreamListener();
+    _startRelayCountTimer();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkFirstOpen();
     });
@@ -91,10 +99,74 @@ class FeedPageState extends State<FeedPage> {
     }
   }
 
+  void _startRelayCountTimer() {
+    _updateRelayCount();
+    _relayCountTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      _updateRelayCount();
+    });
+  }
+
+  void _updateRelayCount() {
+    if (mounted) {
+      try {
+        // Get ACTUAL active connections from WebSocketManager
+        final activeSockets = _webSocketManager.activeSockets;
+        final activeCount = activeSockets.length;
+        final totalRelays = _webSocketManager.relayUrls.length;
+
+        if (kDebugMode) {
+          print('[FeedPage] Active connections: $activeCount / $totalRelays relays');
+        }
+
+        if (_connectedRelayCount != activeCount) {
+          setState(() {
+            _connectedRelayCount = activeCount;
+          });
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('[FeedPage] Error updating relay count: $e');
+        }
+        // Fallback to configured count
+        _getRelayCountFromPrefs();
+      }
+    }
+  }
+
+  Future<void> _getRelayCountFromPrefs() async {
+    try {
+      final relays = await getRelaySetMainSockets();
+      if (mounted && relays.length != _connectedRelayCount) {
+        setState(() {
+          _connectedRelayCount = relays.length;
+        });
+        if (kDebugMode) {
+          print('[FeedPage] Fallback to configured relay count: ${relays.length}');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('[FeedPage] Error getting relay count from prefs: $e');
+      }
+    }
+  }
+
+  String _getRelayCountText() {
+    // Show only active connection count
+    final activeSockets = _webSocketManager.activeSockets.length;
+
+    if (activeSockets == 1) {
+      return '1 relay';
+    } else {
+      return '$activeSockets relays';
+    }
+  }
+
   @override
   void dispose() {
     _userStreamSubscription?.cancel();
     _profilesStreamSubscription?.cancel();
+    _relayCountTimer?.cancel();
     _scrollController.dispose();
     _notesNotifier.dispose();
     super.dispose();
@@ -242,6 +314,33 @@ class FeedPageState extends State<FeedPage> {
                       height: 30,
                       colorFilter: ColorFilter.mode(colors.iconPrimary, BlendMode.srcIn),
                     ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _getRelayCountText(),
+                        style: TextStyle(
+                          color: colors.secondary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (_connectedRelayCount > 0) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: colors.accent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],
