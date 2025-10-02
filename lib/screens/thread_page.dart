@@ -32,6 +32,10 @@ class _ThreadPageState extends State<ThreadPage> {
   late ValueNotifier<List<NoteModel>> _notesNotifier;
   final Map<String, UserModel> _profiles = {};
 
+  // Pagination state for replies
+  int _visibleRepliesCount = 10;
+  static const int _repliesPerPage = 10;
+
   @override
   void initState() {
     super.initState();
@@ -207,11 +211,15 @@ class _ThreadPageState extends State<ThreadPage> {
           );
         }
 
-        debugPrint(' [ThreadPage] Building ${directReplies.length} reply widgets');
+        // Apply pagination to direct replies
+        final visibleReplies = directReplies.take(_visibleRepliesCount).toList();
+        final hasMoreReplies = directReplies.length > _visibleRepliesCount;
+
+        debugPrint(' [ThreadPage] Building ${visibleReplies.length} reply widgets out of ${directReplies.length} total');
         return Column(
           children: [
             const SizedBox(height: 8.0),
-            ...directReplies.map((reply) {
+            ...visibleReplies.map((reply) {
               debugPrint(' [ThreadPage] Creating widget for reply: ${reply.id}');
               return _buildThreadReply(
                 context,
@@ -221,6 +229,13 @@ class _ThreadPageState extends State<ThreadPage> {
                 0, // depth
               );
             }),
+
+            // Load More button
+            if (hasMoreReplies) ...[
+              const SizedBox(height: 16.0),
+              _buildLoadMoreButton(context, directReplies.length),
+              const SizedBox(height: 8.0),
+            ],
           ],
         );
       },
@@ -247,6 +262,37 @@ class _ThreadPageState extends State<ThreadPage> {
             style: TextStyle(
               color: context.colors.textSecondary,
               fontSize: 16,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLoadMoreButton(BuildContext context, int totalReplies) {
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16.0),
+        child: OutlinedButton(
+          onPressed: () {
+            setState(() {
+              _visibleRepliesCount += _repliesPerPage;
+            });
+          },
+          child: Text(
+            'Load More',
+            style: TextStyle(
+              color: context.colors.primary,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(color: context.colors.primary.withValues(alpha: 0.3)),
+            backgroundColor: context.colors.primary.withValues(alpha: 0.05),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(40),
             ),
           ),
         ),
