@@ -118,7 +118,7 @@ class NoteRepository {
   }
 
   /// Get notes for a specific user profile (profile mode)
-  /// Uses NostrDataService.fetchProfileNotes() for NIP-compliant profile note fetching
+  /// Uses dedicated NostrDataService.fetchProfileNotes() that bypasses feed filtering
   Future<Result<List<NoteModel>>> getProfileNotes({
     required String authorNpub,
     int limit = 50,
@@ -126,7 +126,9 @@ class NoteRepository {
     DateTime? since,
   }) async {
     try {
-      // Use NostrDataService for actual profile note fetching according to NIPs
+      debugPrint('[NoteRepository] PROFILE MODE: Getting notes for $authorNpub (bypassing feed filters)');
+
+      // Use dedicated profile note fetching that completely bypasses feed filtering
       final result = await _nostrDataService.fetchProfileNotes(
         userNpub: authorNpub,
         limit: limit,
@@ -134,14 +136,18 @@ class NoteRepository {
         since: since,
       );
 
-      // Note: Automatic interaction fetching removed - only fetch when explicitly needed
       result.fold(
-        (notes) => debugPrint('[NoteRepository] Loaded ${notes.length} profile notes without automatic interaction fetch'),
-        (error) => debugPrint('[NoteRepository] Profile notes error: $error'),
+        (notes) {
+          debugPrint('[NoteRepository] PROFILE MODE: Loaded ${notes.length} profile notes');
+          debugPrint(
+              '[NoteRepository] PROFILE MODE: Notes include - Posts: ${notes.where((n) => !n.isReply && !n.isRepost).length}, Replies: ${notes.where((n) => n.isReply && !n.isRepost).length}, Reposts: ${notes.where((n) => n.isRepost).length}');
+        },
+        (error) => debugPrint('[NoteRepository] PROFILE MODE: Profile notes error: $error'),
       );
 
       return result;
     } catch (e) {
+      debugPrint('[NoteRepository] PROFILE MODE: Exception getting profile notes: $e');
       return Result.error('Failed to get profile notes: ${e.toString()}');
     }
   }
@@ -164,7 +170,9 @@ class NoteRepository {
       if (cachedNote != null) {
         debugPrint('[NoteRepository] Found note in NostrDataService cache: ${cachedNote.id}');
         // Add to local cache for future access
-        _notes.add(cachedNote);
+        if (!_notes.any((n) => n.id == cachedNote.id)) {
+          _notes.add(cachedNote);
+        }
         return Result.success(cachedNote);
       }
 

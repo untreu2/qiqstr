@@ -195,15 +195,16 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
   }
 
   /// Load profile notes for specific user (their posts AND reposts)
+  /// Uses dedicated profile loading system that bypasses feed filtering
   Future<void> loadProfileNotes(String userNpub) async {
     await executeOperation('loadProfileNotes', () async {
       _profileNotesState = const LoadingState();
       safeNotifyListeners();
 
-      debugPrint('[ProfileViewModel] Loading profile notes for: $userNpub');
+      debugPrint('[ProfileViewModel] PROFILE MODE: Loading notes for $userNpub (bypassing feed filters)');
 
       try {
-        // Get profile notes (user's own posts AND their reposts)
+        // Use dedicated profile loading that bypasses feed filtering completely
         final result = await _noteRepository.getProfileNotes(
           authorNpub: userNpub,
           limit: 50,
@@ -211,16 +212,44 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
 
         result.fold(
           (notes) {
-            debugPrint('[ProfileViewModel] Loaded ${notes.length} profile notes');
-            _profileNotesState = notes.isEmpty ? const EmptyState('No notes from this user yet') : LoadedState(notes);
+            debugPrint('[ProfileViewModel] PROFILE MODE: Loaded ${notes.length} profile notes');
+            debugPrint(
+                '[ProfileViewModel] PROFILE MODE: Notes breakdown - Posts: ${notes.where((n) => !n.isReply && !n.isRepost).length}, Replies: ${notes.where((n) => n.isReply && !n.isRepost).length}, Reposts: ${notes.where((n) => n.isRepost).length}');
+
+            // Filter out standalone replies (keep only posts and reposts)
+            final filteredNotes = notes.where((note) {
+              // Show normal posts (not replies, not reposts)
+              if (!note.isReply && !note.isRepost) {
+                return true;
+              }
+
+              // Show all reposts (including reposted replies)
+              if (note.isRepost) {
+                return true;
+              }
+
+              // Hide standalone replies
+              if (note.isReply && !note.isRepost) {
+                return false;
+              }
+
+              return true;
+            }).toList();
+
+            debugPrint(
+                '[ProfileViewModel] PROFILE MODE: After filtering - ${filteredNotes.length} notes (${notes.length - filteredNotes.length} standalone replies hidden)');
+            debugPrint(
+                '[ProfileViewModel] PROFILE MODE: Filtered breakdown - Posts: ${filteredNotes.where((n) => !n.isReply && !n.isRepost).length}, Reposts: ${filteredNotes.where((n) => n.isRepost).length}');
+
+            _profileNotesState = filteredNotes.isEmpty ? const EmptyState('No notes from this user yet') : LoadedState(filteredNotes);
           },
           (error) {
-            debugPrint('[ProfileViewModel] Failed to load profile notes: $error');
+            debugPrint('[ProfileViewModel] PROFILE MODE: Failed to load profile notes: $error');
             _profileNotesState = ErrorState('Failed to load notes: $error');
           },
         );
       } catch (e) {
-        debugPrint('[ProfileViewModel] Exception loading profile notes: $e');
+        debugPrint('[ProfileViewModel] PROFILE MODE: Exception loading profile notes: $e');
         _profileNotesState = ErrorState('Exception loading notes: $e');
       }
 
@@ -281,6 +310,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
   @override
   void onRetry() {
     if (_currentProfileNpub.isNotEmpty) {
+      debugPrint('[ProfileViewModel] PROFILE MODE: Retrying profile and notes load for $_currentProfileNpub');
       loadProfile(_currentProfileNpub);
       loadProfileNotes(_currentProfileNpub);
     }

@@ -183,17 +183,43 @@ class _ThreadPageState extends State<ThreadPage> {
       builder: (context, replies) {
         debugPrint(' [ThreadPage] Replies state loaded with ${replies.length} replies');
 
-        final threadStructure = viewModel.threadStructureState.data;
+        // Check both replies and thread structure states
+        final threadStructureState = viewModel.threadStructureState;
+
+        // If thread structure is still loading, show loading indicator
+        if (threadStructureState.isLoading) {
+          debugPrint('[ThreadPage] Thread structure still loading, showing loader');
+          return Container(
+            padding: const EdgeInsets.all(32),
+            child: Center(
+              child: Column(
+                children: [
+                  CircularProgressIndicator(color: context.colors.primary),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Building thread structure...',
+                    style: TextStyle(color: context.colors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        final threadStructure = threadStructureState.data;
         if (threadStructure == null) {
           debugPrint('[ThreadPage] Thread structure is null, showing empty widget');
           return const SizedBox.shrink();
         }
 
-        debugPrint(' [ThreadPage] Thread structure available, getting children for: ${displayNote.id}');
+        debugPrint(' [ThreadPage] Thread structure ready, getting children for: ${displayNote.id}');
         final allDirectReplies = threadStructure.getChildren(displayNote.id);
-        // Filter out repost notes
-        final directReplies = allDirectReplies.where((reply) => !reply.isRepost).toList();
-        debugPrint(' [ThreadPage] Found ${directReplies.length} direct replies (filtered) for ${displayNote.id}');
+
+        // Filter out repost notes and sort by timestamp for consistent ordering
+        final directReplies = allDirectReplies.where((reply) => !reply.isRepost).toList()
+          ..sort((a, b) => a.timestamp.compareTo(b.timestamp)); // Ensure consistent ordering
+
+        debugPrint(' [ThreadPage] Found ${directReplies.length} direct replies (filtered and sorted) for ${displayNote.id}');
 
         if (directReplies.isEmpty) {
           debugPrint(' [ThreadPage] No direct replies found, showing "No replies yet"');
@@ -219,14 +245,21 @@ class _ThreadPageState extends State<ThreadPage> {
         return Column(
           children: [
             const SizedBox(height: 8.0),
-            ...visibleReplies.map((reply) {
-              debugPrint(' [ThreadPage] Creating widget for reply: ${reply.id}');
-              return _buildThreadReply(
-                context,
-                viewModel,
-                reply,
-                threadStructure,
-                0, // depth
+            // Wrap reply widgets in AnimatedList for smooth updates
+            ...visibleReplies.asMap().entries.map((entry) {
+              final index = entry.key;
+              final reply = entry.value;
+              debugPrint(' [ThreadPage] Creating widget for reply [$index]: ${reply.id}');
+              return AnimatedContainer(
+                key: ValueKey(reply.id),
+                duration: const Duration(milliseconds: 300),
+                child: _buildThreadReply(
+                  context,
+                  viewModel,
+                  reply,
+                  threadStructure,
+                  0, // depth
+                ),
               );
             }),
 
@@ -279,20 +312,20 @@ class _ThreadPageState extends State<ThreadPage> {
               _visibleRepliesCount += _repliesPerPage;
             });
           },
-          child: Text(
-            'Load More',
-            style: TextStyle(
-              color: context.colors.primary,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
           style: OutlinedButton.styleFrom(
             side: BorderSide(color: context.colors.primary.withValues(alpha: 0.3)),
             backgroundColor: context.colors.primary.withValues(alpha: 0.05),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(40),
+            ),
+          ),
+          child: Text(
+            'Load More',
+            style: TextStyle(
+              color: context.colors.primary,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ),

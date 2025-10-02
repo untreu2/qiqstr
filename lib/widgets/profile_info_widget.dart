@@ -558,10 +558,19 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         final cacheKey = 'profile_large_${currentUser.pubkeyHex}_${currentUser.profileImage.hashCode}';
 
         Widget avatar = RepaintBoundary(
-          child: _getCachedAvatar(
-            currentUser.profileImage,
-            avatarRadius,
-            cacheKey,
+          child: Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: Colors.white,
+                width: 4.0,
+              ),
+            ),
+            child: _getCachedAvatar(
+              currentUser.profileImage,
+              avatarRadius,
+              cacheKey,
+            ),
           ),
         );
 

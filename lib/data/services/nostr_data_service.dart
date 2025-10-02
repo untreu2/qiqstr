@@ -1441,6 +1441,7 @@ class NostrDataService {
 
   /// Fetch profile notes for specific user only (not their follows)
   /// Used in profile mode according to user requirements
+  /// COMPLETELY BYPASSES feed filtering - shows ALL user content regardless of follow status
   Future<Result<List<NoteModel>>> fetchProfileNotes({
     required String userNpub,
     int limit = 50,
@@ -1448,7 +1449,7 @@ class NostrDataService {
     DateTime? since,
   }) async {
     try {
-      debugPrint('[NostrDataService] Fetching profile notes for: $userNpub');
+      debugPrint('[NostrDataService] PROFILE MODE: Fetching notes for $userNpub (bypassing ALL feed filters)');
 
       // Convert npub to hex format
       final pubkeyHex = _authService.npubToHex(userNpub);
@@ -1465,103 +1466,302 @@ class NostrDataService {
         until: until != null ? until.millisecondsSinceEpoch ~/ 1000 : null,
       );
 
-      // Create request and broadcast to relays
-      final request = NostrService.createRequest(filter);
-      await _relayManager.broadcast(NostrService.serializeRequest(request));
+      // PROFILE MODE: Direct relay connection with isolated event handling
+      final profileNotes = <NoteModel>[];
+      final limitedRelays = _relayManager.relayUrls.take(3).toList();
 
-      // Function to filter user notes from the current cache
-      List<NoteModel> filterUserNotes() {
-        return _getNotesList()
-            .where((note) {
-              debugPrint('[NostrDataService] Profile: Checking note ${note.id}');
-              debugPrint('[NostrDataService]   - Author: ${note.author}');
-              debugPrint('[NostrDataService]   - RepostedBy: ${note.repostedBy}');
-              debugPrint('[NostrDataService]   - IsReply: ${note.isReply}');
-              debugPrint('[NostrDataService]   - IsRepost: ${note.isRepost}');
+      debugPrint('[NostrDataService] PROFILE: Using ${limitedRelays.length} relays for direct fetch');
 
-              // Check if user is the reposter
-              bool isReposter = false;
-              if (note.repostedBy != null) {
-                final reposterHex = _authService.npubToHex(note.repostedBy!) ?? note.repostedBy!;
-                isReposter = note.repostedBy == userNpub || reposterHex == pubkeyHex;
-                debugPrint('[NostrDataService]   - IsReposter: $isReposter (hex: $reposterHex)');
+      await Future.wait(limitedRelays.map((relayUrl) async {
+        WebSocket? ws;
+        StreamSubscription? sub;
+        try {
+          debugPrint('[NostrDataService] PROFILE: Connecting to $relayUrl');
+          ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
+          if (_isClosed) {
+            await ws.close();
+            return;
+          }
+
+          final completer = Completer<void>();
+          bool hasReceivedEvents = false;
+
+          sub = ws.listen((event) {
+            try {
+              final decoded = jsonDecode(event);
+
+              if (decoded[0] == 'EVENT') {
+                hasReceivedEvents = true;
+                final eventData = decoded[2] as Map<String, dynamic>;
+                final eventId = eventData['id'] as String;
+                final eventAuthor = eventData['pubkey'] as String;
+                final eventKind = eventData['kind'] as int;
+
+                debugPrint('[NostrDataService] PROFILE: Received event $eventId from $relayUrl');
+
+                // PROFILE MODE: Accept ALL notes from this user, NO FEED FILTERING
+                if (eventAuthor == pubkeyHex && (eventKind == 1 || eventKind == 6)) {
+                  // Check for duplicates
+                  if (!profileNotes.any((n) => n.id == eventId)) {
+                    final note = _processProfileEventDirectly(eventData, userNpub);
+                    if (note != null) {
+                      profileNotes.add(note);
+
+                      // CRITICAL: Also add to main cache for ThreadPage access
+                      if (!_noteCache.containsKey(eventId) && !_eventIds.contains(eventId)) {
+                        _noteCache[eventId] = note;
+                        _eventIds.add(eventId);
+                        debugPrint('[NostrDataService] PROFILE: Also added ${eventId.substring(0, 8)}... to main cache for thread access');
+                      }
+
+                      debugPrint('[NostrDataService] PROFILE: Added note ${eventId.substring(0, 8)}... to profile list');
+                    }
+                  }
+                }
+              } else if (decoded[0] == 'EOSE') {
+                debugPrint('[NostrDataService] PROFILE: EOSE received from $relayUrl');
+                if (!completer.isCompleted) completer.complete();
               }
+            } catch (e) {
+              debugPrint('[NostrDataService] PROFILE: Error processing event: $e');
+            }
+          }, onDone: () {
+            if (!completer.isCompleted) completer.complete();
+          }, onError: (error) {
+            debugPrint('[NostrDataService] PROFILE: Connection error: $error');
+            if (!completer.isCompleted) completer.complete();
+          }, cancelOnError: true);
 
-              // Check if user is the author
-              final noteAuthorHex = _authService.npubToHex(note.author) ?? note.author;
-              final isAuthor = note.author == userNpub || noteAuthorHex == pubkeyHex;
-              debugPrint('[NostrDataService]   - IsAuthor: $isAuthor (hex: $noteAuthorHex)');
+          if (ws.readyState == WebSocket.open) {
+            ws.add(NostrService.serializeRequest(NostrService.createRequest(filter)));
+          }
 
-              // First check if user is either author or reposter
-              final isUserRelated = isAuthor || isReposter;
-              if (!isUserRelated) {
-                debugPrint('[NostrDataService]   - Result: EXCLUDE (not user related)');
-                return false;
-              }
+          await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
+            debugPrint('[NostrDataService] PROFILE: Timeout waiting for notes from $relayUrl');
+          });
 
-              // Apply same filtering logic as feed (_getFilteredNotesList)
-              // Normal post (reply değil) → göster
-              if (!note.isReply) {
-                debugPrint('[NostrDataService]   - Result: INCLUDE (normal post)');
-                return true;
-              }
+          await sub.cancel();
+          await ws.close();
 
-              // Reply ama aynı zamanda repost → göster (reposted reply)
-              if (note.isReply && note.isRepost) {
-                debugPrint('[NostrDataService]   - Result: INCLUDE (reposted reply)');
-                return true;
-              }
+          debugPrint('[NostrDataService] PROFILE: Finished $relayUrl, received ${hasReceivedEvents ? 'events' : 'no events'}');
+        } catch (e) {
+          debugPrint('[NostrDataService] PROFILE: Exception with relay $relayUrl: $e');
+          await sub?.cancel();
+          await ws?.close();
+        }
+      }));
 
-              // Standalone reply → gizle
-              debugPrint('[NostrDataService]   - Result: EXCLUDE (standalone reply)');
-              return false;
-            })
-            .take(limit)
-            .toList();
+      // Sort profile notes by timestamp
+      profileNotes.sort((a, b) {
+        final aTime = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
+        final bTime = b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
+        return bTime.compareTo(aTime);
+      });
+
+      final limitedNotes = profileNotes.take(limit).toList();
+
+      debugPrint('[NostrDataService] PROFILE: Returning ${limitedNotes.length} profile notes for $userNpub');
+      debugPrint(
+          '[NostrDataService] PROFILE: Breakdown - Posts: ${limitedNotes.where((n) => !n.isReply && !n.isRepost).length}, Replies: ${limitedNotes.where((n) => n.isReply && !n.isRepost).length}, Reposts: ${limitedNotes.where((n) => n.isRepost).length}');
+      debugPrint('[NostrDataService] PROFILE: Main cache now has ${_noteCache.length} total notes for thread access');
+
+      // Trigger UI update so other components know about the new notes in cache
+      _scheduleUIUpdate();
+
+      return Result.success(limitedNotes);
+    } catch (e) {
+      debugPrint('[NostrDataService] PROFILE: Error fetching profile notes: $e');
+      return Result.error('Failed to fetch profile notes: $e');
+    }
+  }
+
+  /// Process event directly for profile mode (bypasses all feed filtering)
+  NoteModel? _processProfileEventDirectly(Map<String, dynamic> eventData, String userNpub) {
+    try {
+      final pubkey = eventData['pubkey'] as String;
+      final createdAt = eventData['created_at'] as int;
+      final kind = eventData['kind'] as int;
+
+      final authorNpub = _authService.hexToNpub(pubkey) ?? pubkey;
+      final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
+
+      if (kind == 1) {
+        // Text note
+        return _processKind1ForProfile(eventData, authorNpub, timestamp);
+      } else if (kind == 6) {
+        // Repost
+        return _processKind6ForProfile(eventData, authorNpub, timestamp);
       }
 
-      // Wait for relay responses if cache has no notes for this user
-      final cachedUserNotes = filterUserNotes();
-      if (cachedUserNotes.isEmpty) {
-        debugPrint('[NostrDataService] No cached profile notes found, waiting for relay responses...');
+      return null;
+    } catch (e) {
+      debugPrint('[NostrDataService] PROFILE: Error processing event: $e');
+      return null;
+    }
+  }
 
-        // Wait up to 3 seconds for relay responses
-        final completer = Completer<List<NoteModel>>();
-        late StreamSubscription subscription;
+  /// Process kind 1 event for profile mode
+  NoteModel? _processKind1ForProfile(Map<String, dynamic> eventData, String authorNpub, DateTime timestamp) {
+    try {
+      final id = eventData['id'] as String;
+      final content = eventData['content'] as String;
+      final tags = eventData['tags'] as List<dynamic>? ?? [];
 
-        subscription = _notesController.stream.listen((notes) {
-          final userNotes = filterUserNotes();
-          if (userNotes.isNotEmpty && !completer.isCompleted) {
-            debugPrint('[NostrDataService] Received ${userNotes.length} profile notes from relays');
-            completer.complete(userNotes);
+      // Parse reply structure
+      String? rootId;
+      String? parentId;
+      bool isReply = false;
+      final List<Map<String, String>> eTags = [];
+      final List<Map<String, String>> pTags = [];
+
+      for (final tag in tags) {
+        if (tag is List && tag.isNotEmpty) {
+          if (tag[0] == 'e' && tag.length >= 2) {
+            final eventId = tag[1] as String;
+            final relayUrl = tag.length > 2 ? (tag[2] as String? ?? '') : '';
+            final marker = tag.length >= 4 ? tag[3] as String : '';
+            final pubkeyTag = tag.length > 4 ? (tag[4] as String? ?? '') : '';
+
+            eTags.add({
+              'eventId': eventId,
+              'relayUrl': relayUrl,
+              'marker': marker,
+              'pubkey': pubkeyTag,
+            });
+
+            if (marker == 'root') {
+              rootId = eventId;
+              isReply = true;
+            } else if (marker == 'reply') {
+              parentId = eventId;
+              isReply = true;
+            } else if (rootId == null) {
+              rootId = eventId;
+              isReply = true;
+            }
+          } else if (tag[0] == 'p' && tag.length >= 2) {
+            pTags.add({
+              'pubkey': tag[1] as String,
+              'relayUrl': tag.length > 2 ? (tag[2] as String? ?? '') : '',
+              'petname': tag.length > 3 ? (tag[3] as String? ?? '') : '',
+            });
           }
-        });
-
-        // Set timeout
-        Timer(const Duration(seconds: 3), () {
-          if (!completer.isCompleted) {
-            debugPrint('[NostrDataService] Timeout waiting for profile note responses');
-            completer.complete([]); // Return empty list on timeout
-          }
-        });
-
-        try {
-          final notes = await completer.future;
-          await subscription.cancel();
-          debugPrint('[NostrDataService] Returning ${notes.length} profile notes from relay response');
-          return Result.success(notes);
-        } catch (e) {
-          await subscription.cancel();
-          debugPrint('[NostrDataService] Error waiting for profile notes: $e');
-          return Result.success([]);
         }
       }
 
-      // Return cached notes if available
-      debugPrint('[NostrDataService] Returning ${cachedUserNotes.length} cached profile notes for $userNpub');
-      return Result.success(cachedUserNotes);
+      return NoteModel(
+        id: id,
+        content: content,
+        author: authorNpub,
+        timestamp: timestamp,
+        isReply: isReply,
+        isRepost: false,
+        rootId: rootId,
+        parentId: parentId,
+        repostedBy: null,
+        reactionCount: 0,
+        replyCount: 0,
+        repostCount: 0,
+        zapAmount: 0,
+        rawWs: jsonEncode(eventData),
+        eTags: eTags,
+        pTags: pTags,
+      );
     } catch (e) {
-      return Result.error('Failed to fetch profile notes: $e');
+      debugPrint('[NostrDataService] PROFILE: Error processing kind 1: $e');
+      return null;
+    }
+  }
+
+  /// Process kind 6 event (repost) for profile mode
+  NoteModel? _processKind6ForProfile(Map<String, dynamic> eventData, String reposterNpub, DateTime timestamp) {
+    try {
+      final id = eventData['id'] as String;
+      final content = eventData['content'] as String? ?? '';
+      final tags = eventData['tags'] as List<dynamic>? ?? [];
+
+      // Find original event and original author from tags
+      String? originalEventId;
+      String? originalAuthorHex;
+
+      for (final tag in tags) {
+        if (tag is List && tag.isNotEmpty) {
+          if (tag[0] == 'e' && tag.length >= 2) {
+            originalEventId = tag[1] as String;
+          } else if (tag[0] == 'p' && tag.length >= 2) {
+            originalAuthorHex = tag[1] as String;
+          }
+        }
+      }
+
+      if (originalEventId == null) return null;
+
+      String displayContent = 'Reposted note';
+      String displayAuthor = originalAuthorHex != null ? (_authService.hexToNpub(originalAuthorHex) ?? originalAuthorHex) : 'Unknown';
+      bool detectedIsReply = false;
+      String? detectedRootId;
+      String? detectedParentId;
+
+      // Try to extract original content from repost content
+      if (content.isNotEmpty) {
+        try {
+          final originalContent = jsonDecode(content) as Map<String, dynamic>;
+          displayContent = originalContent['content'] as String? ?? displayContent;
+
+          if (originalAuthorHex != null) {
+            displayAuthor = _authService.hexToNpub(originalAuthorHex) ?? originalAuthorHex;
+          }
+
+          // Check if original is a reply
+          final originalTags = originalContent['tags'] as List<dynamic>? ?? [];
+          for (final tag in originalTags) {
+            if (tag is List && tag.length >= 2 && tag[0] == 'e') {
+              final eventId = tag[1] as String;
+
+              if (tag.length >= 4) {
+                final marker = tag[3] as String;
+                if (marker == 'root') {
+                  detectedRootId = eventId;
+                  detectedParentId = eventId;
+                  detectedIsReply = true;
+                } else if (marker == 'reply') {
+                  detectedParentId = eventId;
+                  detectedIsReply = true;
+                }
+              } else {
+                if (detectedParentId == null) {
+                  detectedParentId = eventId;
+                  detectedRootId = eventId;
+                  detectedIsReply = true;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          debugPrint('[NostrDataService] PROFILE: Failed to parse repost content: $e');
+        }
+      }
+
+      return NoteModel(
+        id: id,
+        content: displayContent,
+        author: displayAuthor,
+        timestamp: timestamp,
+        isReply: detectedIsReply,
+        isRepost: true,
+        rootId: detectedRootId ?? originalEventId,
+        parentId: detectedParentId,
+        repostedBy: reposterNpub,
+        repostTimestamp: timestamp,
+        reactionCount: 0,
+        replyCount: 0,
+        repostCount: 0,
+        zapAmount: 0,
+        rawWs: jsonEncode(eventData),
+      );
+    } catch (e) {
+      debugPrint('[NostrDataService] PROFILE: Error processing kind 6: $e');
+      return null;
     }
   }
 
@@ -2296,38 +2496,109 @@ class NostrDataService {
     }
   }
 
-  /// Fetch a specific note by ID from relays - Enhanced version for QuoteWidget
+  /// Fetch a specific note by ID from relays - Enhanced version for Thread Pages
   Future<bool> fetchSpecificNote(String noteId) async {
     try {
-      debugPrint('[NostrDataService]  Fetching specific note: $noteId');
+      debugPrint('[NostrDataService] THREAD: Fetching specific note: $noteId');
 
       // Check if we already have this note in cache
       if (_noteCache.containsKey(noteId)) {
-        debugPrint('[NostrDataService]  Note already in cache: $noteId');
+        debugPrint('[NostrDataService] THREAD: Note already in cache: $noteId');
         return true;
       }
 
-      // Create filter using NostrService for better compatibility
-      final filter = NostrService.createEventByIdFilter(eventIds: [noteId]);
-      final request = NostrService.createRequest(filter);
+      // Use direct relay connections for critical thread note fetching
+      final limitedRelays = _relayManager.relayUrls.take(3).toList();
+      bool noteFound = false;
 
-      // Broadcast to relays
-      await _relayManager.broadcast(NostrService.serializeRequest(request));
+      debugPrint('[NostrDataService] THREAD: Using ${limitedRelays.length} relays for direct fetch');
 
-      debugPrint('[NostrDataService]  Specific note request sent for: $noteId');
+      await Future.wait(limitedRelays.map((relayUrl) async {
+        WebSocket? ws;
+        StreamSubscription? sub;
+        try {
+          debugPrint('[NostrDataService] THREAD: Connecting to $relayUrl');
+          ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
+          if (_isClosed) {
+            await ws.close();
+            return;
+          }
 
-      // Wait a bit for response and check cache again
-      await Future.delayed(const Duration(milliseconds: 1500));
+          final completer = Completer<void>();
+          bool hasReceivedEvents = false;
 
-      if (_noteCache.containsKey(noteId)) {
-        debugPrint('[NostrDataService] Note successfully fetched: $noteId');
+          // Create filter for specific note
+          final filter = NostrService.createEventByIdFilter(eventIds: [noteId]);
+          final request = NostrService.createRequest(filter);
+
+          sub = ws.listen((event) {
+            try {
+              final decoded = jsonDecode(event);
+
+              if (decoded[0] == 'EVENT') {
+                hasReceivedEvents = true;
+                final eventData = decoded[2] as Map<String, dynamic>;
+                final eventId = eventData['id'] as String;
+
+                debugPrint('[NostrDataService] THREAD: Received event $eventId from $relayUrl');
+
+                if (eventId == noteId) {
+                  // Process this note regardless of feed filtering (for thread access)
+                  final kind = eventData['kind'] as int;
+                  if (kind == 1 || kind == 6) {
+                    final pubkeyHex = eventData['pubkey'] as String;
+                    final userNpub = _authService.hexToNpub(pubkeyHex) ?? pubkeyHex;
+                    final note = _processProfileEventDirectly(eventData, userNpub);
+                    if (note != null) {
+                      _noteCache[eventId] = note;
+                      _eventIds.add(eventId);
+                      noteFound = true;
+                      debugPrint('[NostrDataService] THREAD: Successfully cached note $eventId');
+                    }
+                  }
+                }
+              } else if (decoded[0] == 'EOSE') {
+                debugPrint('[NostrDataService] THREAD: EOSE received from $relayUrl');
+                if (!completer.isCompleted) completer.complete();
+              }
+            } catch (e) {
+              debugPrint('[NostrDataService] THREAD: Error processing event: $e');
+            }
+          }, onDone: () {
+            if (!completer.isCompleted) completer.complete();
+          }, onError: (error) {
+            debugPrint('[NostrDataService] THREAD: Connection error: $error');
+            if (!completer.isCompleted) completer.complete();
+          }, cancelOnError: true);
+
+          if (ws.readyState == WebSocket.open) {
+            ws.add(NostrService.serializeRequest(request));
+          }
+
+          await completer.future.timeout(const Duration(seconds: 3), onTimeout: () {
+            debugPrint('[NostrDataService] THREAD: Timeout waiting for note from $relayUrl');
+          });
+
+          await sub.cancel();
+          await ws.close();
+
+          debugPrint('[NostrDataService] THREAD: Finished $relayUrl, received ${hasReceivedEvents ? 'events' : 'no events'}');
+        } catch (e) {
+          debugPrint('[NostrDataService] THREAD: Exception with relay $relayUrl: $e');
+          await sub?.cancel();
+          await ws?.close();
+        }
+      }));
+
+      if (noteFound || _noteCache.containsKey(noteId)) {
+        debugPrint('[NostrDataService] THREAD: Note successfully fetched: $noteId');
         return true;
       } else {
-        debugPrint('[NostrDataService]  Note not found after fetch: $noteId');
+        debugPrint('[NostrDataService] THREAD: Note not found after fetch: $noteId');
         return false;
       }
     } catch (e) {
-      debugPrint('[NostrDataService]  Error fetching specific note: $e');
+      debugPrint('[NostrDataService] THREAD: Error fetching specific note: $e');
       return false;
     }
   }
