@@ -4,9 +4,9 @@ import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/user_model.dart';
 import '../screens/profile_page.dart';
-import 'package:bounce/bounce.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/user_repository.dart';
+import '../widgets/back_button_widget.dart';
 
 class FollowingPage extends StatefulWidget {
   final UserModel user;
@@ -149,41 +149,18 @@ class _FollowingPageState extends State<FollowingPage> {
   }
 
   Widget _buildHeader(BuildContext context) {
+    final double topPadding = MediaQuery.of(context).padding.top;
+    
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 60, 16, 8),
-      child: Row(
-        children: [
-          Bounce(
-            scaleFactor: 0.85,
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: context.colors.surface,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: context.colors.border),
-              ),
-              child: Icon(
-                Icons.arrow_back,
-                color: context.colors.textPrimary,
-                size: 20,
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Text(
-              'Following',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-                color: context.colors.textPrimary,
-                letterSpacing: -0.5,
-              ),
-            ),
-          ),
-        ],
+      padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 0),
+      child: Text(
+        'Following',
+        style: TextStyle(
+          fontSize: 28,
+          fontWeight: FontWeight.w700,
+          color: context.colors.textPrimary,
+          letterSpacing: -0.5,
+        ),
       ),
     );
   }
@@ -298,15 +275,23 @@ class _FollowingPageState extends State<FollowingPage> {
 
   Widget _buildContent(BuildContext context) {
     if (_isLoading) {
-      return Center(
+      return SingleChildScrollView(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(color: context.colors.accent),
-            const SizedBox(height: 16),
-            Text(
-              'Loading following list...',
-              style: TextStyle(color: context.colors.textSecondary),
+            _buildHeader(context),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.3),
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: context.colors.accent),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Loading following list...',
+                    style: TextStyle(color: context.colors.textSecondary),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -314,38 +299,49 @@ class _FollowingPageState extends State<FollowingPage> {
     }
 
     if (_error != null) {
-      return Center(
+      return SingleChildScrollView(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.error_outline,
-              size: 48,
-              color: context.colors.error,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Error loading following list',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: context.colors.textPrimary,
+            _buildHeader(context),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 48,
+                    color: context.colors.error,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Error loading following list',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: context.colors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Text(
+                      _error!,
+                      style: TextStyle(color: context.colors.textSecondary),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _loadFollowingUsers,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: context.colors.accent,
+                      foregroundColor: context.colors.background,
+                    ),
+                    child: const Text('Retry'),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _error!,
-              style: TextStyle(color: context.colors.textSecondary),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _loadFollowingUsers,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: context.colors.accent,
-                foregroundColor: context.colors.background,
-              ),
-              child: const Text('Retry'),
             ),
           ],
         ),
@@ -353,41 +349,68 @@ class _FollowingPageState extends State<FollowingPage> {
     }
 
     if (_followingUsers.isEmpty) {
-      return Center(
+      return SingleChildScrollView(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.people_outline,
-              size: 48,
-              color: context.colors.textSecondary,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No following found',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: context.colors.textPrimary,
+            _buildHeader(context),
+            SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.people_outline,
+                    size: 48,
+                    color: context.colors.textSecondary,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No following found',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: context.colors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'This user is not following anyone yet.',
+                    style: TextStyle(color: context.colors.textSecondary),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'This user is not following anyone yet.',
-              style: TextStyle(color: context.colors.textSecondary),
             ),
           ],
         ),
       );
     }
 
-    return ListView.separated(
-      padding: EdgeInsets.zero,
-      itemCount: _followingUsers.length,
-      itemBuilder: (context, index) => _buildUserTile(context, _followingUsers[index]),
-      separatorBuilder: (_, __) => Divider(
-        color: context.colors.border,
-        height: 1,
+    return RefreshIndicator(
+      onRefresh: _loadFollowingUsers,
+      child: CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: _buildHeader(context),
+          ),
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                if (index.isOdd) {
+                  return Divider(
+                    color: context.colors.border,
+                    height: 1,
+                  );
+                }
+                final userIndex = index ~/ 2;
+                return _buildUserTile(context, _followingUsers[userIndex]);
+              },
+              childCount: _followingUsers.length * 2 - 1,
+            ),
+          ),
+          const SliverToBoxAdapter(
+            child: SizedBox(height: 24),
+          ),
+        ],
       ),
     );
   }
@@ -398,13 +421,10 @@ class _FollowingPageState extends State<FollowingPage> {
       builder: (context, themeManager, child) {
         return Scaffold(
           backgroundColor: context.colors.background,
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          body: Stack(
             children: [
-              _buildHeader(context),
-              Expanded(
-                child: _buildContent(context),
-              ),
+              _buildContent(context),
+              const BackButtonWidget.floating(),
             ],
           ),
         );
