@@ -697,12 +697,11 @@ class _RelayPageState extends State<RelayPage> {
                 child: GestureDetector(
                   onTap: _isFetchingUserRelays ? null : _fetchUserRelays,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 18),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: _isFetchingUserRelays ? context.colors.surface.withValues(alpha: 0.5) : context.colors.overlayLight,
-                      borderRadius: BorderRadius.circular(25),
-                      border: Border.all(color: context.colors.borderAccent),
+                      borderRadius: BorderRadius.circular(40),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -722,7 +721,7 @@ class _RelayPageState extends State<RelayPage> {
                           _isFetchingUserRelays ? 'Fetching...' : 'Fetch',
                           style: TextStyle(
                             color: context.colors.textPrimary,
-                            fontSize: 16,
+                            fontSize: 17,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -736,12 +735,11 @@ class _RelayPageState extends State<RelayPage> {
                 child: GestureDetector(
                   onTap: _isPublishingRelays ? null : _publishRelays,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 18),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: _isPublishingRelays ? context.colors.surface.withValues(alpha: 0.5) : context.colors.overlayLight,
-                      borderRadius: BorderRadius.circular(25),
-                      border: Border.all(color: context.colors.borderAccent),
+                      borderRadius: BorderRadius.circular(40),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -761,7 +759,7 @@ class _RelayPageState extends State<RelayPage> {
                           _isPublishingRelays ? 'Publishing...' : 'Publish',
                           style: TextStyle(
                             color: context.colors.textPrimary,
-                            fontSize: 16,
+                            fontSize: 17,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -779,12 +777,11 @@ class _RelayPageState extends State<RelayPage> {
                 child: GestureDetector(
                   onTap: _showAddRelayDialog,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 18),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: context.colors.buttonPrimary,
-                      borderRadius: BorderRadius.circular(25),
-                      border: Border.all(color: context.colors.borderAccent),
+                      borderRadius: BorderRadius.circular(40),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -795,7 +792,7 @@ class _RelayPageState extends State<RelayPage> {
                           'Add Relay',
                           style: TextStyle(
                             color: context.colors.background,
-                            fontSize: 16,
+                            fontSize: 17,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -808,12 +805,11 @@ class _RelayPageState extends State<RelayPage> {
               GestureDetector(
                 onTap: _resetToDefaults,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                  padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: context.colors.overlayLight,
-                    borderRadius: BorderRadius.circular(25),
-                    border: Border.all(color: context.colors.borderAccent),
+                    borderRadius: BorderRadius.circular(40),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -824,7 +820,7 @@ class _RelayPageState extends State<RelayPage> {
                         'Reset',
                         style: TextStyle(
                           color: context.colors.textPrimary,
-                          fontSize: 16,
+                          fontSize: 17,
                           fontWeight: FontWeight.bold,
                         ),
                       ),

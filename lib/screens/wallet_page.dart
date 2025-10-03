@@ -223,17 +223,15 @@ class _WalletPageState extends State<WalletPage> {
   Widget _buildConnectButton(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: SizedBox(
-        width: double.infinity,
-        child: ElevatedButton(
-          onPressed: _isConnecting ? null : _connectWallet,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: context.colors.accent,
-            foregroundColor: context.colors.background,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
+      child: GestureDetector(
+        onTap: _isConnecting ? null : _connectWallet,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: context.colors.accent,
+            borderRadius: BorderRadius.circular(40),
           ),
           child: _isConnecting
               ? SizedBox(
@@ -244,7 +242,14 @@ class _WalletPageState extends State<WalletPage> {
                     strokeWidth: 2,
                   ),
                 )
-              : const Text('Connect Wallet'),
+              : Text(
+                  'Connect Wallet',
+                  style: TextStyle(
+                    color: context.colors.background,
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
         ),
       ),
     );
@@ -256,52 +261,58 @@ class _WalletPageState extends State<WalletPage> {
     }
 
     return Expanded(
-      child: Column(
+      child: Stack(
         children: [
-          // Balance at top
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
-            child: Text(
-              _balance != null
-                  ? '${((_balance!.balance / 1000).floor()).toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')} sats'
-                  : 'Loading...',
-              style: TextStyle(
-                fontSize: 56,
-                fontWeight: FontWeight.bold,
-                color: context.colors.textPrimary,
+          Column(
+            children: [
+              // Balance at top
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+                child: Text(
+                  _balance != null
+                      ? '${((_balance!.balance / 1000).floor()).toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')} sats'
+                      : 'Loading...',
+                  style: TextStyle(
+                    fontSize: 56,
+                    fontWeight: FontWeight.bold,
+                    color: context.colors.textPrimary,
+                  ),
+                ),
               ),
-            ),
+              // Transactions in the middle
+              Expanded(
+                child: _buildTransactionsList(context),
+              ),
+              const SizedBox(height: 90),
+            ],
           ),
-          // Transactions in the middle
-          Expanded(
-            child: _buildTransactionsList(context),
-          ),
-          // Buttons at bottom
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+          // Floating buttons at bottom
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 130,
             child: Row(
               children: [
                 Expanded(
                   child: GestureDetector(
                     onTap: _showReceiveDialog,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      padding: const EdgeInsets.symmetric(vertical: 18),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: context.colors.overlayLight,
-                        borderRadius: BorderRadius.circular(25),
-                        border: Border.all(color: context.colors.borderAccent),
+                        color: context.colors.buttonPrimary,
+                        borderRadius: BorderRadius.circular(40),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.arrow_downward, size: 18, color: context.colors.textPrimary),
+                          Icon(Icons.arrow_downward, size: 18, color: context.colors.background),
                           const SizedBox(width: 8),
                           Text(
                             'Receive',
                             style: TextStyle(
-                              color: context.colors.textPrimary,
-                              fontSize: 16,
+                              color: context.colors.background,
+                              fontSize: 17,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -315,23 +326,22 @@ class _WalletPageState extends State<WalletPage> {
                   child: GestureDetector(
                     onTap: _showSendDialog,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      padding: const EdgeInsets.symmetric(vertical: 18),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: context.colors.overlayLight,
-                        borderRadius: BorderRadius.circular(25),
-                        border: Border.all(color: context.colors.borderAccent),
+                        color: context.colors.buttonPrimary,
+                        borderRadius: BorderRadius.circular(40),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.arrow_upward, size: 18, color: context.colors.textPrimary),
+                          Icon(Icons.arrow_upward, size: 18, color: context.colors.background),
                           const SizedBox(width: 8),
                           Text(
                             'Send',
                             style: TextStyle(
-                              color: context.colors.textPrimary,
-                              fontSize: 16,
+                              color: context.colors.background,
+                              fontSize: 17,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -343,7 +353,6 @@ class _WalletPageState extends State<WalletPage> {
               ],
             ),
           ),
-          const SizedBox(height: 120),
         ],
       ),
     );

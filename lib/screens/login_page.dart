@@ -133,18 +133,17 @@ class _LoginPageState extends State<LoginPage> {
             onTap: _loginWithNsecInput,
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding: const EdgeInsets.symmetric(vertical: 18),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: context.colors.buttonPrimary,
-                borderRadius: BorderRadius.circular(25),
-                border: Border.all(color: context.colors.borderAccent),
+                borderRadius: BorderRadius.circular(40),
               ),
               child: Text(
                 'Login',
                 style: TextStyle(
                   color: context.colors.background,
-                  fontSize: 16,
+                  fontSize: 17,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -155,18 +154,17 @@ class _LoginPageState extends State<LoginPage> {
             onTap: _createNewAccount,
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding: const EdgeInsets.symmetric(vertical: 18),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: context.colors.overlayLight,
-                borderRadius: BorderRadius.circular(25),
-                border: Border.all(color: context.colors.borderAccent),
+                borderRadius: BorderRadius.circular(40),
               ),
               child: Text(
                 'Create a New Account',
                 style: TextStyle(
                   color: context.colors.textPrimary,
-                  fontSize: 16,
+                  fontSize: 17,
                   fontWeight: FontWeight.bold,
                 ),
               ),
