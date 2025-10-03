@@ -370,87 +370,138 @@ class FeedPageState extends State<FeedPage> {
         return Scaffold(
           backgroundColor: colors.background,
           drawer: const SidebarWidget(),
-          body: UIStateBuilder<List<NoteModel>>(
-            state: viewModel.feedState,
-            builder: (context, notes) {
-              return RefreshIndicator(
-                onRefresh: viewModel.refreshFeed,
-                child: CustomScrollView(
-                  key: const PageStorageKey<String>('feed_scroll'),
-                  controller: _scrollController,
-                  physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                  cacheExtent: 1500,
-                  slivers: [
-                    SliverPersistentHeader(
-                      floating: true,
-                      delegate: _PinnedHeaderDelegate(
-                        height: headerHeight,
-                        child: AnimatedOpacity(
-                          opacity: _showAppBar ? 1.0 : 0.0,
-                          duration: const Duration(milliseconds: 300),
-                          child: _buildHeader(context, topPadding),
+          body: Stack(
+            children: [
+              UIStateBuilder<List<NoteModel>>(
+                state: viewModel.feedState,
+                builder: (context, notes) {
+                  return RefreshIndicator(
+                    onRefresh: viewModel.refreshFeed,
+                    child: CustomScrollView(
+                      key: const PageStorageKey<String>('feed_scroll'),
+                      controller: _scrollController,
+                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      cacheExtent: 1500,
+                      slivers: [
+                        SliverPersistentHeader(
+                          floating: true,
+                          delegate: _PinnedHeaderDelegate(
+                            height: headerHeight,
+                            child: AnimatedOpacity(
+                              opacity: _showAppBar ? 1.0 : 0.0,
+                              duration: const Duration(milliseconds: 300),
+                              child: _buildHeader(context, topPadding),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-                    const SliverToBoxAdapter(
-                      child: SizedBox(height: 8),
-                    ),
-                    // Use existing NoteListWidget with notes
-                    Builder(
-                      builder: (context) {
-                        // Update notesNotifier when notes change
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (_notesNotifier.value != notes) {
-                            _notesNotifier.value = notes;
-                          }
-                        });
+                        const SliverToBoxAdapter(
+                          child: SizedBox(height: 8),
+                        ),
+                        // Use existing NoteListWidget with notes
+                        Builder(
+                          builder: (context) {
+                            // Update notesNotifier when notes change
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (_notesNotifier.value != notes) {
+                                _notesNotifier.value = notes;
+                              }
+                            });
 
-                        return widgets.NoteListWidget(
-                          notes: notes,
-                          currentUserNpub: viewModel.currentUserNpub,
-                          notesNotifier: _notesNotifier,
-                          profiles: _profiles,
-                          isLoading: viewModel.isLoadingMore,
-                          hasMore: viewModel.canLoadMore,
-                          onLoadMore: notes.length >= 20 ? viewModel.loadMoreNotes : null,
-                          scrollController: _scrollController,
-                        );
-                      },
+                            return widgets.NoteListWidget(
+                              notes: notes,
+                              currentUserNpub: viewModel.currentUserNpub,
+                              notesNotifier: _notesNotifier,
+                              profiles: _profiles,
+                              isLoading: viewModel.isLoadingMore,
+                              hasMore: viewModel.canLoadMore,
+                              onLoadMore: notes.length >= 20 ? viewModel.loadMoreNotes : null,
+                              scrollController: _scrollController,
+                            );
+                          },
+                        ),
+                      ],
                     ),
-                  ],
+                  );
+                },
+                loading: () => const Center(
+                  child: CircularProgressIndicator(),
                 ),
-              );
-            },
-            loading: () => const Center(
-              child: CircularProgressIndicator(),
-            ),
-            error: (message) => Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    message,
+                error: (message) => Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        message,
+                        style: TextStyle(color: colors.textSecondary),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () {
+                          final viewModel = context.read<FeedViewModel>();
+                          viewModel.refreshFeed();
+                        },
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+                empty: (message) => Center(
+                  child: Text(
+                    message ?? 'Your feed is empty',
                     style: TextStyle(color: colors.textSecondary),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      final viewModel = context.read<FeedViewModel>();
-                      viewModel.refreshFeed();
-                    },
-                    child: const Text('Retry'),
+                ),
+              ),
+              // New notes button - shown at bottom when there are pending notes
+              if (viewModel.pendingNotesCount > 0)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: SafeArea(
+                    child: Center(
+                      child: GestureDetector(
+                      onTap: () {
+                        viewModel.addPendingNotesToFeed();
+                        // Scroll to top after adding new notes
+                        scrollToTop();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: colors.buttonPrimary,
+                          borderRadius: BorderRadius.circular(25),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.2),
+                              blurRadius: 8,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.arrow_upward, size: 15, color: colors.background),
+                            const SizedBox(width: 5),
+                            Text(
+                              'Show new notes',
+                              style: TextStyle(
+                                color: colors.background,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
-                ],
+                ),
               ),
-            ),
-            empty: (message) => Center(
-              child: Text(
-                message ?? 'Your feed is empty',
-                style: TextStyle(color: colors.textSecondary),
-                textAlign: TextAlign.center,
-              ),
-            ),
+            ],
           ),
         );
       },

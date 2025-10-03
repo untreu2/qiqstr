@@ -53,6 +53,10 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   bool _isInitialized = false;
   bool _isLoadingFeed = false;
 
+  // Pending notes - notes that arrived in real-time but not yet shown
+  final List<NoteModel> _pendingNotes = [];
+  int get pendingNotesCount => _pendingNotes.length;
+
   // Commands - using nullable fields to prevent late initialization errors
   RefreshFeedCommand? _refreshFeedCommand;
   LoadMoreFeedCommand? _loadMoreFeedCommand;
@@ -239,9 +243,28 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           // Only update if we already have a successful state
           // Don't override successful loads with empty streams
           if (notes.isNotEmpty) {
-            debugPrint(' [FeedViewModel] Updating feed state with ${notes.length} stream notes');
-            _feedState = LoadedState(notes);
-            safeNotifyListeners();
+            // Instead of directly updating feed state, add new notes to pending list
+            final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
+            final currentNoteIds = currentNotes.map((n) => n.id).toSet();
+            
+            // Find notes that are not in current feed
+            final newNotes = notes.where((note) => !currentNoteIds.contains(note.id)).toList();
+            
+            if (newNotes.isNotEmpty) {
+              debugPrint(' [FeedViewModel] Adding ${newNotes.length} new notes to pending list');
+              
+              // Add to pending notes (avoiding duplicates)
+              for (final note in newNotes) {
+                if (!_pendingNotes.any((n) => n.id == note.id)) {
+                  _pendingNotes.add(note);
+                }
+              }
+              
+              // Sort pending notes by timestamp (newest first)
+              _pendingNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+              
+              safeNotifyListeners();
+            }
           } else {
             debugPrint('[FeedViewModel] Ignoring empty stream update to preserve loaded state');
           }
@@ -250,6 +273,32 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
         }
       }),
     );
+  }
+
+  /// Add pending notes to feed
+  void addPendingNotesToFeed() {
+    if (_pendingNotes.isEmpty || _feedState is! LoadedState<List<NoteModel>>) return;
+
+    debugPrint('[FeedViewModel] Adding ${_pendingNotes.length} pending notes to feed');
+
+    final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
+    
+    // Merge pending notes with current notes
+    final allNotes = [..._pendingNotes, ...currentNotes];
+    
+    // Sort by timestamp (newest first)
+    allNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    
+    // Update state
+    _feedState = LoadedState(allNotes);
+    
+    // Load profiles for new notes
+    _loadUserProfilesForNotes(_pendingNotes);
+    
+    // Clear pending notes
+    _pendingNotes.clear();
+    
+    safeNotifyListeners();
   }
 
   /// Get current feed notes
