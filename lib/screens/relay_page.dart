@@ -8,11 +8,10 @@ import '../core/di/app_di.dart';
 import '../data/repositories/auth_repository.dart';
 import '../services/nostr_service.dart';
 import '../services/relay_service.dart';
+import '../widgets/back_button_widget.dart';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:ui';
 import 'dart:async';
-import 'package:bounce/bounce.dart';
 
 class RelayPage extends StatefulWidget {
   const RelayPage({super.key});
@@ -657,39 +656,32 @@ class _RelayPageState extends State<RelayPage> {
     );
   }
 
-  Widget _buildFloatingBackButton(BuildContext context) {
+  Widget _buildHeader(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
-
-    return Positioned(
-      top: topPadding + 8,
-      left: 16,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(25.0),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: context.colors.backgroundTransparent,
-              border: Border.all(
-                color: context.colors.borderLight,
-                width: 1.5,
-              ),
-              borderRadius: BorderRadius.circular(25.0),
-            ),
-            child: Bounce(
-              scaleFactor: 0.85,
-              onTap: () => Navigator.pop(context),
-              behavior: HitTestBehavior.opaque,
-              child: Icon(
-                Icons.arrow_back,
-                color: context.colors.textSecondary,
-                size: 20,
-              ),
+    
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Relays',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: context.colors.textPrimary,
+              letterSpacing: -0.5,
             ),
           ),
-        ),
+          Text(
+            "Manage your relay connections and publish your relay list.",
+            style: TextStyle(
+              fontSize: 14,
+              color: context.colors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -855,12 +847,6 @@ class _RelayPageState extends State<RelayPage> {
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Row(
             children: [
-              Icon(
-                isMainRelay ? Icons.star : Icons.cloud,
-                color: context.colors.accent,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
               Text(
                 title,
                 style: TextStyle(
@@ -1016,12 +1002,13 @@ class _RelayPageState extends State<RelayPage> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(height: MediaQuery.of(context).padding.top + 60),
+              _buildHeader(context),
               _buildActionButtons(context),
               Expanded(
                 child: SingleChildScrollView(
                   child: Column(
                     children: [
+                      const SizedBox(height: 16),
                       _buildRelaySection('Relays', _relays, true),
                       const SizedBox(height: 24),
                     ],
@@ -1030,7 +1017,7 @@ class _RelayPageState extends State<RelayPage> {
               ),
             ],
           ),
-          _buildFloatingBackButton(context),
+          const BackButtonWidget.floating(),
         ],
       ),
     );

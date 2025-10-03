@@ -11,13 +11,15 @@ import '../../data/repositories/auth_repository.dart';
 Future<void> showRepostDialog({
   required BuildContext context,
   required NoteModel note,
+  VoidCallback? onRepostSuccess,
 }) async {
   return showModalBottomSheet(
     context: context,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-    ),
+    isScrollControlled: true,
     backgroundColor: context.colors.background,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
     builder: (modalContext) => Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -26,7 +28,7 @@ Future<void> showRepostDialog({
           title: Text('Repost', style: TextStyle(color: context.colors.textPrimary, fontSize: 16)),
           onTap: () async {
             Navigator.pop(modalContext);
-            await _performRepost(context, note);
+            await _performRepost(context, note, onRepostSuccess);
           },
         ),
         ListTile(
@@ -56,6 +58,7 @@ Future<void> showRepostDialog({
 Future<void> _performRepost(
   BuildContext context,
   NoteModel note,
+  VoidCallback? onRepostSuccess,
 ) async {
   // Store reference before async operations
   final scaffoldMessenger = ScaffoldMessenger.of(context);
@@ -78,6 +81,7 @@ Future<void> _performRepost(
         SnackBar(content: Text('Failed to repost: ${result.error}')),
       );
     } else {
+      onRepostSuccess?.call();
       scaffoldMessenger.showSnackBar(
         const SnackBar(content: Text('Note reposted successfully')),
       );

@@ -186,6 +186,36 @@ class _KeysPageState extends State<KeysPage> {
     );
   }
 
+  Widget _buildHeader(BuildContext context) {
+    final double topPadding = MediaQuery.of(context).padding.top;
+    
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Keys',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: context.colors.textPrimary,
+              letterSpacing: -0.5,
+            ),
+          ),
+          Text(
+            "Manage your Nostr identity keys securely.",
+            style: TextStyle(
+              fontSize: 14,
+              color: context.colors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<ThemeManager>(
@@ -205,7 +235,7 @@ class _KeysPageState extends State<KeysPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(height: MediaQuery.of(context).padding.top + 60),
+              _buildHeader(context),
               _buildKeyDisplayCard(
                 context,
                 'Private Key (nsec)',
@@ -226,7 +256,7 @@ class _KeysPageState extends State<KeysPage> {
             ],
           ),
         ),
-        const BackButtonWidget(topOffset: 12),
+        const BackButtonWidget.floating(),
       ],
     );
   }

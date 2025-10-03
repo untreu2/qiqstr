@@ -73,6 +73,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   bool _isSearchingUsers = false;
   String _userSearchQuery = '';
   final Map<String, String> _mentionMap = {};
+  UserModel? _currentUser;
 
   // New system services
   late NostrDataService _dataService;
@@ -222,8 +223,14 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
       if (npub == null || npub.isEmpty) return;
 
-      if (mounted) {
-        setState(() {});
+      // Fetch current user's profile
+      final userResult = await _userRepository.getUserProfile(npub);
+      if (userResult.isSuccess && userResult.data != null) {
+        if (mounted) {
+          setState(() {
+            _currentUser = userResult.data;
+          });
+        }
       }
     } catch (e) {
       _showErrorSnackBar('$_errorLoadingProfile: ${e.toString()}');
@@ -784,6 +791,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (_isReply()) _buildReplyPreview(),
+          const SizedBox(height: 12),
           _buildComposerRow(),
           const SizedBox(height: 16),
           if (_mediaUrls.isNotEmpty) _buildMediaList(),
@@ -822,8 +830,23 @@ class _ShareNotePageState extends State<ShareNotePage> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        _buildUserAvatar(),
+        const SizedBox(width: 12),
         Expanded(child: _buildTextInputStack()),
       ],
+    );
+  }
+
+  Widget _buildUserAvatar() {
+    return CircleAvatar(
+      radius: _avatarRadius,
+      backgroundImage: _currentUser?.profileImage.isNotEmpty == true
+          ? CachedNetworkImageProvider(_currentUser!.profileImage)
+          : null,
+      backgroundColor: context.colors.surfaceTransparent,
+      child: _currentUser?.profileImage.isEmpty != false
+          ? Icon(Icons.person, color: context.colors.textPrimary, size: 20)
+          : null,
     );
   }
 
@@ -831,24 +854,27 @@ class _ShareNotePageState extends State<ShareNotePage> {
     final textStyle = TextStyle(fontSize: _fontSize, height: _lineHeight);
     final strutStyle = StrutStyle(fontSize: _fontSize, height: _lineHeight);
 
-    return Semantics(
-      label: 'Compose your note',
-      textField: true,
-      multiline: true,
-      child: TextField(
-        focusNode: _focusNode,
-        controller: _noteController,
-        maxLines: null,
-        textAlignVertical: TextAlignVertical.top,
-        style: textStyle.copyWith(color: context.colors.textPrimary),
-        cursorColor: context.colors.textPrimary,
-        strutStyle: strutStyle,
-        decoration: InputDecoration(
-          hintText: _noteController.text.isEmpty ? _hintText : "",
-          hintStyle: textStyle.copyWith(color: context.colors.textSecondary),
-          border: InputBorder.none,
-          contentPadding: EdgeInsets.zero,
-          isCollapsed: true,
+    return Padding(
+      padding: const EdgeInsets.only(top: 5),
+      child: Semantics(
+        label: 'Compose your note',
+        textField: true,
+        multiline: true,
+        child: TextField(
+          focusNode: _focusNode,
+          controller: _noteController,
+          maxLines: null,
+          textAlignVertical: TextAlignVertical.top,
+          style: textStyle.copyWith(color: context.colors.textPrimary),
+          cursorColor: context.colors.textPrimary,
+          strutStyle: strutStyle,
+          decoration: InputDecoration(
+            hintText: _noteController.text.isEmpty ? _hintText : "",
+            hintStyle: textStyle.copyWith(color: context.colors.textSecondary),
+            border: InputBorder.none,
+            contentPadding: EdgeInsets.zero,
+            isCollapsed: true,
+          ),
         ),
       ),
     );

@@ -20,8 +20,9 @@ class _WalletPageState extends State<WalletPage> {
 
   WalletConnection? _connection;
   WalletBalance? _balance;
+  List<TransactionDetails>? _transactions;
   bool _isConnecting = false;
-  bool _isLoadingBalance = false;
+  bool _isLoadingTransactions = false;
   String? _error;
   Timer? _balanceTimer;
 
@@ -40,6 +41,7 @@ class _WalletPageState extends State<WalletPage> {
             _connection = connection;
           });
           _getBalance();
+          _getTransactions();
           _startBalanceTimer();
         }
       },
@@ -69,6 +71,7 @@ class _WalletPageState extends State<WalletPage> {
           _isConnecting = false;
         });
         _getBalance();
+        _getTransactions();
         _startBalanceTimer();
         _nwcController.clear();
       },
@@ -79,24 +82,41 @@ class _WalletPageState extends State<WalletPage> {
   }
 
   Future<void> _getBalance() async {
-    setState(() {
-      _isLoadingBalance = true;
-    });
-
     final result = await _walletRepository.getBalance();
 
     result.fold(
       (balance) {
+        if (mounted) {
+          setState(() {
+            _balance = balance;
+          });
+        }
+      },
+      (error) {
+        _setError('Failed to get balance: $error');
+      },
+    );
+  }
+
+  Future<void> _getTransactions() async {
+    setState(() {
+      _isLoadingTransactions = true;
+    });
+
+    final result = await _walletRepository.listTransactions();
+
+    result.fold(
+      (transactions) {
         setState(() {
-          _balance = balance;
-          _isLoadingBalance = false;
+          _transactions = transactions;
+          _isLoadingTransactions = false;
         });
       },
       (error) {
         setState(() {
-          _isLoadingBalance = false;
+          _isLoadingTransactions = false;
         });
-        _setError('Failed to get balance: $error');
+        debugPrint('Failed to get transactions: $error');
       },
     );
   }
@@ -121,6 +141,7 @@ class _WalletPageState extends State<WalletPage> {
     setState(() {
       _connection = null;
       _balance = null;
+      _transactions = null;
       _error = null;
     });
   }
@@ -129,7 +150,6 @@ class _WalletPageState extends State<WalletPage> {
     setState(() {
       _error = error;
       _isConnecting = false;
-      _isLoadingBalance = false;
     });
   }
 
@@ -230,61 +250,217 @@ class _WalletPageState extends State<WalletPage> {
     );
   }
 
-  Widget _buildBalance(BuildContext context) {
+  Widget _buildMainContent(BuildContext context) {
     if (_connection == null) {
       return const SizedBox.shrink();
     }
 
     return Expanded(
-      child: Center(
+      child: Column(
+        children: [
+          // Balance at top
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
+            child: Text(
+              _balance != null
+                  ? '${((_balance!.balance / 1000).floor()).toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')} sats'
+                  : 'Loading...',
+              style: TextStyle(
+                fontSize: 56,
+                fontWeight: FontWeight.bold,
+                color: context.colors.textPrimary,
+              ),
+            ),
+          ),
+          // Transactions in the middle
+          Expanded(
+            child: _buildTransactionsList(context),
+          ),
+          // Buttons at bottom
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _showReceiveDialog,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: context.colors.overlayLight,
+                        borderRadius: BorderRadius.circular(25),
+                        border: Border.all(color: context.colors.borderAccent),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.arrow_downward, size: 18, color: context.colors.textPrimary),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Receive',
+                            style: TextStyle(
+                              color: context.colors.textPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _showSendDialog,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: context.colors.overlayLight,
+                        borderRadius: BorderRadius.circular(25),
+                        border: Border.all(color: context.colors.borderAccent),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.arrow_upward, size: 18, color: context.colors.textPrimary),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Send',
+                            style: TextStyle(
+                              color: context.colors.textPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 120),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTransactionsList(BuildContext context) {
+    if (_isLoadingTransactions) {
+      return Center(
+        child: CircularProgressIndicator(color: context.colors.textPrimary),
+      );
+    }
+
+    if (_transactions == null || _transactions!.isEmpty) {
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (_balance != null) ...[
-              Text(
-                '${((_balance!.balance / 1000).floor()).toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')} sats',
-                style: TextStyle(
-                  fontSize: 56,
-                  fontWeight: FontWeight.bold,
-                  color: context.colors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 40),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildActionButton(
-                      context: context,
-                      label: 'Receive',
-                      icon: Icons.arrow_downward,
-                      onTap: _showReceiveDialog,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _buildActionButton(
-                      context: context,
-                      label: 'Send',
-                      icon: Icons.arrow_upward,
-                      onTap: _showSendDialog,
-                    ),
-                  ),
-                ],
-              ),
-            ] else if (_isLoadingBalance) ...[
-              CircularProgressIndicator(
+            Icon(Icons.receipt_long, color: context.colors.textTertiary, size: 48),
+            const SizedBox(height: 12),
+            Text(
+              'No transactions yet',
+              style: TextStyle(
                 color: context.colors.textSecondary,
-                strokeWidth: 3,
+                fontSize: 14,
               ),
-              const SizedBox(height: 24),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: _transactions!.length,
+      separatorBuilder: (context, index) => Divider(
+        color: context.colors.border,
+        height: 1,
+      ),
+      itemBuilder: (context, index) {
+        final tx = _transactions![index];
+        return _buildTransactionTile(context, tx);
+      },
+    );
+  }
+
+  Widget _buildTransactionTile(BuildContext context, TransactionDetails tx) {
+    final isIncoming = tx.type == 'incoming';
+    final dateTime = DateTime.fromMillisecondsSinceEpoch(tx.createdAt * 1000);
+    final formatted = '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        horizontalTitleGap: 12,
+        leading: CircleAvatar(
+          radius: 18,
+          backgroundColor: context.colors.grey800,
+          child: Icon(
+            isIncoming ? Icons.arrow_downward : Icons.arrow_upward,
+            color: context.colors.textPrimary,
+            size: 16,
+          ),
+        ),
+        title: Text(
+          tx.description.isEmpty ? (isIncoming ? 'Received' : 'Sent') : tx.description,
+          style: TextStyle(
+            color: context.colors.textPrimary,
+            fontWeight: FontWeight.w500,
+            fontSize: 15,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            Text(
+              formatted,
+              style: TextStyle(
+                color: context.colors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+            if (tx.feesPaid > 0) ...[
+              const SizedBox(height: 2),
               Text(
-                'Loading balance...',
+                'Fee: ${(tx.feesPaid / 1000).floor()} sats',
                 style: TextStyle(
-                  fontSize: 18,
-                  color: context.colors.textSecondary,
+                  color: context.colors.textTertiary,
+                  fontSize: 11,
                 ),
               ),
             ],
+          ],
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              '${isIncoming ? '+' : '-'}${(tx.amount / 1000).floor().toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
+              style: TextStyle(
+                color: context.colors.textPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'sats',
+              style: TextStyle(
+                color: context.colors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
           ],
         ),
       ),
@@ -292,99 +468,33 @@ class _WalletPageState extends State<WalletPage> {
   }
 
   void _showNwcSettings() {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Wallet Settings'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Update NWC URI:'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _nwcController,
-              decoration: InputDecoration(
-                hintText: 'nostr+walletconnect://...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 16),
-            const Text('Or disconnect current wallet:'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _disconnect();
-            },
-            child: Text(
-              'Disconnect',
-              style: TextStyle(color: Colors.red),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _connectWallet();
-            },
-            child: const Text('Update'),
-          ),
-        ],
+      isScrollControlled: true,
+      backgroundColor: context.colors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-    );
-  }
-
-  Widget _buildActionButton({
-    required BuildContext context,
-    required String label,
-    required IconData icon,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        decoration: BoxDecoration(
-          color: context.colors.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: context.colors.textTertiary.withValues(alpha: 0.2)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: context.colors.textPrimary,
-              size: 24,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: context.colors.textPrimary,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
+      builder: (context) => SettingsDialog(
+        nwcController: _nwcController,
+        onUpdate: () {
+          _connectWallet();
+        },
+        onDisconnect: () {
+          _disconnect();
+        },
       ),
     );
   }
 
   void _showReceiveDialog() {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      barrierDismissible: false,
+      isScrollControlled: true,
+      backgroundColor: context.colors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) => ReceiveDialog(
         walletRepository: _walletRepository,
       ),
@@ -392,12 +502,19 @@ class _WalletPageState extends State<WalletPage> {
   }
 
   void _showSendDialog() {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      barrierDismissible: false,
+      isScrollControlled: true,
+      backgroundColor: context.colors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (context) => SendDialog(
         walletRepository: _walletRepository,
-        onPaymentSuccess: () => _getBalance(),
+        onPaymentSuccess: () {
+          _getBalance();
+          _getTransactions();
+        },
       ),
     );
   }
@@ -454,7 +571,7 @@ class _WalletPageState extends State<WalletPage> {
                 _buildConnectionInput(context),
                 _buildConnectButton(context),
               ] else ...[
-                _buildBalance(context),
+                _buildMainContent(context),
               ],
               _buildError(context),
             ],
@@ -539,85 +656,115 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(_invoice == null ? 'Receive Payment' : 'Receive $_amount sats'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_invoice == null) ...[
-            // Input phase
-            TextField(
-              controller: _amountController,
-              keyboardType: TextInputType.number,
-              enabled: !_isLoading,
-              decoration: const InputDecoration(
-                labelText: 'Amount (sats)',
-                hintText: 'Enter amount in sats',
+    if (_invoice != null) {
+      // Invoice display phase
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _amount != null ? 'Receive $_amount sats' : 'Lightning Invoice',
+              style: TextStyle(
+                color: context.colors.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _memoController,
-              enabled: !_isLoading,
-              decoration: const InputDecoration(
-                labelText: 'Memo (optional)',
-                hintText: 'Description for the invoice',
-              ),
-            ),
-            if (_isLoading) ...[
-              const SizedBox(height: 20),
-              const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  SizedBox(width: 12),
-                  Text('Creating invoice...'),
-                ],
-              ),
-            ],
-            if (_error != null) ...[
-              const SizedBox(height: 16),
-              Text(
-                _error!,
-                style: const TextStyle(color: Colors.red),
-              ),
-            ],
-          ] else ...[
-            // Invoice display phase
-            const Text('Share this Lightning invoice:'),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: context.colors.surface,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: SelectableText(
                 _invoice!,
                 style: TextStyle(
                   fontFamily: 'monospace',
-                  fontSize: 12,
+                  fontSize: 11,
                   color: context.colors.textPrimary,
                 ),
               ),
             ),
+            const SizedBox(height: 45),
           ],
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: _isLoading ? null : () => Navigator.pop(context),
-          child: Text(_invoice == null ? 'Cancel' : 'Close'),
         ),
-        if (_invoice == null)
-          ElevatedButton(
-            onPressed: _isLoading ? null : _createInvoice,
-            child: const Text('Create Invoice'),
+      );
+    }
+
+    // Input phase
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+            top: 8,
           ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _amountController,
+                keyboardType: TextInputType.number,
+                enabled: !_isLoading,
+                style: TextStyle(color: context.colors.textPrimary),
+                decoration: InputDecoration(
+                  labelText: 'Amount (sats)',
+                  labelStyle: TextStyle(color: context.colors.secondary),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: context.colors.secondary),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: context.colors.textPrimary),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _memoController,
+                enabled: !_isLoading,
+                style: TextStyle(color: context.colors.textPrimary),
+                decoration: InputDecoration(
+                  labelText: 'Memo (optional)',
+                  labelStyle: TextStyle(color: context.colors.secondary),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: context.colors.secondary),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: context.colors.textPrimary),
+                  ),
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  style: TextStyle(color: context.colors.textSecondary, fontSize: 12),
+                ),
+              ],
+            ],
+          ),
+        ),
+        ListTile(
+          leading: _isLoading
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(Icons.add_circle_outline, color: context.colors.iconPrimary),
+          title: Text(
+            _isLoading ? 'Creating invoice...' : 'Create Invoice',
+            style: TextStyle(color: context.colors.textPrimary, fontSize: 16),
+          ),
+          onTap: _isLoading ? null : _createInvoice,
+        ),
+        const SizedBox(height: 45),
       ],
     );
   }
@@ -694,69 +841,178 @@ class _SendDialogState extends State<SendDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Send Payment'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_successMessage == null) ...[
-            TextField(
-              controller: _invoiceController,
-              enabled: !_isLoading,
-              decoration: const InputDecoration(
-                labelText: 'Lightning Invoice',
-                hintText: 'Paste invoice here...',
-              ),
-              maxLines: 3,
-            ),
-            if (_isLoading) ...[
-              const SizedBox(height: 20),
-              const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  SizedBox(width: 12),
-                  Text('Sending payment...'),
-                ],
-              ),
-            ],
-            if (_error != null) ...[
-              const SizedBox(height: 16),
-              Text(
-                _error!,
-                style: const TextStyle(color: Colors.red),
-              ),
-            ],
-          ] else ...[
-            // Success phase
-            const Icon(
+    if (_successMessage != null) {
+      // Success phase
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
               Icons.check_circle,
-              color: Colors.green,
+              color: context.colors.textPrimary,
               size: 48,
             ),
             const SizedBox(height: 16),
             Text(
               _successMessage!,
-              style: const TextStyle(color: Colors.green),
+              style: TextStyle(color: context.colors.textPrimary, fontSize: 14),
               textAlign: TextAlign.center,
             ),
+            const SizedBox(height: 45),
           ],
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: _isLoading ? null : () => Navigator.pop(context),
-          child: Text(_successMessage == null ? 'Cancel' : 'Close'),
         ),
-        if (_successMessage == null)
-          ElevatedButton(
-            onPressed: _isLoading ? null : _payInvoice,
-            child: const Text('Pay Invoice'),
+      );
+    }
+
+    // Input phase
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+            top: 8,
           ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _invoiceController,
+                enabled: !_isLoading,
+                style: TextStyle(color: context.colors.textPrimary),
+                decoration: InputDecoration(
+                  labelText: 'Lightning Invoice',
+                  hintText: 'Paste invoice here...',
+                  labelStyle: TextStyle(color: context.colors.secondary),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: context.colors.secondary),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: context.colors.textPrimary),
+                  ),
+                ),
+                maxLines: 3,
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _error!,
+                  style: TextStyle(color: context.colors.textSecondary, fontSize: 12),
+                ),
+              ],
+            ],
+          ),
+        ),
+        ListTile(
+          leading: _isLoading
+              ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Icon(Icons.flash_on, color: context.colors.iconPrimary),
+          title: Text(
+            _isLoading ? 'Sending payment...' : 'Pay Invoice',
+            style: TextStyle(color: context.colors.textPrimary, fontSize: 16),
+          ),
+          onTap: _isLoading ? null : _payInvoice,
+        ),
+        const SizedBox(height: 45),
+      ],
+    );
+  }
+}
+
+class SettingsDialog extends StatefulWidget {
+  final TextEditingController nwcController;
+  final VoidCallback onUpdate;
+  final VoidCallback onDisconnect;
+
+  const SettingsDialog({
+    super.key,
+    required this.nwcController,
+    required this.onUpdate,
+    required this.onDisconnect,
+  });
+
+  @override
+  State<SettingsDialog> createState() => _SettingsDialogState();
+}
+
+class _SettingsDialogState extends State<SettingsDialog> {
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+            top: 8,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Update NWC URI',
+                style: TextStyle(
+                  color: context.colors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: widget.nwcController,
+                style: TextStyle(color: context.colors.textPrimary),
+                decoration: InputDecoration(
+                  labelText: 'NWC Connection',
+                  hintText: 'nostr+walletconnect://...',
+                  labelStyle: TextStyle(color: context.colors.secondary),
+                  enabledBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: context.colors.secondary),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: context.colors.textPrimary),
+                  ),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
+        ),
+        ListTile(
+          leading: Icon(Icons.sync, color: context.colors.iconPrimary),
+          title: Text(
+            'Update Connection',
+            style: TextStyle(color: context.colors.textPrimary, fontSize: 16),
+          ),
+          onTap: () {
+            Navigator.pop(context);
+            widget.onUpdate();
+          },
+        ),
+        Divider(
+          color: context.colors.border,
+          height: 1,
+        ),
+        ListTile(
+          leading: Icon(Icons.logout, color: Colors.red),
+          title: Text(
+            'Disconnect Wallet',
+            style: TextStyle(color: Colors.red, fontSize: 16),
+          ),
+          onTap: () {
+            Navigator.pop(context);
+            widget.onDisconnect();
+          },
+        ),
+        const SizedBox(height: 45),
       ],
     );
   }

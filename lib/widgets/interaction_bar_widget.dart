@@ -8,6 +8,7 @@ import '../models/note_model.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/note_repository.dart';
 import 'dialogs/zap_dialog.dart';
+import 'dialogs/repost_dialog.dart';
 
 class InteractionBar extends StatefulWidget {
   final String noteId;
@@ -44,6 +45,10 @@ class _InteractionBarState extends State<InteractionBar> {
   void initState() {
     super.initState();
     _noteRepository = AppDI.get<NoteRepository>();
+    // Initialize optimistic states as false on first mount
+    _hasReacted = false;
+    _hasReposted = false;
+    _hasZapped = false;
     _loadInteractionCounts();
     _subscribeToNoteUpdates();
   }
@@ -51,6 +56,16 @@ class _InteractionBarState extends State<InteractionBar> {
   @override
   void didUpdateWidget(InteractionBar oldWidget) {
     super.didUpdateWidget(oldWidget);
+    
+    // If note ID changed, reset optimistic states
+    if (oldWidget.note?.id != widget.note?.id) {
+      setState(() {
+        _hasReacted = false;
+        _hasReposted = false;
+        _hasZapped = false;
+      });
+    }
+    
     // Reload counts if note changed
     if (oldWidget.note?.id != widget.note?.id ||
         oldWidget.note?.reactionCount != widget.note?.reactionCount ||
@@ -178,9 +193,7 @@ class _InteractionBarState extends State<InteractionBar> {
           _repostCount = finalRepostCount;
           _replyCount = finalReplyCount;
           _zapAmount = finalZapAmount;
-          _hasReacted = false;
-          _hasReposted = false;
-          _hasZapped = false;
+          // Don't reset optimistic states here - only reset when note ID changes
         });
 
         debugPrint(
@@ -198,9 +211,7 @@ class _InteractionBarState extends State<InteractionBar> {
           _repostCount = 0;
           _replyCount = 0;
           _zapAmount = 0;
-          _hasReacted = false;
-          _hasReposted = false;
-          _hasZapped = false;
+          // Optimistic states will be reset in didUpdateWidget when note ID changes
         });
 
         debugPrint('[InteractionBar] No note provided, using default counts');
@@ -224,73 +235,18 @@ class _InteractionBarState extends State<InteractionBar> {
   void _handleRepostTap() {
     if (_hasReposted || widget.note == null) return;
 
-    showDialog(
+    showRepostDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Share Note'),
-        content: const Text('How would you like to share this note?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await _performRepost();
-            },
-            child: const Text('Repost'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _openQuoteDialog();
-            },
-            child: const Text('Quote'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _openQuoteDialog() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ShareNotePage(
-          initialText: 'nostr:${widget.noteId}', // This will trigger quote mode in ShareNotePage
-        ),
-      ),
-    );
-  }
-
-  Future<void> _performRepost() async {
-    try {
-      setState(() {
-        _hasReposted = true;
-        _repostCount++;
-      });
-
-      final result = await _noteRepository.repostNote(widget.noteId);
-      result.fold(
-        (success) => debugPrint('Repost successful'),
-        (error) {
-          // Revert optimistic update on error
+      note: widget.note!,
+      onRepostSuccess: () {
+        if (mounted) {
           setState(() {
-            _hasReposted = false;
-            _repostCount--;
+            _hasReposted = true;
+            _repostCount++;
           });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to repost: $error')),
-          );
-        },
-      );
-    } catch (e) {
-      setState(() {
-        _hasReposted = false;
-        _repostCount--;
-      });
-    }
+        }
+      },
+    );
   }
 
   Future<void> _handleReactionTap() async {

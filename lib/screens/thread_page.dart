@@ -97,9 +97,6 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Widget _buildThreadContent(BuildContext context, ThreadViewModel viewModel, NoteModel rootNote) {
-    final double topPadding = MediaQuery.of(context).padding.top;
-    final double headerHeight = topPadding + 60;
-
     // Determine which note to display as main (focused or root)
     final displayNote =
         widget.focusedNoteId != null ? viewModel.threadStructureState.data?.getNote(widget.focusedNoteId!) ?? rootNote : rootNote;
@@ -114,7 +111,7 @@ class _ThreadPageState extends State<ThreadPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(height: headerHeight),
+            _buildHeader(context),
 
             // Context note (parent of focused note if applicable)
             _buildContextNote(context, viewModel, displayNote),
@@ -137,6 +134,23 @@ class _ThreadPageState extends State<ThreadPage> {
     );
   }
 
+  Widget _buildHeader(BuildContext context) {
+    final double topPadding = MediaQuery.of(context).padding.top;
+    
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 0),
+      child: Text(
+        'Thread',
+        style: TextStyle(
+          fontSize: 28,
+          fontWeight: FontWeight.w700,
+          color: context.colors.textPrimary,
+          letterSpacing: -0.5,
+        ),
+      ),
+    );
+  }
+
   Widget _buildContextNote(BuildContext context, ThreadViewModel viewModel, NoteModel displayNote) {
     // Show parent note if this is a reply
     if (displayNote.isReply && displayNote.parentId != null) {
@@ -144,7 +158,7 @@ class _ThreadPageState extends State<ThreadPage> {
 
       if (parentNote != null && !parentNote.isRepost) {
         return Padding(
-          padding: const EdgeInsets.fromLTRB(0, 8, 0, 0),
+          padding: const EdgeInsets.fromLTRB(0, 4, 0, 0),
           child: _buildSimpleNoteWidget(context, parentNote, isSmallView: true),
         );
       }
@@ -164,7 +178,7 @@ class _ThreadPageState extends State<ThreadPage> {
 
     return Container(
       key: widget.focusedNoteId != null ? _focusedNoteKey : null,
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       child: FocusedNoteWidget(
         note: note,
         currentUserNpub: viewModel.currentRootNote?.author ?? '',
@@ -484,14 +498,12 @@ class _ThreadPageState extends State<ThreadPage> {
   // Removed _buildInteractionBar - NoteWidget has its own InteractionBar
 
   Widget _buildLoadingState(BuildContext context) {
-    final double topPadding = MediaQuery.of(context).padding.top;
-    final double headerHeight = topPadding + 60;
-
-    return Column(
-      children: [
-        SizedBox(height: headerHeight),
-        Expanded(
-          child: Center(
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          _buildHeader(context),
+          SizedBox(height: MediaQuery.of(context).size.height * 0.3),
+          Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -504,20 +516,18 @@ class _ThreadPageState extends State<ThreadPage> {
               ],
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildErrorState(BuildContext context, String message, ThreadViewModel viewModel) {
-    final double topPadding = MediaQuery.of(context).padding.top;
-    final double headerHeight = topPadding + 60;
-
-    return Column(
-      children: [
-        SizedBox(height: headerHeight),
-        Expanded(
-          child: Center(
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          _buildHeader(context),
+          SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+          Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -534,10 +544,13 @@ class _ThreadPageState extends State<ThreadPage> {
                       ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  message,
-                  style: TextStyle(color: context.colors.textSecondary),
-                  textAlign: TextAlign.center,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    message,
+                    style: TextStyle(color: context.colors.textSecondary),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
@@ -551,20 +564,18 @@ class _ThreadPageState extends State<ThreadPage> {
               ],
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
   Widget _buildNotFoundState(BuildContext context, ThreadViewModel viewModel) {
-    final double topPadding = MediaQuery.of(context).padding.top;
-    final double headerHeight = topPadding + 60;
-
-    return Column(
-      children: [
-        SizedBox(height: headerHeight),
-        Expanded(
-          child: Center(
+    return SingleChildScrollView(
+      child: Column(
+        children: [
+          _buildHeader(context),
+          SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+          Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -583,13 +594,16 @@ class _ThreadPageState extends State<ThreadPage> {
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  'The note may have been deleted or is not available',
-                  style: TextStyle(
-                    color: context.colors.textSecondary,
-                    fontSize: 14,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Text(
+                    'The note may have been deleted or is not available',
+                    style: TextStyle(
+                      color: context.colors.textSecondary,
+                      fontSize: 14,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 24),
                 ElevatedButton(
@@ -603,8 +617,8 @@ class _ThreadPageState extends State<ThreadPage> {
               ],
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 

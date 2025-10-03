@@ -290,42 +290,45 @@ Future<void> showZapDialog({
             ),
           ),
           const SizedBox(height: 20),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: context.colors.buttonPrimary,
-                foregroundColor: context.colors.background,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
-            onPressed: () async {
-              final sats = int.tryParse(amountController.text.trim());
-              if (sats == null || sats <= 0) {
-                ScaffoldMessenger.of(modalContext)
-                    .showSnackBar(const SnackBar(content: Text('Enter a valid amount'), duration: Duration(seconds: 1)));
-                return;
-              }
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: context.colors.buttonPrimary,
+                  foregroundColor: context.colors.background,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16)),
+              onPressed: () async {
+                final sats = int.tryParse(amountController.text.trim());
+                if (sats == null || sats <= 0) {
+                  ScaffoldMessenger.of(modalContext)
+                      .showSnackBar(const SnackBar(content: Text('Enter a valid amount'), duration: Duration(seconds: 1)));
+                  return;
+                }
 
-              Navigator.pop(modalContext);
+                Navigator.pop(modalContext);
 
-              // Get user profile for the note author
-              final userRepository = AppDI.get<UserRepository>();
-              final userResult = await userRepository.getUserProfile(note.author);
+                // Get user profile for the note author
+                final userRepository = AppDI.get<UserRepository>();
+                final userResult = await userRepository.getUserProfile(note.author);
 
-              userResult.fold(
-                (user) {
-                  if (user.lud16.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text('User does not have a lightning address configured.'), duration: Duration(seconds: 1)));
-                    return;
-                  }
+                userResult.fold(
+                  (user) {
+                    if (user.lud16.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('User does not have a lightning address configured.'), duration: Duration(seconds: 1)));
+                      return;
+                    }
 
-                  _payZapWithWallet(context, user, note, sats, noteController.text.trim());
-                },
-                (error) {
-                  ScaffoldMessenger.of(context)
-                      .showSnackBar(SnackBar(content: Text('Error loading user profile: $error'), duration: const Duration(seconds: 1)));
-                },
-              );
-            },
-            child: const Text('⚡ Pay Zap'),
+                    _payZapWithWallet(context, user, note, sats, noteController.text.trim());
+                  },
+                  (error) {
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(SnackBar(content: Text('Error loading user profile: $error'), duration: const Duration(seconds: 1)));
+                  },
+                );
+              },
+              child: const Text('Send'),
+            ),
           ),
         ],
       ),
