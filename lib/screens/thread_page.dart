@@ -28,7 +28,6 @@ class ThreadPage extends StatefulWidget {
 class _ThreadPageState extends State<ThreadPage> {
   late ScrollController _scrollController;
   final GlobalKey _focusedNoteKey = GlobalKey();
-  String? _highlightedNoteId;
   late ValueNotifier<List<NoteModel>> _notesNotifier;
   final Map<String, UserModel> _profiles = {};
 
@@ -41,6 +40,13 @@ class _ThreadPageState extends State<ThreadPage> {
     super.initState();
     _scrollController = ScrollController();
     _notesNotifier = ValueNotifier<List<NoteModel>>([]);
+    
+    // Schedule scroll after first frame if we have a focused note
+    if (widget.focusedNoteId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scheduleScrollToFocusedNote();
+      });
+    }
   }
 
   @override
@@ -60,11 +66,6 @@ class _ThreadPageState extends State<ThreadPage> {
           rootNoteId: widget.rootNoteId,
           focusedNoteId: widget.focusedNoteId,
         );
-
-        // Scroll to focused note if specified
-        if (widget.focusedNoteId != null) {
-          _scrollToFocusedNote();
-        }
       },
       builder: (context, viewModel) {
         return Scaffold(
@@ -101,8 +102,6 @@ class _ThreadPageState extends State<ThreadPage> {
     final displayNote =
         widget.focusedNoteId != null ? viewModel.threadStructureState.data?.getNote(widget.focusedNoteId!) ?? rootNote : rootNote;
 
-    final isDisplayNoteHighlighted = displayNote.id == _highlightedNoteId;
-
     return RefreshIndicator(
       onRefresh: () => viewModel.refreshThreadCommand.execute(),
       child: SingleChildScrollView(
@@ -117,12 +116,7 @@ class _ThreadPageState extends State<ThreadPage> {
             _buildContextNote(context, viewModel, displayNote),
 
             // Main note (root or focused)
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 500),
-              curve: Curves.easeInOut,
-              color: isDisplayNoteHighlighted ? Theme.of(context).primaryColor.withValues(alpha: 0.1) : Colors.transparent,
-              child: _buildMainNote(context, viewModel, displayNote),
-            ),
+            _buildMainNote(context, viewModel, displayNote),
 
             // Thread replies
             _buildThreadReplies(context, viewModel, displayNote),
@@ -359,7 +353,6 @@ class _ThreadPageState extends State<ThreadPage> {
     final double currentIndent = depth * baseIndentWidth;
 
     final isFocused = reply.id == widget.focusedNoteId;
-    final isHighlighted = reply.id == _highlightedNoteId;
     final allNestedReplies = threadStructure.getChildren(reply.id);
     // Filter out repost notes from nested replies
     final nestedReplies = allNestedReplies.where((nestedReply) => !nestedReply.isRepost).toList();
@@ -387,7 +380,6 @@ class _ThreadPageState extends State<ThreadPage> {
                   // Simple flat note container
                   Container(
                     margin: const EdgeInsets.only(right: 8),
-                    color: isHighlighted ? context.colors.primary.withValues(alpha: 0.05) : Colors.transparent,
                     child: _buildEnhancedNoteWidget(
                       context,
                       viewModel,
@@ -622,31 +614,36 @@ class _ThreadPageState extends State<ThreadPage> {
     );
   }
 
-  void _scrollToFocusedNote() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      setState(() {
-        _highlightedNoteId = widget.focusedNoteId;
-      });
+  void _scheduleScrollToFocusedNote() {
+    if (!mounted || widget.focusedNoteId == null) return;
 
-      if (widget.focusedNoteId != null) {
-        final context = _focusedNoteKey.currentContext;
-        if (context != null) {
-          Scrollable.ensureVisible(
-            context,
-            duration: const Duration(milliseconds: 500),
-            curve: Curves.easeInOut,
-            alignment: 0.1,
-          );
-        }
-      }
-
-      // Remove highlight after delay
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) {
-          setState(() => _highlightedNoteId = null);
-        }
-      });
+    // Wait for the thread structure to be fully built and rendered
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      
+      // Try to scroll, retry if context not available yet
+      _attemptScrollToFocusedNote(retries: 5);
     });
+  }
+
+  void _attemptScrollToFocusedNote({int retries = 0}) {
+    if (!mounted || widget.focusedNoteId == null || retries <= 0) return;
+
+    final context = _focusedNoteKey.currentContext;
+    if (context != null) {
+      // Scroll to the focused note
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+        alignment: 0.15, // Position slightly from top for better visibility
+      );
+    } else {
+      // Context not ready yet, retry after a short delay
+      Future.delayed(const Duration(milliseconds: 200), () {
+        _attemptScrollToFocusedNote(retries: retries - 1);
+      });
+    }
   }
 
   // Removed interaction handlers - NoteWidget handles interactions internally
