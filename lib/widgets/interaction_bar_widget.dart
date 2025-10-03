@@ -7,6 +7,7 @@ import '../screens/note_statistics_page.dart';
 import '../models/note_model.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/note_repository.dart';
+import 'dialogs/zap_dialog.dart';
 
 class InteractionBar extends StatefulWidget {
   final String noteId;
@@ -33,6 +34,7 @@ class _InteractionBarState extends State<InteractionBar> {
   // Local state for optimistic updates
   bool _hasReacted = false;
   bool _hasReposted = false;
+  bool _hasZapped = false; // Optimistic zap state for button color only
   int _reactionCount = 0;
   int _repostCount = 0;
   int _replyCount = 0;
@@ -178,6 +180,7 @@ class _InteractionBarState extends State<InteractionBar> {
           _zapAmount = finalZapAmount;
           _hasReacted = false;
           _hasReposted = false;
+          _hasZapped = false;
         });
 
         debugPrint(
@@ -197,6 +200,7 @@ class _InteractionBarState extends State<InteractionBar> {
           _zapAmount = 0;
           _hasReacted = false;
           _hasReposted = false;
+          _hasZapped = false;
         });
 
         debugPrint('[InteractionBar] No note provided, using default counts');
@@ -321,21 +325,25 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   void _handleZapTap() {
-    if (widget.note == null) return;
+    if (widget.note == null || _hasZapped) return;
 
-    showDialog(
+    // Optimistic update for button color only
+    setState(() {
+      _hasZapped = true;
+    });
+
+    showZapDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Zap Note'),
-        content: const Text('Zap functionality will be implemented soon.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
+      note: widget.note!,
+    ).then((_) {
+      // Reset optimistic state after dialog closes
+      // Real zap amount updates will come from stream
+      if (mounted) {
+        setState(() {
+          _hasZapped = false;
+        });
+      }
+    });
   }
 
   void _handleStatsTap() {
@@ -444,7 +452,7 @@ class _InteractionBarState extends State<InteractionBar> {
           _buildButton(
             iconPath: 'assets/zap_button.svg',
             count: _zapAmount,
-            isActive: false,
+            isActive: _hasZapped, // Optimistic color change
             activeColor: colors.zap,
             inactiveColor: colors.secondary,
             onTap: _handleZapTap,

@@ -3,6 +3,7 @@ import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/note_repository.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../data/repositories/notification_repository.dart';
+import '../../../data/repositories/wallet_repository.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/validation_service.dart';
 import '../../../data/services/network_service.dart';
@@ -34,6 +35,11 @@ class RepositoriesModule extends DIModule {
           networkService: AppDI.get<NetworkService>(),
           validationService: AppDI.get<ValidationService>(),
           nostrDataService: AppDI.get<NostrDataService>(),
+        ));
+
+    AppDI.registerLazySingleton<WalletRepository>(() => WalletRepository(
+          authService: AppDI.get<AuthService>(),
+          validationService: AppDI.get<ValidationService>(),
         ));
   }
 }
