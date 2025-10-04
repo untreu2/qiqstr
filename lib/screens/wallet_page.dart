@@ -156,41 +156,28 @@ class _WalletPageState extends State<WalletPage> {
   Widget _buildHeader(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 60, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Wallet',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    color: context.colors.textPrimary,
-                    letterSpacing: -0.5,
-                  ),
-                ),
+          Expanded(
+            child: Text(
+              'Wallet',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w700,
+                color: context.colors.textPrimary,
+                letterSpacing: -0.5,
               ),
-              if (_connection != null)
-                IconButton(
-                  onPressed: _showNwcSettings,
-                  icon: Icon(
-                    Icons.settings_outlined,
-                    color: context.colors.textSecondary,
-                    size: 24,
-                  ),
-                ),
-            ],
-          ),
-          Text(
-            _connection == null ? "Connect to your Lightning wallet using Nostr Wallet Connect." : "Your Lightning wallet is connected.",
-            style: TextStyle(
-              fontSize: 14,
-              color: context.colors.textSecondary,
-              height: 1.4,
             ),
           ),
+          if (_connection != null)
+            IconButton(
+              onPressed: _showNwcSettings,
+              icon: Icon(
+                Icons.settings_outlined,
+                color: context.colors.textSecondary,
+                size: 24,
+              ),
+            ),
         ],
       ),
     );
@@ -261,59 +248,99 @@ class _WalletPageState extends State<WalletPage> {
     }
 
     return Expanded(
-      child: Stack(
+      child: Column(
         children: [
-          Column(
-            children: [
-              // Balance at top
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 24, 16, 24),
-                child: Text(
-                  _balance != null
-                      ? '${((_balance!.balance / 1000).floor()).toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')} sats'
-                      : 'Loading...',
-                  style: TextStyle(
-                    fontSize: 56,
-                    fontWeight: FontWeight.bold,
-                    color: context.colors.textPrimary,
+          // Balance at top (left aligned)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _balance != null
+                        ? ((_balance!.balance / 1000).floor()).toString()
+                        : '0',
+                    style: TextStyle(
+                      fontSize: 72,
+                      fontWeight: FontWeight.bold,
+                      color: context.colors.textPrimary,
+                      height: 1.0,
+                    ),
                   ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'sats',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w400,
+                      color: context.colors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Divider
+          SizedBox(
+            height: 12,
+            child: Center(
+              child: Container(
+                height: 0.5,
+                decoration: BoxDecoration(
+                  color: context.colors.textSecondary.withValues(alpha: 0.3),
                 ),
               ),
-              // Transactions in the middle
-              Expanded(
-                child: _buildTransactionsList(context),
-              ),
-              const SizedBox(height: 90),
-            ],
+            ),
           ),
-          // Floating buttons at bottom
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 130,
+          // Recent Activity header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Recent transactions',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: context.colors.textPrimary,
+                ),
+              ),
+            ),
+          ),
+          // Transactions list
+          Expanded(
+            child: _buildTransactionsList(context),
+          ),
+          // Fixed buttons at bottom
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
             child: Row(
               children: [
                 Expanded(
                   child: GestureDetector(
                     onTap: _showReceiveDialog,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: context.colors.buttonPrimary,
-                        borderRadius: BorderRadius.circular(40),
+                        borderRadius: BorderRadius.circular(30),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.arrow_downward, size: 18, color: context.colors.background),
+                          Icon(Icons.arrow_downward, size: 20, color: context.colors.background),
                           const SizedBox(width: 8),
                           Text(
                             'Receive',
                             style: TextStyle(
                               color: context.colors.background,
-                              fontSize: 17,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
@@ -326,23 +353,23 @@ class _WalletPageState extends State<WalletPage> {
                   child: GestureDetector(
                     onTap: _showSendDialog,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: context.colors.buttonPrimary,
-                        borderRadius: BorderRadius.circular(40),
+                        borderRadius: BorderRadius.circular(30),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.arrow_upward, size: 18, color: context.colors.background),
+                          Icon(Icons.arrow_upward, size: 20, color: context.colors.background),
                           const SizedBox(width: 8),
                           Text(
                             'Send',
                             style: TextStyle(
                               color: context.colors.background,
-                              fontSize: 17,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
@@ -384,15 +411,14 @@ class _WalletPageState extends State<WalletPage> {
       );
     }
 
-    return ListView.separated(
+    // Show only last 4 transactions
+    final recentTransactions = _transactions!.take(4).toList();
+    
+    return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      itemCount: _transactions!.length,
-      separatorBuilder: (context, index) => Divider(
-        color: context.colors.border,
-        height: 1,
-      ),
+      itemCount: recentTransactions.length,
       itemBuilder: (context, index) {
-        final tx = _transactions![index];
+        final tx = recentTransactions[index];
         return _buildTransactionTile(context, tx);
       },
     );
@@ -404,74 +430,61 @@ class _WalletPageState extends State<WalletPage> {
     final formatted = '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: ListTile(
-        contentPadding: EdgeInsets.zero,
-        horizontalTitleGap: 12,
-        leading: CircleAvatar(
-          radius: 18,
-          backgroundColor: context.colors.grey800,
-          child: Icon(
-            isIncoming ? Icons.arrow_downward : Icons.arrow_upward,
-            color: context.colors.textPrimary,
-            size: 16,
-          ),
-        ),
-        title: Text(
-          tx.description.isEmpty ? (isIncoming ? 'Received' : 'Sent') : tx.description,
-          style: TextStyle(
-            color: context.colors.textPrimary,
-            fontWeight: FontWeight.w500,
-            fontSize: 15,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Text(
-              formatted,
-              style: TextStyle(
-                color: context.colors.textSecondary,
-                fontSize: 12,
-              ),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 0),
+      child: Row(
+        children: [
+          // Icon
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: context.colors.surface,
+              borderRadius: BorderRadius.circular(20),
             ),
-            if (tx.feesPaid > 0) ...[
-              const SizedBox(height: 2),
-              Text(
-                'Fee: ${(tx.feesPaid / 1000).floor()} sats',
-                style: TextStyle(
-                  color: context.colors.textTertiary,
-                  fontSize: 11,
+            child: Icon(
+              isIncoming ? Icons.arrow_downward : Icons.arrow_upward,
+              color: context.colors.textPrimary,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Title and date
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isIncoming ? 'Received' : 'Sent',
+                  style: TextStyle(
+                    color: context.colors.textPrimary,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 16,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
-          ],
-        ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              '${isIncoming ? '+' : '-'}${(tx.amount / 1000).floor().toString().replaceAllMapped(RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
-              style: TextStyle(
-                color: context.colors.textPrimary,
-                fontWeight: FontWeight.w600,
-                fontSize: 16,
-              ),
+                const SizedBox(height: 4),
+                Text(
+                  formatted,
+                  style: TextStyle(
+                    color: context.colors.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 2),
-            Text(
-              'sats',
-              style: TextStyle(
-                color: context.colors.textSecondary,
-                fontSize: 12,
-              ),
+          ),
+          const SizedBox(width: 12),
+          // Amount
+          Text(
+            '${isIncoming ? '+' : '-'}${(tx.amount / 1000).floor()} sats',
+            style: TextStyle(
+              color: context.colors.textPrimary,
+              fontWeight: FontWeight.w600,
+              fontSize: 16,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

@@ -4,12 +4,12 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../screens/login_page.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/auth_repository.dart';
+import '../widgets/toast_widget.dart';
 
 class Logout {
   static Future<void> performLogout(BuildContext context) async {
     // Store references before async operations
     final navigator = Navigator.of(context);
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     try {
       // Clear authentication via repository
@@ -31,9 +31,9 @@ class Logout {
       if (kDebugMode) {
         print('Error during logout: $e');
       }
-      scaffoldMessenger.showSnackBar(
-        const SnackBar(content: Text('Error during logout. Please try again.')),
-      );
+      if (context.mounted) {
+        AppToast.error(context, 'Error during logout. Please try again.');
+      }
     }
   }
 }

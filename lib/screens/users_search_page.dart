@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -70,28 +71,15 @@ class _UserSearchPageState extends State<UserSearchPage> {
   Widget _buildHeader(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 60, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Text(
-                'Search users',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: context.colors.textPrimary,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
-          ),
           Text(
-            "Search for users by entering their npub.",
+            'Search users',
             style: TextStyle(
-              fontSize: 14,
-              color: context.colors.textSecondary,
-              height: 1.4,
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: context.colors.textPrimary,
+              letterSpacing: -0.5,
             ),
           ),
         ],
@@ -99,23 +87,48 @@ class _UserSearchPageState extends State<UserSearchPage> {
     );
   }
 
+  Future<void> _pasteFromClipboard() async {
+    final clipboardData = await Clipboard.getData('text/plain');
+    if (clipboardData != null && clipboardData.text != null) {
+      _searchController.text = clipboardData.text!;
+    }
+  }
+
   Widget _buildSearchInput(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
       child: TextField(
         controller: _searchController,
-        style: TextStyle(color: context.colors.textPrimary),
+        style: TextStyle(color: context.colors.background),
         decoration: InputDecoration(
           hintText: 'Enter npub to search for users...',
-          hintStyle: TextStyle(color: context.colors.textTertiary),
-          prefixIcon: Icon(Icons.search, color: context.colors.textPrimary),
+          hintStyle: TextStyle(color: context.colors.background.withValues(alpha: 0.6)),
+          suffixIcon: Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: GestureDetector(
+              onTap: _pasteFromClipboard,
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: context.colors.background,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.content_paste,
+                  color: context.colors.textPrimary,
+                  size: 20,
+                ),
+              ),
+            ),
+          ),
           filled: true,
-          fillColor: context.colors.surface,
+          fillColor: context.colors.textPrimary,
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(40),
             borderSide: BorderSide.none,
           ),
-          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
         ),
       ),
     );
@@ -275,32 +288,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
     }
 
     if (_filteredUsers.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.people_outline,
-              size: 48,
-              color: context.colors.textSecondary,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _searchController.text.trim().isEmpty ? 'Start typing to search users' : 'No users found',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: context.colors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _searchController.text.trim().isEmpty ? 'Enter an npub to find users.' : 'Enter a valid npub to search.',
-              style: TextStyle(color: context.colors.textSecondary),
-            ),
-          ],
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     return ListView.separated(
@@ -330,11 +318,12 @@ class _UserSearchPageState extends State<UserSearchPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeader(context),
-              _buildSearchInput(context),
-              const SizedBox(height: 16),
               Expanded(
                 child: _buildSearchResults(context),
               ),
+              const SizedBox(height: 16),
+              _buildSearchInput(context),
+              SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
             ],
           ),
         );

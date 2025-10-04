@@ -7,6 +7,7 @@ import '../presentation/viewmodels/edit_profile_viewmodel.dart';
 import '../data/repositories/user_repository.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/media_service.dart';
+import '../widgets/toast_widget.dart';
 
 class EditOwnProfilePage extends StatelessWidget {
   const EditOwnProfilePage({super.key});
@@ -130,18 +131,14 @@ class _EditProfileContentState extends State<_EditProfileContent> {
           }
 
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('$label uploaded successfully.')),
-            );
+            AppToast.success(context, '$label uploaded successfully.');
           }
           if (kDebugMode) {
             print('[EditProfile] Media uploaded successfully: $mediaUrl');
           }
         } catch (uploadError) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Upload failed: $uploadError')),
-            );
+            AppToast.error(context, 'Upload failed: $uploadError');
           }
           setState(() {
             controller.text = ''; // Clear on upload failure
@@ -150,9 +147,7 @@ class _EditProfileContentState extends State<_EditProfileContent> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e')),
-        );
+        AppToast.error(context, 'Upload failed: $e');
       }
     } finally {
       setState(() {
@@ -192,21 +187,11 @@ class _EditProfileContentState extends State<_EditProfileContent> {
       if (mounted) {
         result.fold(
           (updatedUser) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Profile updated successfully!'),
-                backgroundColor: Colors.green,
-              ),
-            );
+            AppToast.success(context, 'Profile updated successfully!');
             Navigator.pop(context);
           },
           (error) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Failed to update profile: $error'),
-                backgroundColor: Colors.red,
-              ),
-            );
+            AppToast.error(context, 'Failed to update profile: $error');
           },
         );
       }
@@ -215,12 +200,7 @@ class _EditProfileContentState extends State<_EditProfileContent> {
         print('[EditProfile] Error saving profile: $e');
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update profile: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppToast.error(context, 'Failed to update profile: ${e.toString()}');
       }
     }
   }

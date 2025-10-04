@@ -8,6 +8,7 @@ import '../screens/suggested_follows_page.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/user_repository.dart';
 import '../services/media_service.dart';
+import '../widgets/toast_widget.dart';
 
 class EditNewAccountProfilePage extends StatefulWidget {
   final String npub;
@@ -72,18 +73,14 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
           });
 
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Profile image uploaded successfully.')),
-            );
+            AppToast.success(context, 'Profile image uploaded successfully.');
           }
           if (kDebugMode) {
             print('[EditNewAccountProfile] Media uploaded successfully: $mediaUrl');
           }
         } catch (uploadError) {
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Upload failed: $uploadError')),
-            );
+            AppToast.error(context, 'Upload failed: $uploadError');
           }
           setState(() {
             _pictureController.text = ''; // Clear on upload failure
@@ -92,9 +89,7 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: $e')),
-        );
+        AppToast.error(context, 'Upload failed: $e');
       }
     } finally {
       setState(() {
@@ -131,23 +126,13 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
         (success) {
           debugPrint('[EditNewAccountProfile] Profile updated successfully');
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Profile updated successfully!'),
-                backgroundColor: Colors.green,
-              ),
-            );
+            AppToast.success(context, 'Profile updated successfully!');
           }
         },
         (error) {
           debugPrint('[EditNewAccountProfile] Profile update failed: $error');
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Profile update failed: $error'),
-                backgroundColor: Colors.red,
-              ),
-            );
+            AppToast.error(context, 'Profile update failed: $error');
           }
           // Don't return - still continue to next page even if profile update fails
         },
@@ -169,12 +154,7 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
     } catch (e) {
       debugPrint('[EditNewAccountProfile] Error saving profile: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update profile: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        AppToast.error(context, 'Failed to update profile: ${e.toString()}');
         // Still continue to next page even on error
         Navigator.pushReplacement(
           context,

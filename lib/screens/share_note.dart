@@ -11,6 +11,7 @@ import 'package:nostr_nip19/nostr_nip19.dart';
 import '../models/user_model.dart';
 import '../theme/theme_manager.dart';
 import '../widgets/back_button_widget.dart';
+import '../widgets/toast_widget.dart';
 
 class ShareNotePage extends StatefulWidget {
   final String? initialText;
@@ -609,20 +610,18 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   void _showErrorSnackBar(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    AppToast.error(context, message);
   }
 
   void _showRetryableError(String error) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$_errorSharingNote: $error'),
-        action: SnackBarAction(
-          label: _retryText,
-          onPressed: _shareNote,
-        ),
+    AppToast.show(
+      context,
+      '$_errorSharingNote: $error',
+      type: ToastType.error,
+      action: SnackBarAction(
+        label: _retryText,
+        onPressed: _shareNote,
       ),
     );
   }

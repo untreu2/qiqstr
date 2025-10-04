@@ -11,6 +11,7 @@ import 'link_preview_widget.dart';
 import 'media_preview_widget.dart';
 import 'mini_link_preview_widget.dart';
 import 'quote_widget.dart';
+import 'toast_widget.dart';
 
 enum NoteContentSize { small, big }
 
@@ -169,24 +170,18 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         await launchUrl(url);
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not launch ${link.url}')),
-          );
+          AppToast.error(context, 'Could not launch ${link.url}');
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error opening link: $e')),
-        );
+        AppToast.error(context, 'Error opening link: $e');
       }
     }
   }
 
   void _onHashtagTap(String hashtag) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Hashtag: $hashtag')),
-    );
+    AppToast.info(context, 'Hashtag: $hashtag');
   }
 
   List<InlineSpan> _buildSpans() {

@@ -9,6 +9,7 @@ import '../core/di/app_di.dart';
 import '../data/repositories/note_repository.dart';
 import 'dialogs/zap_dialog.dart';
 import 'dialogs/repost_dialog.dart';
+import 'toast_widget.dart';
 
 class InteractionBar extends StatefulWidget {
   final String noteId;
@@ -267,9 +268,7 @@ class _InteractionBarState extends State<InteractionBar> {
             _hasReacted = false;
             _reactionCount--;
           });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to react: $error')),
-          );
+          AppToast.error(context, 'Failed to react: $error');
         },
       );
     } catch (e) {

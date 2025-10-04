@@ -14,6 +14,7 @@ import '../../data/repositories/wallet_repository.dart';
 import '../../services/nostr_service.dart';
 import '../../services/relay_service.dart';
 import '../../constants/relays.dart';
+import '../toast_widget.dart';
 
 Future<void> _payZapWithWallet(
   BuildContext context,
@@ -29,39 +30,14 @@ Future<void> _payZapWithWallet(
     // Check if wallet is connected
     if (!walletRepository.isConnected) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please connect your wallet first'),
-            duration: Duration(seconds: 2),
-            backgroundColor: Colors.orange,
-          ),
-        );
+        AppToast.warning(context, 'Please connect your wallet first');
       }
       return;
     }
 
     // Show loading
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Row(
-            children: [
-              SizedBox(
-                width: 16,
-                height: 16,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              ),
-              SizedBox(width: 12),
-              Text('Creating zap...'),
-            ],
-          ),
-          duration: Duration(seconds: 30),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      AppToast.info(context, 'Processing payment...', duration: const Duration(seconds: 30));
     }
 
     // Get private key for zap request event
@@ -219,33 +195,13 @@ Future<void> _payZapWithWallet(
       // Continue anyway, payment was successful
     }
     if (context.mounted) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.flash_on, color: Colors.yellow, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text('Zapped $sats sats to ${user.name} on their note!'),
-              ),
-            ],
-          ),
-          duration: const Duration(seconds: 3),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      AppToast.hide(context);
+      AppToast.success(context, 'Zapped $sats sats to ${user.name} on their note!');
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to zap: $e'),
-          duration: const Duration(seconds: 3),
-          backgroundColor: Colors.red[700],
-        ),
-      );
+      AppToast.hide(context);
+      AppToast.error(context, 'Failed to zap: $e');
     }
   }
 }
@@ -300,8 +256,7 @@ Future<void> showZapDialog({
               onPressed: () async {
                 final sats = int.tryParse(amountController.text.trim());
                 if (sats == null || sats <= 0) {
-                  ScaffoldMessenger.of(modalContext)
-                      .showSnackBar(const SnackBar(content: Text('Enter a valid amount'), duration: Duration(seconds: 1)));
+                  AppToast.error(modalContext, 'Enter a valid amount', duration: const Duration(seconds: 1));
                   return;
                 }
 
@@ -314,16 +269,14 @@ Future<void> showZapDialog({
                 userResult.fold(
                   (user) {
                     if (user.lud16.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text('User does not have a lightning address configured.'), duration: Duration(seconds: 1)));
+                      AppToast.error(context, 'User does not have a lightning address configured.', duration: const Duration(seconds: 1));
                       return;
                     }
 
                     _payZapWithWallet(context, user, note, sats, noteController.text.trim());
                   },
                   (error) {
-                    ScaffoldMessenger.of(context)
-                        .showSnackBar(SnackBar(content: Text('Error loading user profile: $error'), duration: const Duration(seconds: 1)));
+                    AppToast.error(context, 'Error loading user profile: $error', duration: const Duration(seconds: 1));
                   },
                 );
               },

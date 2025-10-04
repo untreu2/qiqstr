@@ -9,6 +9,7 @@ import '../data/repositories/auth_repository.dart';
 import '../services/nostr_service.dart';
 import '../services/relay_service.dart';
 import '../widgets/back_button_widget.dart';
+import '../widgets/toast_widget.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
@@ -93,9 +94,7 @@ class _RelayPageState extends State<RelayPage> {
         _isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading relays: ${e.toString()}')),
-        );
+        AppToast.error(context, 'Error loading relays: ${e.toString()}');
       }
     }
   }
@@ -206,12 +205,11 @@ class _RelayPageState extends State<RelayPage> {
 
   void _showSnackBar(String message, {bool isError = false}) {
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: isError ? Colors.red : null,
-        ),
-      );
+      if (isError) {
+        AppToast.error(context, message);
+      } else {
+        AppToast.success(context, message);
+      }
     }
   }
 
@@ -238,22 +236,16 @@ class _RelayPageState extends State<RelayPage> {
         await _useUserRelays();
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Found and applied ${_userRelays.length} relays from your profile')),
-          );
+          AppToast.success(context, 'Found and applied ${_userRelays.length} relays from your profile');
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('No relay list found in your profile')),
-          );
+          AppToast.info(context, 'No relay list found in your profile');
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error fetching user relays: ${e.toString()}')),
-        );
+        AppToast.error(context, 'Error fetching user relays: ${e.toString()}');
       }
     } finally {
       setState(() => _isFetchingUserRelays = false);
@@ -385,9 +377,7 @@ class _RelayPageState extends State<RelayPage> {
 
   Future<void> _useUserRelays() async {
     if (_userRelays.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No user relays available. Please fetch them first.')),
-      );
+      AppToast.info(context, 'No user relays available. Please fetch them first.');
       return;
     }
 
@@ -407,15 +397,11 @@ class _RelayPageState extends State<RelayPage> {
       await prefs.setBool('using_user_relays', true);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Now using your personal relays (${writeRelays.length} main relays)')),
-        );
+        AppToast.success(context, 'Now using your personal relays (${writeRelays.length} main relays)');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error applying user relays: ${e.toString()}')),
-        );
+        AppToast.error(context, 'Error applying user relays: ${e.toString()}');
       }
     }
   }
@@ -428,15 +414,11 @@ class _RelayPageState extends State<RelayPage> {
       await WebSocketManager.instance.reloadCustomRelays();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Relays saved successfully')),
-        );
+        AppToast.success(context, 'Relays saved successfully');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving relays: ${e.toString()}')),
-        );
+        AppToast.error(context, 'Error saving relays: ${e.toString()}');
       }
     }
   }
@@ -450,23 +432,19 @@ class _RelayPageState extends State<RelayPage> {
     final url = _addRelayController.text.trim();
 
     if (url.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a relay URL')),
-      );
+      AppToast.error(context, 'Please enter a relay URL');
       return;
     }
 
     if (!_isValidRelayUrl(url)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid WebSocket URL (wss:// or ws://)')));
+      AppToast.error(context, 'Please enter a valid WebSocket URL (wss:// or ws://)');
       return;
     }
 
     final targetList = _relays;
 
     if (targetList.contains(url)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Relay already exists in this category')),
-      );
+      AppToast.error(context, 'Relay already exists in this category');
       return;
     }
 
@@ -482,15 +460,11 @@ class _RelayPageState extends State<RelayPage> {
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Relay added to Main list')),
-        );
+        AppToast.success(context, 'Relay added to Main list');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error adding relay: ${e.toString()}')),
-        );
+        AppToast.error(context, 'Error adding relay: ${e.toString()}');
       }
     } finally {
       setState(() => _isAddingRelay = false);
@@ -505,9 +479,7 @@ class _RelayPageState extends State<RelayPage> {
     await _saveRelays();
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Relay removed successfully')),
-      );
+      AppToast.success(context, 'Relay removed successfully');
     }
   }
 
@@ -516,10 +488,21 @@ class _RelayPageState extends State<RelayPage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: context.colors.surface,
-        title: Text('Reset to Defaults', style: TextStyle(color: context.colors.textPrimary)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Reset to Defaults',
+          style: TextStyle(
+            color: context.colors.textPrimary,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         content: Text(
           'This will reset all relays to their default values. Are you sure?',
-          style: TextStyle(color: context.colors.textSecondary),
+          style: TextStyle(
+            color: context.colors.textSecondary,
+            fontSize: 15,
+          ),
         ),
         actions: [
           GestureDetector(
@@ -543,16 +526,14 @@ class _RelayPageState extends State<RelayPage> {
           ),
           GestureDetector(
             onTap: () async {
-              final scaffoldMessenger = ScaffoldMessenger.of(context);
-              Navigator.pop(context);
+              final BuildContext dialogContext = context;
+              Navigator.pop(dialogContext);
               setState(() {
                 _relays = List.from(relaySetMainSockets);
               });
               await _saveRelays();
-              if (mounted) {
-                scaffoldMessenger.showSnackBar(
-                  const SnackBar(content: Text('Relays reset to defaults')),
-                );
+              if (mounted && context.mounted) {
+                AppToast.success(context, 'Relays reset to defaults');
               }
             },
             child: Container(
@@ -583,31 +564,45 @@ class _RelayPageState extends State<RelayPage> {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: context.colors.surface,
-        title: Text('Add New Relay', style: TextStyle(color: context.colors.textPrimary)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Add New Relay',
+          style: TextStyle(
+            color: context.colors.textPrimary,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: _addRelayController,
-              style: TextStyle(color: context.colors.textPrimary),
+              style: TextStyle(
+                color: context.colors.textPrimary,
+                fontSize: 15,
+              ),
               decoration: InputDecoration(
                 hintText: 'wss://relay.example.com',
-                hintStyle: TextStyle(color: context.colors.textTertiary),
+                hintStyle: TextStyle(
+                  color: context.colors.textTertiary,
+                  fontSize: 15,
+                ),
                 filled: true,
                 fillColor: context.colors.background,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: context.colors.border),
+                  borderSide: BorderSide(color: context.colors.border.withValues(alpha: 0.3)),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: context.colors.border),
+                  borderSide: BorderSide(color: context.colors.border.withValues(alpha: 0.3)),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: context.colors.accent, width: 2),
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
               ),
             ),
           ],
@@ -667,16 +662,17 @@ class _RelayPageState extends State<RelayPage> {
           Text(
             'Relays',
             style: TextStyle(
-              fontSize: 28,
+              fontSize: 32,
               fontWeight: FontWeight.w700,
               color: context.colors.textPrimary,
               letterSpacing: -0.5,
             ),
           ),
+          const SizedBox(height: 4),
           Text(
             "Manage your relay connections and publish your relay list.",
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 15,
               color: context.colors.textSecondary,
               height: 1.4,
             ),
@@ -839,37 +835,6 @@ class _RelayPageState extends State<RelayPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Row(
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: context.colors.textPrimary,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: context.colors.accent.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${relays.length}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: context.colors.accent,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
         if (relays.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -889,7 +854,7 @@ class _RelayPageState extends State<RelayPage> {
             itemCount: relays.length,
             itemBuilder: (context, index) => _buildRelayTile(relays[index], isMainRelay),
             separatorBuilder: (_, __) => Divider(
-              color: context.colors.border,
+              color: context.colors.border.withValues(alpha: 0.3),
               height: 1,
             ),
           ),
@@ -912,8 +877,11 @@ class _RelayPageState extends State<RelayPage> {
         height: 40,
         decoration: BoxDecoration(
           color: isUserRelay ? context.colors.accent.withValues(alpha: 0.1) : context.colors.surface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: isUserRelay ? context.colors.accent.withValues(alpha: 0.3) : context.colors.border),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isUserRelay ? context.colors.accent.withValues(alpha: 0.3) : context.colors.border.withValues(alpha: 0.3),
+            width: 1,
+          ),
         ),
         child: Icon(
           isUserRelay ? Icons.cloud_sync : Icons.router,
@@ -925,7 +893,7 @@ class _RelayPageState extends State<RelayPage> {
         relay,
         style: TextStyle(
           color: context.colors.textPrimary,
-          fontSize: 14,
+          fontSize: 15,
           fontWeight: FontWeight.w500,
         ),
       ),
@@ -969,13 +937,16 @@ class _RelayPageState extends State<RelayPage> {
               ],
             )
           : null,
-      trailing: IconButton(
-        icon: Icon(
-          Icons.delete_outline,
-          color: context.colors.textSecondary,
-          size: 20,
+      trailing: GestureDetector(
+        onTap: () => _removeRelay(relay, isMainRelay),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          child: Icon(
+            Icons.delete_outline,
+            color: context.colors.textSecondary,
+            size: 20,
+          ),
         ),
-        onPressed: () => _removeRelay(relay, isMainRelay),
       ),
     );
   }

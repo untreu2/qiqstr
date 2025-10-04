@@ -7,6 +7,7 @@ import '../../theme/theme_manager.dart';
 import '../../core/di/app_di.dart';
 import '../../data/repositories/note_repository.dart';
 import '../../data/repositories/auth_repository.dart';
+import '../toast_widget.dart';
 
 Future<void> showRepostDialog({
   required BuildContext context,
@@ -60,38 +61,33 @@ Future<void> _performRepost(
   NoteModel note,
   VoidCallback? onRepostSuccess,
 ) async {
-  // Store reference before async operations
-  final scaffoldMessenger = ScaffoldMessenger.of(context);
-
   try {
     final authRepository = AppDI.get<AuthRepository>();
     final noteRepository = AppDI.get<NoteRepository>();
 
     final currentUserResult = await authRepository.getCurrentUserNpub();
     if (currentUserResult.isError || currentUserResult.data == null) {
-      scaffoldMessenger.showSnackBar(
-        const SnackBar(content: Text('Please log in to repost')),
-      );
+      if (context.mounted) {
+        AppToast.error(context, 'Please log in to repost');
+      }
       return;
     }
 
     final result = await noteRepository.repostNote(note.id);
     if (result.isError) {
-      scaffoldMessenger.showSnackBar(
-        SnackBar(content: Text('Failed to repost: ${result.error}')),
-      );
+      if (context.mounted) {
+        AppToast.error(context, 'Failed to repost: ${result.error}');
+      }
     } else {
       onRepostSuccess?.call();
-      scaffoldMessenger.showSnackBar(
-        const SnackBar(content: Text('Note reposted successfully')),
-      );
+      // No toast on successful repost
     }
   } catch (e) {
     if (kDebugMode) {
       print('Error reposting note: $e');
     }
-    scaffoldMessenger.showSnackBar(
-      const SnackBar(content: Text('Failed to repost note')),
-    );
+    if (context.mounted) {
+      AppToast.error(context, 'Failed to repost note');
+    }
   }
 }

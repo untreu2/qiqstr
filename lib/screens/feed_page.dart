@@ -457,12 +457,11 @@ class FeedPageState extends State<FeedPage> {
               // New notes button - shown at bottom when there are pending notes
               if (viewModel.pendingNotesCount > 0)
                 Positioned(
-                  bottom: 0,
+                  bottom: 104,
                   left: 0,
                   right: 0,
-                  child: SafeArea(
-                    child: Center(
-                      child: GestureDetector(
+                  child: Center(
+                    child: GestureDetector(
                       onTap: () {
                         viewModel.addPendingNotesToFeed();
                         // Scroll to top after adding new notes
@@ -500,7 +499,6 @@ class FeedPageState extends State<FeedPage> {
                     ),
                   ),
                 ),
-              ),
             ],
           ),
         );

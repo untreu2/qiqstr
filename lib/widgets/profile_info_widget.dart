@@ -10,6 +10,7 @@ import '../theme/theme_manager.dart';
 import '../screens/edit_profile.dart';
 import '../screens/following_page.dart';
 import '../widgets/photo_viewer_widget.dart';
+import '../widgets/toast_widget.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/auth_repository.dart';
 import '../data/repositories/user_repository.dart';
@@ -370,12 +371,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
           // Show error to user
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Failed to $operationName user: $error'),
-                backgroundColor: context.colors.error,
-              ),
-            );
+            AppToast.error(context, 'Failed to $operationName user: $error');
           }
         },
       );
@@ -631,21 +627,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   void _showVerificationTooltip(BuildContext context, String nip05) {
     final domain = nip05.split('@').last;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'This user is verified by $domain',
-          style: TextStyle(color: context.colors.textPrimary),
-        ),
-        backgroundColor: context.colors.surface,
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-        ),
-      ),
-    );
+    AppToast.info(context, 'This user is verified by $domain');
   }
 
   Widget _buildOptimizedBanner(BuildContext context, UserModel user, double screenWidth) {

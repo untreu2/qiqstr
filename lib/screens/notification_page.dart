@@ -80,33 +80,17 @@ class _NotificationPageState extends State<NotificationPage> {
   }
 
   Widget _buildHeader(BuildContext context, NotificationViewModel viewModel) {
-    final notificationsLast24Hours = viewModel.notificationsLast24Hours;
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 60, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Text(
-                'Notifications',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: context.colors.textPrimary,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
           Text(
-            "You have $notificationsLast24Hours ${notificationsLast24Hours == 1 ? 'notification' : 'notifications'} in the last 24 hours.",
+            'Notifications',
             style: TextStyle(
-              fontSize: 14,
-              color: context.colors.textSecondary,
-              height: 1.4,
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: context.colors.textPrimary,
+              letterSpacing: -0.5,
             ),
           ),
         ],

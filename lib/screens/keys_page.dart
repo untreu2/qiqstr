@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:nostr/nostr.dart';
 import 'package:qiqstr/theme/theme_manager.dart';
 import '../widgets/back_button_widget.dart';
+import '../widgets/toast_widget.dart';
 import 'package:provider/provider.dart';
 
 class KeysPage extends StatefulWidget {
@@ -66,15 +67,7 @@ class _KeysPageState extends State<KeysPage> {
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${keyType.toUpperCase()} copied to clipboard!'),
-        backgroundColor: context.colors.success.withValues(alpha: 0.9),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        margin: const EdgeInsets.all(16),
-      ),
-    );
+    AppToast.success(context, '${keyType.toUpperCase()} copied to clipboard!');
 
     setState(() => _copiedKeyType = keyType);
 
@@ -86,40 +79,56 @@ class _KeysPageState extends State<KeysPage> {
   }
 
   Widget _buildKeyDisplayCard(BuildContext context, String title, String value, String keyType, bool isCopied) {
-    final displayValue = keyType == 'nsec' ? '****************************************************************' : value;
+    final displayValue = keyType == 'nsec' ? '•' * 48 : value;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
-      padding: const EdgeInsets.all(16.0),
+      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      padding: const EdgeInsets.all(20.0),
       decoration: BoxDecoration(
         color: context.colors.surface,
-        borderRadius: BorderRadius.circular(12.0),
-        border: Border.all(color: context.colors.border),
+        borderRadius: BorderRadius.circular(16.0),
+        border: Border.all(
+          color: context.colors.border.withValues(alpha: 0.3),
+          width: 1,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: TextStyle(color: context.colors.textSecondary, fontSize: 14)),
-          const SizedBox(height: 8),
+          Text(
+            title,
+            style: TextStyle(
+              color: context.colors.textSecondary,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
-                child: SelectableText(
+                child: Text(
                   displayValue,
                   maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: context.colors.textPrimary,
-                    fontSize: 15,
-                    fontFamily: 'monospace',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                    letterSpacing: keyType == 'nsec' ? 2 : 0,
                   ),
                 ),
               ),
-              const SizedBox(width: 16),
-              IconButton(
-                icon: isCopied
-                    ? Icon(Icons.check, color: context.colors.success)
-                    : Icon(Icons.copy_outlined, color: context.colors.iconPrimary),
-                onPressed: () => _copyToClipboard(value, keyType),
-                tooltip: 'Copy to clipboard',
+              const SizedBox(width: 12),
+              GestureDetector(
+                onTap: () => _copyToClipboard(value, keyType),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  child: Icon(
+                    isCopied ? Icons.check : Icons.content_copy,
+                    color: isCopied ? context.colors.success : context.colors.iconSecondary,
+                    size: 20,
+                  ),
+                ),
               ),
             ],
           ),
@@ -128,63 +137,6 @@ class _KeysPageState extends State<KeysPage> {
     );
   }
 
-  Widget _buildDisclaimerCard(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: context.colors.surface.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12.0),
-        border: Border.all(color: context.colors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'What are these keys?',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: context.colors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 16.0),
-          _buildDisclaimerRow(
-            context,
-            title: 'Private Key (nsec)',
-            description:
-                'This is your password. Keep it secret and never share it. It allows you to sign messages and control your identity.',
-          ),
-          const SizedBox(height: 16.0),
-          _buildDisclaimerRow(
-            context,
-            title: 'Public Key (npub)',
-            description: 'This is your username. Share it with others so they can find you and interact with your profile.',
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDisclaimerRow(BuildContext context, {required String title, required String description}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: context.colors.textPrimary,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          description,
-          style: TextStyle(color: context.colors.textSecondary, height: 1.4),
-        ),
-      ],
-    );
-  }
 
   Widget _buildHeader(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
@@ -197,16 +149,17 @@ class _KeysPageState extends State<KeysPage> {
           Text(
             'Keys',
             style: TextStyle(
-              fontSize: 28,
+              fontSize: 32,
               fontWeight: FontWeight.w700,
               color: context.colors.textPrimary,
               letterSpacing: -0.5,
             ),
           ),
+          const SizedBox(height: 4),
           Text(
             "Manage your Nostr identity keys securely.",
             style: TextStyle(
-              fontSize: 14,
+              fontSize: 15,
               color: context.colors.textSecondary,
               height: 1.4,
             ),
@@ -236,6 +189,7 @@ class _KeysPageState extends State<KeysPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeader(context),
+              const SizedBox(height: 8),
               _buildKeyDisplayCard(
                 context,
                 'Private Key (nsec)',
@@ -250,9 +204,7 @@ class _KeysPageState extends State<KeysPage> {
                 'npub',
                 _copiedKeyType == 'npub',
               ),
-              const SizedBox(height: 16),
-              _buildDisclaimerCard(context),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
             ],
           ),
         ),
@@ -261,3 +213,4 @@ class _KeysPageState extends State<KeysPage> {
     );
   }
 }
+
