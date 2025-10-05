@@ -19,39 +19,86 @@ Future<void> showRepostDialog({
     isScrollControlled: true,
     backgroundColor: context.colors.background,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      borderRadius: BorderRadius.zero,
     ),
-    builder: (modalContext) => Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ListTile(
-          leading: Icon(Icons.repeat, color: context.colors.iconPrimary),
-          title: Text('Repost', style: TextStyle(color: context.colors.textPrimary, fontSize: 16)),
-          onTap: () async {
-            Navigator.pop(modalContext);
-            await _performRepost(context, note, onRepostSuccess);
-          },
-        ),
-        ListTile(
-          leading: Icon(Icons.format_quote, color: context.colors.iconPrimary),
-          title: Text('Quote', style: TextStyle(color: context.colors.textPrimary, fontSize: 16)),
-          onTap: () {
-            Navigator.pop(modalContext);
-            final bech32 = encodeBasicBech32(note.id, 'note');
-            final quoteText = 'nostr:$bech32';
-
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ShareNotePage(
-                  initialText: quoteText,
-                ),
+    builder: (modalContext) => Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: () async {
+              Navigator.pop(modalContext);
+              await _performRepost(context, note, onRepostSuccess);
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: context.colors.buttonPrimary,
+                borderRadius: BorderRadius.circular(40),
               ),
-            );
-          },
-        ),
-        const SizedBox(height: 45),
-      ],
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.repeat, color: context.colors.buttonText, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Repost',
+                    style: TextStyle(
+                      color: context.colors.buttonText,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: () {
+              Navigator.pop(modalContext);
+              final bech32 = encodeBasicBech32(note.id, 'note');
+              final quoteText = 'nostr:$bech32';
+
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ShareNotePage(
+                    initialText: quoteText,
+                  ),
+                ),
+              );
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: context.colors.overlayLight,
+                borderRadius: BorderRadius.circular(40),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.format_quote, color: context.colors.textPrimary, size: 20),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Quote',
+                    style: TextStyle(
+                      color: context.colors.textPrimary,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     ),
   );
 }

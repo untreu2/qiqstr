@@ -387,10 +387,10 @@ class _UserSearchPageState extends State<UserSearchPage> {
                   ),
                   child: TextField(
                     controller: _searchController,
-                    style: TextStyle(color: context.colors.background),
+                    style: TextStyle(color: context.colors.buttonText),
                     decoration: InputDecoration(
                       hintText: 'Search by name or npub...',
-                      hintStyle: TextStyle(color: context.colors.background.withValues(alpha: 0.6)),
+                      hintStyle: TextStyle(color: context.colors.buttonText.withValues(alpha: 0.6)),
                       suffixIcon: Padding(
                         padding: const EdgeInsets.only(right: 8),
                         child: GestureDetector(
@@ -411,7 +411,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
                         ),
                       ),
                       filled: true,
-                      fillColor: context.colors.textPrimary,
+                      fillColor: context.colors.buttonPrimary,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(40),
                         borderSide: BorderSide.none,

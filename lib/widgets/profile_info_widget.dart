@@ -535,7 +535,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
-                color: Colors.white,
+                color: context.colors.background,
                 width: 4.0,
               ),
             ),
@@ -689,20 +689,18 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         );
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: context.colors.overlayLight,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: context.colors.borderAccent),
+          borderRadius: BorderRadius.circular(40),
         ),
         child: Text(
           'Edit profile',
           style: TextStyle(
             color: context.colors.textPrimary,
             fontSize: 13,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
@@ -715,19 +713,18 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       onTap: _toggleFollow,
       child: Container(
         width: 100,
-        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: isFollowing ? context.colors.overlayLight : context.colors.buttonPrimary,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: context.colors.borderAccent),
+          borderRadius: BorderRadius.circular(40),
         ),
         child: Text(
           isFollowing ? 'Following' : 'Follow',
           style: TextStyle(
             color: isFollowing ? context.colors.textPrimary : context.colors.background,
             fontSize: 13,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w600,
           ),
         ),
       ),
@@ -743,13 +740,11 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         if (mounted) setState(() => _copiedToClipboard = false);
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: context.colors.overlayLight,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: context.colors.borderAccent),
+          borderRadius: BorderRadius.circular(40),
         ),
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 300),
@@ -768,7 +763,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 13,
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.w600,
                     color: context.colors.textPrimary,
                   ),
                 ),
@@ -814,7 +809,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                   '$_followingCount',
                   style: TextStyle(
                     fontSize: 14,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w600,
                     color: context.colors.textPrimary,
                   ),
                 ),

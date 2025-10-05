@@ -208,9 +208,9 @@ class SuggestedFollowsPage extends StatelessWidget {
                     ),
                   ),
                   child: isSelected
-                      ? const Icon(
+                      ? Icon(
                           Icons.check,
-                          color: Colors.white,
+                          color: context.colors.buttonText,
                           size: 16,
                         )
                       : null,
@@ -243,19 +243,18 @@ class SuggestedFollowsPage extends StatelessWidget {
                   },
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding: const EdgeInsets.symmetric(vertical: 18),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: context.colors.overlayLight,
-                borderRadius: BorderRadius.circular(25),
-                border: Border.all(color: context.colors.borderAccent),
+                borderRadius: BorderRadius.circular(40),
               ),
               child: Text(
                 'Skip',
                 style: TextStyle(
                   color: context.colors.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -269,12 +268,11 @@ class SuggestedFollowsPage extends StatelessWidget {
                   },
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding: const EdgeInsets.symmetric(vertical: 18),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: context.colors.buttonPrimary,
-                borderRadius: BorderRadius.circular(25),
-                border: Border.all(color: context.colors.borderAccent),
+                borderRadius: BorderRadius.circular(40),
               ),
               child: viewModel.isProcessing
                   ? SizedBox(
@@ -288,9 +286,9 @@ class SuggestedFollowsPage extends StatelessWidget {
                   : Text(
                       'Continue',
                       style: TextStyle(
-                        color: context.colors.background,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                        color: context.colors.buttonText,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
             ),

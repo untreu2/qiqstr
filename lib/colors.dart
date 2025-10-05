@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  static const Color primary = Colors.white;
+  static const Color primary = Color(0xFF2D2D2D); 
   static const Color secondary = Colors.grey;
   static const Color accent = Color.fromARGB(255, 222, 169, 54);
 
@@ -19,7 +19,8 @@ class AppColors {
   static const Color success = Colors.greenAccent;
   static const Color warning = Colors.amber;
 
-  static const Color buttonPrimary = Colors.white;
+  static const Color buttonPrimary = Color(0xFF2D2D2D); 
+  static const Color buttonText = Colors.white; 
   static const Color buttonSecondary = Colors.white10;
   static const Color buttonBorder = Colors.white30;
 
@@ -32,7 +33,7 @@ class AppColors {
   static const Color overlayLight = Colors.white10;
   static const Color overlayDark = Colors.black87;
 
-  static const Color iconPrimary = Colors.white;
+  static const Color iconPrimary = Color(0xFF2D2D2D); 
   static const Color iconSecondary = Colors.white70;
   static const Color iconDisabled = Colors.white38;
 
@@ -46,10 +47,10 @@ class AppColors {
 
   static const Color inputFill = Colors.white10;
   static const Color inputBorder = Colors.white24;
-  static const Color inputFocused = Colors.white;
+  static const Color inputFocused = Color(0xFF2D2D2D); 
   static const Color inputLabel = Colors.white70;
 
-  static const Color loading = Colors.white;
+  static const Color loading = Color(0xFF2D2D2D); 
   static const Color loadingBackground = Colors.white38;
 
   static const Color notificationBackground = Colors.grey;
@@ -72,7 +73,7 @@ class AppColors {
 
   static const Color sliderActive = Colors.amber;
   static const Color sliderInactive = Colors.white24;
-  static const Color sliderThumb = Colors.white;
+  static const Color sliderThumb = Color(0xFF2D2D2D); 
 
   static const Color glassBackground = Color(0xFF000000);
 
@@ -89,7 +90,7 @@ class AppColors {
 }
 
 class AppColorsLight {
-  static const Color primary = Colors.black;
+  static const Color primary = Color(0xFF2D2D2D); 
   static const Color secondary = Color.fromARGB(255, 74, 69, 69);
   static const Color accent = Color(0xFF8B0000);
 
@@ -107,7 +108,8 @@ class AppColorsLight {
   static const Color success = Colors.greenAccent;
   static const Color warning = Colors.amber;
 
-  static const Color buttonPrimary = Colors.black;
+  static const Color buttonPrimary = Color(0xFF2D2D2D); 
+  static const Color buttonText = Colors.white; 
   static const Color buttonSecondary = Colors.black12;
   static const Color buttonBorder = Colors.black26;
 
@@ -120,7 +122,7 @@ class AppColorsLight {
   static const Color overlayLight = Colors.black12;
   static const Color overlayDark = Colors.white70;
 
-  static const Color iconPrimary = Colors.black;
+  static const Color iconPrimary = Color(0xFF2D2D2D); 
   static const Color iconSecondary = Colors.black54;
   static const Color iconDisabled = Colors.black26;
 

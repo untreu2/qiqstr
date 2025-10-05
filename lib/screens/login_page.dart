@@ -142,9 +142,9 @@ class _LoginPageState extends State<LoginPage> {
               child: Text(
                 'Login',
                 style: TextStyle(
-                  color: context.colors.background,
+                  color: context.colors.buttonText,
                   fontSize: 17,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -165,7 +165,7 @@ class _LoginPageState extends State<LoginPage> {
                 style: TextStyle(
                   color: context.colors.textPrimary,
                   fontSize: 17,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
@@ -174,7 +174,7 @@ class _LoginPageState extends State<LoginPage> {
           if (_message.isNotEmpty)
             Text(
               _message,
-              style: TextStyle(color: context.colors.error, fontWeight: FontWeight.bold),
+              style: TextStyle(color: context.colors.error, fontWeight: FontWeight.w600),
             ),
         ],
       ),

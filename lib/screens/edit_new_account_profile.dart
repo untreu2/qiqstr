@@ -9,6 +9,7 @@ import '../core/di/app_di.dart';
 import '../data/repositories/user_repository.dart';
 import '../services/media_service.dart';
 import '../widgets/toast_widget.dart';
+import '../widgets/back_button_widget.dart';
 
 class EditNewAccountProfilePage extends StatefulWidget {
   final String npub;
@@ -164,13 +165,33 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
     }
   }
 
-  Future<void> _skipToSuggestions() async {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => SuggestedFollowsPage(
-          npub: widget.npub,
-        ),
+  Widget _buildHeader(BuildContext context) {
+    final double topPadding = MediaQuery.of(context).padding.top;
+    
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Set Up Profile',
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.w700,
+              color: context.colors.textPrimary,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Add some basic information to help others discover you.',
+            style: TextStyle(
+              fontSize: 15,
+              color: context.colors.textSecondary,
+              height: 1.4,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -204,146 +225,99 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
       builder: (context, themeManager, child) {
         return Scaffold(
           backgroundColor: context.colors.background,
-          body: SafeArea(
-            child: Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const SizedBox(height: 8),
-                          Text(
-                            'Set up your profile',
-                            style: TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                              color: context.colors.textPrimary,
+          body: Stack(
+            children: [
+              SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(context),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TextFormField(
+                              controller: _nameController,
+                              decoration: _inputDecoration(context, 'Username'),
+                              style: TextStyle(color: context.colors.textPrimary),
+                              maxLength: 50,
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Add some basic information to help others discover you.',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: context.colors.textSecondary,
-                              height: 1.4,
+                            const SizedBox(height: 20),
+                            TextFormField(
+                              controller: _aboutController,
+                              decoration: _inputDecoration(context, 'Bio'),
+                              style: TextStyle(color: context.colors.textPrimary),
+                              maxLines: 3,
+                              maxLength: 300,
                             ),
-                          ),
-                          const SizedBox(height: 40),
-                          TextFormField(
-                            controller: _nameController,
-                            decoration: _inputDecoration(context, 'Username'),
-                            style: TextStyle(color: context.colors.textPrimary),
-                            maxLength: 50,
-                          ),
-                          const SizedBox(height: 20),
-                          TextFormField(
-                            controller: _aboutController,
-                            decoration: _inputDecoration(context, 'Bio'),
-                            style: TextStyle(color: context.colors.textPrimary),
-                            maxLines: 3,
-                            maxLength: 300,
-                          ),
-                          const SizedBox(height: 20),
-                          TextFormField(
-                            controller: _pictureController,
-                            enabled: !_isUploadingPicture,
-                            decoration: _inputDecoration(
-                              context,
-                              'Profile image URL',
-                              onUpload: _isUploadingPicture ? null : _pickAndUploadMedia,
+                            const SizedBox(height: 20),
+                            TextFormField(
+                              controller: _pictureController,
+                              enabled: !_isUploadingPicture,
+                              decoration: _inputDecoration(
+                                context,
+                                'Profile image URL',
+                                onUpload: _isUploadingPicture ? null : _pickAndUploadMedia,
+                              ),
+                              style: TextStyle(color: context.colors.textPrimary),
                             ),
-                            style: TextStyle(color: context.colors.textPrimary),
-                          ),
-                          const SizedBox(height: 20),
-                          TextFormField(
-                            controller: _lud16Controller,
-                            decoration: _inputDecoration(context, 'Lightning address (optional)'),
-                            style: TextStyle(color: context.colors.textPrimary),
-                          ),
-                          const SizedBox(height: 20),
-                          TextFormField(
-                            controller: _websiteController,
-                            decoration: _inputDecoration(context, 'Website (optional)'),
-                            style: TextStyle(color: context.colors.textPrimary),
-                          ),
-                          const SizedBox(height: 60),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
-                  decoration: BoxDecoration(
-                    color: context.colors.background,
-                    border: Border(
-                      top: BorderSide(color: context.colors.border),
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      GestureDetector(
-                        onTap: _isSaving ? null : _skipToSuggestions,
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: context.colors.overlayLight,
-                            borderRadius: BorderRadius.circular(25),
-                            border: Border.all(color: context.colors.borderAccent),
-                          ),
-                          child: Text(
-                            'Skip',
-                            style: TextStyle(
-                              color: context.colors.textPrimary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                            const SizedBox(height: 20),
+                            TextFormField(
+                              controller: _lud16Controller,
+                              decoration: _inputDecoration(context, 'Lightning address (optional)'),
+                              style: TextStyle(color: context.colors.textPrimary),
                             ),
-                          ),
+                            const SizedBox(height: 20),
+                            TextFormField(
+                              controller: _websiteController,
+                              decoration: _inputDecoration(context, 'Website (optional)'),
+                              style: TextStyle(color: context.colors.textPrimary),
+                            ),
+                            const SizedBox(height: 60),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      GestureDetector(
-                        onTap: _isSaving ? null : _saveAndContinue,
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          alignment: Alignment.center,
-                          decoration: BoxDecoration(
-                            color: context.colors.buttonPrimary,
-                            borderRadius: BorderRadius.circular(25),
-                            border: Border.all(color: context.colors.borderAccent),
+                    ),
+                  ],
+                ),
+              ),
+              const BackButtonWidget.floating(),
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 16,
+                right: 16,
+                child: GestureDetector(
+                  onTap: _isSaving ? null : _saveAndContinue,
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: context.colors.buttonPrimary,
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    child: _isSaving
+                        ? Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
+                              ),
+                            ),
+                          )
+                        : Icon(
+                            Icons.check,
+                            color: context.colors.background,
+                            size: 24,
                           ),
-                          child: _isSaving
-                              ? SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
-                                  ),
-                                )
-                              : Text(
-                                  'Continue',
-                                  style: TextStyle(
-                                    color: context.colors.background,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },

@@ -79,6 +79,7 @@ class AppThemeColors {
   final Color success;
   final Color warning;
   final Color buttonPrimary;
+  final Color buttonText;
   final Color buttonSecondary;
   final Color buttonBorder;
   final Color border;
@@ -142,6 +143,7 @@ class AppThemeColors {
     required this.success,
     required this.warning,
     required this.buttonPrimary,
+    required this.buttonText,
     required this.buttonSecondary,
     required this.buttonBorder,
     required this.border,
@@ -207,6 +209,7 @@ class AppThemeColors {
       success: AppColors.success,
       warning: AppColors.warning,
       buttonPrimary: AppColors.buttonPrimary,
+      buttonText: AppColors.buttonText,
       buttonSecondary: AppColors.buttonSecondary,
       buttonBorder: AppColors.buttonBorder,
       border: AppColors.border,
@@ -273,6 +276,7 @@ class AppThemeColors {
       success: AppColorsLight.success,
       warning: AppColorsLight.warning,
       buttonPrimary: AppColorsLight.buttonPrimary,
+      buttonText: AppColorsLight.buttonText,
       buttonSecondary: AppColorsLight.buttonSecondary,
       buttonBorder: AppColorsLight.buttonBorder,
       border: AppColorsLight.border,

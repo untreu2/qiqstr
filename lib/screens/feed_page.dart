@@ -348,7 +348,7 @@ class FeedPageState extends State<FeedPage> {
                       'assets/main_icon_white.svg',
                       width: 30,
                       height: 30,
-                      colorFilter: ColorFilter.mode(colors.iconPrimary, BlendMode.srcIn),
+                      colorFilter: ColorFilter.mode(colors.textPrimary, BlendMode.srcIn),
                     ),
                   ),
                 ),
@@ -513,12 +513,12 @@ class FeedPageState extends State<FeedPage> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.arrow_upward, size: 15, color: colors.background),
+                            Icon(Icons.arrow_upward, size: 15, color: colors.buttonText),
                             const SizedBox(width: 5),
                             Text(
                               'Show new notes',
                               style: TextStyle(
-                                color: colors.background,
+                                color: colors.buttonText,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
                               ),

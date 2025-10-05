@@ -3,11 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/user_model.dart';
 import '../screens/profile_page.dart';
-import '../screens/relay_page.dart';
-import '../utils/logout.dart';
+import '../screens/settings_page.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/theme_manager.dart';
-import '../screens/keys_page.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/auth_repository.dart';
@@ -89,6 +87,9 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         final colors = themeManager.colors;
 
         return Drawer(
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.zero,
+          ),
           child: Container(
             color: colors.background,
             child: _currentUser == null
@@ -129,57 +130,64 @@ class _UserProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final double topPadding = MediaQuery.of(context).padding.top;
+    
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 60, 16, 16),
-      child: Row(
+      padding: EdgeInsets.fromLTRB(20, topPadding + 16, 20, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: colors.avatarPlaceholder,
-              image: user.profileImage.isNotEmpty
-                  ? DecorationImage(
-                      image: NetworkImage(user.profileImage),
-                      fit: BoxFit.cover,
-                    )
-                  : null,
-            ),
-            child: user.profileImage.isEmpty
-                ? Icon(
-                    Icons.person,
-                    size: 30,
-                    color: colors.textSecondary,
-                  )
-                : null,
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(
-                  child: Text(
-                    user.name.isNotEmpty ? user.name : 'Anonymous',
-                    style: TextStyle(
-                      color: colors.textPrimary,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+          Row(
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: colors.avatarPlaceholder,
+                  image: user.profileImage.isNotEmpty
+                      ? DecorationImage(
+                          image: NetworkImage(user.profileImage),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
                 ),
-                if (user.nip05.isNotEmpty && user.nip05Verified) ...[
-                  const SizedBox(width: 6),
-                  Icon(
-                    Icons.verified,
-                    size: 18,
-                    color: colors.accent,
-                  ),
-                ],
-              ],
-            ),
+                child: user.profileImage.isEmpty
+                    ? Icon(
+                        Icons.person,
+                        size: 32,
+                        color: colors.textSecondary,
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        user.name.isNotEmpty ? user.name : 'Anonymous',
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.3,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (user.nip05.isNotEmpty && user.nip05Verified) ...[
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.verified,
+                        size: 20,
+                        color: colors.accent,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -196,70 +204,68 @@ class _SidebarContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Divider(color: colors.border, indent: 16, endIndent: 16),
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.zero,
-                children: [
-                  _buildSidebarItem(
-                    colors: colors,
-                    svgAsset: 'assets/profile_button.svg',
-                    label: 'Profile',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ProfilePage(user: user),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 20),
+          Expanded(
+            child: CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      _buildModernSidebarItem(
+                        context: context,
+                        colors: colors,
+                        svgAsset: 'assets/profile_button.svg',
+                        label: 'Profile',
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ProfilePage(user: user),
+                          ),
+                        ),
                       ),
+                    ]),
+                  ),
+                ),
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      children: [
+                        const Spacer(),
+                        const SizedBox(height: 10),
+                        _buildModernSidebarItem(
+                          context: context,
+                          colors: colors,
+                          icon: CarbonIcons.settings,
+                          label: 'Settings',
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const SettingsPage(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 150),
+                      ],
                     ),
                   ),
-                  _buildSidebarItem(
-                    colors: colors,
-                    svgAsset: 'assets/relay_1.svg',
-                    label: 'Relays',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const RelayPage(),
-                      ),
-                    ),
-                  ),
-                  _buildSidebarItem(
-                    colors: colors,
-                    icon: CarbonIcons.password,
-                    label: 'Keys',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const KeysPage(),
-                      ),
-                    ),
-                  ),
-                  _buildThemeToggle(colors),
-                  Divider(color: colors.border, indent: 16, endIndent: 16),
-                  _buildSidebarItem(
-                    colors: colors,
-                    svgAsset: 'assets/signout_button.svg',
-                    label: 'Logout',
-                    iconColor: colors.error,
-                    textColor: colors.error,
-                    onTap: () => Logout.performLogout(context),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-Widget _buildSidebarItem({
+Widget _buildModernSidebarItem({
+  required BuildContext context,
   required AppThemeColors colors,
   String? svgAsset,
   IconData? icon,
@@ -268,56 +274,39 @@ Widget _buildSidebarItem({
   Color? iconColor,
   Color? textColor,
 }) {
-  return ListTile(
-    leading: icon != null
-        ? Icon(
-            icon,
-            size: 22,
-            color: iconColor ?? colors.iconPrimary,
-          )
-        : SvgPicture.asset(
-            svgAsset!,
-            width: 22,
-            height: 22,
-            colorFilter: ColorFilter.mode(
-              iconColor ?? colors.iconPrimary,
-              BlendMode.srcIn,
+  return InkWell(
+    onTap: onTap,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      child: Row(
+        children: [
+          if (icon != null)
+            Icon(
+              icon,
+              size: 24,
+              color: iconColor ?? colors.textPrimary,
+            )
+          else if (svgAsset != null)
+            SvgPicture.asset(
+              svgAsset,
+              width: 24,
+              height: 24,
+              colorFilter: ColorFilter.mode(
+                iconColor ?? colors.textPrimary,
+                BlendMode.srcIn,
+              ),
+            ),
+          const SizedBox(width: 16),
+          Text(
+            label,
+            style: TextStyle(
+              color: textColor ?? colors.textPrimary,
+              fontSize: 18,
+                  fontWeight: FontWeight.w600,
             ),
           ),
-    title: Text(
-      label,
-      style: TextStyle(color: textColor ?? colors.textPrimary, fontSize: 18, fontWeight: FontWeight.w500),
+        ],
+      ),
     ),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-    hoverColor: colors.hoverTransparent,
-    onTap: onTap,
-  );
-}
-
-Widget _buildThemeToggle(AppThemeColors colors) {
-  return Consumer<ThemeManager>(
-    builder: (context, themeManager, child) {
-      return ListTile(
-        leading: Icon(
-          themeManager.isDarkMode ? CarbonIcons.asleep : CarbonIcons.light,
-          color: colors.iconPrimary,
-          size: 22,
-        ),
-        title: Text(
-          themeManager.isDarkMode ? 'Dark Mode' : 'Light Mode',
-          style: TextStyle(color: colors.textPrimary, fontSize: 18, fontWeight: FontWeight.w500),
-        ),
-        trailing: Switch(
-          value: themeManager.isDarkMode,
-          onChanged: (value) => themeManager.toggleTheme(),
-          activeThumbColor: colors.accent,
-          inactiveThumbColor: colors.textSecondary,
-          inactiveTrackColor: colors.border,
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        hoverColor: colors.hoverTransparent,
-        onTap: () => themeManager.toggleTheme(),
-      );
-    },
   );
 }

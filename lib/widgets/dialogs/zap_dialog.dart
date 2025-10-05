@@ -197,9 +197,9 @@ Future<void> showZapDialog({
     context: context,
     isScrollControlled: true,
     backgroundColor: context.colors.background,
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
     builder: (modalContext) => Padding(
-      padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(modalContext).viewInsets.bottom + 40, top: 8),
+      padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(modalContext).viewInsets.bottom + 40, top: 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -209,57 +209,82 @@ Future<void> showZapDialog({
             style: TextStyle(color: context.colors.textPrimary),
             decoration: InputDecoration(
               labelText: 'Amount (sats)',
-              labelStyle: TextStyle(color: context.colors.secondary),
-              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: context.colors.secondary)),
-              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: context.colors.textPrimary)),
+              labelStyle: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: context.colors.textSecondary,
+              ),
+              filled: true,
+              fillColor: context.colors.inputFill,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(25),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           TextField(
             controller: noteController,
             style: TextStyle(color: context.colors.textPrimary),
             decoration: InputDecoration(
-              labelText: 'Comment... (Optional)',
-              labelStyle: TextStyle(color: context.colors.secondary),
-              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: context.colors.secondary)),
-              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: context.colors.textPrimary)),
+              labelText: 'Comment (Optional)',
+              labelStyle: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: context.colors.textSecondary,
+              ),
+              filled: true,
+              fillColor: context.colors.inputFill,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(25),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
           ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: context.colors.buttonPrimary,
-                  foregroundColor: context.colors.background,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16)),
-              onPressed: () async {
-                final sats = int.tryParse(amountController.text.trim());
-                if (sats == null || sats <= 0) {
-                  AppToast.error(modalContext, 'Enter a valid amount', duration: const Duration(seconds: 1));
-                  return;
-                }
+          const SizedBox(height: 24),
+          GestureDetector(
+            onTap: () async {
+              final sats = int.tryParse(amountController.text.trim());
+              if (sats == null || sats <= 0) {
+                AppToast.error(modalContext, 'Enter a valid amount', duration: const Duration(seconds: 1));
+                return;
+              }
 
-                Navigator.pop(modalContext);
+              Navigator.pop(modalContext);
 
-                final userRepository = AppDI.get<UserRepository>();
-                final userResult = await userRepository.getUserProfile(note.author);
+              final userRepository = AppDI.get<UserRepository>();
+              final userResult = await userRepository.getUserProfile(note.author);
 
-                userResult.fold(
-                  (user) {
-                    if (user.lud16.isEmpty) {
-                      AppToast.error(context, 'User does not have a lightning address configured.', duration: const Duration(seconds: 1));
-                      return;
-                    }
+              userResult.fold(
+                (user) {
+                  if (user.lud16.isEmpty) {
+                    AppToast.error(context, 'User does not have a lightning address configured.', duration: const Duration(seconds: 1));
+                    return;
+                  }
 
-                    _payZapWithWallet(context, user, note, sats, noteController.text.trim());
-                  },
-                  (error) {
-                    AppToast.error(context, 'Error loading user profile: $error', duration: const Duration(seconds: 1));
-                  },
-                );
-              },
-              child: const Text('Send'),
+                  _payZapWithWallet(context, user, note, sats, noteController.text.trim());
+                },
+                (error) {
+                  AppToast.error(context, 'Error loading user profile: $error', duration: const Duration(seconds: 1));
+                },
+              );
+            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: context.colors.buttonPrimary,
+                borderRadius: BorderRadius.circular(40),
+              ),
+              child: Text(
+                'Send',
+                style: TextStyle(
+                  color: context.colors.buttonText,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ),
         ],

@@ -496,100 +496,107 @@ class _RelayPageState extends State<RelayPage> {
   }
 
   Future<void> _resetToDefaults() async {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: context.colors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'Reset to Defaults',
-          style: TextStyle(
-            color: context.colors.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        content: Text(
-          'This will reset all relays to their default values. Are you sure?',
-          style: TextStyle(
-            color: context.colors.textSecondary,
-            fontSize: 15,
-          ),
-        ),
-        actions: [
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: context.colors.surfaceTransparent,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: context.colors.borderLight),
+      isScrollControlled: true,
+      backgroundColor: context.colors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.zero,
+      ),
+      builder: (modalContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'This will reset all relays to their default values. Are you sure?',
+              style: TextStyle(
+                color: context.colors.textSecondary,
+                fontSize: 15,
               ),
-              child: Text(
-                'Cancel',
-                style: TextStyle(
-                  color: context.colors.textSecondary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            GestureDetector(
+              onTap: () async {
+                Navigator.pop(modalContext);
+                setState(() {
+                  _relays = List.from(relaySetMainSockets);
+                });
+                await _saveRelays();
+                if (mounted && context.mounted) {
+                  AppToast.success(context, 'Relays reset to defaults');
+                }
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: context.colors.buttonPrimary,
+                  borderRadius: BorderRadius.circular(40),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.refresh, color: context.colors.buttonText, size: 20),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Reset to Defaults',
+                      style: TextStyle(
+                        color: context.colors.buttonText,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
-          ),
-          GestureDetector(
-            onTap: () async {
-              final BuildContext dialogContext = context;
-              Navigator.pop(dialogContext);
-              setState(() {
-                _relays = List.from(relaySetMainSockets);
-              });
-              await _saveRelays();
-              if (mounted && context.mounted) {
-                AppToast.success(context, 'Relays reset to defaults');
-              }
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: context.colors.surfaceTransparent,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: context.colors.borderLight),
-              ),
-              child: Text(
-                'Reset',
-                style: TextStyle(
-                  color: context.colors.accent,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: () => Navigator.pop(modalContext),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: context.colors.overlayLight,
+                  borderRadius: BorderRadius.circular(40),
+                ),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: context.colors.textPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   void _showAddRelayDialog() {
     _addRelayController.clear();
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: context.colors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'Add New Relay',
-          style: TextStyle(
-            color: context.colors.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        content: Column(
+      isScrollControlled: true,
+      backgroundColor: context.colors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.zero,
+      ),
+      builder: (modalContext) => Padding(
+        padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(modalContext).viewInsets.bottom + 40),
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: _addRelayController,
+              autofocus: true,
               style: TextStyle(
                 color: context.colors.textPrimary,
                 fontSize: 15,
@@ -597,68 +604,78 @@ class _RelayPageState extends State<RelayPage> {
               decoration: InputDecoration(
                 hintText: 'wss://relay.example.com',
                 hintStyle: TextStyle(
-                  color: context.colors.textTertiary,
+                  color: context.colors.textSecondary,
                   fontSize: 15,
                 ),
                 filled: true,
-                fillColor: context.colors.background,
+                fillColor: context.colors.inputFill,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: context.colors.border.withValues(alpha: 0.3)),
+                  borderRadius: BorderRadius.circular(25),
+                  borderSide: BorderSide.none,
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: context.colors.border.withValues(alpha: 0.3)),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              ),
+            ),
+            const SizedBox(height: 20),
+            GestureDetector(
+              onTap: _isAddingRelay ? null : () => _addRelay(true),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: _isAddingRelay ? context.colors.overlayLight.withValues(alpha: 0.5) : context.colors.buttonPrimary,
+                  borderRadius: BorderRadius.circular(40),
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: context.colors.accent, width: 2),
+                child: _isAddingRelay
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
+                        ),
+                      )
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.add, color: context.colors.buttonText, size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Add Relay',
+                            style: TextStyle(
+                              color: context.colors.buttonText,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: () => Navigator.pop(modalContext),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: context.colors.overlayLight,
+                  borderRadius: BorderRadius.circular(40),
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: context.colors.textPrimary,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
           ],
         ),
-        actions: [
-          GestureDetector(
-            onTap: () => Navigator.pop(context),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: context.colors.surfaceTransparent,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: context.colors.borderLight),
-              ),
-              child: Text(
-                'Cancel',
-                style: TextStyle(
-                  color: context.colors.textSecondary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: _isAddingRelay ? null : () => _addRelay(true),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: _isAddingRelay ? context.colors.surface : context.colors.surfaceTransparent,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: context.colors.borderLight),
-              ),
-              child: Text(
-                'Add Relay',
-                style: TextStyle(
-                  color: _isAddingRelay ? context.colors.textTertiary : context.colors.accent,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -705,7 +722,7 @@ class _RelayPageState extends State<RelayPage> {
                 child: GestureDetector(
                   onTap: _isFetchingUserRelays ? null : _fetchUserRelays,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: _isFetchingUserRelays ? context.colors.surface.withValues(alpha: 0.5) : context.colors.overlayLight,
@@ -730,7 +747,7 @@ class _RelayPageState extends State<RelayPage> {
                           style: TextStyle(
                             color: context.colors.textPrimary,
                             fontSize: 17,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -743,7 +760,7 @@ class _RelayPageState extends State<RelayPage> {
                 child: GestureDetector(
                   onTap: _isPublishingRelays ? null : _publishRelays,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: _isPublishingRelays ? context.colors.surface.withValues(alpha: 0.5) : context.colors.overlayLight,
@@ -768,7 +785,7 @@ class _RelayPageState extends State<RelayPage> {
                           style: TextStyle(
                             color: context.colors.textPrimary,
                             fontSize: 17,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -785,7 +802,7 @@ class _RelayPageState extends State<RelayPage> {
                 child: GestureDetector(
                   onTap: _showAddRelayDialog,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 18),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: context.colors.buttonPrimary,
@@ -794,14 +811,14 @@ class _RelayPageState extends State<RelayPage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.add, size: 18, color: context.colors.background),
+                        Icon(Icons.add, size: 18, color: context.colors.buttonText),
                         const SizedBox(width: 8),
                         Text(
                           'Add Relay',
                           style: TextStyle(
-                            color: context.colors.background,
+                            color: context.colors.buttonText,
                             fontSize: 17,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ],
@@ -813,7 +830,7 @@ class _RelayPageState extends State<RelayPage> {
               GestureDetector(
                 onTap: _resetToDefaults,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: context.colors.overlayLight,
@@ -829,7 +846,7 @@ class _RelayPageState extends State<RelayPage> {
                         style: TextStyle(
                           color: context.colors.textPrimary,
                           fontSize: 17,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ],

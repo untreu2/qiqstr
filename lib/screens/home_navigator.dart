@@ -78,12 +78,12 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                         width: 46,
                         height: 46,
                         decoration: BoxDecoration(
-                          color: context.colors.textPrimary,
+                          color: context.colors.buttonPrimary,
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
                           Icons.add,
-                          color: context.colors.background,
+                          color: context.colors.buttonText,
                           size: 26,
                         ),
                       ),

@@ -36,8 +36,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
   static const double _mediaItemSize = 160.0;
   static const double _mediaListHeight = 170.0;
   static const double _avatarRadius = 20.0;
-  static const double _buttonHeight = 34.0;
-  static const double _buttonBorderRadius = 24.0;
   static const double _userSuggestionsMaxHeight = 200.0;
 
   static const double _fontSize = 15.0;
@@ -645,78 +643,54 @@ class _ShareNotePageState extends State<ShareNotePage> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: context.colors.background,
-      body: Stack(
+  Widget _buildHeader(BuildContext context) {
+    final double topPadding = MediaQuery.of(context).padding.top;
+    
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _buildMainScaffold(),
-          const BackButtonWidget(),
+          Text(
+            'New Post',
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.w700,
+              color: context.colors.textPrimary,
+              letterSpacing: -0.5,
+            ),
+          ),
+          _buildAppBarActions(),
         ],
       ),
-    );
-  }
-
-  Widget _buildMainScaffold() {
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: _buildAppBar(),
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            Expanded(child: _buildMainContent()),
-            if (_isSearchingUsers) _buildUserSuggestions(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      leading: const BackButtonWidget(type: BackButtonType.appBar),
-      actions: [_buildAppBarActions()],
     );
   }
 
   Widget _buildAppBarActions() {
     return Row(
       children: [
-        if (_isMediaUploading) _buildUploadingIndicator(),
         _buildMediaButton(),
         const SizedBox(width: 8),
         _buildPostButton(),
-        const SizedBox(width: 8),
       ],
     );
   }
 
-  Widget _buildUploadingIndicator() {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: Row(
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: context.colors.background,
+      body: Stack(
         children: [
-          SizedBox(
-            width: 16,
-            height: 16,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
-            ),
+          Column(
+            children: [
+              _buildHeader(context),
+              Expanded(child: _buildMainContent()),
+              if (_isSearchingUsers) _buildUserSuggestions(),
+            ],
           ),
-          const SizedBox(width: 6),
-          Text(
-            _uploadingText,
-            style: TextStyle(
-              color: context.colors.textPrimary,
-              fontSize: _smallFontSize,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          const BackButtonWidget.floating(),
         ],
       ),
     );
@@ -724,31 +698,39 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   Widget _buildMediaButton() {
     return Semantics(
-      label: 'Add media files to your post',
+      label: _isMediaUploading ? 'Uploading media files' : 'Add media files to your post',
       button: true,
       enabled: !_isMediaUploading,
       child: GestureDetector(
-        onTap: _selectMedia,
+        onTap: _isMediaUploading ? null : _selectMedia,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          height: _buttonHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: context.colors.surfaceTransparent,
-            borderRadius: BorderRadius.circular(_buttonBorderRadius),
-            border: Border.all(color: context.colors.borderLight),
+            color: context.colors.overlayLight,
+            borderRadius: BorderRadius.circular(40),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.attach_file, size: 16, color: context.colors.textPrimary),
+              if (_isMediaUploading)
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
+                  ),
+                )
+              else
+                Icon(Icons.attach_file, size: 16, color: context.colors.textPrimary),
               const SizedBox(width: 6),
               Text(
-                _addMediaText,
+                _isMediaUploading ? _uploadingText : _addMediaText,
                 style: TextStyle(
                   color: context.colors.textPrimary,
                   fontSize: _smallFontSize,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
@@ -766,13 +748,11 @@ class _ShareNotePageState extends State<ShareNotePage> {
       child: GestureDetector(
         onTap: _isPosting ? null : _shareNote,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          height: _buttonHeight,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: context.colors.surfaceTransparent,
-            borderRadius: BorderRadius.circular(_buttonBorderRadius),
-            border: Border.all(color: context.colors.borderLight),
+            color: context.colors.buttonPrimary,
+            borderRadius: BorderRadius.circular(40),
           ),
           child: _isPosting ? _buildPostingIndicator() : _buildPostButtonText(),
         ),
@@ -786,7 +766,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
       height: 18,
       child: CircularProgressIndicator(
         strokeWidth: 2.5,
-        valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
+        valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
       ),
     );
   }
@@ -795,16 +775,16 @@ class _ShareNotePageState extends State<ShareNotePage> {
     return Text(
       _postButtonText,
       style: TextStyle(
-        color: context.colors.textPrimary,
+        color: context.colors.buttonText,
         fontSize: _smallFontSize,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w600,
       ),
     );
   }
 
   Widget _buildMainContent() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

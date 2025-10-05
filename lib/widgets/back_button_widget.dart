@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:bounce/bounce.dart';
 import '../theme/theme_manager.dart';
@@ -83,31 +82,24 @@ class BackButtonWidget extends StatelessWidget {
     return Positioned(
       top: topPadding + (topOffset ?? 14),
       left: 16,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(25.0),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: context.colors.backgroundTransparent,
-              border: Border.all(color: context.colors.borderLight, width: 1.5),
-              borderRadius: BorderRadius.circular(25.0),
-            ),
-            child: Bounce(
-              scaleFactor: 0.85,
-              onTap: onPressed ?? () => Navigator.pop(context),
-              behavior: HitTestBehavior.opaque,
-              child: Semantics(
-                label: semanticsLabel ?? 'Go back to previous screen',
-                button: true,
-                child: Icon(
-                  Icons.arrow_back,
-                  color: iconColor ?? context.colors.textSecondary,
-                  size: iconSize ?? 20,
-                ),
-              ),
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: context.colors.buttonPrimary,
+          borderRadius: BorderRadius.circular(22.0),
+        ),
+        child: Bounce(
+          scaleFactor: 0.85,
+          onTap: onPressed ?? () => Navigator.pop(context),
+          behavior: HitTestBehavior.opaque,
+          child: Semantics(
+            label: semanticsLabel ?? 'Go back to previous screen',
+            button: true,
+            child: Icon(
+              Icons.arrow_back,
+              color: iconColor ?? context.colors.buttonText,
+              size: iconSize ?? 20,
             ),
           ),
         ),

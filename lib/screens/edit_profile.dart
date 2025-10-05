@@ -8,6 +8,7 @@ import '../data/repositories/user_repository.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/media_service.dart';
 import '../widgets/toast_widget.dart';
+import '../widgets/back_button_widget.dart';
 
 class EditOwnProfilePage extends StatelessWidget {
   const EditOwnProfilePage({super.key});
@@ -208,18 +209,10 @@ class _EditProfileContentState extends State<_EditProfileContent> {
         color: context.colors.textSecondary,
       ),
       filled: true,
-      fillColor: context.colors.background,
+      fillColor: context.colors.inputFill,
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: context.colors.border),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: context.colors.border),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: context.colors.accent, width: 2),
+        borderRadius: BorderRadius.circular(25),
+        borderSide: BorderSide.none,
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       suffixIcon: onUpload != null
@@ -228,6 +221,28 @@ class _EditProfileContentState extends State<_EditProfileContent> {
               onPressed: onUpload,
             )
           : null,
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    final double topPadding = MediaQuery.of(context).padding.top;
+    
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Edit Profile',
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.w700,
+              color: context.colors.textPrimary,
+              letterSpacing: -0.5,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -244,190 +259,175 @@ class _EditProfileContentState extends State<_EditProfileContent> {
 
         return Scaffold(
           backgroundColor: context.colors.background,
-          appBar: AppBar(
-            backgroundColor: context.colors.background,
-            elevation: 0,
-            leading: Padding(
-              padding: const EdgeInsets.only(left: 8.0),
-              child: IconButton(
-                icon: Icon(Icons.arrow_back_ios_new_rounded, color: context.colors.textPrimary, size: 20),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
-            actions: [
-              GestureDetector(
-                onTap: viewModel.isSaving ? null : _saveProfile,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  height: 34,
-                  alignment: Alignment.center,
-                  margin: const EdgeInsets.only(right: 12),
-                  decoration: BoxDecoration(
-                    color: context.colors.surface,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: context.colors.border),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: viewModel.isSaving
-                        ? [
-                            SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
-                              ),
+          body: Stack(
+            children: [
+              SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(context),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            TextFormField(
+                              controller: _nameController,
+                              decoration: _inputDecoration(context, 'Username'),
+                              style: TextStyle(color: context.colors.textPrimary),
+                              maxLength: 50,
+                              onChanged: (value) => viewModel.updateName(value),
+                              validator: (value) {
+                                if (value != null && value.trim().length > 50) {
+                                  return 'Username must be 50 characters or less';
+                                }
+                                return null;
+                              },
                             ),
-                            const SizedBox(width: 10),
-                            Text(
-                              'Updating...',
-                              style: TextStyle(
-                                color: context.colors.textPrimary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
+                            const SizedBox(height: 20),
+                            TextFormField(
+                              controller: _aboutController,
+                              decoration: _inputDecoration(context, 'Bio'),
+                              style: TextStyle(color: context.colors.textPrimary),
+                              maxLines: 3,
+                              maxLength: 300,
+                              onChanged: (value) => viewModel.updateAbout(value),
+                              validator: (value) {
+                                if (value != null && value.trim().length > 300) {
+                                  return 'Bio must be 300 characters or less';
+                                }
+                                return null;
+                              },
                             ),
-                          ]
-                        : [
-                            Text(
-                              'Save',
-                              style: TextStyle(
-                                color: context.colors.textPrimary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
+                            const SizedBox(height: 20),
+                            TextFormField(
+                              controller: _pictureController,
+                              enabled: !viewModel.isUploadingPicture,
+                              decoration: _inputDecoration(
+                                context,
+                                'Profile image URL',
+                                onUpload: viewModel.isUploadingPicture
+                                    ? null
+                                    : () => _pickAndUploadMedia(
+                                          controller: _pictureController,
+                                          label: 'Profile image',
+                                          isPicture: true,
+                                        ),
                               ),
+                              style: TextStyle(color: context.colors.textPrimary),
+                              onChanged: (value) => viewModel.updatePicture(value),
+                              validator: (value) {
+                                if (value != null && value.trim().isNotEmpty) {
+                                  final uri = Uri.tryParse(value.trim());
+                                  if (uri == null || !uri.hasScheme) {
+                                    return 'Please enter a valid URL';
+                                  }
+                                }
+                                return null;
+                              },
                             ),
-                            const SizedBox(width: 4),
-                            Icon(Icons.check, size: 16, color: context.colors.textPrimary),
+                            const SizedBox(height: 20),
+                            TextFormField(
+                              controller: _bannerController,
+                              enabled: !_isUploadingBanner,
+                              decoration: _inputDecoration(
+                                context,
+                                'Banner URL',
+                                onUpload: _isUploadingBanner
+                                    ? null
+                                    : () => _pickAndUploadMedia(
+                                          controller: _bannerController,
+                                          label: 'Banner',
+                                          isPicture: false,
+                                        ),
+                              ),
+                              style: TextStyle(color: context.colors.textPrimary),
+                              validator: (value) {
+                                if (value != null && value.trim().isNotEmpty) {
+                                  final uri = Uri.tryParse(value.trim());
+                                  if (uri == null || !uri.hasScheme) {
+                                    return 'Please enter a valid URL';
+                                  }
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 20),
+                            TextFormField(
+                              controller: _lud16Controller,
+                              decoration: _inputDecoration(context, 'Lightning address (optional)'),
+                              style: TextStyle(color: context.colors.textPrimary),
+                              onChanged: (value) => viewModel.updateLud16(value),
+                              validator: (value) {
+                                if (value != null && value.trim().isNotEmpty) {
+                                  final lud16 = value.trim();
+                                  if (!lud16.contains('@') || lud16.split('@').length != 2) {
+                                    return 'Please enter a valid lightning address (e.g., user@domain.com)';
+                                  }
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 20),
+                            TextFormField(
+                              controller: _websiteController,
+                              decoration: _inputDecoration(context, 'Website (optional)'),
+                              style: TextStyle(color: context.colors.textPrimary),
+                              onChanged: (value) => viewModel.updateWebsite(value),
+                              validator: (value) {
+                                if (value != null && value.trim().isNotEmpty) {
+                                  final website = value.trim();
+                                  if (!website.contains('.') || website.contains(' ')) {
+                                    return 'Please enter a valid website URL';
+                                  }
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 60),
                           ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const BackButtonWidget.floating(),
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 16,
+                right: 16,
+                child: GestureDetector(
+                  onTap: viewModel.isSaving ? null : _saveProfile,
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: context.colors.buttonPrimary,
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    child: viewModel.isSaving
+                        ? Center(
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
+                              ),
+                            ),
+                          )
+                        : Icon(
+                            Icons.check,
+                            color: context.colors.background,
+                            size: 24,
+                          ),
                   ),
                 ),
               ),
             ],
-          ),
-          body: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Form(
-              key: _formKey,
-              child: ListView(
-                children: [
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: _inputDecoration(context, 'Username'),
-                    style: TextStyle(color: context.colors.textPrimary),
-                    maxLength: 50,
-                    onChanged: (value) => viewModel.updateName(value),
-                    validator: (value) {
-                      if (value != null && value.trim().length > 50) {
-                        return 'Username must be 50 characters or less';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _aboutController,
-                    decoration: _inputDecoration(context, 'Bio'),
-                    style: TextStyle(color: context.colors.textPrimary),
-                    maxLines: 3,
-                    maxLength: 300,
-                    onChanged: (value) => viewModel.updateAbout(value),
-                    validator: (value) {
-                      if (value != null && value.trim().length > 300) {
-                        return 'Bio must be 300 characters or less';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _pictureController,
-                    enabled: !viewModel.isUploadingPicture,
-                    decoration: _inputDecoration(
-                      context,
-                      'Profile image URL',
-                      onUpload: viewModel.isUploadingPicture
-                          ? null
-                          : () => _pickAndUploadMedia(
-                                controller: _pictureController,
-                                label: 'Profile image',
-                                isPicture: true,
-                              ),
-                    ),
-                    style: TextStyle(color: context.colors.textPrimary),
-                    onChanged: (value) => viewModel.updatePicture(value),
-                    validator: (value) {
-                      if (value != null && value.trim().isNotEmpty) {
-                        final uri = Uri.tryParse(value.trim());
-                        if (uri == null || !uri.hasScheme) {
-                          return 'Please enter a valid URL';
-                        }
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _bannerController,
-                    enabled: !_isUploadingBanner,
-                    decoration: _inputDecoration(
-                      context,
-                      'Banner URL',
-                      onUpload: _isUploadingBanner
-                          ? null
-                          : () => _pickAndUploadMedia(
-                                controller: _bannerController,
-                                label: 'Banner',
-                                isPicture: false,
-                              ),
-                    ),
-                    style: TextStyle(color: context.colors.textPrimary),
-                    validator: (value) {
-                      if (value != null && value.trim().isNotEmpty) {
-                        final uri = Uri.tryParse(value.trim());
-                        if (uri == null || !uri.hasScheme) {
-                          return 'Please enter a valid URL';
-                        }
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _lud16Controller,
-                    decoration: _inputDecoration(context, 'Lightning address'),
-                    style: TextStyle(color: context.colors.textPrimary),
-                    onChanged: (value) => viewModel.updateLud16(value),
-                    validator: (value) {
-                      if (value != null && value.trim().isNotEmpty) {
-                        final lud16 = value.trim();
-                        if (!lud16.contains('@') || lud16.split('@').length != 2) {
-                          return 'Please enter a valid lightning address (e.g., user@domain.com)';
-                        }
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _websiteController,
-                    decoration: _inputDecoration(context, 'Website'),
-                    style: TextStyle(color: context.colors.textPrimary),
-                    onChanged: (value) => viewModel.updateWebsite(value),
-                    validator: (value) {
-                      if (value != null && value.trim().isNotEmpty) {
-                        final website = value.trim();
-                        if (!website.contains('.') || website.contains(' ')) {
-                          return 'Please enter a valid website URL';
-                        }
-                      }
-                      return null;
-                    },
-                  ),
-                ],
-              ),
-            ),
           ),
         );
       },

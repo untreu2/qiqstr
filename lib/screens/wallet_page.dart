@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../core/di/app_di.dart';
@@ -134,17 +135,6 @@ class _WalletPageState extends State<WalletPage> {
     _balanceTimer = null;
   }
 
-  Future<void> _disconnect() async {
-    _stopBalanceTimer();
-    await _walletRepository.disconnect();
-    setState(() {
-      _connection = null;
-      _balance = null;
-      _transactions = null;
-      _error = null;
-    });
-  }
-
   void _setError(String error) {
     setState(() {
       _error = error;
@@ -155,87 +145,132 @@ class _WalletPageState extends State<WalletPage> {
   Widget _buildHeader(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 60, 16, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'Wallet',
+      child: Text(
+        'Wallet',
+        style: TextStyle(
+          fontSize: 28,
+          fontWeight: FontWeight.w700,
+          color: context.colors.textPrimary,
+          letterSpacing: -0.5,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pasteFromClipboard() async {
+    final clipboardData = await Clipboard.getData('text/plain');
+    if (clipboardData != null && clipboardData.text != null) {
+      _nwcController.text = clipboardData.text!;
+      // Auto-connect after paste
+      if (_nwcController.text.trim().isNotEmpty) {
+        _connectWallet();
+      }
+    }
+  }
+
+  Widget _buildConnectionBottomBar(BuildContext context) {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 0,
+      child: Container(
+        decoration: BoxDecoration(
+          color: context.colors.background,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          top: 12,
+          bottom: MediaQuery.of(context).padding.bottom + 12,
+        ),
+        child: TextField(
+          controller: _nwcController,
+          style: TextStyle(color: context.colors.buttonText),
+          enabled: !_isConnecting,
+          decoration: InputDecoration(
+            hintText: 'Paste NWC URI here...',
+            hintStyle: TextStyle(color: context.colors.buttonText.withValues(alpha: 0.6)),
+            suffixIcon: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: GestureDetector(
+                onTap: _isConnecting ? null : _pasteFromClipboard,
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: _isConnecting ? context.colors.background.withValues(alpha: 0.5) : context.colors.background,
+                    shape: BoxShape.circle,
+                  ),
+                  child: _isConnecting
+                      ? Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: CircularProgressIndicator(
+                            color: context.colors.textPrimary,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Icon(
+                          Icons.content_paste,
+                          color: context.colors.textPrimary,
+                          size: 20,
+                        ),
+                ),
+              ),
+            ),
+            filled: true,
+            fillColor: context.colors.buttonPrimary,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(40),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+          ),
+          maxLines: 1,
+          onSubmitted: (_) => _connectWallet(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyWalletState(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.account_balance_wallet_outlined,
+              size: 80,
+              color: context.colors.textSecondary.withValues(alpha: 0.5),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Connect Your Wallet',
               style: TextStyle(
-                fontSize: 28,
+                fontSize: 24,
                 fontWeight: FontWeight.w700,
                 color: context.colors.textPrimary,
-                letterSpacing: -0.5,
               ),
             ),
-          ),
-          if (_connection != null)
-            IconButton(
-              onPressed: _showNwcSettings,
-              icon: Icon(
-                Icons.settings_outlined,
+            const SizedBox(height: 12),
+            Text(
+              'Paste your NWC connection URI below to get started',
+              style: TextStyle(
+                fontSize: 16,
                 color: context.colors.textSecondary,
-                size: 24,
+                height: 1.4,
               ),
+              textAlign: TextAlign.center,
             ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildConnectionInput(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-      child: TextField(
-        controller: _nwcController,
-        style: TextStyle(color: context.colors.textPrimary),
-        decoration: InputDecoration(
-          hintText: 'Enter NWC URI (nostr+walletconnect://...)',
-          hintStyle: TextStyle(color: context.colors.textTertiary),
-          prefixIcon: Icon(Icons.account_balance_wallet, color: context.colors.textPrimary),
-          filled: true,
-          fillColor: context.colors.surface,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(20),
-            borderSide: BorderSide.none,
-          ),
-          contentPadding: const EdgeInsets.symmetric(vertical: 12),
-        ),
-        maxLines: 2,
-        onSubmitted: (_) => _connectWallet(),
-      ),
-    );
-  }
-
-  Widget _buildConnectButton(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: GestureDetector(
-        onTap: _isConnecting ? null : _connectWallet,
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 18),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: context.colors.accent,
-            borderRadius: BorderRadius.circular(40),
-          ),
-          child: _isConnecting
-              ? SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(
-                    color: context.colors.background,
-                    strokeWidth: 2,
-                  ),
-                )
-              : Text(
-                  'Connect Wallet',
-                  style: TextStyle(
-                    color: context.colors.background,
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+          ],
         ),
       ),
     );
@@ -264,7 +299,7 @@ class _WalletPageState extends State<WalletPage> {
                         : '0',
                     style: TextStyle(
                       fontSize: 72,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w600,
                       color: context.colors.textPrimary,
                       height: 1.0,
                     ),
@@ -416,33 +451,13 @@ class _WalletPageState extends State<WalletPage> {
     );
   }
 
-  void _showNwcSettings() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: context.colors.background,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SettingsDialog(
-        nwcController: _nwcController,
-        onUpdate: () {
-          _connectWallet();
-        },
-        onDisconnect: () {
-          _disconnect();
-        },
-      ),
-    );
-  }
-
   void _showReceiveDialog() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: context.colors.background,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.zero,
       ),
       builder: (context) => ReceiveDialog(
         walletRepository: _walletRepository,
@@ -456,7 +471,7 @@ class _WalletPageState extends State<WalletPage> {
       isScrollControlled: true,
       backgroundColor: context.colors.background,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.zero,
       ),
       builder: (context) => SendDialog(
         walletRepository: _walletRepository,
@@ -519,14 +534,16 @@ class _WalletPageState extends State<WalletPage> {
                 children: [
                   _buildHeader(context),
                   if (_connection == null) ...[
-                    _buildConnectionInput(context),
-                    _buildConnectButton(context),
+                    Expanded(child: _buildEmptyWalletState(context)),
+                    const SizedBox(height: 80),
                   ] else ...[
                     _buildMainContent(context),
                   ],
                   _buildError(context),
                 ],
               ),
+              if (_connection == null)
+                _buildConnectionBottomBar(context),
               if (_connection != null)
                 Positioned(
                   left: 0,
@@ -564,12 +581,12 @@ class _WalletPageState extends State<WalletPage> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.arrow_downward, size: 20, color: context.colors.background),
+                                  Icon(Icons.arrow_downward, size: 20, color: context.colors.buttonText),
                                   const SizedBox(width: 8),
                                   Text(
                                     'Receive',
                                     style: TextStyle(
-                                      color: context.colors.background,
+                                      color: context.colors.buttonText,
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -593,12 +610,12 @@ class _WalletPageState extends State<WalletPage> {
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.arrow_upward, size: 20, color: context.colors.background),
+                                  Icon(Icons.arrow_upward, size: 20, color: context.colors.buttonText),
                                   const SizedBox(width: 8),
                                   Text(
                                     'Send',
                                     style: TextStyle(
-                                      color: context.colors.background,
+                                      color: context.colors.buttonText,
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -731,77 +748,95 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
       );
     }
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-            top: 8,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _amountController,
-                keyboardType: TextInputType.number,
-                enabled: !_isLoading,
-                style: TextStyle(color: context.colors.textPrimary),
-                decoration: InputDecoration(
-                  labelText: 'Amount (sats)',
-                  labelStyle: TextStyle(color: context.colors.secondary),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: context.colors.secondary),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: context.colors.textPrimary),
-                  ),
-                ),
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 40,
+        top: 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _amountController,
+            keyboardType: TextInputType.number,
+            enabled: !_isLoading,
+            style: TextStyle(color: context.colors.textPrimary),
+            decoration: InputDecoration(
+              labelText: 'Amount (sats)',
+              labelStyle: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: context.colors.textSecondary,
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _memoController,
-                enabled: !_isLoading,
-                style: TextStyle(color: context.colors.textPrimary),
-                decoration: InputDecoration(
-                  labelText: 'Memo (optional)',
-                  labelStyle: TextStyle(color: context.colors.secondary),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: context.colors.secondary),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: context.colors.textPrimary),
-                  ),
-                ),
+              filled: true,
+              fillColor: context.colors.inputFill,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(25),
+                borderSide: BorderSide.none,
               ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _error!,
-                  style: TextStyle(color: context.colors.textSecondary, fontSize: 12),
-                ),
-              ],
-            ],
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
           ),
-        ),
-        ListTile(
-          leading: _isLoading
-              ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(Icons.add_circle_outline, color: context.colors.iconPrimary),
-          title: Text(
-            _isLoading ? 'Creating invoice...' : 'Create Invoice',
-            style: TextStyle(color: context.colors.textPrimary, fontSize: 16),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _memoController,
+            enabled: !_isLoading,
+            style: TextStyle(color: context.colors.textPrimary),
+            decoration: InputDecoration(
+              labelText: 'Memo (Optional)',
+              labelStyle: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: context.colors.textSecondary,
+              ),
+              filled: true,
+              fillColor: context.colors.inputFill,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(25),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
           ),
-          onTap: _isLoading ? null : _createInvoice,
-        ),
-        const SizedBox(height: 45),
-      ],
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              style: TextStyle(color: context.colors.error, fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 24),
+          GestureDetector(
+            onTap: _isLoading ? null : _createInvoice,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: context.colors.buttonPrimary,
+                borderRadius: BorderRadius.circular(40),
+              ),
+              child: _isLoading
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
+                      ),
+                    )
+                  : Text(
+                      'Create Invoice',
+                      style: TextStyle(
+                        color: context.colors.buttonText,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -900,154 +935,77 @@ class _SendDialogState extends State<SendDialog> {
       );
     }
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-            top: 8,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _invoiceController,
-                enabled: !_isLoading,
-                style: TextStyle(color: context.colors.textPrimary),
-                decoration: InputDecoration(
-                  labelText: 'Lightning Invoice',
-                  hintText: 'Paste invoice here...',
-                  labelStyle: TextStyle(color: context.colors.secondary),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: context.colors.secondary),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: context.colors.textPrimary),
-                  ),
-                ),
-                maxLines: 3,
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 40,
+        top: 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _invoiceController,
+            enabled: !_isLoading,
+            style: TextStyle(color: context.colors.textPrimary),
+            decoration: InputDecoration(
+              labelText: 'Lightning Invoice',
+              hintText: 'Paste invoice here...',
+              labelStyle: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: context.colors.textSecondary,
               ),
-              if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _error!,
-                  style: TextStyle(color: context.colors.textSecondary, fontSize: 12),
-                ),
-              ],
-            ],
-          ),
-        ),
-        ListTile(
-          leading: _isLoading
-              ? const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Icon(Icons.flash_on, color: context.colors.iconPrimary),
-          title: Text(
-            _isLoading ? 'Sending payment...' : 'Pay Invoice',
-            style: TextStyle(color: context.colors.textPrimary, fontSize: 16),
-          ),
-          onTap: _isLoading ? null : _payInvoice,
-        ),
-        const SizedBox(height: 45),
-      ],
-    );
-  }
-}
-
-class SettingsDialog extends StatefulWidget {
-  final TextEditingController nwcController;
-  final VoidCallback onUpdate;
-  final VoidCallback onDisconnect;
-
-  const SettingsDialog({
-    super.key,
-    required this.nwcController,
-    required this.onUpdate,
-    required this.onDisconnect,
-  });
-
-  @override
-  State<SettingsDialog> createState() => _SettingsDialogState();
-}
-
-class _SettingsDialogState extends State<SettingsDialog> {
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-            top: 8,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Update NWC URI',
-                style: TextStyle(
-                  color: context.colors.textSecondary,
-                  fontSize: 12,
-                ),
+              hintStyle: TextStyle(color: context.colors.textSecondary),
+              filled: true,
+              fillColor: context.colors.inputFill,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(25),
+                borderSide: BorderSide.none,
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: widget.nwcController,
-                style: TextStyle(color: context.colors.textPrimary),
-                decoration: InputDecoration(
-                  labelText: 'NWC Connection',
-                  hintText: 'nostr+walletconnect://...',
-                  labelStyle: TextStyle(color: context.colors.secondary),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: context.colors.secondary),
-                  ),
-                  focusedBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: context.colors.textPrimary),
-                  ),
-                ),
-                maxLines: 3,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            ),
+            maxLines: 3,
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _error!,
+              style: TextStyle(color: context.colors.error, fontSize: 12),
+            ),
+          ],
+          const SizedBox(height: 24),
+          GestureDetector(
+            onTap: _isLoading ? null : _payInvoice,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: context.colors.buttonPrimary,
+                borderRadius: BorderRadius.circular(40),
               ),
-            ],
+              child: _isLoading
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
+                      ),
+                    )
+                  : Text(
+                      'Pay Invoice',
+                      style: TextStyle(
+                        color: context.colors.buttonText,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+            ),
           ),
-        ),
-        ListTile(
-          leading: Icon(Icons.sync, color: context.colors.iconPrimary),
-          title: Text(
-            'Update Connection',
-            style: TextStyle(color: context.colors.textPrimary, fontSize: 16),
-          ),
-          onTap: () {
-            Navigator.pop(context);
-            widget.onUpdate();
-          },
-        ),
-        Divider(
-          color: context.colors.border,
-          height: 1,
-        ),
-        ListTile(
-          leading: Icon(Icons.logout, color: Colors.red),
-          title: Text(
-            'Disconnect Wallet',
-            style: TextStyle(color: Colors.red, fontSize: 16),
-          ),
-          onTap: () {
-            Navigator.pop(context);
-            widget.onDisconnect();
-          },
-        ),
-        const SizedBox(height: 45),
-      ],
+        ],
+      ),
     );
   }
 }

@@ -171,7 +171,7 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> with AutomaticK
                     style: TextStyle(
                       color: context.colors.textPrimary,
                       fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
