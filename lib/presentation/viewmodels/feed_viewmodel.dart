@@ -46,6 +46,10 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   String _currentUserNpub = '';
   String get currentUserNpub => _currentUserNpub;
 
+  String? _hashtag;
+  String? get hashtag => _hashtag;
+  bool get isHashtagMode => _hashtag != null;
+
   bool _isInitialized = false;
   bool _isLoadingFeed = false;
 
@@ -73,14 +77,15 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     });
   }
 
-  void initializeWithUser(String npub) {
-    if (_isInitialized && _currentUserNpub == npub) {
-      debugPrint('⏭ [FeedViewModel] Already initialized for $npub, skipping');
+  void initializeWithUser(String npub, {String? hashtag}) {
+    if (_isInitialized && _currentUserNpub == npub && _hashtag == hashtag) {
+      debugPrint('[FeedViewModel] Already initialized for $npub (hashtag: $hashtag), skipping');
       return;
     }
 
-    debugPrint('[FeedViewModel] Initializing with user: $npub');
+    debugPrint('[FeedViewModel] Initializing with user: $npub (hashtag: ${hashtag ?? "none"})');
     _currentUserNpub = npub;
+    _hashtag = hashtag;
     _isInitialized = true;
 
     _loadFeed();
@@ -112,7 +117,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   }
 
   Future<void> _loadFeed() async {
-    if (_currentUserNpub.isEmpty) {
+    if (_currentUserNpub.isEmpty && !isHashtagMode) {
       debugPrint(' [FeedViewModel] Cannot load feed - no current user npub');
       return;
     }
@@ -123,8 +128,19 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     }
 
     _isLoadingFeed = true;
-    debugPrint('[FeedViewModel] Loading feed for user: $_currentUserNpub');
+    
+    if (isHashtagMode) {
+      debugPrint('[FeedViewModel] Loading hashtag feed for: #$_hashtag');
+      await _loadHashtagFeed();
+    } else {
+      debugPrint('[FeedViewModel] Loading feed for user: $_currentUserNpub');
+      await _loadUserFeed();
+    }
+    
+    _isLoadingFeed = false;
+  }
 
+  Future<void> _loadUserFeed() async {
     await executeOperation('loadFeed', () async {
       _feedState = const LoadingState();
       safeNotifyListeners();
@@ -158,7 +174,42 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
         },
       );
 
-      _isLoadingFeed = false;
+      safeNotifyListeners();
+    });
+  }
+
+  Future<void> _loadHashtagFeed() async {
+    await executeOperation('loadHashtagFeed', () async {
+      _feedState = const LoadingState();
+      safeNotifyListeners();
+
+      debugPrint(' [FeedViewModel] Requesting hashtag notes from repository for: #$_hashtag');
+
+      final result = await _noteRepository.getHashtagNotes(
+        hashtag: _hashtag!,
+        limit: 50,
+      );
+
+      await result.fold(
+        (notes) async {
+          debugPrint(' [FeedViewModel] Repository returned ${notes.length} notes for #$_hashtag');
+
+          if (notes.isEmpty) {
+            debugPrint('[FeedViewModel] No notes found for hashtag: #$_hashtag');
+            _feedState = const LoadedState(<NoteModel>[]);
+          } else {
+            debugPrint(' [FeedViewModel] Setting loaded state with ${notes.length} hashtag notes');
+            _feedState = LoadedState(notes);
+
+            await _loadUserProfilesForNotes(notes);
+          }
+        },
+        (error) async {
+          debugPrint(' [FeedViewModel] Error loading hashtag feed: $error');
+          _feedState = ErrorState(error);
+        },
+      );
+
       safeNotifyListeners();
     });
   }
@@ -177,11 +228,17 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
       final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
       final oldestNote = currentNotes.isNotEmpty ? currentNotes.last : null;
 
-      final result = await _noteRepository.getFeedNotesFromFollowList(
-        currentUserNpub: _currentUserNpub,
-        limit: 25,
-        until: oldestNote?.timestamp,
-      );
+      final result = isHashtagMode
+          ? await _noteRepository.getHashtagNotes(
+              hashtag: _hashtag!,
+              limit: 25,
+              until: oldestNote?.timestamp,
+            )
+          : await _noteRepository.getFeedNotesFromFollowList(
+              currentUserNpub: _currentUserNpub,
+              limit: 25,
+              until: oldestNote?.timestamp,
+            );
 
       result.fold(
         (newNotes) {
@@ -210,6 +267,11 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   }
 
   void _subscribeToRealTimeUpdates() {
+    if (isHashtagMode) {
+      debugPrint('[FeedViewModel] Skipping real-time updates in hashtag mode');
+      return;
+    }
+
     debugPrint('[FeedViewModel] Setting up real-time updates for user: $_currentUserNpub');
 
     addSubscription(

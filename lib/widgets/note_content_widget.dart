@@ -6,7 +6,9 @@ import 'package:nostr_nip19/nostr_nip19.dart';
 import '../theme/theme_manager.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/user_repository.dart';
+import '../data/repositories/auth_repository.dart';
 import '../models/user_model.dart';
+import '../screens/feed_page.dart';
 import 'link_preview_widget.dart';
 import 'media_preview_widget.dart';
 import 'mini_link_preview_widget.dart';
@@ -171,8 +173,40 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     }
   }
 
-  void _onHashtagTap(String hashtag) {
-    AppToast.info(context, 'Hashtag: $hashtag');
+  Future<void> _onHashtagTap(String hashtag) async {
+    try {
+      // Remove the # symbol if present
+      final cleanHashtag = hashtag.startsWith('#') ? hashtag.substring(1) : hashtag;
+      
+      debugPrint('[NoteContentWidget] Navigating to hashtag feed: #$cleanHashtag');
+      
+      // Get current user npub for the feed page
+      final authRepository = AppDI.get<AuthRepository>();
+      final npubResult = await authRepository.getCurrentUserNpub();
+      
+      if (npubResult.isError || npubResult.data == null) {
+        if (mounted) {
+          AppToast.error(context, 'Could not load hashtag feed');
+        }
+        return;
+      }
+      
+      if (mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => FeedPage(
+              npub: npubResult.data!,
+              hashtag: cleanHashtag,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[NoteContentWidget] Error navigating to hashtag: $e');
+      if (mounted) {
+        AppToast.error(context, 'Error opening hashtag');
+      }
+    }
   }
 
   List<InlineSpan> _buildSpans() {

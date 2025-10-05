@@ -430,6 +430,7 @@ class NostrService {
     );
   }
 
+
   static Request createRequest(Filter filter) {
     final uuid = generateUUID();
     final cacheKey = 'single_${filter.hashCode}';

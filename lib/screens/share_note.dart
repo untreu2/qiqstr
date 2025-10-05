@@ -467,12 +467,17 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Future<void> _sendNote(String content) async {
+    // Extract hashtags from content and create t tags
+    final hashtags = _extractHashtags(content);
+    final tags = _createHashtagTags(hashtags);
+
     if (_isReply()) {
       final result = await _noteRepository.postReply(
         content: content,
         rootId: widget.replyToNoteId!,
         parentAuthor: 'unknown',
         relayUrls: ['wss://relay.damus.io'],
+        additionalTags: tags,
       );
 
       if (result.isError) {
@@ -480,7 +485,10 @@ class _ShareNotePageState extends State<ShareNotePage> {
       }
     } else {
       debugPrint('[ShareNotePage] Sending as regular note with content: ${content.length > 100 ? content.substring(0, 100) : content}...');
-      final result = await _noteRepository.postNote(content: content);
+      final result = await _noteRepository.postNote(
+        content: content,
+        tags: tags,
+      );
 
       if (result.isError) {
         throw Exception(result.error ?? 'Failed to post note');
@@ -490,6 +498,21 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   bool _isReply() {
     return widget.replyToNoteId != null && widget.replyToNoteId!.isNotEmpty;
+  }
+
+  List<String> _extractHashtags(String content) {
+    // Regex to find hashtags (#word)
+    final hashtagRegex = RegExp(r'#(\w+)');
+    final matches = hashtagRegex.allMatches(content);
+    
+    return matches
+        .map((match) => match.group(1)!.toLowerCase()) // NIP-24 requires lowercase
+        .toSet() // Remove duplicates
+        .toList();
+  }
+
+  List<List<String>> _createHashtagTags(List<String> hashtags) {
+    return hashtags.map((hashtag) => ['t', hashtag]).toList();
   }
 
   void _setPostingState(bool isPosting) {

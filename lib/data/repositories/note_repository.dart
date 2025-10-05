@@ -128,6 +128,36 @@ class NoteRepository {
     }
   }
 
+  Future<Result<List<NoteModel>>> getHashtagNotes({
+    required String hashtag,
+    int limit = 20,
+    DateTime? until,
+    DateTime? since,
+  }) async {
+    try {
+      debugPrint('[NoteRepository] HASHTAG MODE: Getting notes for #$hashtag');
+
+      final result = await _nostrDataService.fetchHashtagNotes(
+        hashtag: hashtag,
+        limit: limit,
+        until: until,
+        since: since,
+      );
+
+      result.fold(
+        (notes) {
+          debugPrint('[NoteRepository] HASHTAG MODE: Loaded ${notes.length} notes');
+        },
+        (error) => debugPrint('[NoteRepository] HASHTAG MODE: Error: $error'),
+      );
+
+      return result;
+    } catch (e) {
+      debugPrint('[NoteRepository] HASHTAG MODE: Exception: $e');
+      return Result.error('Failed to get hashtag notes: ${e.toString()}');
+    }
+  }
+
   Future<Result<NoteModel?>> getNoteById(String noteId) async {
     try {
       debugPrint('[NoteRepository] Looking for note ID: $noteId');
@@ -430,6 +460,7 @@ class NoteRepository {
     String? replyId,
     required String parentAuthor,
     required List<String> relayUrls,
+    List<List<String>>? additionalTags,
   }) async {
     try {
       return await _nostrDataService.postReply(
@@ -438,6 +469,7 @@ class NoteRepository {
         replyId: replyId,
         parentAuthor: parentAuthor,
         relayUrls: relayUrls,
+        additionalTags: additionalTags,
       );
     } catch (e) {
       return Result.error('Failed to post reply: $e');

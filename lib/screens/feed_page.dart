@@ -21,7 +21,8 @@ import '../constants/relays.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
-  const FeedPage({super.key, required this.npub});
+  final String? hashtag;
+  const FeedPage({super.key, required this.npub, this.hashtag});
 
   @override
   FeedPageState createState() => FeedPageState();
@@ -283,6 +284,7 @@ class FeedPageState extends State<FeedPage> {
 
   Widget _buildHeader(BuildContext context, double topPadding) {
     final colors = context.colors;
+    final isHashtagMode = widget.hashtag != null;
 
     return Container(
       width: double.infinity,
@@ -297,43 +299,52 @@ class FeedPageState extends State<FeedPage> {
               children: [
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: GestureDetector(
-                    onTap: () => Scaffold.of(context).openDrawer(),
-                    child: _currentUser != null
-                        ? Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: colors.avatarPlaceholder,
-                              image: _currentUser!.profileImage.isNotEmpty == true
-                                  ? DecorationImage(
-                                      image: NetworkImage(_currentUser!.profileImage),
-                                      fit: BoxFit.cover,
-                                    )
-                                  : null,
-                            ),
-                            child: _currentUser!.profileImage.isEmpty != false
-                                ? Icon(
-                                    Icons.person,
-                                    size: 20,
-                                    color: colors.textSecondary,
-                                  )
-                                : null,
-                          )
-                        : Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: colors.avatarPlaceholder,
-                            ),
-                            child: CircularProgressIndicator(
-                              color: colors.accent,
-                              strokeWidth: 2,
-                            ),
+                  child: isHashtagMode
+                      ? GestureDetector(
+                          onTap: () => Navigator.of(context).pop(),
+                          child: Icon(
+                            Icons.arrow_back,
+                            size: 24,
+                            color: colors.textPrimary,
                           ),
-                  ),
+                        )
+                      : GestureDetector(
+                          onTap: () => Scaffold.of(context).openDrawer(),
+                          child: _currentUser != null
+                              ? Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: colors.avatarPlaceholder,
+                                    image: _currentUser!.profileImage.isNotEmpty == true
+                                        ? DecorationImage(
+                                            image: NetworkImage(_currentUser!.profileImage),
+                                            fit: BoxFit.cover,
+                                          )
+                                        : null,
+                                  ),
+                                  child: _currentUser!.profileImage.isEmpty != false
+                                      ? Icon(
+                                          Icons.person,
+                                          size: 20,
+                                          color: colors.textSecondary,
+                                        )
+                                      : null,
+                                )
+                              : Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: colors.avatarPlaceholder,
+                                  ),
+                                  child: CircularProgressIndicator(
+                                    color: colors.accent,
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                        ),
                 ),
                 Center(
                   child: GestureDetector(
@@ -344,12 +355,21 @@ class FeedPageState extends State<FeedPage> {
                         curve: Curves.easeOut,
                       );
                     },
-                    child: SvgPicture.asset(
-                      'assets/main_icon_white.svg',
-                      width: 30,
-                      height: 30,
-                      colorFilter: ColorFilter.mode(colors.textPrimary, BlendMode.srcIn),
-                    ),
+                    child: isHashtagMode
+                        ? Text(
+                            '#${widget.hashtag}',
+                            style: TextStyle(
+                              color: colors.textPrimary,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          )
+                        : SvgPicture.asset(
+                            'assets/main_icon_white.svg',
+                            width: 30,
+                            height: 30,
+                            colorFilter: ColorFilter.mode(colors.textPrimary, BlendMode.srcIn),
+                          ),
                   ),
                 ),
                 Align(
@@ -396,14 +416,14 @@ class FeedPageState extends State<FeedPage> {
     return ViewModelBuilder<FeedViewModel>(
       create: () => AppDI.get<FeedViewModel>(),
       onModelReady: (viewModel) {
-        viewModel.initializeWithUser(widget.npub);
+        viewModel.initializeWithUser(widget.npub, hashtag: widget.hashtag);
 
         _setupProfilesStreamListener(viewModel);
       },
       builder: (context, viewModel) {
         return Scaffold(
           backgroundColor: colors.background,
-          drawer: const SidebarWidget(),
+          drawer: widget.hashtag == null ? const SidebarWidget() : null,
           body: Stack(
             children: [
               UIStateBuilder<List<NoteModel>>(
@@ -486,7 +506,7 @@ class FeedPageState extends State<FeedPage> {
                   ),
                 ),
               ),
-              if (viewModel.pendingNotesCount > 0)
+              if (viewModel.pendingNotesCount > 0 && widget.hashtag == null)
                 Positioned(
                   bottom: 104,
                   left: 0,

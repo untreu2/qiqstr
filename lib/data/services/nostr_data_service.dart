@@ -35,10 +35,10 @@ class NostrDataService {
   final Map<String, List<NotificationModel>> _notificationCache = {};
   final Map<String, List<ReactionModel>> _reactionsMap = {};
   final Map<String, List<ZapModel>> _zapsMap = {};
-  final Map<String, List<ReactionModel>> _repostsMap = {}; // Track reposts for each note
+  final Map<String, List<ReactionModel>> _repostsMap = {}; 
   final Set<String> _eventIds = {};
 
-  final Map<String, List<String>> _followingCache = {}; // npub -> list of followed hex pubkeys
+  final Map<String, List<String>> _followingCache = {}; 
   final Map<String, DateTime> _followingCacheTime = {};
   final Duration _followingCacheTTL = const Duration(minutes: 10);
 
@@ -98,7 +98,7 @@ class NostrDataService {
 
     debugPrint('[NostrDataService] No valid follow cache - REJECTING note from: $authorHexPubkey');
     _refreshFollowCacheInBackground();
-    return false; // STRICT: Don't allow notes when follow list is not available
+    return false; 
   }
 
   void _refreshFollowCacheInBackground() async {
@@ -119,7 +119,7 @@ class NostrDataService {
 
   void _setupRelayEventHandling() {
     _relayManager.connectRelays(
-      [], // Empty target npubs for global timeline initially
+      [], 
       onEvent: _handleRelayEvent,
       onDisconnected: _handleRelayDisconnection,
       serviceId: 'nostr_data_service',
@@ -159,8 +159,8 @@ class NostrDataService {
       debugPrint('[NostrDataService] Fetching initial global content...');
 
       final filter = NostrService.createNotesFilter(
-        authors: null, // Global timeline
-        kinds: [1], // Just text notes first
+        authors: null, 
+        kinds: [1], 
         limit: 30,
         since: (DateTime.now().subtract(const Duration(hours: 24))).millisecondsSinceEpoch ~/ 1000,
       );
@@ -227,22 +227,22 @@ class NostrDataService {
       }
 
       switch (kind) {
-        case 0: // User profile
+        case 0: 
           _processProfileEvent(eventData);
           break;
-        case 1: // Text note
+        case 1: 
           await _processKind1Event(eventData);
           break;
-        case 3: // Follow list
+        case 3: 
           _processFollowEvent(eventData);
           break;
-        case 6: // Repost
+        case 6: 
           await _processRepostEvent(eventData);
           break;
-        case 7: // Reaction
+        case 7: 
           _processReactionEvent(eventData);
           break;
-        case 9735: // Zap
+        case 9735: 
           _processZapEvent(eventData);
           break;
       }
@@ -704,7 +704,7 @@ class NostrDataService {
                   debugPrint('   Marker[$i]: "$marker"');
                   if (marker == 'root') {
                     detectedRootId = eventId;
-                    detectedParentId = eventId; // CRITICAL: For root replies, parentId = rootId
+                    detectedParentId = eventId; 
                     detectedIsReply = true;
                     debugPrint('  ROOT marker found - this is a direct reply! rootId: $detectedRootId, parentId: $detectedParentId');
                   } else if (marker == 'reply') {
@@ -719,7 +719,7 @@ class NostrDataService {
                 } else {
                   if (detectedParentId == null) {
                     detectedParentId = eventId;
-                    detectedRootId = eventId; // For legacy, assume parentId = rootId
+                    detectedRootId = eventId; 
                     detectedIsReply = true;
                     debugPrint('  Legacy e-tag found - this is a reply! eventId: $detectedParentId');
                   }
@@ -736,7 +736,7 @@ class NostrDataService {
                 content: displayContent,
                 author: displayAuthor,
                 timestamp: DateTime.fromMillisecondsSinceEpoch((originalContent['created_at'] as int? ?? createdAt) * 1000),
-                isReply: detectedIsReply, // CRITICAL: Set reply flag correctly
+                isReply: detectedIsReply, 
                 isRepost: false,
                 rootId: detectedRootId,
                 parentId: detectedParentId,
@@ -771,7 +771,7 @@ class NostrDataService {
           content: displayContent,
           author: displayAuthor,
           timestamp: timestamp,
-          isReply: finalIsReply, // CRITICAL: Use determined reply status
+          isReply: finalIsReply, 
           isRepost: true,
           rootId: finalRootId ?? originalEventId,
           parentId: finalParentId,
@@ -890,7 +890,7 @@ class NostrDataService {
   void _processZapEvent(Map<String, dynamic> eventData) {
     try {
       final id = eventData['id'] as String;
-      final walletPubkey = eventData['pubkey'] as String; // This is the wallet/server pubkey
+      final walletPubkey = eventData['pubkey'] as String; 
       final content = eventData['content'] as String;
       final createdAt = eventData['created_at'] as int;
       final tags = eventData['tags'] as List<dynamic>;
@@ -913,7 +913,7 @@ class NostrDataService {
             description = tag[1] as String;
           } else if (tag[0] == 'amount' && tag.length >= 2) {
             try {
-              amount = int.parse(tag[1] as String) ~/ 1000; // Convert millisats to sats
+              amount = int.parse(tag[1] as String) ~/ 1000; 
             } catch (e) {
               amount = 0;
             }
@@ -921,7 +921,7 @@ class NostrDataService {
         }
       }
 
-      String realZapperPubkey = walletPubkey; // Fallback to wallet pubkey
+      String realZapperPubkey = walletPubkey; 
       String? zapComment;
 
       if (description.isNotEmpty) {
@@ -958,12 +958,12 @@ class NostrDataService {
       if (targetEventId != null) {
         final zap = ZapModel(
           id: id,
-          sender: _authService.hexToNpub(realZapperPubkey) ?? realZapperPubkey, // Use real zapper, not wallet
+          sender: _authService.hexToNpub(realZapperPubkey) ?? realZapperPubkey, 
           recipient: _authService.hexToNpub(recipient) ?? recipient,
           targetEventId: targetEventId,
           timestamp: DateTime.fromMillisecondsSinceEpoch(createdAt * 1000),
           bolt11: bolt11,
-          comment: zapComment ?? (content.isNotEmpty ? content : null), // Prefer zap request comment
+          comment: zapComment ?? (content.isNotEmpty ? content : null), 
           amount: amount,
         );
 
@@ -1175,7 +1175,7 @@ class NostrDataService {
       final now = timeService.now;
 
       if (cachedProfile != null && now.difference(cachedProfile.fetchedAt) < _profileCacheTTL) {
-        return; // Cache is still valid
+        return; 
       }
 
       final filter = NostrService.createProfileFilter(
@@ -1210,7 +1210,7 @@ class NostrDataService {
 
       if (authorHexKeys.isEmpty) {
         debugPrint('[NostrDataService] Fetching global timeline');
-        targetAuthors = []; // null authors = global timeline
+        targetAuthors = []; 
       } else if (authorHexKeys.length == 1 && authorHexKeys.first == _authService.npubToHex(_currentUserNpub)) {
         debugPrint('[NostrDataService] Feed mode - fetching follow list first (NIP-02)');
         isFeedMode = true;
@@ -1230,8 +1230,8 @@ class NostrDataService {
             '[NostrDataService]  Follow list result: success=${followingResult.isSuccess}, data=${followingResult.data?.length ?? 0}');
 
         if (followingResult.isSuccess && followingResult.data != null && followingResult.data!.isNotEmpty) {
-          targetAuthors = List<String>.from(followingResult.data!); // These are already hex pubkeys
-          targetAuthors.add(currentUserHex); // Add self in hex format
+          targetAuthors = List<String>.from(followingResult.data!); 
+          targetAuthors.add(currentUserHex); 
           debugPrint('[NostrDataService] Following list found: ${targetAuthors.length} hex pubkeys');
           debugPrint('[NostrDataService]  Target authors (hex): ${targetAuthors.take(5).toList()}... (showing first 5)');
 
@@ -1243,7 +1243,7 @@ class NostrDataService {
         } else {
           debugPrint('[NostrDataService]  No follow list found - returning empty feed');
           debugPrint('[NostrDataService] Follow result error: ${followingResult.error}');
-          return Result.success([]); // Return empty feed when no follow list exists
+          return Result.success([]); 
         }
       } else {
         targetAuthors = authorHexKeys;
@@ -1253,7 +1253,7 @@ class NostrDataService {
 
       final filter = NostrService.createNotesFilter(
         authors: targetAuthors.isEmpty ? null : targetAuthors,
-        kinds: [1, 6], // NIP-01 text notes + NIP-18 reposts
+        kinds: [1, 6], 
         limit: limit,
         since: since != null ? since.millisecondsSinceEpoch ~/ 1000 : null,
         until: until != null ? until.millisecondsSinceEpoch ~/ 1000 : null,
@@ -1279,7 +1279,7 @@ class NostrDataService {
         Timer(const Duration(seconds: 3), () {
           if (!completer.isCompleted) {
             debugPrint('[NostrDataService] Timeout waiting for relay responses');
-            completer.complete([]); // Return empty list on timeout
+            completer.complete([]); 
           }
         });
 
@@ -1327,8 +1327,8 @@ class NostrDataService {
       }
 
       final filter = NostrService.createNotesFilter(
-        authors: [pubkeyHex], // Only this specific user
-        kinds: [1, 6], // NIP-01 text notes + NIP-18 reposts
+        authors: [pubkeyHex], 
+        kinds: [1, 6], 
         limit: limit,
         since: since != null ? since.millisecondsSinceEpoch ~/ 1000 : null,
         until: until != null ? until.millisecondsSinceEpoch ~/ 1000 : null,
@@ -1618,6 +1618,200 @@ class NostrDataService {
     }
   }
 
+  Future<Result<List<NoteModel>>> fetchHashtagNotes({
+    required String hashtag,
+    int limit = 20,
+    DateTime? until,
+    DateTime? since,
+  }) async {
+    try {
+      debugPrint('[NostrDataService] HASHTAG MODE: Fetching GLOBAL notes for #$hashtag with server-side filtering');
+
+      final Map<String, NoteModel> hashtagNotesMap = {};
+      final limitedRelays = _relayManager.relayUrls.take(3).toList();
+
+      debugPrint('[NostrDataService] HASHTAG: Using ${limitedRelays.length} relays for PARALLEL fetch');
+
+      await Future.wait(
+        limitedRelays.map((relayUrl) async {
+          if (_isClosed) return;
+          
+          WebSocket? ws;
+          StreamSubscription? sub;
+          try {
+            debugPrint('[NostrDataService] HASHTAG: Connecting to $relayUrl');
+            ws = await WebSocket.connect(relayUrl);
+            if (_isClosed) {
+              await ws.close();
+              return;
+            }
+
+            final completer = Completer<void>();
+            int eventCount = 0;
+
+            sub = ws.listen((event) {
+              try {
+                final decoded = jsonDecode(event);
+
+                if (decoded[0] == 'EVENT') {
+                  final eventData = decoded[2] as Map<String, dynamic>;
+                  final eventId = eventData['id'] as String;
+                  final eventKind = eventData['kind'] as int;
+
+                  if (eventKind == 1) {
+                    if (!hashtagNotesMap.containsKey(eventId)) {
+                      final note = _processHashtagEventDirectly(eventData);
+                      if (note != null) {
+                        hashtagNotesMap[eventId] = note;
+                        eventCount++;
+                        if (!_noteCache.containsKey(eventId) && !_eventIds.contains(eventId)) {
+                          _noteCache[eventId] = note;
+                          _eventIds.add(eventId);
+                        }
+                      }
+                    }
+                  }
+                } else if (decoded[0] == 'EOSE') {
+                  debugPrint('[NostrDataService] HASHTAG: EOSE from $relayUrl - $eventCount notes');
+                  if (!completer.isCompleted) completer.complete();
+                }
+              } catch (e) {
+                debugPrint('[NostrDataService] HASHTAG: Error processing event: $e');
+              }
+            }, onDone: () {
+              if (!completer.isCompleted) completer.complete();
+            }, onError: (error) {
+              debugPrint('[NostrDataService] HASHTAG: Connection error on $relayUrl: $error');
+              if (!completer.isCompleted) completer.complete();
+            }, cancelOnError: true);
+
+            if (ws.readyState == WebSocket.open) {
+              final subscriptionId = NostrService.generateUUID();
+              final filterMap = {
+                'kinds': [1],
+                '#t': [hashtag.toLowerCase()],
+                'limit': limit,
+              };
+              
+              if (since != null) {
+                filterMap['since'] = since.millisecondsSinceEpoch ~/ 1000;
+              }
+              if (until != null) {
+                filterMap['until'] = until.millisecondsSinceEpoch ~/ 1000;
+              }
+
+              final request = jsonEncode(['REQ', subscriptionId, filterMap]);
+              ws.add(request);
+              debugPrint('[NostrDataService] HASHTAG: Query sent to $relayUrl');
+            }
+
+            await completer.future;
+
+            await sub.cancel();
+            await ws.close();
+          } catch (e) {
+            debugPrint('[NostrDataService] HASHTAG: Exception with $relayUrl: $e');
+            await sub?.cancel();
+            await ws?.close();
+          }
+        }),
+      );
+
+      final hashtagNotes = hashtagNotesMap.values.toList();
+
+      
+      hashtagNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+      final limitedNotes = hashtagNotes.take(limit).toList();
+
+      debugPrint('[NostrDataService] HASHTAG: Returning ${limitedNotes.length} notes for #$hashtag (found ${hashtagNotes.length} total)');
+
+      
+      _scheduleUIUpdate();
+
+      return Result.success(limitedNotes);
+    } catch (e) {
+      debugPrint('[NostrDataService] HASHTAG: Error fetching hashtag notes: $e');
+      return Result.error('Failed to fetch hashtag notes: $e');
+    }
+  }
+
+  NoteModel? _processHashtagEventDirectly(Map<String, dynamic> eventData) {
+    try {
+      final id = eventData['id'] as String;
+      final pubkey = eventData['pubkey'] as String;
+      final content = eventData['content'] as String;
+      final createdAt = eventData['created_at'] as int;
+      final tags = eventData['tags'] as List<dynamic>? ?? [];
+
+      final authorNpub = _authService.hexToNpub(pubkey) ?? pubkey;
+      final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
+
+      String? rootId;
+      String? parentId;
+      bool isReply = false;
+      final List<Map<String, String>> eTags = [];
+      final List<Map<String, String>> pTags = [];
+
+      for (final tag in tags) {
+        if (tag is List && tag.isNotEmpty) {
+          if (tag[0] == 'e' && tag.length >= 2) {
+            final eventId = tag[1] as String;
+            final relayUrl = tag.length > 2 ? (tag[2] as String? ?? '') : '';
+            final marker = tag.length >= 4 ? tag[3] as String : '';
+            final pubkeyTag = tag.length > 4 ? (tag[4] as String? ?? '') : '';
+
+            eTags.add({
+              'eventId': eventId,
+              'relayUrl': relayUrl,
+              'marker': marker,
+              'pubkey': pubkeyTag,
+            });
+
+            if (marker == 'root') {
+              rootId = eventId;
+              isReply = true;
+            } else if (marker == 'reply') {
+              parentId = eventId;
+              isReply = true;
+            } else if (rootId == null) {
+              rootId = eventId;
+              isReply = true;
+            }
+          } else if (tag[0] == 'p' && tag.length >= 2) {
+            pTags.add({
+              'pubkey': tag[1] as String,
+              'relayUrl': tag.length > 2 ? (tag[2] as String? ?? '') : '',
+              'petname': tag.length > 3 ? (tag[3] as String? ?? '') : '',
+            });
+          }
+        }
+      }
+
+      return NoteModel(
+        id: id,
+        content: content,
+        author: authorNpub,
+        timestamp: timestamp,
+        isReply: isReply,
+        isRepost: false,
+        rootId: rootId,
+        parentId: parentId,
+        repostedBy: null,
+        reactionCount: 0,
+        replyCount: 0,
+        repostCount: 0,
+        zapAmount: 0,
+        rawWs: jsonEncode(eventData),
+        eTags: eTags,
+        pTags: pTags,
+      );
+    } catch (e) {
+      debugPrint('[NostrDataService] HASHTAG: Error processing event: $e');
+      return null;
+    }
+  }
+
   Future<Result<UserModel>> fetchUserProfile(String npub) async {
     try {
       final pubkeyHex = _authService.npubToHex(npub);
@@ -1702,7 +1896,7 @@ class NostrDataService {
         if (_relayManager.activeSockets.isEmpty) {
           debugPrint('[NostrDataService] No active relay connections, attempting to connect...');
           await _relayManager.connectRelays(
-            [], // Empty target for global
+            [], 
             onEvent: _handleRelayEvent,
             onDisconnected: _handleRelayDisconnection,
             serviceId: 'note_post',
@@ -1842,7 +2036,7 @@ class NostrDataService {
         if (_relayManager.activeSockets.isEmpty) {
           debugPrint('[NostrDataService] No active relay connections, attempting to connect...');
           await _relayManager.connectRelays(
-            [], // Empty target for global
+            [], 
             onEvent: _handleRelayEvent,
             onDisconnected: _handleRelayDisconnection,
             serviceId: 'repost',
@@ -1871,6 +2065,7 @@ class NostrDataService {
     String? replyId,
     required String parentAuthor,
     required List<String> relayUrls,
+    List<List<String>>? additionalTags,
   }) async {
     try {
       final parentEventId = replyId ?? rootId;
@@ -1916,7 +2111,7 @@ class NostrDataService {
       final List<Map<String, String>> eTags = [];
       final List<Map<String, String>> pTags = [];
 
-      final authorHex = _authService.npubToHex(parentNote.author) ?? parentNote.author; // Convert to hex format
+      final authorHex = _authService.npubToHex(parentNote.author) ?? parentNote.author; 
 
       if (actualRootId != actualReplyId) {
         tags.add(['e', actualRootId, '', 'root', authorHex]);
@@ -1962,6 +2157,11 @@ class NostrDataService {
           'relayUrl': '',
           'petname': '',
         });
+      }
+
+      if (additionalTags != null && additionalTags.isNotEmpty) {
+        tags.addAll(additionalTags);
+        debugPrint('[NostrDataService] Added ${additionalTags.length} additional tags to reply');
       }
 
       debugPrint('[NostrDataService] Creating NIP-10 compliant reply event...');
@@ -2064,7 +2264,7 @@ class NostrDataService {
         if (_relayManager.activeSockets.isEmpty) {
           debugPrint('[NostrDataService] No active relay connections, attempting to connect...');
           await _relayManager.connectRelays(
-            [], // Empty target for global
+            [], 
             onEvent: _handleRelayEvent,
             onDisconnected: _handleRelayDisconnection,
             serviceId: 'profile_update',
@@ -2091,7 +2291,7 @@ class NostrDataService {
         lud16: user.lud16,
         website: user.website,
         updatedAt: updatedAt,
-        nip05Verified: false, // Will be verified later asynchronously
+        nip05Verified: false, 
       );
 
       _profileCache[pubkeyHex] = CachedProfile(
@@ -2239,7 +2439,7 @@ class NostrDataService {
                     if (tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length >= 2) {
                       final followedHexPubkey = tag[1] as String;
                       if (!following.contains(followedHexPubkey)) {
-                        following.add(followedHexPubkey); // Store as hex pubkey
+                        following.add(followedHexPubkey); 
                         debugPrint('[NostrDataService] Found followed user (hex): $followedHexPubkey');
                       }
                     }
@@ -2594,7 +2794,7 @@ class NostrDataService {
         if (_relayManager.activeSockets.isEmpty) {
           debugPrint('[NostrDataService] No active relay connections, attempting to connect...');
           await _relayManager.connectRelays(
-            [], // Empty target for global
+            [], 
             onEvent: _handleRelayEvent,
             onDisconnected: _handleRelayDisconnection,
             serviceId: 'quote_post',
@@ -2746,7 +2946,7 @@ class NostrDataService {
         if (_relayManager.activeSockets.isEmpty) {
           debugPrint('[NostrDataService] No active relay connections, attempting to connect...');
           await _relayManager.connectRelays(
-            [], // Empty target for global
+            [], 
             onEvent: _handleRelayEvent,
             onDisconnected: _handleRelayDisconnection,
             serviceId: 'follow_event',
