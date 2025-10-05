@@ -33,7 +33,6 @@ class _InteractionBarState extends State<InteractionBar> {
   late final NoteRepository _noteRepository;
   StreamSubscription? _notesStreamSubscription;
 
-  // Local state for optimistic updates
   bool _hasReacted = false;
   bool _hasReposted = false;
   bool _hasZapped = false; // Optimistic zap state for button color only
@@ -46,7 +45,6 @@ class _InteractionBarState extends State<InteractionBar> {
   void initState() {
     super.initState();
     _noteRepository = AppDI.get<NoteRepository>();
-    // Initialize optimistic states as false on first mount
     _hasReacted = false;
     _hasReposted = false;
     _hasZapped = false;
@@ -58,7 +56,6 @@ class _InteractionBarState extends State<InteractionBar> {
   void didUpdateWidget(InteractionBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     
-    // If note ID changed, reset optimistic states
     if (oldWidget.note?.id != widget.note?.id) {
       setState(() {
         _hasReacted = false;
@@ -67,7 +64,6 @@ class _InteractionBarState extends State<InteractionBar> {
       });
     }
     
-    // Reload counts if note changed
     if (oldWidget.note?.id != widget.note?.id ||
         oldWidget.note?.reactionCount != widget.note?.reactionCount ||
         oldWidget.note?.repostCount != widget.note?.repostCount ||
@@ -84,11 +80,9 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   void _subscribeToNoteUpdates() {
-    // Listen to real-time note updates to refresh interaction counts automatically
     _notesStreamSubscription = _noteRepository.notesStream.listen((notes) {
       if (!mounted) return;
 
-      // Find our note in the updated list
       final updatedNote = notes.where((note) => note.id == widget.noteId).firstOrNull;
       if (updatedNote != null) {
         final newReactionCount = updatedNote.reactionCount;
@@ -96,15 +90,12 @@ class _InteractionBarState extends State<InteractionBar> {
         final newReplyCount = updatedNote.replyCount;
         final newZapAmount = updatedNote.zapAmount;
 
-        // ENHANCED LOGIC: Accept stream updates more intelligently
-        // This allows proper synchronization from thread view calculations
         bool shouldUpdate = false;
         int finalReactionCount = _reactionCount;
         int finalRepostCount = _repostCount;
         int finalReplyCount = _replyCount;
         int finalZapAmount = _zapAmount;
 
-        // Accept updates if counts have genuinely changed and are meaningful
         if (newReactionCount != _reactionCount && newReactionCount >= _reactionCount) {
           finalReactionCount = newReactionCount;
           shouldUpdate = true;
@@ -142,25 +133,18 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   void _loadInteractionCounts() async {
-    // Load actual interaction counts from note parameter with enhanced real-time updates
     if (widget.note != null) {
       final newReactionCount = widget.note!.reactionCount;
       final newRepostCount = widget.note!.repostCount;
       final newReplyCount = widget.note!.replyCount;
       final newZapAmount = widget.note!.zapAmount;
 
-      // ENHANCED LOGIC: Always trust the note's counts if they come from repository updates
-      // This ensures calculated thread counts are properly synchronized to the feed
       bool shouldUpdate = false;
       int finalReactionCount = _reactionCount;
       int finalRepostCount = _repostCount;
       int finalReplyCount = _replyCount;
       int finalZapAmount = _zapAmount;
 
-      // Accept updates if:
-      // 1. New counts are higher (normal case)
-      // 2. Current counts are zero (initial load)
-      // 3. Note has been updated recently (repository sync from thread view)
       if (newReactionCount != _reactionCount && (newReactionCount > _reactionCount || _reactionCount == 0)) {
         finalReactionCount = newReactionCount;
         shouldUpdate = true;
@@ -178,7 +162,6 @@ class _InteractionBarState extends State<InteractionBar> {
         shouldUpdate = true;
       }
 
-      // SPECIAL CASE: If this is a fresh widget mount, always use note's counts
       if (_reactionCount == 0 && _repostCount == 0 && _replyCount == 0 && _zapAmount == 0) {
         finalReactionCount = newReactionCount;
         finalRepostCount = newRepostCount;
@@ -194,7 +177,6 @@ class _InteractionBarState extends State<InteractionBar> {
           _repostCount = finalRepostCount;
           _replyCount = finalReplyCount;
           _zapAmount = finalZapAmount;
-          // Don't reset optimistic states here - only reset when note ID changes
         });
 
         debugPrint(
@@ -205,14 +187,12 @@ class _InteractionBarState extends State<InteractionBar> {
         debugPrint('  Widget:  reactions=$newReactionCount, reposts=$newRepostCount, replies=$newReplyCount, zaps=$newZapAmount');
       }
     } else {
-      // Only set to zero if current counts are also zero (initial state)
       if (_reactionCount == 0 && _repostCount == 0 && _replyCount == 0 && _zapAmount == 0) {
         setState(() {
           _reactionCount = 0;
           _repostCount = 0;
           _replyCount = 0;
           _zapAmount = 0;
-          // Optimistic states will be reset in didUpdateWidget when note ID changes
         });
 
         debugPrint('[InteractionBar] No note provided, using default counts');
@@ -263,7 +243,6 @@ class _InteractionBarState extends State<InteractionBar> {
       result.fold(
         (success) => debugPrint('Reaction successful'),
         (error) {
-          // Revert optimistic update on error
           setState(() {
             _hasReacted = false;
             _reactionCount--;
@@ -282,7 +261,6 @@ class _InteractionBarState extends State<InteractionBar> {
   void _handleZapTap() {
     if (widget.note == null || _hasZapped) return;
 
-    // Optimistic update for button color only
     setState(() {
       _hasZapped = true;
     });
@@ -291,8 +269,6 @@ class _InteractionBarState extends State<InteractionBar> {
       context: context,
       note: widget.note!,
     ).then((_) {
-      // Reset optimistic state after dialog closes
-      // Real zap amount updates will come from stream
       if (mounted) {
         setState(() {
           _hasZapped = false;

@@ -2,8 +2,6 @@ import '../../core/base/result.dart';
 import '../services/auth_service.dart';
 import '../services/validation_service.dart';
 
-/// Repository for authentication operations
-/// Handles business logic for login, logout, and user management
 class AuthRepository {
   final AuthService _authService;
   final ValidationService _validationService;
@@ -14,7 +12,6 @@ class AuthRepository {
   })  : _authService = authService,
         _validationService = validationService;
 
-  /// Get the currently logged-in user's npub
   Future<Result<String?>> getCurrentUserNpub() async {
     try {
       return await _authService.getCurrentUserNpub();
@@ -23,7 +20,6 @@ class AuthRepository {
     }
   }
 
-  /// Check if user is currently authenticated
   Future<Result<bool>> isAuthenticated() async {
     try {
       return await _authService.isAuthenticated();
@@ -32,16 +28,13 @@ class AuthRepository {
     }
   }
 
-  /// Login with NSEC with validation
   Future<Result<AuthResult>> loginWithNsec(String nsec) async {
     try {
-      // Validate NSEC format first
       final validationResult = _validationService.validateNsec(nsec);
       if (validationResult.isError) {
         return Result.error(validationResult.error!);
       }
 
-      // Attempt login
       final loginResult = await _authService.loginWithNsec(nsec);
 
       return loginResult.fold(
@@ -57,7 +50,6 @@ class AuthRepository {
     }
   }
 
-  /// Create a new account
   Future<Result<AuthResult>> createNewAccount() async {
     try {
       final createResult = await _authService.createNewAccount();
@@ -75,16 +67,13 @@ class AuthRepository {
     }
   }
 
-  /// Login with private key (hex format)
   Future<Result<AuthResult>> loginWithPrivateKey(String privateKey) async {
     try {
-      // Validate private key format first
       final validationResult = _validationService.validatePrivateKeyHex(privateKey);
       if (validationResult.isError) {
         return Result.error(validationResult.error!);
       }
 
-      // Attempt login
       final loginResult = await _authService.loginWithPrivateKey(privateKey);
 
       return loginResult.fold(
@@ -100,7 +89,6 @@ class AuthRepository {
     }
   }
 
-  /// Logout user
   Future<Result<void>> logout() async {
     try {
       return await _authService.logout();
@@ -109,7 +97,6 @@ class AuthRepository {
     }
   }
 
-  /// Get user's NSEC for backup purposes
   Future<Result<String?>> getUserNsec() async {
     try {
       return await _authService.getUserNsec();
@@ -118,7 +105,6 @@ class AuthRepository {
     }
   }
 
-  /// Get user's private key (for advanced operations)
   Future<Result<String?>> getCurrentUserPrivateKey() async {
     try {
       return await _authService.getCurrentUserPrivateKey();
@@ -127,10 +113,8 @@ class AuthRepository {
     }
   }
 
-  /// Check if the provided npub belongs to the current user
   Future<Result<bool>> isCurrentUser(String npub) async {
     try {
-      // Validate npub format first
       final validationResult = _validationService.validateNpub(npub);
       if (validationResult.isError) {
         return Result.error(validationResult.error!);
@@ -142,7 +126,6 @@ class AuthRepository {
     }
   }
 
-  /// Get current user's public key in hex format
   Future<Result<String?>> getCurrentUserPublicKeyHex() async {
     try {
       return await _authService.getCurrentUserPublicKeyHex();
@@ -151,7 +134,6 @@ class AuthRepository {
     }
   }
 
-  /// Convert npub to hex format (utility method)
   String? npubToHex(String npub) {
     try {
       return _authService.npubToHex(npub);
@@ -160,7 +142,6 @@ class AuthRepository {
     }
   }
 
-  /// Convert hex to npub format (utility method)
   String? hexToNpub(String hex) {
     try {
       return _authService.hexToNpub(hex);
@@ -169,7 +150,6 @@ class AuthRepository {
     }
   }
 
-  /// Convert hex private key to nsec format (utility method)
   String? hexToNsec(String hexPrivateKey) {
     try {
       return _authService.hexToNsec(hexPrivateKey);
@@ -178,7 +158,6 @@ class AuthRepository {
     }
   }
 
-  /// Convert nsec to hex format (utility method)
   String? nsecToHex(String nsec) {
     try {
       return _authService.nsecToHex(nsec);
@@ -187,7 +166,6 @@ class AuthRepository {
     }
   }
 
-  /// Get current user's NSEC (generated from hex private key)
   Future<Result<String?>> getCurrentUserNsec() async {
     try {
       return await _authService.getCurrentUserNsec();
@@ -196,12 +174,10 @@ class AuthRepository {
     }
   }
 
-  /// Validate credentials and attempt recovery
   Future<Result<AuthResult>> recoverAccount({
     required String nsec,
   }) async {
     try {
-      // This is essentially the same as login but with recovery context
       final validationResult = _validationService.validateNsec(nsec);
       if (validationResult.isError) {
         return Result.error(validationResult.error!);
@@ -222,7 +198,6 @@ class AuthRepository {
     }
   }
 
-  /// Get authentication status with user info
   Future<Result<AuthStatus>> getAuthStatus() async {
     try {
       final isAuthResult = await _authService.isAuthenticated();
@@ -255,7 +230,6 @@ class AuthRepository {
     }
   }
 
-  /// Clear all authentication data (for development/testing)
   Future<Result<void>> clearAllData() async {
     try {
       return await _authService.clearAllData();
@@ -265,7 +239,6 @@ class AuthRepository {
   }
 }
 
-/// Result of authentication operations
 class AuthResult {
   final String npub;
   final AuthResultType type;
@@ -281,14 +254,12 @@ class AuthResult {
   String toString() => 'AuthResult(npub: $npub, type: $type, isNew: $isNewAccount)';
 }
 
-/// Types of authentication results
 enum AuthResultType {
   login, // Normal login
   newAccount, // New account creation
   recovery, // Account recovery
 }
 
-/// Current authentication status
 class AuthStatus {
   final bool isAuthenticated;
   final String? npub;

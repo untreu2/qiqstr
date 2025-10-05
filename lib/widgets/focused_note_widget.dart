@@ -145,7 +145,6 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
       UserModel? authorUser = widget.profiles[_authorId];
       UserModel? reposterUser = _reposterId != null ? widget.profiles[_reposterId] : null;
 
-      // Fallback to default users if not in profiles map
       authorUser ??= UserModel(
         pubkeyHex: _authorId,
         name: _authorId.length > 8 ? _authorId.substring(0, 8) : _authorId,
@@ -590,7 +589,6 @@ class _FocusedUserInfoSection extends StatelessWidget {
       valueListenable: stateNotifier,
       builder: (context, state, _) {
         try {
-          // Return empty widget since user info is now handled in profile section
           return const SizedBox.shrink();
         } catch (e) {
           debugPrint('[FocusedUserInfoSection] Build error: $e');

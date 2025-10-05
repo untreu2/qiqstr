@@ -41,7 +41,6 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
   late final List<String> _linkUrls;
   late final List<String> _quoteIds;
 
-  // User cache for mentions
   final Map<String, UserModel> _mentionUsers = {};
   final Map<String, bool> _mentionLoadingStates = {};
   late final UserRepository _userRepository;
@@ -61,18 +60,15 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     _quoteIds = (widget.parsedContent['quoteIds'] as List<dynamic>?)?.cast<String>() ?? [];
   }
 
-  /// Extract pubkey from bech32 mention (npub1 or nprofile1)
   String? _extractPubkey(String bech32) {
     try {
       debugPrint('[NoteContentWidget] Extracting pubkey from: $bech32');
 
       if (bech32.startsWith('npub1')) {
-        // npub1 için: decodeBasicBech32 ile hex alıyoruz
         final decoded = decodeBasicBech32(bech32, 'npub');
         debugPrint('[NoteContentWidget] npub1 decoded to: $decoded');
         return decoded;
       } else if (bech32.startsWith('nprofile1')) {
-        // nprofile1 için: decodeTlvBech32Full ile decode edip 0. indeksteki type_0_main alıyoruz
         debugPrint('[NoteContentWidget] Decoding nprofile1...');
         final result = decodeTlvBech32Full(bech32, 'nprofile');
         debugPrint('[NoteContentWidget] nprofile1 full result: $result');
@@ -90,19 +86,16 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     return null;
   }
 
-  /// Preload user profiles for all mentions
   void _preloadMentionUsers() {
     final mentionIds = _textParts.where((part) => part['type'] == 'mention').map((part) => part['id'] as String).toSet();
 
     for (final mentionId in mentionIds) {
-      // Extract actual pubkey from bech32 if needed
       final actualPubkey = _extractPubkey(mentionId) ?? mentionId;
       debugPrint('[NoteContentWidget] Preloading mention - original: $mentionId, extracted: $actualPubkey');
       _loadMentionUser(actualPubkey);
     }
   }
 
-  /// Load user profile for mention
   Future<void> _loadMentionUser(String pubkeyHex) async {
     debugPrint('[NoteContentWidget] Loading user for pubkey: $pubkeyHex');
 
@@ -114,7 +107,6 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     _mentionLoadingStates[pubkeyHex] = true;
 
     try {
-      // UserRepository npub formatında bekliyor, hex'i npub'a encode edelim
       final npubEncoded = encodeBasicBech32(pubkeyHex, 'npub');
       debugPrint('[NoteContentWidget] Encoded hex $pubkeyHex to npub: $npubEncoded');
 
@@ -132,7 +124,6 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
           },
           (error) {
             debugPrint('[NoteContentWidget] Failed to load user, creating fallback for: $pubkeyHex, error: $error');
-            // Create fallback user
             setState(() {
               _mentionUsers[pubkeyHex] = UserModel(
                 pubkeyHex: pubkeyHex,
@@ -245,7 +236,6 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         }
       } else if (p['type'] == 'mention') {
         final id = p['id'] as String;
-        // Extract actual pubkey from bech32 if needed
         final actualPubkey = _extractPubkey(id) ?? id;
         final user = _mentionUsers[actualPubkey];
         final isLoading = _mentionLoadingStates[actualPubkey] == true;
@@ -254,11 +244,9 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         if (isLoading) {
           displayText = '@loading...';
         } else if (user != null) {
-          // Use real user name, truncate if too long
           final userName = user.name.isNotEmpty ? user.name : (id.length > 8 ? id.substring(0, 8) : id);
           displayText = userName.length > 15 ? '@${userName.substring(0, 15)}...' : '@$userName';
         } else {
-          // Fallback to ID
           displayText = '@${id.length > 8 ? id.substring(0, 8) : id}...';
         }
 
@@ -271,7 +259,6 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
           ),
           recognizer: TapGestureRecognizer()
             ..onTap = () {
-              // Navigation için de npub formatında gönder
               final npubForNavigation = encodeBasicBech32(actualPubkey, 'npub');
               debugPrint('[NoteContentWidget] Navigating to profile with npub: $npubForNavigation');
               widget.onNavigateToMentionProfile?.call(npubForNavigation);
@@ -297,7 +284,6 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Text content
         if (_textParts.isNotEmpty)
           RichText(
             text: TextSpan(children: _buildSpans()),
@@ -307,14 +293,12 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
             ),
           ),
 
-        // Media content
         if (_mediaUrls.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: MediaPreviewWidget(mediaUrls: _mediaUrls),
           ),
 
-        // Link previews (only if no media)
         if (_linkUrls.isNotEmpty && _mediaUrls.isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -331,7 +315,6 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
             ),
           ),
 
-        // Quote content
         if (_quoteIds.isNotEmpty)
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,

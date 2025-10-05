@@ -10,7 +10,6 @@ enum ToastType {
 }
 
 class AppToast {
-  /// Shows a toast message with the specified type and optional action
   static void show(
     BuildContext context,
     String message, {
@@ -44,7 +43,6 @@ class AppToast {
     );
   }
 
-  /// Shows a success toast
   static void success(BuildContext context, String message, {Duration? duration}) {
     show(
       context,
@@ -54,7 +52,6 @@ class AppToast {
     );
   }
 
-  /// Shows an error toast
   static void error(BuildContext context, String message, {Duration? duration}) {
     show(
       context,
@@ -64,7 +61,6 @@ class AppToast {
     );
   }
 
-  /// Shows an info toast
   static void info(BuildContext context, String message, {Duration? duration}) {
     show(
       context,
@@ -74,7 +70,6 @@ class AppToast {
     );
   }
 
-  /// Shows a warning toast
   static void warning(BuildContext context, String message, {Duration? duration}) {
     show(
       context,
@@ -84,7 +79,6 @@ class AppToast {
     );
   }
 
-  /// Hides the current toast
   static void hide(BuildContext context) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -100,7 +94,6 @@ class AppToast {
   }
 
   static Color _getBackgroundColor(AppThemeColors colors, ToastType type) {
-    // All toasts use the same monochrome color
     return colors.secondary.withValues(alpha: 0.9);
   }
 }

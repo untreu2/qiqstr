@@ -45,7 +45,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   String? _userHexKey;
 
-  // Add state management for user profile data like note_widget.dart
   final ValueNotifier<UserModel> _userNotifier = ValueNotifier(UserModel(
     pubkeyHex: '',
     name: '',
@@ -96,7 +95,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   }
 
   void _startProgressiveInitialization() {
-    // Initialize with the provided user data immediately
     _userNotifier.value = widget.user;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -137,7 +135,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       _isLoadingProfile = true;
       debugPrint('[ProfileInfoWidget] Loading fresh profile data for: ${_userNotifier.value.pubkeyHex}');
 
-      // Use UserRepository to load fresh user data (same as note_widget.dart)
       final result = await _userRepository.getUserProfile(_userNotifier.value.pubkeyHex);
 
       result.fold(
@@ -149,7 +146,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         },
         (error) {
           debugPrint('[ProfileInfoWidget] Failed to load fresh profile: $error');
-          // Keep the original user data if fresh load fails
         },
       );
     } catch (e) {
@@ -159,16 +155,13 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     }
   }
 
-  /// Setup listener for UserRepository stream to get real-time profile updates
   void _setupUserStreamListener() {
     _userStreamSubscription = _userRepository.currentUserStream.listen(
       (updatedUser) {
-        // Only update if this is the same user being displayed
         if (updatedUser.pubkeyHex == widget.user.pubkeyHex || updatedUser.pubkeyHex == _userNotifier.value.pubkeyHex) {
           debugPrint('[ProfileInfoWidget] Received updated user data from stream: ${updatedUser.name}');
           if (mounted) {
             _userNotifier.value = updatedUser;
-            // Refresh counts and other data that might have changed
             _loadFollowerCounts();
           }
         }
@@ -203,10 +196,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       String? currentUserHex = _convertToHex(_currentUserNpub!);
       if (currentUserHex == _userHexKey) return;
 
-      // Check if current user follows this profile user
       await _checkFollowStatus();
 
-      // Check if this profile user follows the current user
       await _checkIfUserFollowsMe();
     } catch (e) {
       debugPrint('[ProfileInfoWidget] Follow status init error: $e');
@@ -217,7 +208,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     try {
       if (_currentUserNpub == null) return;
 
-      // Use UserRepository.isFollowing method (cleaner MVVM approach)
       final followStatusResult = await _userRepository.isFollowing(_userNotifier.value.pubkeyHex);
 
       followStatusResult.fold(
@@ -250,16 +240,13 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
       debugPrint('[ProfileInfoWidget] Checking if ${_userNotifier.value.pubkeyHex} follows $_currentUserNpub');
 
-      // Get the profile user's following list to check if current user is in it
       final nostrDataService = AppDI.get<NostrDataService>();
       final followingResult = await nostrDataService.getFollowingList(_userNotifier.value.pubkeyHex);
 
       followingResult.fold(
         (followingHexList) {
-          // Convert current user npub to hex for comparison
           final currentUserHex = _convertToHex(_currentUserNpub!);
 
-          // Check if current user's hex is in the profile user's following list
           final doesFollow = currentUserHex != null && followingHexList.contains(currentUserHex);
 
           debugPrint('[ProfileInfoWidget] Does ${_userNotifier.value.pubkeyHex} follow $_currentUserNpub? $doesFollow');
@@ -324,7 +311,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     debugPrint('[ProfileInfoWidget] Target user npub: ${_userNotifier.value.pubkeyHex}');
     debugPrint('[ProfileInfoWidget] Target user hex: $_userHexKey');
 
-    // Optimistic UI update
     setState(() {
       _isFollowing = !_isFollowing!;
     });
@@ -332,7 +318,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     debugPrint('[ProfileInfoWidget] UI optimistically updated to: $_isFollowing');
 
     try {
-      // Ensure we're using the correct format for follow operations
       final currentUser = _userNotifier.value;
       final targetNpub = currentUser.pubkeyHex.startsWith('npub1')
           ? currentUser.pubkeyHex
@@ -350,7 +335,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       result.fold(
         (_) {
           debugPrint('[ProfileInfoWidget] Follow toggle successful');
-          // Refresh follow status to ensure accuracy (increased delay for relay propagation)
           Future.delayed(const Duration(milliseconds: 1000), () {
             if (mounted) {
               _checkFollowStatus();
@@ -360,16 +344,13 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         (error) {
           debugPrint('[ProfileInfoWidget] Follow toggle error: $error');
 
-          // Show error with correct operation name (based on ORIGINAL state)
           final operationName = originalFollowState == true ? 'unfollow' : 'follow';
           debugPrint('[ProfileInfoWidget] Operation that failed: $operationName');
 
-          // Revert optimistic update
           setState(() {
             _isFollowing = originalFollowState;
           });
 
-          // Show error to user
           if (mounted) {
             AppToast.error(context, 'Failed to $operationName user: $error');
           }
@@ -377,7 +358,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       );
     } catch (e) {
       debugPrint('[ProfileInfoWidget] Follow toggle exception: $e');
-      // Revert optimistic update
       setState(() {
         _isFollowing = originalFollowState;
       });
@@ -386,8 +366,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   Future<void> _loadFollowerCounts() async {
     try {
-      // Get THIS profile user's following list (how many they follow)
-      // Use NostrDataService directly for follow counts (read-only operation)
       final nostrDataService = AppDI.get<NostrDataService>();
       final followingResult = await nostrDataService.getFollowingList(_userNotifier.value.pubkeyHex);
 
@@ -485,7 +463,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     );
   }
 
-  // Static cache for avatar widgets (same as note_widget.dart)
   static final Map<String, Widget> _avatarCache = <String, Widget>{};
 
   Widget _getCachedAvatar(String imageUrl, double radius, String cacheKey) {
@@ -631,7 +608,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   }
 
   Widget _buildOptimizedBanner(BuildContext context, UserModel user, double screenWidth) {
-    // Calculate 36:9 aspect ratio height
     final double bannerHeight = screenWidth * (5 / 10);
 
     return GestureDetector(

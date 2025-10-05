@@ -76,7 +76,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
   final Map<String, String> _mentionMap = {};
   UserModel? _currentUser;
 
-  // New system services
   late NostrDataService _dataService;
   late UserRepository _userRepository;
   late NoteRepository _noteRepository;
@@ -162,7 +161,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
       final npubs = matches.map((m) => m.group(1)!).toList();
 
-      // Use new system for mention resolution - fetch user profiles
       final Map<String, String> resolvedNames = {};
       for (final npub in npubs) {
         try {
@@ -205,15 +203,46 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   Future<void> _loadUsers() async {
     try {
-      // Get cached users from NostrDataService
-      final cachedUsers = _dataService.cachedUsers;
+      debugPrint('[ShareNotePage] Loading users from Isar database...');
+      
+      final isarService = _userRepository.isarService;
+      
+      if (!isarService.isInitialized) {
+        debugPrint('[ShareNotePage] ️ Isar not initialized, waiting...');
+        await isarService.waitForInitialization();
+      }
+      
+      final isarProfiles = await isarService.getAllUserProfiles();
+      
+      final userModels = isarProfiles.map((isarProfile) {
+        final profileData = isarProfile.toProfileData();
+        return UserModel.fromCachedProfile(
+          isarProfile.pubkeyHex,
+          profileData,
+        );
+      }).toList();
+      
       if (mounted) {
         setState(() {
-          _allUsers = cachedUsers;
+          _allUsers = userModels;
         });
+        debugPrint('[ShareNotePage]  Loaded ${userModels.length} users from Isar for mention suggestions');
       }
     } catch (e) {
+      debugPrint('[ShareNotePage]  Error loading users from Isar: $e');
       _showErrorSnackBar('$_errorLoadingUsers: ${e.toString()}');
+      
+      try {
+        final cachedUsers = _dataService.cachedUsers;
+        if (mounted) {
+          setState(() {
+            _allUsers = cachedUsers;
+          });
+          debugPrint('[ShareNotePage] ️ Using ${cachedUsers.length} users from NostrDataService fallback');
+        }
+      } catch (fallbackError) {
+        debugPrint('[ShareNotePage]  Fallback also failed: $fallbackError');
+      }
     }
   }
 
@@ -224,7 +253,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
       if (npub == null || npub.isEmpty) return;
 
-      // Fetch current user's profile
       final userResult = await _userRepository.getUserProfile(npub);
       if (userResult.isSuccess && userResult.data != null) {
         if (mounted) {
@@ -293,7 +321,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
     }
 
     try {
-      // Use legacy Blossom upload pattern
       final mediaResult = await _dataService.sendMedia(file.path!, _serverUrl);
       if (mediaResult.isSuccess && mediaResult.data != null) {
         if (mounted) {
@@ -383,7 +410,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
     String quotePart = "";
     if (hasQuote && widget.initialText != null) {
-      // Convert hex ID to nostr:note1 format and add as text
       final hexId = widget.initialText!.replaceFirst('nostr:', '');
       try {
         final note1Id = encodeBasicBech32(hexId, 'note');
@@ -400,7 +426,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   Future<void> _sendNote(String content) async {
     if (_isReply()) {
-      // Use new system for reply posting
       final result = await _noteRepository.postReply(
         content: content,
         rootId: widget.replyToNoteId!,
@@ -412,7 +437,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
         throw Exception(result.error ?? 'Failed to post reply');
       }
     } else {
-      // Always send as regular note (quote is now just text in content)
       debugPrint('[ShareNotePage] Sending as regular note with content: ${content.length > 100 ? content.substring(0, 100) : content}...');
       final result = await _noteRepository.postNote(content: content);
 
@@ -567,20 +591,15 @@ class _ShareNotePageState extends State<ShareNotePage> {
     final username = _formatUsername(user.name);
     final mentionKey = '@$username';
 
-    // Use hex pubkey if available, otherwise try to convert npub to hex
     String npubBech32;
     if (user.pubkeyHex.isNotEmpty) {
-      // Use hex pubkey to encode to npub format
       npubBech32 = encodeBasicBech32(user.pubkeyHex, 'npub');
     } else if (user.npub.startsWith('npub1')) {
-      // Already in bech32 format, use directly
       npubBech32 = user.npub;
     } else {
-      // Fallback: try to encode assuming it's hex
       try {
         npubBech32 = encodeBasicBech32(user.npub, 'npub');
       } catch (e) {
-        // If all fails, use the raw value
         npubBech32 = user.npub;
       }
     }

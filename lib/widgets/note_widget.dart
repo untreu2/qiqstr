@@ -86,7 +86,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     _content = widget.note.content;
     _widgetKey = '${_noteId}_$_authorId';
 
-    // Debug for reply text issue
     debugPrint(' [NoteWidget] Note ${_noteId.substring(0, 8)}: isReply=$_isReply, isRepost=$_isRepost, parentId=$_parentId');
     if (_isRepost) {
       debugPrint(' [NoteWidget] Repost by: $_reposterId, rootId: ${widget.note.rootId}');
@@ -130,7 +129,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
 
   void _setupUserListener() {
     try {
-      // Listen to profiles from widget.profiles map
       widget.notesNotifier.addListener(_onNotesChange);
     } catch (e) {
       debugPrint('[NoteWidget] Setup listener error: $e');
@@ -164,7 +162,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
       UserModel? authorUser = widget.profiles[_authorId];
       UserModel? reposterUser = _reposterId != null ? widget.profiles[_reposterId] : null;
 
-      // Fallback to default users if not in profiles map
       authorUser ??= UserModel(
         pubkeyHex: _authorId,
         name: _authorId.length > 8 ? _authorId.substring(0, 8) : _authorId,
@@ -196,7 +193,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
 
       final replyText = _isReply && _parentId != null ? 'Reply to...' : null;
 
-      // Debug for reply text
       if (_isReply) {
         debugPrint(' [NoteWidget] Reply detected: parentId=$_parentId, replyText="$replyText"');
       }
@@ -219,67 +215,73 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     if (_isDisposed || !mounted) return;
 
     try {
-      // Check if we already have profiles data (from FeedViewModel batch loading)
       final authorUser = widget.profiles[_authorId];
       final reposterUser = _reposterId != null ? widget.profiles[_reposterId] : null;
 
-      // If we have complete profile data, no need to load anything
-      if (authorUser != null &&
-          authorUser.name != 'Anonymous' &&
-          authorUser.name != _authorId.substring(0, 8) && // Not a fallback user
-          (_reposterId == null || (reposterUser != null && reposterUser.name != 'Anonymous'))) {
-        debugPrint('[NoteWidget] Using cached profiles from FeedViewModel for ${_noteId.substring(0, 8)}');
+      bool isProfileComplete(UserModel? user, String userId) {
+        if (user == null) return false;
+        if (user.name == 'Anonymous') return false;
+        if (user.name == userId.substring(0, 8)) return false; // Fallback user
+        if (user.profileImage.isEmpty) return false;
+        return true;
+      }
+
+      final reposterId = _reposterId;
+      if (isProfileComplete(authorUser, _authorId) &&
+          (reposterId == null || isProfileComplete(reposterUser, reposterId))) {
+        debugPrint('[NoteWidget] ✓ Using cached profiles with images for ${_noteId.substring(0, 8)}');
         return;
       }
 
-      debugPrint('[NoteWidget] Loading missing profiles for ${_noteId.substring(0, 8)}');
+      debugPrint('[NoteWidget] ️ Loading missing/incomplete profiles for ${_noteId.substring(0, 8)}');
+      if (authorUser != null && authorUser.profileImage.isEmpty) {
+        debugPrint('[NoteWidget]   → Author ${authorUser.name} missing profile image');
+      }
+      if (reposterUser != null && reposterUser.profileImage.isEmpty) {
+        debugPrint('[NoteWidget]   → Reposter ${reposterUser.name} missing profile image');
+      }
 
-      // Check preloaded users if available
       if (widget.notesListProvider != null) {
         final authorPreloaded = widget.notesListProvider.getPreloadedUser(_authorId);
-        final reposterPreloaded = _reposterId != null ? widget.notesListProvider.getPreloadedUser(_reposterId) : null;
+        final reposterPreloaded = reposterId != null ? widget.notesListProvider.getPreloadedUser(reposterId) : null;
 
-        if (authorPreloaded != null &&
-            authorPreloaded.name != 'Anonymous' &&
-            (_reposterId == null || (reposterPreloaded != null && reposterPreloaded.name != 'Anonymous'))) {
+        if (isProfileComplete(authorPreloaded, _authorId) &&
+            (reposterId == null || isProfileComplete(reposterPreloaded, reposterId))) {
           return;
         }
       }
 
-      // Only load author if not already cached or is fallback
-      if (authorUser == null || authorUser.name == 'Anonymous' || authorUser.name == _authorId.substring(0, 8)) {
+      if (!isProfileComplete(authorUser, _authorId)) {
         debugPrint('[NoteWidget] Loading author profile: ${_authorId.substring(0, 8)}...');
         final authorResult = await _userRepository.getUserProfile(_authorId);
         authorResult.fold(
           (user) {
             if (mounted && !_isDisposed) {
-              // Update the profiles map and trigger update
               widget.profiles[_authorId] = user;
+              debugPrint('[NoteWidget]  Author profile loaded: ${user.name} (image: ${user.profileImage.isNotEmpty ? "✓" : "✗"})');
               _updateUserData();
             }
           },
-          (error) => debugPrint('[NoteWidget] Failed to load author: $error'),
+          (error) => debugPrint('[NoteWidget]  Failed to load author: $error'),
         );
       }
 
-      // Only load reposter if needed and not already cached or is fallback
       if (_reposterId != null) {
         final reposterId = _reposterId;
         final currentReposterUser = widget.profiles[reposterId];
 
-        if (currentReposterUser == null ||
-            currentReposterUser.name == 'Anonymous' ||
-            currentReposterUser.name == reposterId.substring(0, 8)) {
+        if (!isProfileComplete(currentReposterUser, reposterId)) {
           debugPrint('[NoteWidget] Loading reposter profile: ${reposterId.substring(0, 8)}...');
           final reposterResult = await _userRepository.getUserProfile(reposterId);
           reposterResult.fold(
             (user) {
               if (mounted && !_isDisposed) {
                 widget.profiles[reposterId] = user;
+                debugPrint('[NoteWidget]  Reposter profile loaded: ${user.name} (image: ${user.profileImage.isNotEmpty ? "✓" : "✗"})');
                 _updateUserData();
               }
             },
-            (error) => debugPrint('[NoteWidget] Failed to load reposter: $error'),
+            (error) => debugPrint('[NoteWidget]  Failed to load reposter: $error'),
           );
         }
       }
@@ -394,7 +396,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
       if (mounted && !_isDisposed) {
         debugPrint('[NoteWidget] Attempting to navigate to profile: $npub');
 
-        // Create a default user if not in profiles map
         final user = widget.profiles[npub] ??
             UserModel(
               pubkeyHex: npub,
@@ -445,17 +446,14 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
       String? focusedId;
 
       if (_isRepost && widget.note.rootId != null && widget.note.rootId!.isNotEmpty) {
-        // For reposts, use the original note ID as root
         rootId = widget.note.rootId!;
         focusedId = null; // Focus on the original note
         debugPrint('[NoteWidget] Navigating to repost thread - original note: $rootId');
       } else if (_isReply && widget.note.rootId != null && widget.note.rootId!.isNotEmpty) {
-        // For replies, use the root note ID and focus on this reply
         rootId = widget.note.rootId!;
         focusedId = _noteId;
         debugPrint('[NoteWidget] Navigating to reply thread - root: $rootId, focused: $focusedId');
       } else {
-        // For regular notes, use the note ID as root
         rootId = _noteId;
         focusedId = null;
         debugPrint('[NoteWidget] Navigating to regular note thread: $rootId');
@@ -475,15 +473,12 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     }
   }
 
-  /// Get the correct note ID for InteractionBar (handles reposts)
   String _getInteractionNoteId() {
-    // For reposts, use the original note ID (rootId) instead of the repost event ID
     if (_isRepost && widget.note.rootId != null && widget.note.rootId!.isNotEmpty) {
       debugPrint('[NoteWidget] Using original note ID for repost interactions: ${widget.note.rootId}');
       return widget.note.rootId!;
     }
 
-    // For regular notes and replies, use the note ID
     return _noteId;
   }
 

@@ -32,17 +32,14 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
     _userRepository = AppDI.get<UserRepository>();
     _nostrDataService = AppDI.get<NostrDataService>();
 
-    // IMMEDIATELY fetch fresh interactions for this note when stats page opens
     _fetchInteractionsForNote();
   }
 
-  /// Fetch fresh interactions for the note
   Future<void> _fetchInteractionsForNote() async {
     try {
       debugPrint(' [NoteStatisticsPage] Fetching fresh interactions for note: ${widget.note.id}');
       await _nostrDataService.fetchInteractionsForNotes([widget.note.id]);
 
-      // Update UI after fetching
       if (mounted) {
         setState(() {});
       }
@@ -76,7 +73,6 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
       if (mounted) {
         debugPrint('[NoteStatisticsPage] Navigating to profile: $npub');
 
-        // Get user profile for navigation
         final user = await _getUser(npub);
 
         if (mounted) {
@@ -232,7 +228,6 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Get real interaction data from NostrDataService
     final reactions = _nostrDataService.getReactionsForNote(widget.note.id);
     final reposts = _nostrDataService.getRepostsForNote(widget.note.id);
     final zaps = _nostrDataService.getZapsForNote(widget.note.id);
@@ -240,7 +235,6 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
     debugPrint(
         '[NoteStatisticsPage] Displaying interactions: ${reactions.length} reactions, ${reposts.length} reposts, ${zaps.length} zaps');
 
-    // Build interaction widgets
     final reactionWidgets = reactions
         .map((reaction) => _buildEntry(
               npub: reaction.author,

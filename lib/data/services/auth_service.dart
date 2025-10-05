@@ -3,8 +3,6 @@ import 'package:nostr/nostr.dart';
 
 import '../../core/base/result.dart';
 
-/// Service responsible for authentication operations
-/// Handles secure storage of credentials and key management
 class AuthService {
   static final AuthService _instance = AuthService._internal();
   factory AuthService() => _instance;
@@ -14,7 +12,6 @@ class AuthService {
 
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
-  /// Get the currently logged-in user's npub
   Future<Result<String?>> getCurrentUserNpub() async {
     try {
       final npub = await _secureStorage.read(key: 'npub');
@@ -24,7 +21,6 @@ class AuthService {
     }
   }
 
-  /// Get the currently logged-in user's private key
   Future<Result<String?>> getCurrentUserPrivateKey() async {
     try {
       final privateKey = await _secureStorage.read(key: 'privateKey');
@@ -34,7 +30,6 @@ class AuthService {
     }
   }
 
-  /// Check if user is currently authenticated
   Future<Result<bool>> isAuthenticated() async {
     try {
       final npub = await _secureStorage.read(key: 'npub');
@@ -48,7 +43,6 @@ class AuthService {
     }
   }
 
-  /// Login with NSEC (private key)
   Future<Result<String>> loginWithNsec(String nsec) async {
     try {
       if (nsec.trim().isEmpty) {
@@ -63,7 +57,6 @@ class AuthService {
         return const Result.error('NSEC is too short');
       }
 
-      // Validate and decode NSEC
       String privateKey;
       try {
         privateKey = Nip19.decodePrivkey(nsec);
@@ -71,7 +64,6 @@ class AuthService {
         return const Result.error('Invalid NSEC format');
       }
 
-      // Generate npub from private key
       String npub;
       try {
         final keychain = Keychain(privateKey);
@@ -80,7 +72,6 @@ class AuthService {
         return const Result.error('Failed to generate public key from NSEC');
       }
 
-      // Store credentials securely (only hex format internally)
       await Future.wait([
         _secureStorage.write(key: 'npub', value: npub),
         _secureStorage.write(key: 'privateKey', value: privateKey),
@@ -92,18 +83,14 @@ class AuthService {
     }
   }
 
-  /// Create a new account with randomly generated keys
   Future<Result<String>> createNewAccount() async {
     try {
-      // Generate new key pair
       final keychain = Keychain.generate();
       final privateKey = keychain.private;
       final publicKey = keychain.public;
 
-      // Encode to bech32 format
       final npub = Nip19.encodePubkey(publicKey);
 
-      // Store credentials securely (only hex format internally)
       await Future.wait([
         _secureStorage.write(key: 'npub', value: npub),
         _secureStorage.write(key: 'privateKey', value: privateKey),
@@ -115,7 +102,6 @@ class AuthService {
     }
   }
 
-  /// Login with private key (hex format)
   Future<Result<String>> loginWithPrivateKey(String privateKey) async {
     try {
       if (privateKey.trim().isEmpty) {
@@ -126,14 +112,12 @@ class AuthService {
         return const Result.error('Private key must be 64 characters long');
       }
 
-      // Validate private key format
       try {
         int.parse(privateKey, radix: 16);
       } catch (e) {
         return const Result.error('Private key must be valid hexadecimal');
       }
 
-      // Generate public key and npub
       String npub;
       try {
         final keychain = Keychain(privateKey);
@@ -142,7 +126,6 @@ class AuthService {
         return const Result.error('Failed to generate public key from private key');
       }
 
-      // Store credentials securely (only hex format internally)
       await Future.wait([
         _secureStorage.write(key: 'npub', value: npub),
         _secureStorage.write(key: 'privateKey', value: privateKey),
@@ -154,7 +137,6 @@ class AuthService {
     }
   }
 
-  /// Logout user and clear all stored credentials
   Future<Result<void>> logout() async {
     try {
       await Future.wait([
@@ -168,12 +150,10 @@ class AuthService {
     }
   }
 
-  /// Get user's NSEC (encoded private key) - now generated from hex
   Future<Result<String?>> getUserNsec() async {
     return getCurrentUserNsec();
   }
 
-  /// Update stored credentials (useful for account recovery)
   Future<Result<void>> updateCredentials({
     required String npub,
     required String privateKey,
@@ -190,7 +170,6 @@ class AuthService {
     }
   }
 
-  /// Check if the provided npub belongs to the current user
   Future<Result<bool>> isCurrentUser(String npub) async {
     try {
       final currentNpub = await _secureStorage.read(key: 'npub');
@@ -200,7 +179,6 @@ class AuthService {
     }
   }
 
-  /// Get public key in hex format from stored npub
   Future<Result<String?>> getCurrentUserPublicKeyHex() async {
     try {
       final npub = await _secureStorage.read(key: 'npub');
@@ -212,7 +190,6 @@ class AuthService {
         final publicKeyHex = decodeBasicBech32(npub, 'npub');
         return Result.success(publicKeyHex);
       } else if (npub.length == 64) {
-        // Already in hex format
         return Result.success(npub);
       } else {
         return const Result.error('Invalid npub format');
@@ -222,7 +199,6 @@ class AuthService {
     }
   }
 
-  /// Convert npub to hex format
   String? npubToHex(String npub) {
     try {
       if (npub.startsWith('npub1')) {
@@ -236,7 +212,6 @@ class AuthService {
     }
   }
 
-  /// Convert hex to npub format
   String? hexToNpub(String hex) {
     try {
       if (hex.length == 64) {
@@ -248,7 +223,6 @@ class AuthService {
     }
   }
 
-  /// Convert hex private key to nsec format for display
   String? hexToNsec(String hexPrivateKey) {
     try {
       if (hexPrivateKey.length == 64) {
@@ -260,7 +234,6 @@ class AuthService {
     }
   }
 
-  /// Convert nsec to hex format
   String? nsecToHex(String nsec) {
     try {
       if (nsec.startsWith('nsec1')) {
@@ -274,7 +247,6 @@ class AuthService {
     }
   }
 
-  /// Get current user's nsec (generated from hex private key)
   Future<Result<String?>> getCurrentUserNsec() async {
     try {
       final privateKeyResult = await getCurrentUserPrivateKey();
@@ -290,7 +262,6 @@ class AuthService {
     }
   }
 
-  /// Decode basic bech32 string to hex
   String? decodeBasicBech32(String bech32String, String expectedPrefix) {
     try {
       if (expectedPrefix == 'npub') {
@@ -304,7 +275,6 @@ class AuthService {
     }
   }
 
-  /// Clear all authentication data (for development/testing)
   Future<Result<void>> clearAllData() async {
     try {
       await _secureStorage.deleteAll();

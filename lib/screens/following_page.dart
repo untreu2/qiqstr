@@ -25,7 +25,6 @@ class _FollowingPageState extends State<FollowingPage> {
   bool _isLoading = true;
   String? _error;
 
-  // User profile loading states (like note_content_widget.dart)
   final Map<String, UserModel> _loadedUsers = {};
   final Map<String, bool> _loadingStates = {};
 
@@ -47,7 +46,6 @@ class _FollowingPageState extends State<FollowingPage> {
 
       debugPrint('[FollowingPage] Loading following users for: ${widget.user.npub}');
 
-      // Get the basic following list (just npub list)
       final result = await _userRepository.getFollowingListForUser(widget.user.npub);
 
       if (mounted) {
@@ -59,7 +57,6 @@ class _FollowingPageState extends State<FollowingPage> {
               _isLoading = false;
             });
 
-            // Preload individual user profiles (like note_content_widget.dart)
             _preloadUserProfiles();
           },
           (error) {
@@ -83,14 +80,12 @@ class _FollowingPageState extends State<FollowingPage> {
     }
   }
 
-  /// Preload user profiles for all following users (like note_content_widget.dart)
   void _preloadUserProfiles() {
     for (final user in _followingUsers) {
       _loadUserProfile(user.npub);
     }
   }
 
-  /// Load individual user profile (like note_content_widget.dart _loadMentionUser)
   Future<void> _loadUserProfile(String npub) async {
     if (_loadingStates[npub] == true || _loadedUsers.containsKey(npub)) {
       return; // Already loading or loaded
@@ -110,7 +105,6 @@ class _FollowingPageState extends State<FollowingPage> {
               _loadedUsers[npub] = user;
               _loadingStates[npub] = false;
 
-              // Update the user in the following list
               final index = _followingUsers.indexWhere((u) => u.npub == npub);
               if (index != -1) {
                 _followingUsers[index] = user;
@@ -119,7 +113,6 @@ class _FollowingPageState extends State<FollowingPage> {
           },
           (error) {
             debugPrint('[FollowingPage] Error loading profile for $npub: $error');
-            // Create fallback user (like note_content_widget.dart)
             setState(() {
               _loadedUsers[npub] = UserModel(
                 pubkeyHex: npub,
@@ -166,19 +159,15 @@ class _FollowingPageState extends State<FollowingPage> {
   }
 
   Widget _buildUserTile(BuildContext context, UserModel user) {
-    // Check loading state for this specific user (like note_content_widget.dart)
     final isLoading = _loadingStates[user.npub] == true;
     final loadedUser = _loadedUsers[user.npub] ?? user;
 
-    // Determine display name based on loaded data
     String displayName;
     if (isLoading) {
       displayName = '${user.npub.substring(0, 16)}... (Loading)';
     } else if (loadedUser.name.isNotEmpty) {
-      // Use the actual loaded name regardless of length
       displayName = loadedUser.name.length > 25 ? '${loadedUser.name.substring(0, 25)}...' : loadedUser.name;
     } else {
-      // Fallback to npub prefix if no name available
       displayName = user.npub.startsWith('npub1') ? '${user.npub.substring(0, 16)}...' : 'Unknown User';
     }
 
@@ -240,7 +229,6 @@ class _FollowingPageState extends State<FollowingPage> {
                       ],
                     ],
                   ),
-                  // Show loading indicator if this specific profile is loading (like note_content_widget.dart)
                   if (isLoading) ...[
                     const SizedBox(height: 4),
                     Row(

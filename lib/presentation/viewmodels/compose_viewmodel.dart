@@ -14,14 +14,11 @@ import '../../models/note_model.dart';
 import '../../models/user_model.dart';
 import '../../services/media_service.dart';
 
-/// ViewModel for composing and posting notes
-/// Handles note creation, reply posting, and content validation
 class ComposeViewModel extends BaseViewModel with CommandMixin {
   final NoteRepository _noteRepository;
   final AuthRepository _authRepository;
   final UserRepository _userRepository;
 
-  // State
   String _content = '';
   bool _isReply = false;
   bool _isQuote = false;
@@ -32,14 +29,11 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
   List<String> _relayUrls = [];
   List<List<String>>? _tags;
 
-  // Media state
   final List<String> _mediaUrls = [];
   bool _isUploadingMedia = false;
 
-  // User search state
   bool _isSearchingUsers = false;
 
-  // UI State
   UIState<NoteModel> _postState = const UIState.initial();
   UIState<String> _authState = const UIState.initial();
   UIState<List<UserModel>> _userSuggestionsState = const UIState.initial();
@@ -54,7 +48,6 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
     _setupCommands();
   }
 
-  // Getters
   String get content => _content;
   bool get isReply => _isReply;
   bool get isQuote => _isQuote;
@@ -72,19 +65,16 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
   int get characterCount => _content.length;
   int get remainingCharacters => 280 - _content.length;
 
-  // Convenience getters for UI
   bool get isPosting => _postState.isLoading;
   bool get isPostSuccessful => _postState.isLoaded;
   String? get postErrorMessage => _postState.error;
 
-  // Commands - using nullable fields to prevent late initialization errors
   SimpleCommand? _postNoteCommand;
   SimpleCommand? _clearContentCommand;
   SimpleParameterizedCommand<List<String>>? _uploadMediaCommand;
   SimpleParameterizedCommand<String>? _removeMediaCommand;
   SimpleParameterizedCommand<MentionParams>? _addMentionCommand;
 
-  // Getters for commands
   SimpleCommand get postNoteCommand => _postNoteCommand ??= SimpleCommand(_postNote);
   SimpleCommand get clearContentCommand => _clearContentCommand ??= SimpleCommand(_clearContent);
   SimpleParameterizedCommand<List<String>> get uploadMediaCommand =>
@@ -94,7 +84,6 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
       _addMentionCommand ??= SimpleParameterizedCommand<MentionParams>(_addMention);
 
   void _setupCommands() {
-    // Register commands lazily
     registerCommand('postNote', postNoteCommand);
     registerCommand('clearContent', clearContentCommand);
     registerCommand('uploadMedia', uploadMediaCommand);
@@ -102,11 +91,9 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
     registerCommand('addMention', addMentionCommand);
   }
 
-  /// Update content from UI
   void updateContent(String newContent) {
     _content = newContent;
 
-    // Check for user mentions (@) to trigger user search
     if (newContent.endsWith('@') || newContent.contains('@')) {
       _triggerUserSearch(newContent);
     }
@@ -114,7 +101,6 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
     safeNotifyListeners();
   }
 
-  /// Post a new note or reply
   Future<void> _postNote() async {
     if (!canPost) {
       return;
@@ -124,7 +110,6 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
       _postState = const UIState.loading();
       safeNotifyListeners();
 
-      // Check authentication first
       final authResult = await _authRepository.isAuthenticated();
       if (authResult.isError || !authResult.data!) {
         _postState = const UIState.error('Not authenticated. Please log in first.');
@@ -135,7 +120,6 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
       Result<NoteModel> result;
 
       if (_isReply && _rootId != null && _parentAuthor != null) {
-        // Post reply
         result = await _noteRepository.postReply(
           content: _content,
           rootId: _rootId!,
@@ -144,7 +128,6 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
           relayUrls: _relayUrls.isNotEmpty ? _relayUrls : ['wss://relay.damus.io'],
         );
       } else if (_isQuote && _quoteEventId != null) {
-        // Post quote note - add quoted event ID to content like legacy system
         final quotedContent = _buildQuoteContent(_content, _quoteEventId!);
         result = await _noteRepository.postQuote(
           content: quotedContent,
@@ -154,7 +137,6 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
           additionalTags: _tags,
         );
       } else {
-        // Post regular note
         result = await _noteRepository.postNote(
           content: _content,
           tags: _tags,
@@ -174,7 +156,6 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
     }
   }
 
-  /// Clear compose content
   Future<void> _clearContent() async {
     _content = '';
     _isReply = false;
@@ -189,13 +170,11 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
     safeNotifyListeners();
   }
 
-  /// Upload media files using legacy Blossom pattern
   Future<void> _uploadMedia(List<String> filePaths) async {
     try {
       _isUploadingMedia = true;
       safeNotifyListeners();
 
-      // Use legacy Blossom upload pattern
       const blossomUrl = 'https://blossom.primal.net'; // Default Blossom server
       final List<String> uploadedUrls = [];
 
@@ -210,7 +189,6 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
           if (kDebugMode) {
             print('[ComposeViewModel] Failed to upload media file $filePath: $e');
           }
-          // Continue with other files even if one fails
         }
       }
 
@@ -235,23 +213,19 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
     }
   }
 
-  /// Remove media by URL
   Future<void> _removeMedia(String url) async {
     _mediaUrls.remove(url);
     safeNotifyListeners();
   }
 
-  /// Add mention to content - like old ShareNotePage system
   Future<void> _addMention(MentionParams params) async {
     try {
       final cursorPos = params.startIndex;
       if (cursorPos == -1 || cursorPos > _content.length) return;
 
-      // Find @ symbol before cursor like old system
       final atIndex = _content.substring(0, cursorPos).lastIndexOf('@');
       if (atIndex == -1) return;
 
-      // Replace from @ symbol to cursor with mention
       final mention = '@${params.name} ';
       final textAfterCursor = _content.substring(cursorPos);
       _content = '${_content.substring(0, atIndex)}$mention$textAfterCursor';
@@ -260,7 +234,6 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
       _userSuggestionsState = const UIState.initial();
       safeNotifyListeners();
     } catch (e) {
-      // Simple fallback: just append mention
       _content = '$_content @${params.name} ';
       _isSearchingUsers = false;
       _userSuggestionsState = const UIState.initial();
@@ -268,9 +241,7 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
     }
   }
 
-  /// Trigger user search for mentions
   void _triggerUserSearch(String text) {
-    // Simple implementation - would need actual search logic
     _isSearchingUsers = text.contains('@');
     if (_isSearchingUsers) {
       _searchUsers(text);
@@ -278,13 +249,11 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
     safeNotifyListeners();
   }
 
-  /// Search users for mentions
   Future<void> _searchUsers(String query) async {
     try {
       _userSuggestionsState = const UIState.loading();
       safeNotifyListeners();
 
-      // Extract search term after @
       final atIndex = query.lastIndexOf('@');
       if (atIndex == -1 || atIndex >= query.length) {
         _userSuggestionsState = const UIState.empty();
@@ -292,7 +261,6 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
         return;
       }
 
-      // Safe substring operation
       final startIndex = atIndex + 1;
       final searchTerm = startIndex < query.length ? query.substring(startIndex) : '';
 
@@ -316,7 +284,6 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
     }
   }
 
-  /// Setup reply context
   void initializeForReply({
     required String replyToNoteId,
     String? rootId,
@@ -336,7 +303,6 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
     safeNotifyListeners();
   }
 
-  /// Setup quote context
   void initializeForQuote({
     required String quotedEventId,
     String? quotedEventPubkey,
@@ -348,7 +314,6 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
     _isQuote = true;
     _quoteEventId = quoteEventId ?? quotedEventId;
 
-    // Create quote tags
     final List<List<String>> quoteTags = [];
 
     if (quotedEventPubkey != null) {
@@ -366,7 +331,6 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
     safeNotifyListeners();
   }
 
-  /// Post a repost
   Future<void> postRepost({
     required String noteId,
     required String noteAuthor,
@@ -375,7 +339,6 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
       _postState = const UIState.loading();
       safeNotifyListeners();
 
-      // Check authentication first
       final authResult = await _authRepository.isAuthenticated();
       if (authResult.isError || !authResult.data!) {
         _postState = const UIState.error('Not authenticated. Please log in first.');
@@ -398,22 +361,17 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
     }
   }
 
-  /// Build quote content like legacy system - add nostr:note1... to end
   String _buildQuoteContent(String userContent, String quotedEventId) {
     final trimmedContent = userContent.trim();
 
-    // Convert hex eventId to note1 format (NIP-19) exactly like old ShareNotePage
     String noteId;
     try {
-      // If quotedEventId is already in note1 format, use it directly
       if (quotedEventId.startsWith('note1')) {
         noteId = quotedEventId;
       } else {
-        // Convert hex to note1 format using encodeBasicBech32 (like old system)
         noteId = encodeBasicBech32(quotedEventId, 'note');
       }
     } catch (e) {
-      // Fallback - try with original format
       noteId = quotedEventId.startsWith('note1') ? quotedEventId : quotedEventId;
     }
 
@@ -426,18 +384,15 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
     return '$trimmedContent\n\n$quotePart';
   }
 
-  /// Add custom tags
   void addTags(List<List<String>> tags) {
     _tags = (_tags ?? [])..addAll(tags);
     safeNotifyListeners();
   }
 
-  /// Reset to initial state
   void reset() {
     executeCommand('clearContent');
   }
 
-  /// Check current authentication status
   Future<void> checkAuthStatus() async {
     try {
       _authState = const UIState.loading();
@@ -456,15 +411,8 @@ class ComposeViewModel extends BaseViewModel with CommandMixin {
       safeNotifyListeners();
     }
   }
-
-  @override
-  void dispose() {
-    // Clean up any resources
-    super.dispose();
-  }
 }
 
-/// Parameters for mention command
 class MentionParams {
   final String name;
   final String npub;

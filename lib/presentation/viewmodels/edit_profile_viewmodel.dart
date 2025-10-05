@@ -6,7 +6,6 @@ import '../../data/repositories/user_repository.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../services/media_service.dart';
 
-/// ViewModel for editing user profile
 class EditProfileViewModel extends BaseViewModel with CommandMixin {
   final UserRepository _userRepository;
 
@@ -15,7 +14,6 @@ class EditProfileViewModel extends BaseViewModel with CommandMixin {
     required AuthRepository authRepository,
   }) : _userRepository = userRepository;
 
-  // State
   UIState<UserModel> _profileState = const UIState.initial();
   UIState<UserModel> get profileState => _profileState;
 
@@ -25,7 +23,6 @@ class EditProfileViewModel extends BaseViewModel with CommandMixin {
   bool _isUploadingPicture = false;
   bool get isUploadingPicture => _isUploadingPicture;
 
-  // Form data
   String _name = '';
   String _about = '';
   String _picture = '';
@@ -46,16 +43,13 @@ class EditProfileViewModel extends BaseViewModel with CommandMixin {
   void initialize() {
     super.initialize();
 
-    // Register commands
     registerCommand('saveProfile', SimpleCommand(_saveProfile));
     registerCommand('uploadPicture', SimpleCommand(_uploadPicture));
   }
 
-  /// Public command methods
   void saveProfileCommand() => executeCommand('saveProfile');
   void uploadPicture() => executeCommand('uploadPicture');
 
-  /// Update form fields
   void updateName(String value) {
     _name = value;
     safeNotifyListeners();
@@ -91,7 +85,6 @@ class EditProfileViewModel extends BaseViewModel with CommandMixin {
     safeNotifyListeners();
   }
 
-  /// Load current user profile data
   Future<void> loadCurrentUserProfile() async {
     _profileState = const UIState.loading();
     safeNotifyListeners();
@@ -115,7 +108,6 @@ class EditProfileViewModel extends BaseViewModel with CommandMixin {
     safeNotifyListeners();
   }
 
-  /// Load existing profile data
   Future<void> loadProfile(String npub) async {
     _profileState = const UIState.loading();
     safeNotifyListeners();
@@ -139,7 +131,6 @@ class EditProfileViewModel extends BaseViewModel with CommandMixin {
     safeNotifyListeners();
   }
 
-  /// Save profile changes with full field support
   Future<void> _saveProfile() async {
     if (_isSaving) return;
 
@@ -147,7 +138,6 @@ class EditProfileViewModel extends BaseViewModel with CommandMixin {
     safeNotifyListeners();
 
     try {
-      // Use the enhanced updateProfile method that supports all fields
       final result = await _userRepository.updateProfile(
         name: _name.trim(),
         about: _about.trim(),
@@ -176,7 +166,6 @@ class EditProfileViewModel extends BaseViewModel with CommandMixin {
     }
   }
 
-  /// Upload picture using legacy Blossom pattern
   Future<void> _uploadPicture() async {
     if (_isUploadingPicture) return;
 
@@ -185,13 +174,9 @@ class EditProfileViewModel extends BaseViewModel with CommandMixin {
     safeNotifyListeners();
 
     try {
-      // Use legacy Blossom upload pattern - user will provide file path
-      // This is a placeholder method since we can't access file picker directly here
-      // The actual file selection should happen in the UI layer
 
       debugPrint('Picture upload method ready - UI layer should call with file path');
 
-      // For now, just clear the uploading state
       _picture = '';
     } catch (e) {
       _picture = ''; // Clear on error
@@ -202,7 +187,6 @@ class EditProfileViewModel extends BaseViewModel with CommandMixin {
     }
   }
 
-  /// Upload picture with file path using legacy Blossom pattern
   Future<void> uploadPictureWithPath(String filePath) async {
     if (_isUploadingPicture) return;
 
@@ -211,7 +195,6 @@ class EditProfileViewModel extends BaseViewModel with CommandMixin {
     safeNotifyListeners();
 
     try {
-      // Use legacy Blossom upload pattern
       const blossomUrl = 'https://blossom.primal.net'; // Default Blossom server
       final mediaUrl = await MediaService().sendMedia(filePath, blossomUrl);
 
@@ -226,7 +209,6 @@ class EditProfileViewModel extends BaseViewModel with CommandMixin {
     }
   }
 
-  /// Check if form has any data
   bool get hasFormData =>
       _name.trim().isNotEmpty ||
       _about.trim().isNotEmpty ||

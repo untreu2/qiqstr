@@ -62,7 +62,6 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
         type: FileType.image,
       );
       if (result != null && result.files.single.path != null) {
-        // Use legacy Blossom upload pattern exactly
         const blossomUrl = 'https://blossom.primal.net'; // Default Blossom server
         final filePath = result.files.single.path!;
 
@@ -102,7 +101,6 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
     setState(() => _isSaving = true);
 
     try {
-      // Always create and send profile update to establish user presence on relays
       final updatedUser = UserModel(
         pubkeyHex: widget.npub,
         name: _nameController.text.trim().isNotEmpty ? _nameController.text.trim() : 'New User',
@@ -119,7 +117,6 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
       debugPrint(
           '[EditNewAccountProfile] Profile data: name=${updatedUser.name}, about=${updatedUser.about}, image=${updatedUser.profileImage}');
 
-      // Send profile update to relays
       final result = await _userRepository.updateUserProfile(updatedUser);
 
       result.fold(
@@ -134,11 +131,9 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
           if (mounted) {
             AppToast.error(context, 'Profile update failed: $error');
           }
-          // Don't return - still continue to next page even if profile update fails
         },
       );
 
-      // Small delay to let the profile update propagate
       await Future.delayed(const Duration(milliseconds: 500));
 
       if (mounted) {
@@ -155,7 +150,6 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
       debugPrint('[EditNewAccountProfile] Error saving profile: $e');
       if (mounted) {
         AppToast.error(context, 'Failed to update profile: ${e.toString()}');
-        // Still continue to next page even on error
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(

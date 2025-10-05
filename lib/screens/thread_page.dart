@@ -31,7 +31,6 @@ class _ThreadPageState extends State<ThreadPage> {
   late ValueNotifier<List<NoteModel>> _notesNotifier;
   final Map<String, UserModel> _profiles = {};
 
-  // Pagination state for replies
   int _visibleRepliesCount = 10;
   static const int _repliesPerPage = 10;
 
@@ -41,7 +40,6 @@ class _ThreadPageState extends State<ThreadPage> {
     _scrollController = ScrollController();
     _notesNotifier = ValueNotifier<List<NoteModel>>([]);
     
-    // Schedule scroll after first frame if we have a focused note
     if (widget.focusedNoteId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _scheduleScrollToFocusedNote();
@@ -61,7 +59,6 @@ class _ThreadPageState extends State<ThreadPage> {
     return ViewModelBuilder<ThreadViewModel>(
       create: () => AppDI.get<ThreadViewModel>(),
       onModelReady: (viewModel) {
-        // Initialize once when ViewModel is ready
         viewModel.initializeWithThread(
           rootNoteId: widget.rootNoteId,
           focusedNoteId: widget.focusedNoteId,
@@ -98,7 +95,6 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Widget _buildThreadContent(BuildContext context, ThreadViewModel viewModel, NoteModel rootNote) {
-    // Determine which note to display as main (focused or root)
     final displayNote =
         widget.focusedNoteId != null ? viewModel.threadStructureState.data?.getNote(widget.focusedNoteId!) ?? rootNote : rootNote;
 
@@ -112,13 +108,10 @@ class _ThreadPageState extends State<ThreadPage> {
           children: [
             _buildHeader(context),
 
-            // Context note (parent of focused note if applicable)
             _buildContextNote(context, viewModel, displayNote),
 
-            // Main note (root or focused)
             _buildMainNote(context, viewModel, displayNote),
 
-            // Thread replies
             _buildThreadReplies(context, viewModel, displayNote),
 
             const SizedBox(height: 24.0),
@@ -146,7 +139,6 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Widget _buildContextNote(BuildContext context, ThreadViewModel viewModel, NoteModel displayNote) {
-    // Show parent note if this is a reply
     if (displayNote.isReply && displayNote.parentId != null) {
       final parentNote = viewModel.threadStructureState.data?.getNote(displayNote.parentId!);
 
@@ -162,12 +154,10 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Widget _buildMainNote(BuildContext context, ThreadViewModel viewModel, NoteModel note) {
-    // Don't display repost notes
     if (note.isRepost) {
       return const SizedBox.shrink();
     }
 
-    // Update profiles from viewModel
     _profiles.addAll(viewModel.userProfiles);
 
     return Container(
@@ -191,10 +181,8 @@ class _ThreadPageState extends State<ThreadPage> {
       builder: (context, replies) {
         debugPrint(' [ThreadPage] Replies state loaded with ${replies.length} replies');
 
-        // Check both replies and thread structure states
         final threadStructureState = viewModel.threadStructureState;
 
-        // If thread structure is still loading, show loading indicator
         if (threadStructureState.isLoading) {
           debugPrint('[ThreadPage] Thread structure still loading, showing loader');
           return Container(
@@ -223,7 +211,6 @@ class _ThreadPageState extends State<ThreadPage> {
         debugPrint(' [ThreadPage] Thread structure ready, getting children for: ${displayNote.id}');
         final allDirectReplies = threadStructure.getChildren(displayNote.id);
 
-        // Filter out repost notes and sort by timestamp for consistent ordering
         final directReplies = allDirectReplies.where((reply) => !reply.isRepost).toList()
           ..sort((a, b) => a.timestamp.compareTo(b.timestamp)); // Ensure consistent ordering
 
@@ -245,7 +232,6 @@ class _ThreadPageState extends State<ThreadPage> {
           );
         }
 
-        // Apply pagination to direct replies
         final visibleReplies = directReplies.take(_visibleRepliesCount).toList();
         final hasMoreReplies = directReplies.length > _visibleRepliesCount;
 
@@ -253,7 +239,6 @@ class _ThreadPageState extends State<ThreadPage> {
         return Column(
           children: [
             const SizedBox(height: 8.0),
-            // Wrap reply widgets in AnimatedList for smooth updates
             ...visibleReplies.asMap().entries.map((entry) {
               final index = entry.key;
               final reply = entry.value;
@@ -271,7 +256,6 @@ class _ThreadPageState extends State<ThreadPage> {
               );
             }),
 
-            // Load More button
             if (hasMoreReplies) ...[
               const SizedBox(height: 16.0),
               _buildLoadMoreButton(context, directReplies.length),
@@ -354,7 +338,6 @@ class _ThreadPageState extends State<ThreadPage> {
 
     final isFocused = reply.id == widget.focusedNoteId;
     final allNestedReplies = threadStructure.getChildren(reply.id);
-    // Filter out repost notes from nested replies
     final nestedReplies = allNestedReplies.where((nestedReply) => !nestedReply.isRepost).toList();
     final hasNestedReplies = nestedReplies.isNotEmpty;
 
@@ -366,10 +349,8 @@ class _ThreadPageState extends State<ThreadPage> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Simple thread indentation
             if (depth > 0) SizedBox(width: currentIndent),
 
-            // Reply content with enhanced design
             Expanded(
               child: Column(
                 key: isFocused ? _focusedNoteKey : null,
@@ -377,7 +358,6 @@ class _ThreadPageState extends State<ThreadPage> {
                 children: [
                   const SizedBox(height: 2),
 
-                  // Simple flat note container
                   Container(
                     margin: const EdgeInsets.only(right: 8),
                     child: _buildEnhancedNoteWidget(
@@ -390,7 +370,6 @@ class _ThreadPageState extends State<ThreadPage> {
 
                   const SizedBox(height: 4),
 
-                  // Nested replies with improved layout
                   if (depth < maxDepth && hasNestedReplies) ...[
                     const SizedBox(height: 4),
                     ...nestedReplies.take(5).map(
@@ -403,7 +382,6 @@ class _ThreadPageState extends State<ThreadPage> {
                           ),
                         ),
 
-                    // Simple "more replies" indicator
                     if (nestedReplies.length > 5)
                       Container(
                         margin: EdgeInsets.only(
@@ -421,7 +399,6 @@ class _ThreadPageState extends State<ThreadPage> {
                         ),
                       ),
                   ] else if (hasNestedReplies) ...[
-                    // Max depth reached - simple summary
                     Container(
                       margin: EdgeInsets.only(
                         left: currentIndent + 12,
@@ -453,7 +430,6 @@ class _ThreadPageState extends State<ThreadPage> {
     NoteModel note,
     int depth,
   ) {
-    // Update profiles from viewModel
     _profiles.addAll(viewModel.userProfiles);
 
     return NoteWidget(
@@ -473,7 +449,6 @@ class _ThreadPageState extends State<ThreadPage> {
     bool isSmallView = false,
   }) {
     final viewModel = context.read<ThreadViewModel>();
-    // Update profiles from viewModel
     _profiles.addAll(viewModel.userProfiles);
 
     return NoteWidget(
@@ -487,7 +462,6 @@ class _ThreadPageState extends State<ThreadPage> {
     );
   }
 
-  // Removed _buildInteractionBar - NoteWidget has its own InteractionBar
 
   Widget _buildLoadingState(BuildContext context) {
     return SingleChildScrollView(
@@ -617,11 +591,9 @@ class _ThreadPageState extends State<ThreadPage> {
   void _scheduleScrollToFocusedNote() {
     if (!mounted || widget.focusedNoteId == null) return;
 
-    // Wait for the thread structure to be fully built and rendered
     Future.delayed(const Duration(milliseconds: 300), () {
       if (!mounted) return;
       
-      // Try to scroll, retry if context not available yet
       _attemptScrollToFocusedNote(retries: 5);
     });
   }
@@ -631,7 +603,6 @@ class _ThreadPageState extends State<ThreadPage> {
 
     final context = _focusedNoteKey.currentContext;
     if (context != null) {
-      // Scroll to the focused note
       Scrollable.ensureVisible(
         context,
         duration: const Duration(milliseconds: 500),
@@ -639,12 +610,10 @@ class _ThreadPageState extends State<ThreadPage> {
         alignment: 0.15, // Position slightly from top for better visibility
       );
     } else {
-      // Context not ready yet, retry after a short delay
       Future.delayed(const Duration(milliseconds: 200), () {
         _attemptScrollToFocusedNote(retries: retries - 1);
       });
     }
   }
 
-  // Removed interaction handlers - NoteWidget handles interactions internally
 }

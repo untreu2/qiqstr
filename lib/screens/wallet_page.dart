@@ -46,7 +46,6 @@ class _WalletPageState extends State<WalletPage> {
         }
       },
       (error) {
-        // Ignore auto-connect errors
       },
     );
   }
@@ -250,7 +249,6 @@ class _WalletPageState extends State<WalletPage> {
     return Expanded(
       child: Column(
         children: [
-          // Balance at top (left aligned)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             child: Align(
@@ -284,7 +282,6 @@ class _WalletPageState extends State<WalletPage> {
               ),
             ),
           ),
-          // Divider
           SizedBox(
             height: 12,
             child: Center(
@@ -296,7 +293,6 @@ class _WalletPageState extends State<WalletPage> {
               ),
             ),
           ),
-          // Recent Activity header
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Align(
@@ -311,75 +307,10 @@ class _WalletPageState extends State<WalletPage> {
               ),
             ),
           ),
-          // Transactions list
           Expanded(
             child: _buildTransactionsList(context),
           ),
-          // Fixed buttons at bottom
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-            child: Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: _showReceiveDialog,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: context.colors.buttonPrimary,
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.arrow_downward, size: 20, color: context.colors.background),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Receive',
-                            style: TextStyle(
-                              color: context.colors.background,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: _showSendDialog,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: context.colors.buttonPrimary,
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.arrow_upward, size: 20, color: context.colors.background),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Send',
-                            style: TextStyle(
-                              color: context.colors.background,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          const SizedBox(height: 80),
         ],
       ),
     );
@@ -411,7 +342,6 @@ class _WalletPageState extends State<WalletPage> {
       );
     }
 
-    // Show only last 4 transactions
     final recentTransactions = _transactions!.take(4).toList();
     
     return ListView.builder(
@@ -433,7 +363,6 @@ class _WalletPageState extends State<WalletPage> {
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 0),
       child: Row(
         children: [
-          // Icon
           Container(
             width: 40,
             height: 40,
@@ -448,7 +377,6 @@ class _WalletPageState extends State<WalletPage> {
             ),
           ),
           const SizedBox(width: 12),
-          // Title and date
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -475,7 +403,6 @@ class _WalletPageState extends State<WalletPage> {
             ),
           ),
           const SizedBox(width: 12),
-          // Amount
           Text(
             '${isIncoming ? '+' : '-'}${(tx.amount / 1000).floor()} sats',
             style: TextStyle(
@@ -585,17 +512,106 @@ class _WalletPageState extends State<WalletPage> {
       builder: (context, themeManager, child) {
         return Scaffold(
           backgroundColor: context.colors.background,
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          body: Stack(
             children: [
-              _buildHeader(context),
-              if (_connection == null) ...[
-                _buildConnectionInput(context),
-                _buildConnectButton(context),
-              ] else ...[
-                _buildMainContent(context),
-              ],
-              _buildError(context),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeader(context),
+                  if (_connection == null) ...[
+                    _buildConnectionInput(context),
+                    _buildConnectButton(context),
+                  ] else ...[
+                    _buildMainContent(context),
+                  ],
+                  _buildError(context),
+                ],
+              ),
+              if (_connection != null)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: context.colors.background,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.1),
+                          blurRadius: 10,
+                          offset: const Offset(0, -2),
+                        ),
+                      ],
+                    ),
+                    padding: EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      top: 12,
+                      bottom: MediaQuery.of(context).padding.bottom + 12,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: _showReceiveDialog,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: context.colors.buttonPrimary,
+                                borderRadius: BorderRadius.circular(40),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.arrow_downward, size: 20, color: context.colors.background),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Receive',
+                                    style: TextStyle(
+                                      color: context.colors.background,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: _showSendDialog,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: context.colors.buttonPrimary,
+                                borderRadius: BorderRadius.circular(40),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.arrow_upward, size: 20, color: context.colors.background),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Send',
+                                    style: TextStyle(
+                                      color: context.colors.background,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           ),
         );
@@ -679,7 +695,6 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
   @override
   Widget build(BuildContext context) {
     if (_invoice != null) {
-      // Invoice display phase
       return Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -716,7 +731,6 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
       );
     }
 
-    // Input phase
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -864,7 +878,6 @@ class _SendDialogState extends State<SendDialog> {
   @override
   Widget build(BuildContext context) {
     if (_successMessage != null) {
-      // Success phase
       return Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -887,7 +900,6 @@ class _SendDialogState extends State<SendDialog> {
       );
     }
 
-    // Input phase
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [

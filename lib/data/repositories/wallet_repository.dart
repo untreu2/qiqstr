@@ -5,6 +5,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:nostr/nostr.dart';
+
 // ignore: implementation_imports
 import 'package:nostr/src/crypto/nip_004.dart';
 
@@ -14,16 +15,12 @@ import '../services/auth_service.dart';
 import '../services/validation_service.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-/// Repository for Nostr Wallet Connect (NIP-47) operations
-/// Implements Lightning wallet functionality over Nostr using NIP-04 encryption
 class WalletRepository {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
 
-  // Internal state
   WalletConnection? _connection;
   Keychain? _clientKeychain;
 
-  // Stream controllers for real-time updates
   final StreamController<WalletBalance> _balanceController = StreamController<WalletBalance>.broadcast();
   final StreamController<List<TransactionDetails>> _transactionsController = StreamController<List<TransactionDetails>>.broadcast();
 
@@ -32,27 +29,21 @@ class WalletRepository {
     required ValidationService validationService,
   });
 
-  // Streams
   Stream<WalletBalance> get balanceStream => _balanceController.stream;
   Stream<List<TransactionDetails>> get transactionsStream => _transactionsController.stream;
 
-  /// Connect to wallet using NWC URI
   Future<Result<WalletConnection>> connectWallet(String nwcUri) async {
     try {
       debugPrint('[WalletRepository] Connecting to wallet with URI: ${nwcUri.substring(0, 50)}...');
 
-      // Validate NWC URI format
       if (!nwcUri.startsWith('nostr+walletconnect://')) {
         return const Result.error('Invalid NWC URI format. Must start with "nostr+walletconnect://"');
       }
 
-      // Parse connection from URI
       final connection = WalletConnection.fromUri(nwcUri);
 
-      // Generate client key pair from secret
       final clientKeychain = Keychain(connection.clientSecret);
 
-      // Update connection with client public key
       final updatedConnection = WalletConnection(
         relayUrl: connection.relayUrl,
         walletPubKey: connection.walletPubKey,
@@ -60,11 +51,9 @@ class WalletRepository {
         clientPubKey: clientKeychain.public,
       );
 
-      // Store connection state
       _connection = updatedConnection;
       _clientKeychain = clientKeychain;
 
-      // Save NWC URI to secure storage
       await _secureStorage.write(key: 'nwc_uri', value: nwcUri);
 
       debugPrint('[WalletRepository] Successfully connected to wallet');
@@ -80,7 +69,6 @@ class WalletRepository {
     }
   }
 
-  /// Send NWC request and wait for response
   Future<Result<String>> _sendRequest(String method, Map<String, dynamic> params) async {
     WebSocket? ws;
     try {
@@ -90,13 +78,11 @@ class WalletRepository {
 
       debugPrint('[WalletRepository] Sending $method request with params: $params');
 
-      // Create request payload
       final request = NWCRequest(method: method, params: params);
       final payloadJson = request.toJsonString();
 
       debugPrint('[WalletRepository] Request payload: $payloadJson');
 
-      // Encrypt using NIP-04 via nostr package
       final encryptedContent = nip4cipher(
         _clientKeychain!.private,
         '02${_connection!.walletPubKey}',
@@ -106,7 +92,6 @@ class WalletRepository {
 
       debugPrint('[WalletRepository] Encrypted content: ${encryptedContent.substring(0, 50)}...');
 
-      // Create and sign event (NIP-47 kind 23194)
       final event = Event.from(
         kind: 23194, // NWC request
         tags: [
@@ -118,15 +103,12 @@ class WalletRepository {
 
       debugPrint('[WalletRepository] Created event: ${event.id}');
 
-      // Create new WebSocket connection for each request
       ws = await WebSocket.connect(_connection!.relayUrl);
       debugPrint('[WalletRepository] Connected to wallet relay: ${_connection!.relayUrl}');
 
-      // Subscribe to response events first
       final subscriptionId = _generateSubscriptionId();
       final responseCompleter = Completer<String>();
 
-      // Listen for WebSocket messages
       late StreamSubscription wsSubscription;
 
       wsSubscription = ws.listen(
@@ -144,10 +126,8 @@ class WalletRepository {
 
                 debugPrint('[WalletRepository] Received response event: ${responseEvent.id}');
 
-                // Check if this is a response to our request
                 final eTags = responseEvent.tags.where((tag) => tag.length >= 2 && tag[0] == 'e').toList();
                 if (eTags.any((tag) => tag[1] == event.id)) {
-                  // Decrypt response
                   try {
                     final decryptedContent = nip4cipher(
                       _clientKeychain!.private,
@@ -186,7 +166,6 @@ class WalletRepository {
         },
       );
 
-      // Subscribe to wallet response events
       final subscribeMessage = jsonEncode([
         'REQ',
         subscriptionId,
@@ -201,17 +180,14 @@ class WalletRepository {
       debugPrint('[WalletRepository] Sending subscription: $subscribeMessage');
       ws.add(subscribeMessage);
 
-      // Wait a bit for subscription to be processed
       await Future.delayed(const Duration(milliseconds: 100));
 
-      // Publish the request event
       final eventMessage = jsonEncode(['EVENT', event.toJson()]);
       debugPrint('[WalletRepository] Sending event: ${eventMessage.substring(0, 100)}...');
       ws.add(eventMessage);
 
       debugPrint('[WalletRepository] Request event published: ${event.id}');
 
-      // Wait for response with timeout
       final timeoutTimer = Timer(const Duration(seconds: 30), () {
         if (!responseCompleter.isCompleted) {
           responseCompleter.completeError('Request timeout');
@@ -228,7 +204,6 @@ class WalletRepository {
         timeoutTimer.cancel();
         rethrow;
       } finally {
-        // Close WebSocket after each request
         try {
           await wsSubscription.cancel();
           await ws.close();
@@ -247,7 +222,6 @@ class WalletRepository {
     }
   }
 
-  /// Extract nonce/IV from encrypted content
   String _extractNonce(String encryptedContent) {
     final parts = encryptedContent.split('?iv=');
     if (parts.length != 2) {
@@ -256,14 +230,12 @@ class WalletRepository {
     return parts[1];
   }
 
-  /// Generate random subscription ID
   String _generateSubscriptionId() {
     final random = Random.secure();
     final bytes = List<int>.generate(16, (i) => random.nextInt(256));
     return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 
-  /// Get wallet balance
   Future<Result<WalletBalance>> getBalance() async {
     try {
       final response = await _sendRequest('get_balance', {});
@@ -292,7 +264,6 @@ class WalletRepository {
     }
   }
 
-  /// Create Lightning invoice
   Future<Result<String>> makeInvoice(int amount, String memo) async {
     try {
       if (amount <= 0) {
@@ -325,7 +296,6 @@ class WalletRepository {
     }
   }
 
-  /// Pay Lightning invoice
   Future<Result<PaymentResult>> payInvoice(String invoice) async {
     try {
       if (invoice.trim().isEmpty) {
@@ -357,7 +327,6 @@ class WalletRepository {
     }
   }
 
-  /// Send keysend payment
   Future<Result<KeysendResult>> payKeysend(String pubkey, int amount) async {
     try {
       if (pubkey.trim().isEmpty) {
@@ -394,7 +363,6 @@ class WalletRepository {
     }
   }
 
-  /// Lookup invoice information
   Future<Result<InvoiceDetails>> lookupInvoice(String invoice) async {
     try {
       if (invoice.trim().isEmpty) {
@@ -426,7 +394,6 @@ class WalletRepository {
     }
   }
 
-  /// List wallet transactions
   Future<Result<List<TransactionDetails>>> listTransactions() async {
     try {
       final response = await _sendRequest('list_transactions', {});
@@ -458,7 +425,6 @@ class WalletRepository {
     }
   }
 
-  /// Get wallet/node information
   Future<Result<WalletInfo>> getInfo() async {
     try {
       final response = await _sendRequest('get_info', {});
@@ -484,7 +450,6 @@ class WalletRepository {
     }
   }
 
-  /// Auto-connect wallet from saved NWC URI
   Future<Result<WalletConnection?>> autoConnect() async {
     try {
       final savedNwcUri = await _secureStorage.read(key: 'nwc_uri');
@@ -506,13 +471,10 @@ class WalletRepository {
     }
   }
 
-  /// Check if wallet is connected
   bool get isConnected => _connection != null && _clientKeychain != null;
 
-  /// Get current connection info
   WalletConnection? get currentConnection => _connection;
 
-  /// Check if NWC URI is saved
   Future<bool> get hasSavedConnection async {
     try {
       final savedNwcUri = await _secureStorage.read(key: 'nwc_uri');
@@ -522,13 +484,10 @@ class WalletRepository {
     }
   }
 
-  /// Disconnect wallet
   Future<Result<void>> disconnect() async {
     try {
-      // Remove NWC URI from secure storage
       await _secureStorage.delete(key: 'nwc_uri');
 
-      // Close streams and clear state
       _connection = null;
       _clientKeychain = null;
 
@@ -539,7 +498,6 @@ class WalletRepository {
     }
   }
 
-  /// Dispose repository and close streams
   void dispose() {
     _balanceController.close();
     _transactionsController.close();

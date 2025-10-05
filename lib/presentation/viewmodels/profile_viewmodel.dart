@@ -10,8 +10,6 @@ import '../../data/repositories/note_repository.dart';
 import '../../models/user_model.dart';
 import '../../models/note_model.dart';
 
-/// ViewModel for profile-related screens
-/// Handles user profile display, editing, and user interactions
 class ProfileViewModel extends BaseViewModel with CommandMixin {
   final UserRepository _userRepository;
   final AuthRepository _authRepository;
@@ -25,14 +23,12 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
         _authRepository = authRepository,
         _noteRepository = noteRepository;
 
-  // State
   UIState<UserModel> _profileState = const InitialState();
   UIState<UserModel> get profileState => _profileState;
 
   UIState<List<UserModel>> _followingListState = const InitialState();
   UIState<List<UserModel>> get followingListState => _followingListState;
 
-  // Profile notes state - shows THIS user's notes and reposts
   UIState<List<NoteModel>> _profileNotesState = const InitialState();
   UIState<List<NoteModel>> get profileNotesState => _profileNotesState;
 
@@ -45,14 +41,12 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
   String _currentProfileNpub = '';
   String get currentProfileNpub => _currentProfileNpub;
 
-  // Commands - using nullable fields to prevent late initialization errors
   LoadProfileCommand? _loadProfileCommand;
   UpdateProfileCommand? _updateProfileCommand;
   ToggleFollowCommand? _toggleFollowCommand;
   LoadFollowingListCommand? _loadFollowingListCommand;
   LoadProfileNotesCommand? _loadProfileNotesCommand;
 
-  // Getters for commands
   LoadProfileCommand get loadProfileCommand => _loadProfileCommand ??= LoadProfileCommand(this);
   UpdateProfileCommand get updateProfileCommand => _updateProfileCommand ??= UpdateProfileCommand(this);
   ToggleFollowCommand get toggleFollowCommand => _toggleFollowCommand ??= ToggleFollowCommand(this);
@@ -63,7 +57,6 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
   void initialize() {
     super.initialize();
 
-    // Register commands lazily
     registerCommand('loadProfile', loadProfileCommand);
     registerCommand('updateProfile', updateProfileCommand);
     registerCommand('toggleFollow', toggleFollowCommand);
@@ -73,16 +66,13 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
     _subscribeToUserUpdates();
   }
 
-  /// Initialize with specific user npub
   void initializeWithUser(String npub) {
     _currentProfileNpub = npub;
     _checkIfCurrentUser();
     loadProfileCommand.execute(npub);
-    // Also load this user's notes and reposts
     loadProfileNotes(npub);
   }
 
-  /// Load user profile
   Future<void> loadProfile(String npub) async {
     await executeOperation('loadProfile', () async {
       _profileState = const LoadingState();
@@ -103,7 +93,6 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
     });
   }
 
-  /// Update current user profile
   Future<void> updateProfile({
     String? name,
     String? about,
@@ -144,7 +133,6 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
     });
   }
 
-  /// Toggle follow/unfollow user
   Future<void> toggleFollow() async {
     if (_isCurrentUser) {
       setError(ValidationError(message: 'Cannot follow yourself'));
@@ -154,7 +142,6 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
     await executeOperation('toggleFollow', () async {
       final wasFollowing = _isFollowing;
 
-      // Optimistic update
       _isFollowing = !_isFollowing;
       safeNotifyListeners();
 
@@ -163,10 +150,8 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
 
       result.fold(
         (_) {
-          // Success - optimistic update was correct
         },
         (error) {
-          // Revert optimistic update
           _isFollowing = wasFollowing;
           setError(NetworkError(message: 'Failed to ${wasFollowing ? 'unfollow' : 'follow'} user: $error'));
           safeNotifyListeners();
@@ -175,7 +160,6 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
     }, showLoading: false);
   }
 
-  /// Load following list for current user
   Future<void> loadFollowingList() async {
     await executeOperation('loadFollowingList', () async {
       _followingListState = const LoadingState();
@@ -194,8 +178,6 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
     });
   }
 
-  /// Load profile notes for specific user (their posts AND reposts)
-  /// Uses dedicated profile loading system that bypasses feed filtering
   Future<void> loadProfileNotes(String userNpub) async {
     await executeOperation('loadProfileNotes', () async {
       _profileNotesState = const LoadingState();
@@ -204,7 +186,6 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
       debugPrint('[ProfileViewModel] PROFILE MODE: Loading notes for $userNpub (bypassing feed filters)');
 
       try {
-        // Use dedicated profile loading that bypasses feed filtering completely
         final result = await _noteRepository.getProfileNotes(
           authorNpub: userNpub,
           limit: 50,
@@ -216,19 +197,15 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
             debugPrint(
                 '[ProfileViewModel] PROFILE MODE: Notes breakdown - Posts: ${notes.where((n) => !n.isReply && !n.isRepost).length}, Replies: ${notes.where((n) => n.isReply && !n.isRepost).length}, Reposts: ${notes.where((n) => n.isRepost).length}');
 
-            // Filter out standalone replies (keep only posts and reposts)
             final filteredNotes = notes.where((note) {
-              // Show normal posts (not replies, not reposts)
               if (!note.isReply && !note.isRepost) {
                 return true;
               }
 
-              // Show all reposts (including reposted replies)
               if (note.isRepost) {
                 return true;
               }
 
-              // Hide standalone replies
               if (note.isReply && !note.isRepost) {
                 return false;
               }
@@ -257,7 +234,6 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
     });
   }
 
-  /// Check if the profile belongs to current user
   Future<void> _checkIfCurrentUser() async {
     try {
       final result = await _authRepository.getCurrentUserNpub();
@@ -273,7 +249,6 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
     }
   }
 
-  /// Subscribe to user updates
   void _subscribeToUserUpdates() {
     addSubscription(
       _userRepository.currentUserStream.listen((user) {
@@ -285,26 +260,20 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
     );
   }
 
-  /// Get current profile user
   UserModel? get currentProfile {
     return _profileState.data;
   }
 
-  /// Get following list
   List<UserModel> get followingList {
     return _followingListState.data ?? [];
   }
 
-  /// Check if profile is loading
   bool get isProfileLoading => _profileState.isLoading;
 
-  /// Check if following list is loading
   bool get isFollowingListLoading => _followingListState.isLoading;
 
-  /// Get profile error message if any
   String? get profileErrorMessage => _profileState.error;
 
-  /// Get following list error message if any
   String? get followingListErrorMessage => _followingListState.error;
 
   @override
@@ -317,7 +286,6 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
   }
 }
 
-/// Commands for ProfileViewModel
 class LoadProfileCommand extends ParameterizedCommand<String> {
   final ProfileViewModel _viewModel;
 

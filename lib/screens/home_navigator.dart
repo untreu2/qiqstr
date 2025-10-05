@@ -61,7 +61,6 @@ class _HomeNavigatorState extends State<HomeNavigator> {
             children: items.map((item) {
               final index = item['index'] as int;
               
-              // Add button in the middle
               if (item['type'] == 'add') {
                 return Expanded(
                   child: Bounce(
@@ -148,17 +147,14 @@ class _HomeNavigatorState extends State<HomeNavigator> {
 
   void _handleNavigation(int index) {
     if (index == 3) {
-      // Notification tab - just navigate
       if (mounted) setState(() => _currentIndex = index);
     } else if (index == 0) {
-      // Feed tab - scroll to top if already selected
       if (_currentIndex == 0) {
         _feedPageKey.currentState?.scrollToTop();
       } else {
         if (mounted) setState(() => _currentIndex = index);
       }
     } else {
-      // Other tabs
       if (mounted) setState(() => _currentIndex = index);
     }
   }

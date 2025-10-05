@@ -6,8 +6,6 @@ import 'package:http/http.dart' as http;
 
 import '../../core/base/result.dart';
 
-/// Service responsible for HTTP network operations
-/// Handles REST API calls, file uploads, and network connectivity
 class NetworkService {
   static final NetworkService _instance = NetworkService._internal();
   factory NetworkService() => _instance;
@@ -20,7 +18,6 @@ class NetworkService {
 
   final http.Client _httpClient = http.Client();
 
-  /// Check network connectivity
   Future<Result<bool>> checkConnectivity() async {
     try {
       final result = await InternetAddress.lookup('google.com').timeout(const Duration(seconds: 5));
@@ -31,7 +28,6 @@ class NetworkService {
     }
   }
 
-  /// Make GET request
   Future<Result<Map<String, dynamic>>> get(
     String url, {
     Map<String, String>? headers,
@@ -47,7 +43,6 @@ class NetworkService {
     }
   }
 
-  /// Make POST request
   Future<Result<Map<String, dynamic>>> post(
     String url, {
     Map<String, dynamic>? body,
@@ -75,7 +70,6 @@ class NetworkService {
     }
   }
 
-  /// Make PUT request
   Future<Result<Map<String, dynamic>>> put(
     String url, {
     Map<String, dynamic>? body,
@@ -103,7 +97,6 @@ class NetworkService {
     }
   }
 
-  /// Upload file to server
   Future<Result<String>> uploadFile(
     String url,
     File file, {
@@ -115,12 +108,10 @@ class NetworkService {
       final uri = Uri.parse(url);
       final request = http.MultipartRequest('POST', uri);
 
-      // Add headers
       if (headers != null) {
         request.headers.addAll(headers);
       }
 
-      // Add file
       final fileStream = http.ByteStream(file.openRead());
       final fileLength = await file.length();
       final multipartFile = http.MultipartFile(
@@ -131,7 +122,6 @@ class NetworkService {
       );
       request.files.add(multipartFile);
 
-      // Send request
       final streamedResponse = await request.send().timeout(timeout);
       final response = await http.Response.fromStream(streamedResponse);
 
@@ -146,7 +136,6 @@ class NetworkService {
             return const Result.error('Upload succeeded but no URL returned');
           }
         } catch (e) {
-          // Response might not be JSON, try to extract URL from plain text
           final body = response.body.trim();
           if (body.startsWith('http')) {
             return Result.success(body);
@@ -162,7 +151,6 @@ class NetworkService {
     }
   }
 
-  /// Upload file with authentication
   Future<Result<String>> uploadFileWithAuth(
     String url,
     File file,
@@ -179,7 +167,6 @@ class NetworkService {
     );
   }
 
-  /// Make request with retry logic
   Future<Result<Map<String, dynamic>>> getWithRetry(
     String url, {
     Map<String, String>? headers,
@@ -197,7 +184,6 @@ class NetworkService {
 
       attempts++;
       if (attempts < maxRetries) {
-        // Progressive delay: 1s, 2s, 4s...
         final delay = Duration(seconds: 1 << (attempts - 1));
         await Future.delayed(delay);
       }
@@ -206,7 +192,6 @@ class NetworkService {
     return await get(url, headers: headers, timeout: timeout);
   }
 
-  /// Verify NIP-05 identifier
   Future<Result<bool>> verifyNip05(String nip05, String pubkeyHex) async {
     try {
       if (!nip05.contains('@')) {
@@ -238,7 +223,6 @@ class NetworkService {
     }
   }
 
-  /// Download file from URL
   Future<Result<List<int>>> downloadFile(
     String url, {
     Map<String, String>? headers,
@@ -258,7 +242,6 @@ class NetworkService {
     }
   }
 
-  /// Handle HTTP response
   Result<Map<String, dynamic>> _handleResponse(http.Response response) {
     try {
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -280,7 +263,6 @@ class NetworkService {
     }
   }
 
-  /// Get user-friendly HTTP error message
   String _getHttpErrorMessage(int statusCode, String body) {
     switch (statusCode) {
       case 400:
@@ -304,7 +286,6 @@ class NetworkService {
     }
   }
 
-  /// Handle and convert errors to user-friendly messages
   String _handleError(dynamic error) {
     if (error is SocketException) {
       return 'No internet connection';
@@ -319,7 +300,6 @@ class NetworkService {
     }
   }
 
-  /// Get network status information
   Future<Result<NetworkStatus>> getNetworkStatus() async {
     try {
       final connectivityResult = await checkConnectivity();
@@ -334,7 +314,6 @@ class NetworkService {
             ));
           }
 
-          // Measure latency
           final stopwatch = Stopwatch()..start();
           await get('https://httpbin.org/get').timeout(const Duration(seconds: 5));
           stopwatch.stop();
@@ -359,7 +338,6 @@ class NetworkService {
     }
   }
 
-  /// Determine network quality based on latency
   NetworkQuality _getNetworkQuality(int latencyMs) {
     if (latencyMs < 100) return NetworkQuality.excellent;
     if (latencyMs < 300) return NetworkQuality.good;
@@ -367,13 +345,11 @@ class NetworkService {
     return NetworkQuality.poor;
   }
 
-  /// Close HTTP client and cleanup resources
   void dispose() {
     _httpClient.close();
   }
 }
 
-/// Network status information
 class NetworkStatus {
   final bool isConnected;
   final int? latency; // in milliseconds
@@ -389,7 +365,6 @@ class NetworkStatus {
   String toString() => 'NetworkStatus(connected: $isConnected, latency: ${latency}ms, quality: $quality)';
 }
 
-/// Network quality levels
 enum NetworkQuality {
   none, // No connection
   poor, // >600ms

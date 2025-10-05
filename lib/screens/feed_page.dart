@@ -34,7 +34,6 @@ class FeedPageState extends State<FeedPage> {
   int _connectedRelayCount = 0;
   Timer? _relayCountTimer;
 
-  // Legacy interface requirements
   final ValueNotifier<List<NoteModel>> _notesNotifier = ValueNotifier([]);
   final Map<String, UserModel> _profiles = {};
 
@@ -65,7 +64,6 @@ class FeedPageState extends State<FeedPage> {
         if (mounted) {
           setState(() {
             _currentUser = updatedUser;
-            // Update profiles map for consistency
             _profiles[updatedUser.npub] = updatedUser;
           });
         }
@@ -83,6 +81,42 @@ class FeedPageState extends State<FeedPage> {
         _currentUser = user;
         _profiles[user.npub] = user;
       });
+
+      if (user.profileImage.isEmpty) {
+        debugPrint('[FeedPage] ️ Current user profile image missing, reloading...');
+        _reloadCurrentUserProfile();
+      } else {
+        debugPrint('[FeedPage]  Current user loaded with profile image');
+      }
+    }
+  }
+
+  Future<void> _reloadCurrentUserProfile() async {
+    try {
+      final authRepository = AppDI.get<AuthRepository>();
+      final npubResult = await authRepository.getCurrentUserNpub();
+      
+      if (npubResult.isError || npubResult.data == null) {
+        return;
+      }
+
+      final userResult = await _userRepository.getUserProfile(npubResult.data!);
+      userResult.fold(
+        (user) {
+          if (mounted) {
+            setState(() {
+              _currentUser = user;
+              _profiles[user.npub] = user;
+            });
+            debugPrint('[FeedPage]  Reloaded current user: ${user.name} (image: ${user.profileImage.isNotEmpty ? "✓" : "✗"})');
+          }
+        },
+        (error) {
+          debugPrint('[FeedPage]  Failed to reload current user: $error');
+        },
+      );
+    } catch (e) {
+      debugPrint('[FeedPage]  Error reloading current user: $e');
     }
   }
 
@@ -109,7 +143,6 @@ class FeedPageState extends State<FeedPage> {
   void _updateRelayCount() {
     if (mounted) {
       try {
-        // Get ACTUAL active connections from WebSocketManager
         final activeSockets = _webSocketManager.activeSockets;
         final activeCount = activeSockets.length;
         final totalRelays = _webSocketManager.relayUrls.length;
@@ -127,7 +160,6 @@ class FeedPageState extends State<FeedPage> {
         if (kDebugMode) {
           print('[FeedPage] Error updating relay count: $e');
         }
-        // Fallback to configured count
         _getRelayCountFromPrefs();
       }
     }
@@ -152,7 +184,6 @@ class FeedPageState extends State<FeedPage> {
   }
 
   String _getRelayCountText() {
-    // Show only active connection count
     final activeSockets = _webSocketManager.activeSockets.length;
 
     if (activeSockets == 1) {
@@ -186,7 +217,7 @@ class FeedPageState extends State<FeedPage> {
           await prefs.setBool('feed_page_opened', true);
         }
       } catch (e) {
-        // Silent error - not critical
+        // Silently ignore errors when checking first open status
       }
     });
   }
@@ -234,8 +265,15 @@ class FeedPageState extends State<FeedPage> {
         debugPrint('[FeedPage] Received profiles update: ${profiles.length} profiles');
         if (mounted) {
           setState(() {
-            // Update profiles map with new data
             _profiles.addAll(profiles);
+            
+            if (_currentUser != null && profiles.containsKey(_currentUser!.npub)) {
+              final updatedCurrentUser = profiles[_currentUser!.npub]!;
+              if (updatedCurrentUser.profileImage.isNotEmpty || _currentUser!.profileImage.isEmpty) {
+                _currentUser = updatedCurrentUser;
+                debugPrint('[FeedPage]  Updated current user profile from stream: ${updatedCurrentUser.name} (image: ${updatedCurrentUser.profileImage.isNotEmpty ? "✓" : "✗"})');
+              }
+            }
           });
         }
       },
@@ -360,10 +398,8 @@ class FeedPageState extends State<FeedPage> {
     return ViewModelBuilder<FeedViewModel>(
       create: () => AppDI.get<FeedViewModel>(),
       onModelReady: (viewModel) {
-        // Initialize once when ViewModel is ready
         viewModel.initializeWithUser(widget.npub);
 
-        // Setup profiles stream listener
         _setupProfilesStreamListener(viewModel);
       },
       builder: (context, viewModel) {
@@ -397,10 +433,8 @@ class FeedPageState extends State<FeedPage> {
                         const SliverToBoxAdapter(
                           child: SizedBox(height: 8),
                         ),
-                        // Use existing NoteListWidget with notes
                         Builder(
                           builder: (context) {
-                            // Update notesNotifier when notes change
                             WidgetsBinding.instance.addPostFrameCallback((_) {
                               if (_notesNotifier.value != notes) {
                                 _notesNotifier.value = notes;
@@ -454,7 +488,6 @@ class FeedPageState extends State<FeedPage> {
                   ),
                 ),
               ),
-              // New notes button - shown at bottom when there are pending notes
               if (viewModel.pendingNotesCount > 0)
                 Positioned(
                   bottom: 104,
@@ -464,7 +497,6 @@ class FeedPageState extends State<FeedPage> {
                     child: GestureDetector(
                       onTap: () {
                         viewModel.addPendingNotesToFeed();
-                        // Scroll to top after adding new notes
                         scrollToTop();
                       },
                       child: Container(

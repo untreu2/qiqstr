@@ -3,8 +3,6 @@ import 'package:nostr_nip19/nostr_nip19.dart';
 
 import '../../core/base/result.dart';
 
-/// Service responsible for input validation
-/// Provides validation for NSEC, NPUB, and other user inputs
 class ValidationService {
   static final ValidationService _instance = ValidationService._internal();
   factory ValidationService() => _instance;
@@ -12,7 +10,6 @@ class ValidationService {
 
   static ValidationService get instance => _instance;
 
-  /// Validate NSEC (private key) format
   Result<void> validateNsec(String nsec) {
     if (nsec.trim().isEmpty) {
       return const Result.error('NSEC cannot be empty');
@@ -27,7 +24,6 @@ class ValidationService {
     }
 
     try {
-      // Try to decode to validate format
       Nip19.decodePrivkey(nsec);
       return const Result.success(null);
     } catch (e) {
@@ -35,21 +31,17 @@ class ValidationService {
     }
   }
 
-  /// Validate NPUB (public key) format
-  /// Accepts both npub1 bech32 format and 64-character hex format
   Result<void> validateNpub(String npub) {
     if (npub.trim().isEmpty) {
       return const Result.error('NPUB cannot be empty');
     }
 
-    // Handle npub1 bech32 format
     if (npub.startsWith('npub1')) {
       if (npub.length < 63) {
         return const Result.error('NPUB is too short');
       }
 
       try {
-        // Try to decode to validate format
         decodeBasicBech32(npub, 'npub');
         return const Result.success(null);
       } catch (e) {
@@ -57,10 +49,8 @@ class ValidationService {
       }
     }
 
-    // Handle 64-character hex format (internal Nostr protocol format)
     else if (npub.length == 64) {
       try {
-        // Validate hex format
         int.parse(npub, radix: 16);
         return const Result.success(null);
       } catch (e) {
@@ -68,19 +58,15 @@ class ValidationService {
       }
     }
 
-    // For compatibility, allow shorter formats that might be truncated IDs
     else if (npub.length >= 8) {
-      // Accept as valid identifier (might be truncated for display)
       return const Result.success(null);
     }
 
-    // Invalid format
     else {
       return const Result.error('NPUB must be in npub1 bech32 format or valid hex format');
     }
   }
 
-  /// Validate private key in hex format
   Result<void> validatePrivateKeyHex(String privateKey) {
     if (privateKey.trim().isEmpty) {
       return const Result.error('Private key cannot be empty');
@@ -91,7 +77,6 @@ class ValidationService {
     }
 
     try {
-      // Validate hex format
       int.parse(privateKey, radix: 16);
       return const Result.success(null);
     } catch (e) {
@@ -99,7 +84,6 @@ class ValidationService {
     }
   }
 
-  /// Validate public key in hex format
   Result<void> validatePublicKeyHex(String publicKey) {
     if (publicKey.trim().isEmpty) {
       return const Result.error('Public key cannot be empty');
@@ -110,7 +94,6 @@ class ValidationService {
     }
 
     try {
-      // Validate hex format
       int.parse(publicKey, radix: 16);
       return const Result.success(null);
     } catch (e) {
@@ -118,7 +101,6 @@ class ValidationService {
     }
   }
 
-  /// Validate note content
   Result<void> validateNoteContent(String content) {
     if (content.trim().isEmpty) {
       return const Result.error('Note content cannot be empty');
@@ -131,7 +113,6 @@ class ValidationService {
     return const Result.success(null);
   }
 
-  /// Validate profile name
   Result<void> validateProfileName(String name) {
     if (name.trim().isEmpty) {
       return const Result.error('Name cannot be empty');
@@ -144,7 +125,6 @@ class ValidationService {
     return const Result.success(null);
   }
 
-  /// Validate profile about/bio
   Result<void> validateProfileAbout(String about) {
     if (about.length > 500) {
       return const Result.error('About section is too long (max 500 characters)');
@@ -153,7 +133,6 @@ class ValidationService {
     return const Result.success(null);
   }
 
-  /// Validate URL format
   Result<void> validateUrl(String url) {
     if (url.trim().isEmpty) {
       return const Result.success(null); // Empty URL is valid
@@ -173,7 +152,6 @@ class ValidationService {
     }
   }
 
-  /// Validate NIP-05 identifier format
   Result<void> validateNip05(String nip05) {
     if (nip05.trim().isEmpty) {
       return const Result.success(null); // Empty NIP-05 is valid
@@ -191,12 +169,10 @@ class ValidationService {
     final username = parts[0];
     final domain = parts[1];
 
-    // Validate username part
     if (username.length > 64) {
       return const Result.error('NIP-05 username is too long (max 64 characters)');
     }
 
-    // Basic domain validation
     if (!domain.contains('.')) {
       return const Result.error('NIP-05 domain must be valid domain name');
     }
@@ -204,7 +180,6 @@ class ValidationService {
     return const Result.success(null);
   }
 
-  /// Validate Lightning Address (LUD-16)
   Result<void> validateLightningAddress(String lud16) {
     if (lud16.trim().isEmpty) {
       return const Result.success(null); // Empty LUD-16 is valid
@@ -222,7 +197,6 @@ class ValidationService {
     return const Result.success(null);
   }
 
-  /// Validate relay URL
   Result<void> validateRelayUrl(String relayUrl) {
     if (relayUrl.trim().isEmpty) {
       return const Result.error('Relay URL cannot be empty');
@@ -245,21 +219,18 @@ class ValidationService {
     }
   }
 
-  /// Validate amount for zap (in satoshis)
   Result<void> validateZapAmount(int amount) {
     if (amount <= 0) {
       return const Result.error('Zap amount must be greater than 0');
     }
 
     if (amount > 100000000) {
-      // 1 BTC in sats
       return const Result.error('Zap amount is too large (max 1 BTC)');
     }
 
     return const Result.success(null);
   }
 
-  /// Validate general text input with length limits
   Result<void> validateText(
     String text, {
     bool required = false,
@@ -283,7 +254,6 @@ class ValidationService {
   }
 }
 
-/// Helper class for validation results with user-friendly error messages
 class ValidationResult {
   final bool isValid;
   final String? errorMessage;

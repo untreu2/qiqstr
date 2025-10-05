@@ -28,7 +28,6 @@ class BackButtonWidget extends StatelessWidget {
     this.topOffset,
   });
 
-  /// Creates an AppBar back button
   const BackButtonWidget.appBar({
     super.key,
     this.onPressed,
@@ -39,7 +38,6 @@ class BackButtonWidget extends StatelessWidget {
     this.topOffset,
   }) : type = BackButtonType.appBar;
 
-  /// Creates a floating back button with backdrop filter
   const BackButtonWidget.floating({
     super.key,
     this.onPressed,

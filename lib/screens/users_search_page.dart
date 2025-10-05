@@ -18,7 +18,9 @@ class UserSearchPage extends StatefulWidget {
 class _UserSearchPageState extends State<UserSearchPage> {
   final TextEditingController _searchController = TextEditingController();
   List<UserModel> _filteredUsers = [];
+  List<UserModel> _randomUsers = [];
   bool _isSearching = false;
+  bool _isLoadingRandom = false;
   String? _error;
 
   late final UserRepository _userRepository;
@@ -28,11 +30,50 @@ class _UserSearchPageState extends State<UserSearchPage> {
     super.initState();
     _userRepository = AppDI.get<UserRepository>();
     _searchController.addListener(_onSearchChanged);
+    _loadRandomUsers();
   }
 
   void _onSearchChanged() {
     final query = _searchController.text.trim();
     _searchUsers(query);
+  }
+
+  Future<void> _loadRandomUsers() async {
+    setState(() {
+      _isLoadingRandom = true;
+    });
+
+    try {
+      final isarService = _userRepository.isarService;
+      
+      if (!isarService.isInitialized) {
+        await isarService.waitForInitialization();
+      }
+      
+      final randomIsarProfiles = await isarService.getRandomUsersWithImages(limit: 50);
+      
+      final userModels = randomIsarProfiles.map((isarProfile) {
+        final profileData = isarProfile.toProfileData();
+        return UserModel.fromCachedProfile(
+          isarProfile.pubkeyHex,
+          profileData,
+        );
+      }).toList();
+      
+      if (mounted) {
+        setState(() {
+          _randomUsers = userModels;
+          _isLoadingRandom = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[UserSearchPage] Error loading random users: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingRandom = false;
+        });
+      }
+    }
   }
 
   Future<void> _searchUsers(String query) async {
@@ -92,46 +133,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
     if (clipboardData != null && clipboardData.text != null) {
       _searchController.text = clipboardData.text!;
     }
-  }
-
-  Widget _buildSearchInput(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-      child: TextField(
-        controller: _searchController,
-        style: TextStyle(color: context.colors.background),
-        decoration: InputDecoration(
-          hintText: 'Enter npub to search for users...',
-          hintStyle: TextStyle(color: context.colors.background.withValues(alpha: 0.6)),
-          suffixIcon: Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: GestureDetector(
-              onTap: _pasteFromClipboard,
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: context.colors.background,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  Icons.content_paste,
-                  color: context.colors.textPrimary,
-                  size: 20,
-                ),
-              ),
-            ),
-          ),
-          filled: true,
-          fillColor: context.colors.textPrimary,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(40),
-            borderSide: BorderSide.none,
-          ),
-          contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-        ),
-      ),
-    );
   }
 
   Widget _buildUserTile(BuildContext context, UserModel user) {
@@ -287,14 +288,51 @@ class _UserSearchPageState extends State<UserSearchPage> {
       );
     }
 
-    if (_filteredUsers.isEmpty) {
-      return const SizedBox.shrink();
+    if (_filteredUsers.isNotEmpty) {
+      return ListView.separated(
+        padding: EdgeInsets.zero,
+        itemCount: _filteredUsers.length,
+        itemBuilder: (context, index) => _buildUserTile(context, _filteredUsers[index]),
+        separatorBuilder: (_, __) => Divider(
+          color: context.colors.border,
+          height: 1,
+        ),
+      );
+    }
+
+    return _buildRandomUsersBubbleGrid(context);
+  }
+
+  Widget _buildRandomUsersBubbleGrid(BuildContext context) {
+    if (_isLoadingRandom) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: context.colors.primary),
+            const SizedBox(height: 16),
+            Text(
+              'Loading users...',
+              style: TextStyle(color: context.colors.textSecondary),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_randomUsers.isEmpty) {
+      return Center(
+        child: Text(
+          'No users to discover yet',
+          style: TextStyle(color: context.colors.textSecondary),
+        ),
+      );
     }
 
     return ListView.separated(
       padding: EdgeInsets.zero,
-      itemCount: _filteredUsers.length,
-      itemBuilder: (context, index) => _buildUserTile(context, _filteredUsers[index]),
+      itemCount: _randomUsers.length,
+      itemBuilder: (context, index) => _buildUserTile(context, _randomUsers[index]),
       separatorBuilder: (_, __) => Divider(
         color: context.colors.border,
         height: 1,
@@ -314,16 +352,75 @@ class _UserSearchPageState extends State<UserSearchPage> {
       builder: (context, themeManager, child) {
         return Scaffold(
           backgroundColor: context.colors.background,
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          body: Stack(
             children: [
-              _buildHeader(context),
-              Expanded(
-                child: _buildSearchResults(context),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeader(context),
+                  Expanded(
+                    child: _buildSearchResults(context),
+                  ),
+                  SizedBox(height: 80),
+                ],
               ),
-              const SizedBox(height: 16),
-              _buildSearchInput(context),
-              SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: context.colors.background,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 10,
+                        offset: const Offset(0, -2),
+                      ),
+                    ],
+                  ),
+                  padding: EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    top: 12,
+                    bottom: MediaQuery.of(context).padding.bottom + 12,
+                  ),
+                  child: TextField(
+                    controller: _searchController,
+                    style: TextStyle(color: context.colors.background),
+                    decoration: InputDecoration(
+                      hintText: 'Search by name or npub...',
+                      hintStyle: TextStyle(color: context.colors.background.withValues(alpha: 0.6)),
+                      suffixIcon: Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: GestureDetector(
+                          onTap: _pasteFromClipboard,
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: context.colors.background,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.content_paste,
+                              color: context.colors.textPrimary,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ),
+                      filled: true,
+                      fillColor: context.colors.textPrimary,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(40),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         );

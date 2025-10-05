@@ -2,7 +2,6 @@ import 'package:flutter/widgets.dart';
 import '../../core/di/app_di.dart';
 import '../../data/repositories/user_repository.dart';
 
-/// Smart builder widget that efficiently rebuilds when specific data changes
 class SmartBuilder<T extends Listenable> extends StatefulWidget {
   const SmartBuilder({
     super.key,
@@ -66,8 +65,6 @@ class _SmartBuilderState<T extends Listenable> extends State<SmartBuilder<T>> {
   }
 }
 
-/// Builder for user-related widgets
-/// Uses UserRepository stream for efficient user data updates
 class UserBuilder extends StatelessWidget {
   const UserBuilder({
     super.key,
@@ -91,8 +88,6 @@ class UserBuilder extends StatelessWidget {
   }
 }
 
-/// Builder for interaction-related widgets (reactions, replies, etc.)
-/// Simplified for MVVM architecture - interactions are now handled in ViewModels
 class InteractionBuilder extends StatelessWidget {
   const InteractionBuilder({
     super.key,
@@ -107,13 +102,10 @@ class InteractionBuilder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // In MVVM architecture, interactions are handled by ViewModels
-    // This builder is kept for compatibility but simplified
     return builder(context, child);
   }
 }
 
-/// Multi-builder combining user and interaction data
 class MultiBuilder extends StatelessWidget {
   const MultiBuilder({
     super.key,

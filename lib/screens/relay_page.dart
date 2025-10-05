@@ -34,7 +34,6 @@ class _RelayPageState extends State<RelayPage> {
   final List<WebSocket> _activeConnections = [];
   final List<StreamSubscription> _activeSubscriptions = [];
 
-  // New system services
   late AuthRepository _authRepository;
 
   @override
@@ -121,7 +120,6 @@ class _RelayPageState extends State<RelayPage> {
 
       final privateKey = privateKeyResult.data!;
 
-      // Create relay tags for kind 10002 event (like legacy)
       List<List<String>> relayTags = [];
       for (String relay in _relays) {
         relayTags.add(['r', relay]);
@@ -256,7 +254,6 @@ class _RelayPageState extends State<RelayPage> {
     final List<Map<String, dynamic>> relayList = [];
 
     try {
-      // Convert npub to hex if needed
       final pubkeyHex = _authRepository.npubToHex(npub) ?? npub;
 
       for (final relayUrl in relaySetMainSockets) {

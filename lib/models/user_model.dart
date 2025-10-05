@@ -26,7 +26,6 @@ class UserModel {
     this.nip05Verified = false,
   });
 
-  /// Get npub (bech32) format for display purposes
   String get npub {
     try {
       if (pubkeyHex.startsWith('npub1')) {
@@ -38,7 +37,6 @@ class UserModel {
     }
   }
 
-  /// Create from cached profile data with hex pubkey
   factory UserModel.fromCachedProfile(String pubkeyHex, Map<String, String> data) {
     return UserModel(
       pubkeyHex: _ensureHexFormat(pubkeyHex),
@@ -54,9 +52,7 @@ class UserModel {
     );
   }
 
-  /// Create from JSON (for backward compatibility)
   factory UserModel.fromJson(Map<String, dynamic> json) {
-    // Handle both old 'npub' and new 'pubkeyHex' fields
     final identifier = json['pubkeyHex'] as String? ?? json['npub'] as String;
 
     return UserModel(
@@ -73,7 +69,6 @@ class UserModel {
     );
   }
 
-  /// Convert to JSON format
   Map<String, dynamic> toJson() => {
         'pubkeyHex': pubkeyHex,
         'npub': npub, // Include npub for backward compatibility
@@ -88,7 +83,6 @@ class UserModel {
         'nip05Verified': nip05Verified,
       };
 
-  /// Convert identifier to hex format
   static String _ensureHexFormat(String identifier) {
     try {
       if (identifier.startsWith('npub1')) {
@@ -97,7 +91,6 @@ class UserModel {
         return identifier; // Already hex
       }
     } catch (e) {
-      // If conversion fails, return the original
       if (kDebugMode) {
         print('[UserModel] Warning: Could not convert identifier to hex: $e');
       }
@@ -105,7 +98,6 @@ class UserModel {
     return identifier;
   }
 
-  /// Copy with method for updates
   UserModel copyWith({
     String? pubkeyHex,
     String? name,

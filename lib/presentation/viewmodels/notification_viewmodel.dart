@@ -7,11 +7,10 @@ import '../../core/base/app_error.dart';
 import '../../data/repositories/notification_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/services/nostr_data_service.dart';
+import '../../data/services/user_batch_fetcher.dart';
 import '../../models/notification_model.dart';
 import '../../models/user_model.dart';
 
-/// ViewModel for notification-related screens
-/// Handles notification loading, grouping, and user interactions
 class NotificationViewModel extends BaseViewModel with CommandMixin {
   final NotificationRepository _notificationRepository;
   final UserRepository _userRepository;
@@ -25,7 +24,6 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
         _userRepository = userRepository,
         _nostrDataService = nostrDataService;
 
-  // State
   UIState<List<dynamic>> _notificationsState = const InitialState();
   UIState<List<dynamic>> get notificationsState => _notificationsState;
 
@@ -38,12 +36,10 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
 
-  // Commands - using nullable fields to prevent late initialization errors
   LoadNotificationsCommand? _loadNotificationsCommand;
   RefreshNotificationsCommand? _refreshNotificationsCommand;
   MarkAllAsReadCommand? _markAllAsReadCommand;
 
-  // Getters for commands
   LoadNotificationsCommand get loadNotificationsCommand => _loadNotificationsCommand ??= LoadNotificationsCommand(this);
   RefreshNotificationsCommand get refreshNotificationsCommand => _refreshNotificationsCommand ??= RefreshNotificationsCommand(this);
   MarkAllAsReadCommand get markAllAsReadCommand => _markAllAsReadCommand ??= MarkAllAsReadCommand(this);
@@ -52,7 +48,6 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
   void initialize() {
     super.initialize();
 
-    // Register commands lazily
     registerCommand('loadNotifications', loadNotificationsCommand);
     registerCommand('refreshNotifications', refreshNotificationsCommand);
     registerCommand('markAllAsRead', markAllAsReadCommand);
@@ -61,7 +56,6 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
     _isInitialized = true;
   }
 
-  /// Load notifications
   Future<void> loadNotifications() async {
     await executeOperation('loadNotifications', () async {
       _notificationsState = const LoadingState();
@@ -71,13 +65,10 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
 
       result.fold(
         (notifications) async {
-          // Group notifications
           final groupedNotifications = _notificationRepository.groupNotifications(notifications);
 
-          // Load user profiles for notification authors
           await _loadUserProfiles(notifications);
 
-          // Fetch target events for QuoteWidgets
           await _fetchTargetEvents(notifications);
 
           _notificationsState = groupedNotifications.isEmpty ? const EmptyState('No notifications yet') : LoadedState(groupedNotifications);
@@ -89,7 +80,6 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
     });
   }
 
-  /// Refresh notifications
   Future<void> refreshNotifications() async {
     await executeOperation('refreshNotifications', () async {
       _notificationsState = const LoadingState(LoadingType.refreshing);
@@ -99,13 +89,10 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
 
       result.fold(
         (notifications) async {
-          // Group notifications
           final groupedNotifications = _notificationRepository.groupNotifications(notifications);
 
-          // Load user profiles for notification authors
           await _loadUserProfiles(notifications);
 
-          // Fetch target events for QuoteWidgets
           await _fetchTargetEvents(notifications);
 
           _notificationsState = groupedNotifications.isEmpty ? const EmptyState('No notifications yet') : LoadedState(groupedNotifications);
@@ -117,7 +104,6 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
     });
   }
 
-  /// Mark all notifications as read
   Future<void> markAllAsRead() async {
     await executeOperation('markAllAsRead', () async {
       final result = await _notificationRepository.markAllAsRead();
@@ -133,39 +119,46 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
     }, showLoading: false);
   }
 
-  /// Immediately reset unread count to 0 (for instant UI feedback)
   void resetUnreadCountImmediately() {
     _unreadCountState = const LoadedState(0);
     safeNotifyListeners();
   }
 
-  /// Load user profiles for notification authors
   Future<void> _loadUserProfiles(List<NotificationModel> notifications) async {
-    final authorNpubs = notifications.map((n) => n.author).toSet();
+    final authorNpubs = notifications.map((n) => n.author).toSet().toList();
 
-    for (final npub in authorNpubs) {
-      if (!_userProfiles.containsKey(npub)) {
-        final result = await _userRepository.getUserProfile(npub);
-        result.fold(
-          (user) => _userProfiles[npub] = user,
-          (_) {}, // Ignore profile loading errors
-        );
-      }
+    final missingNpubs = authorNpubs.where((npub) => !_userProfiles.containsKey(npub)).toList();
+
+    if (missingNpubs.isEmpty) {
+      return;
     }
+
+    debugPrint('[NotificationViewModel] Batch fetching ${missingNpubs.length} user profiles');
+
+    final results = await _userRepository.getUserProfiles(
+      missingNpubs,
+      priority: FetchPriority.normal,
+    );
+
+    for (final entry in results.entries) {
+      entry.value.fold(
+        (user) => _userProfiles[entry.key] = user,
+        (_) {}, // Ignore profile loading errors
+      );
+    }
+
+    debugPrint('[NotificationViewModel] Loaded ${results.length} profiles');
   }
 
-  /// Fetch target events for notifications to prevent "Event not found" errors in QuoteWidgets
   Future<void> _fetchTargetEvents(List<NotificationModel> notifications) async {
     try {
       debugPrint(' [NotificationViewModel] Fetching target events for ${notifications.length} notifications');
 
-      // Collect all target event IDs
       final targetEventIds = notifications.map((n) => n.targetEventId).where((id) => id.isNotEmpty).toSet().toList();
 
       if (targetEventIds.isNotEmpty) {
         debugPrint(' [NotificationViewModel] Found ${targetEventIds.length} target events to fetch');
 
-        // Use the enhanced batch fetching method
         await _nostrDataService.fetchSpecificNotes(targetEventIds);
 
         debugPrint(' [NotificationViewModel] Target events fetch completed');
@@ -174,11 +167,9 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
       }
     } catch (e) {
       debugPrint(' [NotificationViewModel] Error fetching target events: $e');
-      // Don't throw - this is not critical, QuoteWidgets will handle missing events gracefully
     }
   }
 
-  /// Subscribe to notification updates
   void _subscribeToNotificationUpdates() {
     addSubscription(
       _notificationRepository.notificationsStream.listen((notifications) {
@@ -200,7 +191,6 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
     );
   }
 
-  /// Build title for notification group
   String buildGroupTitle(dynamic item) {
     if (item is NotificationGroup) {
       final notifications = item.notifications;
@@ -259,21 +249,16 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
     return 'Notification';
   }
 
-  /// Get notifications from last 24 hours
   int get notificationsLast24Hours => _notificationRepository.getNotificationsLast24Hours();
 
-  /// Get current notifications
   List<dynamic> get displayNotifications {
     return _notificationsState.data ?? [];
   }
 
-  /// Get current unread count
   int get unreadCount => _unreadCountState.data ?? _notificationRepository.unreadCount;
 
-  /// Check if notifications are loading
   bool get isNotificationsLoading => _notificationsState.isLoading;
 
-  /// Get notification error message if any
   String? get notificationErrorMessage => _notificationsState.error;
 
   @override
@@ -282,7 +267,6 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
   }
 }
 
-/// Commands for NotificationViewModel
 class LoadNotificationsCommand extends ParameterlessCommand {
   final NotificationViewModel _viewModel;
 

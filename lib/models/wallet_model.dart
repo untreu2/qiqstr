@@ -1,9 +1,6 @@
 import 'dart:convert';
 
-/// Models for NIP-47 Nostr Wallet Connect operations
-/// Based on the Go NWC implementation
 
-/// Result of wallet operations
 class WalletResult<T> {
   final T? data;
   final String? error;
@@ -20,7 +17,6 @@ class WalletResult<T> {
   bool get isError => !isSuccess;
 }
 
-/// Wallet connection configuration
 class WalletConnection {
   final String relayUrl;
   final String walletPubKey;
@@ -61,7 +57,6 @@ class WalletConnection {
   String toString() => 'WalletConnection(relay: $relayUrl, wallet: $walletPubKey)';
 }
 
-/// Wallet balance information
 class WalletBalance {
   final int balance; // in millisatoshis
 
@@ -79,7 +74,6 @@ class WalletBalance {
   String toString() => 'WalletBalance(balance: $balance msat)';
 }
 
-/// Invoice details for lightning payments
 class InvoiceDetails {
   final String type;
   final String invoice;
@@ -145,7 +139,6 @@ class InvoiceDetails {
   String toString() => 'InvoiceDetails(type: $type, amount: $amount, hash: $paymentHash)';
 }
 
-/// Payment result for invoice payments
 class PaymentResult {
   final String preimage;
   final int feesPaid;
@@ -171,7 +164,6 @@ class PaymentResult {
   String toString() => 'PaymentResult(preimage: $preimage, fees: $feesPaid)';
 }
 
-/// Keysend payment result
 class KeysendResult {
   final String preimage;
   final int feesPaid;
@@ -197,10 +189,8 @@ class KeysendResult {
   String toString() => 'KeysendResult(preimage: $preimage, fees: $feesPaid)';
 }
 
-/// Transaction details
 typedef TransactionDetails = InvoiceDetails;
 
-/// Wallet information
 class WalletInfo {
   final String alias;
   final String pubkey;
@@ -250,7 +240,6 @@ class WalletInfo {
   String toString() => 'WalletInfo(alias: $alias, network: $network, methods: $methods)';
 }
 
-/// NWC request payload
 class NWCRequest {
   final String method;
   final Map<String, dynamic> params;
@@ -271,7 +260,6 @@ class NWCRequest {
   String toString() => 'NWCRequest(method: $method, params: $params)';
 }
 
-/// NWC response payload
 class NWCResponse<T> {
   final T? result;
   final String? error;
@@ -280,7 +268,6 @@ class NWCResponse<T> {
 
   factory NWCResponse.fromJson(Map<String, dynamic> json, T Function(Map<String, dynamic>) fromJson) {
     try {
-      // Check for error field
       if (json.containsKey('error') && json['error'] != null) {
         final errorValue = json['error'];
         String errorMessage;
@@ -294,7 +281,6 @@ class NWCResponse<T> {
         return NWCResponse<T>(error: errorMessage);
       }
 
-      // Check for result field
       if (json.containsKey('result')) {
         final resultValue = json['result'];
         if (resultValue is Map<String, dynamic>) {

@@ -115,7 +115,6 @@ class _EditProfileContentState extends State<_EditProfileContent> {
         type: FileType.image,
       );
       if (result != null && result.files.single.path != null) {
-        // Use legacy Blossom upload pattern exactly
         const blossomUrl = 'https://blossom.primal.net'; // Default Blossom server
         final filePath = result.files.single.path!;
 
@@ -125,7 +124,6 @@ class _EditProfileContentState extends State<_EditProfileContent> {
             controller.text = mediaUrl;
           });
 
-          // Update the ViewModel with the new URL
           if (isPicture) {
             viewModel.updatePicture(mediaUrl);
           }
@@ -152,7 +150,6 @@ class _EditProfileContentState extends State<_EditProfileContent> {
     } finally {
       setState(() {
         if (isPicture) {
-          // Picture upload state is handled by viewModel
         } else {
           _isUploadingBanner = false;
         }
@@ -165,7 +162,6 @@ class _EditProfileContentState extends State<_EditProfileContent> {
 
     final viewModel = context.read<EditProfileViewModel>();
 
-    // Update viewModel with current form values
     viewModel.updateName(_nameController.text.trim());
     viewModel.updateAbout(_aboutController.text.trim());
     viewModel.updatePicture(_pictureController.text.trim());
@@ -173,7 +169,6 @@ class _EditProfileContentState extends State<_EditProfileContent> {
     viewModel.updateWebsite(_websiteController.text.trim());
 
     try {
-      // Use the enhanced update method that includes all fields
       final result = await _userRepository.updateProfile(
         name: _nameController.text.trim(),
         about: _aboutController.text.trim(),

@@ -27,7 +27,6 @@ class _NotificationPageState extends State<NotificationPage> {
   Widget build(BuildContext context) {
     return ViewModelProvider.notification(
       builder: (context, viewModel) {
-        // Initialize notifications on first build
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (viewModel.isInitialized) {
             viewModel.loadNotificationsCommand.execute();
@@ -247,7 +246,6 @@ class _NotificationPageState extends State<NotificationPage> {
 
   Map<String, dynamic> _parseContent(String content) {
     try {
-      // Simple content parsing for notifications
       return {
         'textParts': [
           {'type': 'text', 'text': content}

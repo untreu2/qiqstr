@@ -27,7 +27,6 @@ Future<void> _payZapWithWallet(
   const secureStorage = FlutterSecureStorage();
 
   try {
-    // Check if wallet is connected
     if (!walletRepository.isConnected) {
       if (context.mounted) {
         AppToast.warning(context, 'Please connect your wallet first');
@@ -35,18 +34,15 @@ Future<void> _payZapWithWallet(
       return;
     }
 
-    // Show loading
     if (context.mounted) {
       AppToast.info(context, 'Processing payment...', duration: const Duration(seconds: 30));
     }
 
-    // Get private key for zap request event
     final privateKey = await secureStorage.read(key: 'privateKey');
     if (privateKey == null || privateKey.isEmpty) {
       throw Exception('Private key not found.');
     }
 
-    // Validate lud16
     if (!user.lud16.contains('@')) {
       throw Exception('Invalid lightning address format.');
     }
@@ -59,7 +55,6 @@ Future<void> _payZapWithWallet(
     final displayName = parts[0];
     final domain = parts[1];
 
-    // Fetch LNURL-pay endpoint
     final uri = Uri.parse('https://$domain/.well-known/lnurlp/$displayName');
     final response = await http.get(uri);
     if (response.statusCode != 200) {
@@ -84,7 +79,6 @@ Future<void> _payZapWithWallet(
       throw Exception('No relays available for zap.');
     }
 
-    // Convert user npub to hex format for zap (DataService pattern)
     String recipientPubkeyHex = user.pubkeyHex;
     if (user.pubkeyHex.startsWith('npub1')) {
       try {
@@ -96,24 +90,19 @@ Future<void> _payZapWithWallet(
             print('[ZapDialog] Error converting npub to hex: $e');
           }
         }
-        // Keep original if conversion fails
       }
     }
 
-    // Create zap request event following DataService.sendZap pattern
     final List<List<String>> tags = [
       ['relays', ...relays.map((e) => e.toString())],
       ['amount', amountMillisats],
       ['p', recipientPubkeyHex], // Recipient's pubkey in hex format
     ];
 
-    // Add LNURL if available
     if (lnurlBech32.isNotEmpty) {
       tags.add(['lnurl', lnurlBech32]);
     }
 
-    // CRITICAL: Add note reference for proper zap attribution
-    // This ensures the zap is tied to the specific note
     if (note.id.isNotEmpty) {
       tags.add(['e', note.id]);
       if (kDebugMode) {
@@ -127,7 +116,6 @@ Future<void> _payZapWithWallet(
       privateKey: privateKey,
     );
 
-    // Get invoice from LNURL-pay callback
     final encodedZap = Uri.encodeComponent(jsonEncode(NostrService.eventToJson(zapRequest)));
     final zapUrl = Uri.parse(
       '$callback?amount=$amountMillisats&nostr=$encodedZap${lnurlBech32.isNotEmpty ? '&lnurl=$lnurlBech32' : ''}',
@@ -144,19 +132,15 @@ Future<void> _payZapWithWallet(
       throw Exception('Invoice not returned by zap server.');
     }
 
-    // Pay the invoice using wallet
     final paymentResult = await walletRepository.payInvoice(invoice);
 
     if (paymentResult.isError) {
       throw Exception(paymentResult.error);
     }
 
-    // CRITICAL: Since we pay with our wallet (not LNURL callback),
-    // we need to manually create and publish the zap event (kind 9735)
     try {
       final webSocketManager = WebSocketManager.instance;
 
-      // 1. Publish zap request event (kind 9734) to relays
       final serializedZapRequest = NostrService.serializeEvent(zapRequest);
       await webSocketManager.priorityBroadcast(serializedZapRequest);
 
@@ -164,8 +148,6 @@ Future<void> _payZapWithWallet(
         print('[ZapDialog] Zap request event (kind 9734) published for note: ${note.id}');
       }
 
-      // 2. Since LNURL callback won't create zap event (we paid directly),
-      // we manually create the zap event (kind 9735) like LNURL would
       final zapEvent = Event.from(
         kind: 9735, // Zap event
         tags: [
@@ -178,7 +160,6 @@ Future<void> _payZapWithWallet(
         privkey: privateKey,
       );
 
-      // 3. Publish the zap event to relays
       final serializedZapEvent = NostrService.serializeEvent(zapEvent);
       await webSocketManager.priorityBroadcast(serializedZapEvent);
 
@@ -192,7 +173,6 @@ Future<void> _payZapWithWallet(
       if (kDebugMode) {
         print('[ZapDialog] Error creating/publishing zap event: $e');
       }
-      // Continue anyway, payment was successful
     }
     if (context.mounted) {
       AppToast.hide(context);
@@ -262,7 +242,6 @@ Future<void> showZapDialog({
 
                 Navigator.pop(modalContext);
 
-                // Get user profile for the note author
                 final userRepository = AppDI.get<UserRepository>();
                 final userResult = await userRepository.getUserProfile(note.author);
 

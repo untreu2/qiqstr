@@ -28,19 +28,16 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
   @override
   bool get wantKeepAlive => true;
 
-  // Simplified state
   NoteModel? _note;
   UserModel? _user;
   bool _isLoading = true;
   bool _hasError = false;
   bool _isDisposed = false;
 
-  // Services
   late final NostrDataService _nostrDataService;
   late final UserRepository _userRepository;
   late final String? _eventId;
 
-  // Cached computed data
   String? _formattedTime;
   Map<String, dynamic>? _parsedContent;
   bool _shouldTruncate = false;
@@ -68,12 +65,10 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
       debugPrint('[QuoteWidget] Extracting eventId from: $bech32');
 
       if (bech32.startsWith('note1')) {
-        // note1 için: decodeBasicBech32 ile hex alıyoruz
         final decoded = decodeBasicBech32(bech32, 'note');
         debugPrint('[QuoteWidget] note1 decoded to: $decoded');
         return decoded;
       } else if (bech32.startsWith('nevent1')) {
-        // nevent1 için: decodeTlvBech32Full ile decode edip 0. indeksteki type_0_main alıyoruz
         debugPrint('[QuoteWidget] Decoding nevent1...');
         final result = decodeTlvBech32Full(bech32, 'nevent');
         debugPrint('[QuoteWidget] nevent1 full result: $result');
@@ -97,7 +92,6 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
       return;
     }
 
-    // IMMEDIATE CHECK: If in cache, show immediately
     final cachedNote = _nostrDataService.cachedNotes.where((note) => note.id == _eventId).firstOrNull;
 
     if (cachedNote != null) {
@@ -105,18 +99,15 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
       return;
     }
 
-    // NOT IN CACHE: Start background fetch with short timeout
     _startBackgroundFetch();
   }
 
   void _startBackgroundFetch() {
-    // Short timeout - 1.5 seconds max
     Timer(const Duration(milliseconds: 1500), () {
       if (_isDisposed || !mounted || _note != null) return;
       _setError();
     });
 
-    // Background fetch - no retry, simple and fast
     Future.microtask(() async {
       if (_isDisposed || !mounted) return;
 
@@ -125,7 +116,6 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
 
         if (_isDisposed || !mounted) return;
 
-        // Check cache again after fetch
         final fetchedNote = _nostrDataService.cachedNotes.where((note) => note.id == _eventId).firstOrNull;
 
         if (fetchedNote != null) {
@@ -188,7 +178,6 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
           }
         },
         (error) {
-          // Create fallback user
           if (mounted) {
             setState(() => _user = _createFallbackUser(npub));
           }

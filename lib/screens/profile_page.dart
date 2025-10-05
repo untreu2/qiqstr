@@ -22,7 +22,6 @@ class _ProfilePageState extends State<ProfilePage> {
   late ScrollController _scrollController;
   late ProfileViewModel _profileViewModel;
 
-  // Legacy interface requirements for NoteListWidget
   final ValueNotifier<List<NoteModel>> _notesNotifier = ValueNotifier([]);
   final Map<String, UserModel> _profiles = {};
 
@@ -31,14 +30,11 @@ class _ProfilePageState extends State<ProfilePage> {
     super.initState();
     _scrollController = ScrollController();
 
-    // Initialize ProfileViewModel
     _profileViewModel = AppDI.get<ProfileViewModel>();
     _profileViewModel.initialize();
 
-    // Add this user to profiles map for legacy interface
     _profiles[widget.user.npub] = widget.user;
 
-    // Initialize ProfileViewModel with user and load notes
     _profileViewModel.initializeWithUser(widget.user.npub);
   }
 
@@ -83,7 +79,6 @@ class _ProfilePageState extends State<ProfilePage> {
             child: ProfileInfoWidget(
               user: widget.user,
               onNavigateToProfile: (npub) {
-                // Navigate to another profile
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -119,10 +114,8 @@ class _ProfilePageState extends State<ProfilePage> {
         return SliverUIStateBuilder<List<NoteModel>>(
           state: _profileViewModel.profileNotesState,
           builder: (context, notes) {
-            // Update notesNotifier for legacy interface
             _notesNotifier.value = notes;
 
-            // Use the same NoteListWidget structure as other pages
             return widgets.NoteListWidget(
               notes: notes,
               currentUserNpub: widget.user.npub,

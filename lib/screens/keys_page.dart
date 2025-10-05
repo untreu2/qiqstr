@@ -29,12 +29,10 @@ class _KeysPageState extends State<KeysPage> {
 
   Future<void> _loadKeys() async {
     try {
-      // Read hex private key and npub from storage
       final hexPrivateKey = await _secureStorage.read(key: 'privateKey');
       final npubBech32 = await _secureStorage.read(key: 'npub');
 
       if (hexPrivateKey != null && npubBech32 != null) {
-        // Generate nsec from hex private key dynamically
         String nsecBech32;
         try {
           nsecBech32 = Nip19.encodePrivkey(hexPrivateKey);

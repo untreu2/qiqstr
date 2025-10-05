@@ -21,7 +21,7 @@ Future<LinkPreviewModel?> _fetchAndParseLink(String url) async {
       return LinkPreviewModel(title: parsedTitle, imageUrl: parsedImage);
     }
   } catch (e) {
-    // Silently ignore link parsing errors to prevent disrupting UI rendering
+    // Silently ignore link preview parsing errors
   }
   return null;
 }
@@ -40,7 +40,6 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
   String? _imageUrl;
   bool _isLoading = true;
 
-  // Simple in-memory cache
   static final Map<String, LinkPreviewModel> _cache = {};
 
   @override
