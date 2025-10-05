@@ -53,7 +53,13 @@ class _ShareNotePageState extends State<ShareNotePage> {
   static const String _errorSharingNote = 'Error sharing note';
   static const String _maxMediaFilesMessage = 'Maximum $_maxMediaFiles media files allowed';
   static const String _fileTooLargeMessage = 'File is too large (max 50MB)';
+  static const String _invalidFileTypeMessage = 'Invalid file type. Only images and videos are allowed';
   static const String _emptyNoteMessage = 'Please enter a note or add media';
+  
+  static const List<String> _allowedExtensions = [
+    'jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif',
+    'mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v',
+  ];
 
   static const String _uploadingText = 'Uploading...';
   static const String _addMediaText = 'Add media';
@@ -206,7 +212,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
       final isarService = _userRepository.isarService;
       
       if (!isarService.isInitialized) {
-        debugPrint('[ShareNotePage] ️ Isar not initialized, waiting...');
+        debugPrint('[ShareNotePage] Isar not initialized, waiting...');
         await isarService.waitForInitialization();
       }
       
@@ -236,7 +242,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
           setState(() {
             _allUsers = cachedUsers;
           });
-          debugPrint('[ShareNotePage] ️ Using ${cachedUsers.length} users from NostrDataService fallback');
+          debugPrint('[ShareNotePage] Using ${cachedUsers.length} users from NostrDataService fallback');
         }
       } catch (fallbackError) {
         debugPrint('[ShareNotePage]  Fallback also failed: $fallbackError');
@@ -313,6 +319,11 @@ class _ShareNotePageState extends State<ShareNotePage> {
   Future<void> _uploadSingleFile(PlatformFile file) async {
     if (file.path == null) return;
 
+    if (!_isFileTypeValid(file)) {
+      _showErrorSnackBar('${file.name}: $_invalidFileTypeMessage');
+      return;
+    }
+
     if (!_isFileSizeValid(file)) {
       _showErrorSnackBar('${file.name} $_fileTooLargeMessage');
       return;
@@ -321,12 +332,20 @@ class _ShareNotePageState extends State<ShareNotePage> {
     try {
       final mediaResult = await _dataService.sendMedia(file.path!, _serverUrl);
       if (mediaResult.isSuccess && mediaResult.data != null) {
+        final uploadedUrl = mediaResult.data!;
+        
+        if (!_isValidMediaUrl(uploadedUrl)) {
+          _showErrorSnackBar('${file.name}: Server returned invalid media URL (no valid extension)');
+          debugPrint('[ShareNotePage] Invalid media URL from server: $uploadedUrl');
+          return;
+        }
+        
         if (mounted) {
           setState(() {
-            _mediaUrls.add(mediaResult.data!);
+            _mediaUrls.add(uploadedUrl);
           });
         }
-        debugPrint('[ShareNotePage] Media uploaded successfully: ${mediaResult.data}');
+        debugPrint('[ShareNotePage] Media uploaded successfully: $uploadedUrl');
       } else {
         throw Exception(mediaResult.error ?? 'Upload failed');
       }
@@ -337,6 +356,31 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   bool _isFileSizeValid(PlatformFile file) {
     return file.size <= _maxFileSizeBytes;
+  }
+
+  bool _isFileTypeValid(PlatformFile file) {
+    if (file.name.isEmpty) return false;
+    
+    final extension = file.name.split('.').last.toLowerCase();
+    return _allowedExtensions.contains(extension);
+  }
+
+  bool _isValidMediaUrl(String url) {
+    if (url.isEmpty) return false;
+    
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    
+    final path = uri.path.toLowerCase();
+    if (path.isEmpty) return false;
+    
+    final lastDotIndex = path.lastIndexOf('.');
+    if (lastDotIndex == -1 || lastDotIndex == path.length - 1) {
+      return false;
+    }
+    
+    final extension = path.substring(lastDotIndex + 1);
+    return _allowedExtensions.contains(extension);
   }
 
   void _setMediaUploadingState(bool isUploading) {
@@ -415,7 +459,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
         debugPrint('[ShareNotePage] Added quote as text: nostr:$note1Id');
       } catch (e) {
         debugPrint('[ShareNotePage] Error encoding hex to note1: $e');
-        quotePart = "\n\nnostr:$hexId"; // Fallback to original
+        quotePart = "\n\nnostr:$hexId";
       }
     }
 
