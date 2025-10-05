@@ -46,12 +46,6 @@ class _HomeNavigatorState extends State<HomeNavigator> {
     return Container(
       decoration: BoxDecoration(
         color: context.colors.surface,
-        border: Border(
-          top: BorderSide(
-            color: context.colors.borderLight,
-            width: 0.5,
-          ),
-        ),
       ),
       child: SafeArea(
         child: Container(
