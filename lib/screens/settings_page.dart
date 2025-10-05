@@ -25,33 +25,16 @@ class _SettingsPageState extends State<SettingsPage> {
           backgroundColor: context.colors.background,
           body: Stack(
             children: [
-              CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildHeader(context),
-                        const SizedBox(height: 16),
-                        _buildSettingsSection(context, themeManager),
-                      ],
-                    ),
-                  ),
-                  SliverFillRemaining(
-                    hasScrollBody: false,
-                    child: Column(
-                      children: [
-                        const Spacer(),
-                        const SizedBox(height: 100),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: _buildLogoutItem(context),
-                        ),
-                        const SizedBox(height: 150),
-                      ],
-                    ),
-                  ),
-                ],
+              SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(context),
+                    const SizedBox(height: 16),
+                    _buildSettingsSection(context, themeManager),
+                    const SizedBox(height: 150),
+                  ],
+                ),
               ),
               const BackButtonWidget.floating(),
             ],
@@ -136,7 +119,11 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const SizedBox(height: 8),
+          _buildExpandedNoteModeToggleItem(context, themeManager),
+          const SizedBox(height: 8),
           _buildThemeToggleItem(context, themeManager),
+          const SizedBox(height: 8),
+          _buildLogoutItem(context),
           const SizedBox(height: 32),
         ],
       ),
@@ -186,6 +173,48 @@ class _SettingsPageState extends State<SettingsPage> {
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExpandedNoteModeToggleItem(BuildContext context, ThemeManager themeManager) {
+    return GestureDetector(
+      onTap: () => themeManager.toggleExpandedNoteMode(),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+        decoration: BoxDecoration(
+          color: context.colors.overlayLight,
+          borderRadius: BorderRadius.circular(40),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              themeManager.isExpandedNoteMode ? CarbonIcons.expand_all : CarbonIcons.collapse_all,
+              size: 22,
+              color: context.colors.textPrimary,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                themeManager.isExpandedNoteMode ? 'Expanded Notes' : 'Normal Notes',
+                style: TextStyle(
+                  color: context.colors.textPrimary,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Switch(
+              value: themeManager.isExpandedNoteMode,
+              onChanged: (value) => themeManager.toggleExpandedNoteMode(),
+              activeThumbColor: context.colors.accent,
+              inactiveThumbColor: context.colors.textSecondary,
+              inactiveTrackColor: context.colors.border,
+              activeTrackColor: context.colors.accent.withValues(alpha: 0.3),
             ),
           ],
         ),

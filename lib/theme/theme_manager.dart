@@ -5,7 +5,9 @@ import '../colors.dart';
 
 class ThemeManager extends ChangeNotifier {
   static const String _themeKey = 'theme_mode';
+  static const String _expandedNoteModeKey = 'expanded_note_mode';
   bool? _isDarkMode;
+  bool _isExpandedNoteMode = false;
 
   bool get isDarkMode {
     if (_isDarkMode != null) {
@@ -16,9 +18,11 @@ class ThemeManager extends ChangeNotifier {
   }
 
   bool get isSystemTheme => _isDarkMode == null;
+  bool get isExpandedNoteMode => _isExpandedNoteMode;
 
   ThemeManager() {
     _loadTheme();
+    _loadExpandedNoteMode();
   }
 
   Future<void> _loadTheme() async {
@@ -28,6 +32,12 @@ class ThemeManager extends ChangeNotifier {
     } else {
       _isDarkMode = null;
     }
+    notifyListeners();
+  }
+
+  Future<void> _loadExpandedNoteMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    _isExpandedNoteMode = prefs.getBool(_expandedNoteModeKey) ?? false;
     notifyListeners();
   }
 
@@ -58,6 +68,22 @@ class ThemeManager extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_themeKey);
     notifyListeners();
+  }
+
+  Future<void> toggleExpandedNoteMode() async {
+    _isExpandedNoteMode = !_isExpandedNoteMode;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_expandedNoteModeKey, _isExpandedNoteMode);
+    notifyListeners();
+  }
+
+  Future<void> setExpandedNoteMode(bool isExpanded) async {
+    if (_isExpandedNoteMode != isExpanded) {
+      _isExpandedNoteMode = isExpanded;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_expandedNoteModeKey, _isExpandedNoteMode);
+      notifyListeners();
+    }
   }
 
   AppThemeColors get colors => isDarkMode ? AppThemeColors.dark() : AppThemeColors.light();

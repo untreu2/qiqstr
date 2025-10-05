@@ -492,7 +492,21 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
 
     try {
       final colors = context.colors;
+      final themeManager = context.themeManager;
+      final isExpanded = themeManager?.isExpandedNoteMode ?? false;
 
+      if (isExpanded) {
+        return _buildExpandedLayout(colors);
+      } else {
+        return _buildNormalLayout(colors);
+      }
+    } catch (e) {
+      debugPrint('[NoteWidget] Build error: $e');
+      return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildNormalLayout(dynamic colors) {
       return RepaintBoundary(
         key: ValueKey(_widgetKey),
         child: GestureDetector(
@@ -523,6 +537,8 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                             : null,
                         colors: colors,
                         widgetKey: _widgetKey,
+                      isExpanded: false,
+                      formattedTimestamp: _formattedTimestamp,
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -567,10 +583,143 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
           ),
         ),
       );
-    } catch (e) {
-      debugPrint('[NoteWidget] Build error: $e');
-      return const SizedBox.shrink();
-    }
+  }
+
+  Widget _buildExpandedLayout(dynamic colors) {
+    return RepaintBoundary(
+      key: ValueKey(_widgetKey),
+      child: GestureDetector(
+        onTap: _navigateToThreadPage,
+        child: Container(
+          color: widget.containerColor ?? colors.background,
+          padding: const EdgeInsets.only(bottom: 2),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ValueListenableBuilder<_NoteState>(
+                      valueListenable: _stateNotifier,
+                      builder: (context, state, _) {
+                        final hasRepost = _isRepost && _reposterId != null;
+                        final hasReply = state.replyText != null;
+                        
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (hasRepost)
+                              Padding(
+                                padding: EdgeInsets.only(
+                                  top: 4, 
+                                  bottom: hasReply ? 2 : 4,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.repeat,
+                                      size: 14,
+                                      color: colors.textSecondary,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Reposted by ${state.reposterUser?.name ?? 'Anonymous'}',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: colors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            if (hasReply)
+                              Padding(
+                                padding: EdgeInsets.only(
+                                  top: hasRepost ? 0 : 4,
+                                  bottom: 4,
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.reply,
+                                      size: 14,
+                                      color: colors.textSecondary,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      state.replyText!,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: colors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        );
+                      },
+                    ),
+                    Padding(
+                      padding: EdgeInsets.only(top: (_isRepost || _isReply) ? 0 : 4),
+                      child: _SafeProfileSection(
+                        stateNotifier: _stateNotifier,
+                        isRepost: _isRepost,
+                        onAuthorTap: () {
+                          debugPrint('[NoteWidget] Author avatar tapped for: $_authorId');
+                          _navigateToProfile(_authorId);
+                        },
+                        onReposterTap: _reposterId != null
+                            ? () {
+                                final reposterId = _reposterId;
+                                _navigateToProfile(reposterId);
+                              }
+                            : null,
+                        colors: colors,
+                        widgetKey: _widgetKey,
+                        isExpanded: true,
+                        formattedTimestamp: _formattedTimestamp,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: RepaintBoundary(
+                        child: _SafeContentSection(
+                          parsedContent: _shouldTruncate ? _truncatedContent! : _parsedContent,
+                          onMentionTap: _navigateToMentionProfile,
+                          onShowMoreTap: _shouldTruncate ? (_) => _navigateToThreadPage() : null,
+                          notesListProvider: widget.notesListProvider,
+                          noteId: _noteId,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: RepaintBoundary(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: widget.currentUserNpub.isNotEmpty
+                              ? InteractionBar(
+                                  noteId: _getInteractionNoteId(),
+                                  currentUserNpub: widget.currentUserNpub,
+                                  note: widget.note,
+                                )
+                              : const SizedBox(height: 32),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -613,6 +762,8 @@ class _SafeProfileSection extends StatelessWidget {
   final VoidCallback? onReposterTap;
   final dynamic colors;
   final String widgetKey;
+  final bool isExpanded;
+  final String formattedTimestamp;
 
   static final Map<String, Widget> _avatarCache = <String, Widget>{};
 
@@ -623,6 +774,8 @@ class _SafeProfileSection extends StatelessWidget {
     required this.onReposterTap,
     required this.colors,
     required this.widgetKey,
+    required this.isExpanded,
+    required this.formattedTimestamp,
   });
 
   Widget _getCachedAvatar(String imageUrl, double radius, String cacheKey) {
@@ -685,6 +838,20 @@ class _SafeProfileSection extends StatelessWidget {
       valueListenable: stateNotifier,
       builder: (context, state, _) {
         try {
+          if (isExpanded) {
+            return _buildExpandedProfile(state);
+          } else {
+            return _buildNormalProfile(state);
+          }
+        } catch (e) {
+          debugPrint('[ProfileSection] Build error: $e');
+          return const SizedBox(width: 44, height: 44);
+        }
+      },
+    );
+  }
+
+  Widget _buildNormalProfile(_NoteState state) {
           return Stack(
             children: [
               Padding(
@@ -719,11 +886,76 @@ class _SafeProfileSection extends StatelessWidget {
                 ),
             ],
           );
-        } catch (e) {
-          debugPrint('[ProfileSection] Build error: $e');
-          return const SizedBox(width: 44, height: 44);
-        }
-      },
+  }
+
+  Widget _buildExpandedProfile(_NoteState state) {
+    // Tüm durumlar için yan yana göster (repost ve reply başlıkları yukarıda)
+    return GestureDetector(
+      onTap: onAuthorTap,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          GestureDetector(
+            onTap: onAuthorTap,
+            child: _getCachedAvatar(
+              state.authorUser?.profileImage ?? '',
+              22,
+              '${widgetKey}_author_${state.authorUser?.profileImage.hashCode ?? 0}',
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          state.authorUser?.name.isNotEmpty == true
+                              ? state.authorUser!.name
+                              : (state.authorUser?.pubkeyHex.substring(0, 8) ?? 'Anonymous'),
+                          style: TextStyle(
+                            fontSize: 15,
+                            color: colors.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (state.authorUser?.nip05.isNotEmpty == true && state.authorUser?.nip05Verified == true) ...[
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.verified,
+                          size: 16,
+                          color: colors.accent,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (state.authorUser?.nip05.isNotEmpty == true)
+                  Flexible(
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: Text(
+                        '• ${state.authorUser!.nip05}',
+                        style: TextStyle(fontSize: 12.5, color: colors.secondary),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: Text('• $formattedTimestamp', style: TextStyle(fontSize: 12.5, color: colors.secondary)),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
