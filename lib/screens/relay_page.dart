@@ -405,15 +405,30 @@ class _RelayPageState extends State<RelayPage> {
 
   Future<void> _saveRelays() async {
     try {
+      if (kDebugMode) {
+        print('[RelayPage] Saving ${_relays.length} relays: $_relays');
+      }
+      
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList('custom_main_relays', _relays);
+      
+      if (kDebugMode) {
+        final saved = prefs.getStringList('custom_main_relays');
+        print('[RelayPage] Saved to SharedPreferences: $saved');
+      }
 
+      if (kDebugMode) {
+        print('[RelayPage] Calling reloadCustomRelays...');
+      }
       await WebSocketManager.instance.reloadCustomRelays();
 
       if (mounted) {
         AppToast.success(context, 'Relays saved successfully');
       }
     } catch (e) {
+      if (kDebugMode) {
+        print('[RelayPage] Error saving relays: $e');
+      }
       if (mounted) {
         AppToast.error(context, 'Error saving relays: ${e.toString()}');
       }

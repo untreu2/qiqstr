@@ -37,6 +37,7 @@ class WebSocketManager {
   final int maxReconnectAttempts = 5;
   final Duration maxBackoffDelay = const Duration(minutes: 2);
   bool _isClosed = false;
+  bool _isInitialized = false;
 
   final Queue<String> _messageQueue = Queue();
   Timer? _messageProcessingTimer;
@@ -46,32 +47,43 @@ class WebSocketManager {
   final Duration healthCheckInterval = const Duration(minutes: 1);
 
   WebSocketManager._internal() {
-    _initializeWithDefaultRelays();
+    _startMessageProcessing();
+    _startHealthMonitoring();
+    
+    _ensureInitialized();
   }
 
-  void _initializeWithDefaultRelays() {
-    if (relayUrls.isEmpty) {
-      relayUrls.addAll(relaySetMainSockets);
-      _initializeStats();
-      _startMessageProcessing();
-      _startHealthMonitoring();
-
-      _loadCustomRelays();
-    }
-  }
-
-  Future<void> _loadCustomRelays() async {
+  Future<void> _ensureInitialized() async {
+    if (_isInitialized) return;
+    
     try {
+      if (kDebugMode) {
+        print('[WebSocketManager] Initializing relay list...');
+      }
+      
+      
       final customRelays = await getRelaySetMainSockets();
-      if (customRelays.isNotEmpty && !_listEquals(relayUrls, customRelays)) {
-        relayUrls.clear();
-        _connectionStats.clear();
-
+      
+      if (relayUrls.isEmpty) {
         relayUrls.addAll(customRelays);
         _initializeStats();
+        
+        if (kDebugMode) {
+          print('[WebSocketManager] Initialized with ${customRelays.length} relays: $customRelays');
+        }
       }
+      
+      _isInitialized = true;
     } catch (e) {
-      // Silently ignore relay loading errors
+      if (kDebugMode) {
+        print('[WebSocketManager] Error initializing relays: $e');
+      }
+      
+      if (relayUrls.isEmpty) {
+        relayUrls.addAll(relaySetMainSockets);
+        _initializeStats();
+      }
+      _isInitialized = true;
     }
   }
 
@@ -139,7 +151,7 @@ class WebSocketManager {
     try {
       await _connectSingleRelay(url, null, null);
     } catch (e) {
-      // Reconnection failed, will retry based on backoff strategy
+      
     }
   }
 
@@ -163,6 +175,9 @@ class WebSocketManager {
     Function(String relayUrl)? onDisconnected,
     String? serviceId,
   }) async {
+    
+    await _ensureInitialized();
+    
     if (serviceId != null) {
       _eventHandlers[serviceId] = onEvent;
       _disconnectHandlers[serviceId] = onDisconnected;
@@ -170,6 +185,10 @@ class WebSocketManager {
 
     if (_webSockets.isNotEmpty) {
       return;
+    }
+
+    if (kDebugMode) {
+      print('[WebSocketManager] Connecting to ${relayUrls.length} relays: $relayUrls');
     }
 
     final connectionFutures = relayUrls.map((relayUrl) => _connectSingleRelay(relayUrl, onEvent, onDisconnected));
@@ -223,14 +242,14 @@ class WebSocketManager {
               onEvent?.call(event, relayUrl);
             }
           } catch (e) {
-            // Error in event handler, log and continue
+            
           }
         },
         onDone: () {
           try {
             _handleDisconnection(relayUrl, onDisconnected);
           } catch (e) {
-            // Connection error handling
+            
           }
         },
         onError: (error) {
@@ -241,7 +260,7 @@ class WebSocketManager {
               _handleDisconnection(relayUrl, onDisconnected);
             }
           } catch (e) {
-            // Error handling during disconnection
+            
           }
         },
         cancelOnError: false,
@@ -456,7 +475,7 @@ class WebSocketManager {
                 }
               }
             } catch (e) {
-              // Event handler error during reconnection
+              
             }
           },
           onDone: () {
@@ -466,7 +485,7 @@ class WebSocketManager {
                 reconnectRelay(relayUrl, targetNpubs, attempt: attempt + 1);
               }
             } catch (e) {
-              // Disconnection handling error
+              
             }
           },
           onError: (error) {
@@ -481,7 +500,7 @@ class WebSocketManager {
                 }
               }
             } catch (e) {
-              // Error handling during reconnection
+              
             }
           },
           cancelOnError: false,
@@ -528,7 +547,7 @@ class WebSocketManager {
           await ws.close();
         }
       } catch (e) {
-        // WebSocket close error, connection already closed
+        
       }
     }
 
@@ -575,33 +594,76 @@ class WebSocketManager {
   }
 
   Future<void> reloadCustomRelays() async {
-    Future.microtask(() async {
+    await Future.microtask(() async {
       try {
         final customRelays = await getRelaySetMainSockets();
+        
+        if (kDebugMode) {
+          print('[WebSocketManager] Reloading custom relays...');
+          print('[WebSocketManager] Current relays: ${relayUrls.length} - $relayUrls');
+          print('[WebSocketManager] New relays: ${customRelays.length} - $customRelays');
+        }
+        
         if (!_listEquals(relayUrls, customRelays)) {
+          if (kDebugMode) {
+            print('[WebSocketManager] Relay list changed, updating...');
+          }
+          
+          
+          final activeConnections = _webSockets.length;
           final closeFutures = _webSockets.values.map((ws) async {
             try {
               if (ws.readyState == WebSocket.open || ws.readyState == WebSocket.connecting) {
                 await ws.close();
               }
             } catch (e) {
-              // WebSocket close error during reload
+              
             }
           });
           await Future.wait(closeFutures, eagerError: false);
 
           await Future.delayed(Duration.zero);
 
+          
           _webSockets.clear();
-
           relayUrls.clear();
           _connectionStats.clear();
 
+          
           relayUrls.addAll(customRelays);
           _initializeStats();
+
+          if (kDebugMode) {
+            print('[WebSocketManager] Updated to ${customRelays.length} relays');
+          }
+
+          
+          if (activeConnections > 0) {
+            if (kDebugMode) {
+              print('[WebSocketManager] Reconnecting to ${relayUrls.length} new relays...');
+            }
+            final connectionFutures = relayUrls.map((relayUrl) => 
+              _connectSingleRelay(relayUrl, null, null)
+            );
+            await Future.wait(connectionFutures, eagerError: false);
+            
+            if (kDebugMode) {
+              print('[WebSocketManager] Reconnection complete: ${_webSockets.length} active connections');
+            }
+          } else {
+            if (kDebugMode) {
+              print('[WebSocketManager] No active connections, will connect on next connectRelays() call');
+            }
+          }
+        } else {
+          if (kDebugMode) {
+            print('[WebSocketManager] Relay list unchanged, no update needed');
+          }
         }
       } catch (e) {
-        // Error during relay reload
+        if (kDebugMode) {
+          print('[WebSocketManager] Error during relay reload: $e');
+        }
       }
     });
   }
@@ -795,7 +857,7 @@ class PrimalCacheClient {
           try {
             if (!completer.isCompleted) completer.complete(null);
           } catch (e) {
-            // Cache client disconnection error
+            
           }
         },
         cancelOnError: false,

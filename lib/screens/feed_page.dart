@@ -184,12 +184,10 @@ class FeedPageState extends State<FeedPage> {
   }
 
   String _getRelayCountText() {
-    final activeSockets = _webSocketManager.activeSockets.length;
-
-    if (activeSockets == 1) {
+    if (_connectedRelayCount == 1) {
       return '1 relay';
     } else {
-      return '$activeSockets relays';
+      return '$_connectedRelayCount relays';
     }
   }
 
