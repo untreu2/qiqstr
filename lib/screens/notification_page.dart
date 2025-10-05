@@ -300,6 +300,76 @@ class _NotificationPageState extends State<NotificationPage> {
           ),
         ),
       );
+    } else if (item is NotificationModel) {
+      // Handle other single notification types (reaction, mention, repost)
+      final profile = viewModel.userProfiles[item.author];
+      final image = profile?.profileImage ?? '';
+
+      return Container(
+        color: context.colors.background,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GestureDetector(
+                    onTap: () => _navigateToAuthorProfile(item.author),
+                    child: CircleAvatar(
+                      radius: 20,
+                      backgroundColor: context.colors.grey800,
+                      backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
+                      child: image.isEmpty ? Icon(Icons.person, size: 20, color: context.colors.textPrimary) : null,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        GestureDetector(
+                          onTap: () => _navigateToAuthorProfile(item.author),
+                          child: Text(
+                            viewModel.buildGroupTitle(item),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                              color: context.colors.textPrimary,
+                              height: 1.3,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatTimestamp(item.timestamp),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: context.colors.textSecondary,
+                          ),
+                        ),
+                        if (item.type == 'mention' && item.content.trim().isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          NoteContentWidget(
+                            parsedContent: _parseContent(item.content),
+                            noteId: item.id,
+                            onNavigateToMentionProfile: _navigateToProfileFromContent,
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        QuoteWidget(
+                          bech32: _encodeEventId(item.targetEventId),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     return const SizedBox.shrink();
