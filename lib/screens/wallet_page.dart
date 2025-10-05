@@ -15,7 +15,7 @@ class WalletPage extends StatefulWidget {
   State<WalletPage> createState() => _WalletPageState();
 }
 
-class _WalletPageState extends State<WalletPage> {
+class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMixin {
   final TextEditingController _nwcController = TextEditingController();
   final _walletRepository = AppDI.get<WalletRepository>();
 
@@ -26,6 +26,9 @@ class _WalletPageState extends State<WalletPage> {
   bool _isLoadingTransactions = false;
   String? _error;
   Timer? _balanceTimer;
+
+  @override
+  bool get wantKeepAlive => false; 
 
   @override
   void initState() {
@@ -123,7 +126,9 @@ class _WalletPageState extends State<WalletPage> {
 
   void _startBalanceTimer() {
     _balanceTimer?.cancel();
-    _balanceTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    
+    
+    _balanceTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       if (_connection != null && mounted) {
         _getBalance();
       }
@@ -161,7 +166,7 @@ class _WalletPageState extends State<WalletPage> {
     final clipboardData = await Clipboard.getData('text/plain');
     if (clipboardData != null && clipboardData.text != null) {
       _nwcController.text = clipboardData.text!;
-      // Auto-connect after paste
+      
       if (_nwcController.text.trim().isNotEmpty) {
         _connectWallet();
       }
@@ -523,6 +528,7 @@ class _WalletPageState extends State<WalletPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); 
     return Consumer<ThemeManager>(
       builder: (context, themeManager, child) {
         return Scaffold(
@@ -681,7 +687,7 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
 
     try {
       final result = await widget.walletRepository.makeInvoice(
-        amountValue * 1000, // Convert sats to millisats
+        amountValue * 1000, 
         _memoController.text.trim().isEmpty ? 'Receive $amountValue sats' : _memoController.text.trim(),
       );
 
