@@ -60,6 +60,9 @@ class NostrDataService {
   final Map<String, DateTime> _lastInteractionFetch = {};
   final Duration _interactionFetchCooldown = Duration(seconds: 5);
 
+  bool _notificationSubscriptionActive = false;
+  String? _notificationSubscriptionId;
+
   NostrDataService({
     required AuthService authService,
     WebSocketManager? relayManager,
@@ -2132,35 +2135,50 @@ class NostrDataService {
       if (since != null) {
         sinceTimestamp = since.millisecondsSinceEpoch ~/ 1000;
       } else {
-        sinceTimestamp = timeService.subtract(const Duration(days: 1)).millisecondsSinceEpoch ~/ 1000;
+        sinceTimestamp = timeService.subtract(const Duration(days: 7)).millisecondsSinceEpoch ~/ 1000;
       }
 
       debugPrint('[NostrDataService]  Notification filter since: $sinceTimestamp');
 
+      if (_notificationSubscriptionActive && _notificationSubscriptionId != null) {
+        debugPrint('[NostrDataService]  Closing existing notification subscription: $_notificationSubscriptionId');
+        await _relayManager.broadcast(jsonEncode(['CLOSE', _notificationSubscriptionId]));
+      }
+
       final filter = {
-        'kinds': [1, 6, 7, 9735], // mentions, reposts, reactions, zaps
-        '#p': [pubkeyHex], // Events that mention the user in p tags
+        'kinds': [1, 6, 7, 9735],
+        '#p': [pubkeyHex],
         'since': sinceTimestamp,
         'limit': limit,
       };
 
-      final subscriptionId = 'notifications_${DateTime.now().millisecondsSinceEpoch}';
-      final request = ['REQ', subscriptionId, filter];
+      _notificationSubscriptionId = 'notifications_persistent';
+      final request = ['REQ', _notificationSubscriptionId, filter];
 
-      debugPrint('[NostrDataService]  Broadcasting notification request: $request');
+      debugPrint('[NostrDataService]  Broadcasting persistent notification request: $request');
 
       await _relayManager.broadcast(jsonEncode(request));
+      _notificationSubscriptionActive = true;
 
-      await Future.delayed(const Duration(seconds: 2));
+      await Future.delayed(const Duration(seconds: 3));
 
       final notifications = _notificationCache[_currentUserNpub] ?? [];
 
-      debugPrint('[NostrDataService]  Returning ${notifications.length} cached notifications');
+      debugPrint('[NostrDataService]  Returning ${notifications.length} cached notifications (subscription remains active)');
 
       return Result.success(notifications.take(limit).toList());
     } catch (e) {
       debugPrint('[NostrDataService]  Error fetching notifications: $e');
       return Result.error('Failed to fetch notifications: $e');
+    }
+  }
+
+  Future<void> stopNotificationSubscription() async {
+    if (_notificationSubscriptionActive && _notificationSubscriptionId != null) {
+      debugPrint('[NostrDataService]  Stopping notification subscription: $_notificationSubscriptionId');
+      await _relayManager.broadcast(jsonEncode(['CLOSE', _notificationSubscriptionId]));
+      _notificationSubscriptionActive = false;
+      _notificationSubscriptionId = null;
     }
   }
 

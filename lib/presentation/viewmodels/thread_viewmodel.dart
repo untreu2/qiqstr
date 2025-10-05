@@ -78,13 +78,19 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
   Future<void> loadThread() async {
     await executeOperation('loadThread', () async {
-      _rootNoteState = const LoadingState();
-      _repliesState = const LoadingState();
-      safeNotifyListeners();
-
-      debugPrint(' [ThreadViewModel] INSTANT thread loading for: $_rootNoteId');
+      debugPrint(' [ThreadViewModel] Loading thread for: $_rootNoteId');
 
       try {
+        final cachedRootResult = await _noteRepository.getNoteById(_rootNoteId);
+        if (cachedRootResult.isSuccess && cachedRootResult.data != null) {
+          _rootNoteState = LoadedState(cachedRootResult.data!);
+          safeNotifyListeners();
+          debugPrint(' [ThreadViewModel] Root note loaded from cache immediately');
+        } else {
+          _rootNoteState = const LoadingState();
+          safeNotifyListeners();
+        }
+
         final results = await Future.wait([
           _noteRepository.getNoteById(_rootNoteId),
           _noteRepository.getThreadReplies(_rootNoteId),
@@ -140,9 +146,9 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         }
 
         safeNotifyListeners();
-        debugPrint(' [ThreadViewModel] INSTANT thread loading completed');
+        debugPrint(' [ThreadViewModel] Thread loading completed');
       } catch (e) {
-        debugPrint(' [ThreadViewModel] Error in instant thread loading: $e');
+        debugPrint(' [ThreadViewModel] Error in thread loading: $e');
         _rootNoteState = ErrorState('Failed to load thread: $e');
         _repliesState = ErrorState('Failed to load thread: $e');
         safeNotifyListeners();

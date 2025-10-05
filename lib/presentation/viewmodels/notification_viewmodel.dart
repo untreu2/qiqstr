@@ -171,11 +171,24 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
   }
 
   void _subscribeToNotificationUpdates() {
+    debugPrint('[NotificationViewModel] Setting up notification stream subscriptions');
+    
     addSubscription(
       _notificationRepository.notificationsStream.listen((notifications) {
         if (!isDisposed) {
+          debugPrint('[NotificationViewModel] Received ${notifications.length} notifications from stream');
+          
           final groupedNotifications = _notificationRepository.groupNotifications(notifications);
-          _notificationsState = groupedNotifications.isEmpty ? const EmptyState('No notifications yet') : LoadedState(groupedNotifications);
+          
+          _loadUserProfiles(notifications);
+          
+          _fetchTargetEvents(notifications);
+          
+          _notificationsState = groupedNotifications.isEmpty 
+              ? const EmptyState('No notifications yet') 
+              : LoadedState(groupedNotifications);
+          
+          debugPrint('[NotificationViewModel] Updated state with ${groupedNotifications.length} grouped items');
           safeNotifyListeners();
         }
       }),
@@ -184,11 +197,14 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
     addSubscription(
       _notificationRepository.unreadCountStream.listen((count) {
         if (!isDisposed) {
+          debugPrint('[NotificationViewModel] Unread count updated: $count');
           _unreadCountState = LoadedState(count);
           safeNotifyListeners();
         }
       }),
     );
+    
+    debugPrint('[NotificationViewModel] Stream subscriptions active');
   }
 
   String buildGroupTitle(dynamic item) {

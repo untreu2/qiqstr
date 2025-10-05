@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart';
+
 import '../../core/base/result.dart';
 import '../../models/notification_model.dart';
 import '../../models/user_model.dart';
@@ -18,22 +20,58 @@ class NotificationRepository {
   final List<NotificationModel> _notifications = [];
   int _unreadCount = 0;
 
+  StreamSubscription<List<NotificationModel>>? _notificationStreamSubscription;
+
   NotificationRepository({
     required AuthService authService,
     required NetworkService networkService,
     required ValidationService validationService,
     required NostrDataService nostrDataService,
   })  : _authService = authService,
-        _nostrDataService = nostrDataService;
+        _nostrDataService = nostrDataService {
+    _setupRealTimeNotifications();
+  }
 
   Stream<List<NotificationModel>> get notificationsStream => _notificationsController.stream;
   Stream<int> get unreadCountStream => _unreadCountController.stream;
+
+  void _setupRealTimeNotifications() {
+    debugPrint('[NotificationRepository] Setting up real-time notification updates');
+    
+    _notificationStreamSubscription = _nostrDataService.notificationsStream.listen((newNotifications) {
+      debugPrint('[NotificationRepository] Stream received ${newNotifications.length} notifications');
+
+      int addedCount = 0;
+      for (final notification in newNotifications) {
+        if (!_notifications.any((n) => n.id == notification.id)) {
+          _notifications.add(notification);
+          addedCount++;
+          _unreadCount++;
+        }
+      }
+
+      if (addedCount > 0) {
+        debugPrint('[NotificationRepository] Added $addedCount new notifications, total: ${_notifications.length}');
+
+        _notifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+        _notificationsController.add(_notifications);
+        _unreadCountController.add(_unreadCount);
+
+        debugPrint('[NotificationRepository] Emitted update to subscribers');
+      }
+    });
+
+    debugPrint('[NotificationRepository] Real-time notification stream is now active');
+  }
 
   Future<Result<List<NotificationModel>>> getNotifications({
     int limit = 50,
     DateTime? since,
   }) async {
     try {
+      debugPrint('[NotificationRepository] getNotifications called with limit: $limit');
+
       final userResult = await _authService.getCurrentUserPublicKeyHex();
 
       if (userResult.isError) {
@@ -56,12 +94,15 @@ class NotificationRepository {
 
         _unreadCount = result.data!.length;
 
+        debugPrint('[NotificationRepository] Loaded ${_notifications.length} notifications');
+
         _notificationsController.add(_notifications);
         _unreadCountController.add(_unreadCount);
       }
 
       return result;
     } catch (e) {
+      debugPrint('[NotificationRepository] Error getting notifications: $e');
       return Result.error('Failed to get notifications: $e');
     }
   }
@@ -158,6 +199,8 @@ class NotificationRepository {
   }
 
   void dispose() {
+    debugPrint('[NotificationRepository] Disposing notification repository');
+    _notificationStreamSubscription?.cancel();
     _notificationsController.close();
     _unreadCountController.close();
     _notifications.clear();

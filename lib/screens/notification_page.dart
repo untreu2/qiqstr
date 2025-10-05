@@ -28,9 +28,14 @@ class _NotificationPageState extends State<NotificationPage> {
     return ViewModelProvider.notification(
       builder: (context, viewModel) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (viewModel.isInitialized) {
+          if (viewModel.isInitialized && !viewModel.isNotificationsLoading) {
             viewModel.loadNotificationsCommand.execute();
-            viewModel.markAllAsReadCommand.execute();
+            
+            Future.delayed(const Duration(milliseconds: 500), () {
+              if (context.mounted) {
+                viewModel.markAllAsReadCommand.execute();
+              }
+            });
           }
         });
 
@@ -44,22 +49,32 @@ class _NotificationPageState extends State<NotificationPage> {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildHeader(context, vm),
+                      _buildHeader(context, vm, notifications.length),
                       Expanded(
                         child: notifications.isEmpty
                             ? _buildEmptyState(context)
                             : RefreshIndicator(
                                 onRefresh: () => vm.refreshNotificationsCommand.execute(),
+                                color: context.colors.textPrimary,
                                 child: ListView.separated(
-                                  padding: EdgeInsets.zero,
+                                  padding: const EdgeInsets.only(bottom: 80),
+                                  physics: const AlwaysScrollableScrollPhysics(),
                                   itemCount: notifications.length,
                                   itemBuilder: (context, index) => _buildNotificationTile(
                                     notifications[index],
                                     vm,
+                                    index,
                                   ),
-                                  separatorBuilder: (_, __) => Divider(
-                                    color: context.colors.border,
-                                    height: 1,
+                                  separatorBuilder: (_, __) => SizedBox(
+                                    height: 24,
+                                    child: Center(
+                                      child: Container(
+                                        height: 0.5,
+                                        decoration: BoxDecoration(
+                                          color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -78,84 +93,118 @@ class _NotificationPageState extends State<NotificationPage> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, NotificationViewModel viewModel) {
+  Widget _buildHeader(BuildContext context, NotificationViewModel viewModel, int notificationCount) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 60, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 60, 16, 16),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            'Notifications',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
-              color: context.colors.textPrimary,
-              letterSpacing: -0.5,
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Notifications',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                  color: context.colors.textPrimary,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              if (notificationCount > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '$notificationCount notification${notificationCount != 1 ? 's' : ''}',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: context.colors.textSecondary,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildNotificationTile(dynamic item, NotificationViewModel viewModel) {
+  Widget _buildNotificationTile(dynamic item, NotificationViewModel viewModel, int index) {
     if (item is NotificationGroup) {
       final first = item.notifications.first;
       final profile = viewModel.userProfiles[first.author];
       final image = profile?.profileImage ?? '';
 
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              horizontalTitleGap: 8,
-              leading: GestureDetector(
-                onTap: () => _navigateToAuthorProfile(first.author),
-                child: CircleAvatar(
-                  radius: 18,
-                  backgroundColor: context.colors.grey800,
-                  backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
-                  child: image.isEmpty ? Icon(Icons.person, size: 18, color: context.colors.textPrimary) : null,
-                ),
+      return Container(
+        color: context.colors.background,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GestureDetector(
+                    onTap: () => _navigateToAuthorProfile(first.author),
+                    child: CircleAvatar(
+                      radius: 20,
+                      backgroundColor: context.colors.grey800,
+                      backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
+                      child: image.isEmpty ? Icon(Icons.person, size: 20, color: context.colors.textPrimary) : null,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Builder(
+                          builder: (context) {
+                            final titleText = viewModel.buildGroupTitle(item);
+                            final titleStyle = TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                              color: context.colors.textPrimary,
+                              height: 1.3,
+                            );
+                            if (item.notifications.length == 1) {
+                              return GestureDetector(
+                                onTap: () => _navigateToAuthorProfile(first.author),
+                                child: Text(titleText, style: titleStyle),
+                              );
+                            } else {
+                              return Text(titleText, style: titleStyle);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatTimestamp(first.timestamp),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: context.colors.textSecondary,
+                          ),
+                        ),
+                        if (first.type == 'mention' && first.content.trim().isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          NoteContentWidget(
+                            parsedContent: _parseContent(first.content),
+                            noteId: first.id,
+                            onNavigateToMentionProfile: _navigateToProfileFromContent,
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        QuoteWidget(
+                          bech32: _encodeEventId(first.targetEventId),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-              title: Builder(
-                builder: (context) {
-                  final titleText = viewModel.buildGroupTitle(item);
-                  final titleStyle = TextStyle(
-                    fontWeight: FontWeight.w500,
-                    fontSize: 15,
-                    color: context.colors.textPrimary,
-                  );
-                  if (item.notifications.length == 1) {
-                    return GestureDetector(
-                      onTap: () => _navigateToAuthorProfile(first.author),
-                      child: Text(titleText, style: titleStyle),
-                    );
-                  } else {
-                    return Text(titleText, style: titleStyle);
-                  }
-                },
-              ),
-            ),
-            if (first.type == 'mention' && first.content.trim().isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: NoteContentWidget(
-                  parsedContent: _parseContent(first.content),
-                  noteId: first.id,
-                  onNavigateToMentionProfile: _navigateToProfileFromContent,
-                ),
-              ),
-            if (first.type == 'mention' && first.content.trim().isNotEmpty) const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: QuoteWidget(
-                bech32: _encodeEventId(first.targetEventId),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     } else if (item is NotificationModel && item.type == 'zap') {
@@ -163,55 +212,114 @@ class _NotificationPageState extends State<NotificationPage> {
       final image = profile?.profileImage ?? '';
       final displayName = profile?.name.isNotEmpty == true ? profile!.name : 'Anonymous';
 
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              horizontalTitleGap: 8,
-              leading: GestureDetector(
-                onTap: () => _navigateToAuthorProfile(item.author),
-                child: CircleAvatar(
-                  radius: 18,
-                  backgroundColor: context.colors.grey800,
-                  backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
-                  child: image.isEmpty ? Icon(Icons.flash_on, size: 18, color: context.colors.textPrimary) : null,
-                ),
-              ),
-              title: GestureDetector(
-                onTap: () => _navigateToAuthorProfile(item.author),
-                child: Text(
-                  '$displayName zapped your post ${item.amount} sats',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w500,
-                    fontSize: 15,
-                    color: context.colors.textPrimary,
+      return Container(
+        color: context.colors.background,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  GestureDetector(
+                    onTap: () => _navigateToAuthorProfile(item.author),
+                    child: CircleAvatar(
+                      radius: 20,
+                      backgroundColor: Colors.amber.shade700,
+                      backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
+                      child: image.isEmpty ? const Icon(Icons.flash_on, size: 20, color: Colors.white) : null,
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        GestureDetector(
+                          onTap: () => _navigateToAuthorProfile(item.author),
+                          child: RichText(
+                            text: TextSpan(
+                              children: [
+                                TextSpan(
+                                  text: displayName,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 15,
+                                    color: context.colors.textPrimary,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: ' zapped your post ',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w400,
+                                    fontSize: 15,
+                                    color: context.colors.textPrimary,
+                                  ),
+                                ),
+                                TextSpan(
+                                  text: '${item.amount} sats',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
+                                    color: Colors.amber.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatTimestamp(item.timestamp),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: context.colors.textSecondary,
+                          ),
+                        ),
+                        if (item.content.trim().isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            item.content,
+                            style: TextStyle(
+                              color: context.colors.textSecondary,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        QuoteWidget(
+                          bech32: _encodeEventId(item.targetEventId),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ),
-            if (item.content.trim().isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  item.content,
-                  style: TextStyle(color: context.colors.textSecondary),
-                ),
-              ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: QuoteWidget(
-                bech32: _encodeEventId(item.targetEventId),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
 
     return const SizedBox.shrink();
+  }
+
+  String _formatTimestamp(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+
+    if (difference.inSeconds < 60) {
+      return 'just now';
+    } else if (difference.inMinutes < 60) {
+      return '${difference.inMinutes}m ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours}h ago';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d ago';
+    } else {
+      return '${timestamp.day}/${timestamp.month}/${timestamp.year}';
+    }
   }
 
   void _navigateToProfileFromContent(String npub) {
@@ -278,10 +386,26 @@ class _NotificationPageState extends State<NotificationPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader(context, context.read<NotificationViewModel>()),
+        _buildHeader(context, context.read<NotificationViewModel>(), 0),
         Expanded(
           child: Center(
-            child: CircularProgressIndicator(color: context.colors.textPrimary),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                CircularProgressIndicator(
+                  color: context.colors.textPrimary,
+                  strokeWidth: 2,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Loading notifications...',
+                  style: TextStyle(
+                    color: context.colors.textSecondary,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ],
@@ -292,36 +416,58 @@ class _NotificationPageState extends State<NotificationPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader(context, viewModel),
+        _buildHeader(context, viewModel, 0),
         Expanded(
           child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.error_outline,
-                  size: 64,
-                  color: context.colors.error,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Failed to load notifications',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        color: context.colors.textPrimary,
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.error_outline,
+                    size: 64,
+                    color: context.colors.error.withOpacity(0.7),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Failed to load notifications',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: context.colors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    message,
+                    style: TextStyle(
+                      color: context.colors.textSecondary,
+                      fontSize: 14,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 32),
+                  ElevatedButton(
+                    onPressed: () => viewModel.loadNotificationsCommand.execute(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: context.colors.textPrimary,
+                      foregroundColor: context.colors.background,
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  message,
-                  style: TextStyle(color: context.colors.textSecondary),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: () => viewModel.loadNotificationsCommand.execute(),
-                  child: const Text('Retry'),
-                ),
-              ],
+                    ),
+                    child: const Text(
+                      'Retry',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -333,12 +479,39 @@ class _NotificationPageState extends State<NotificationPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildHeader(context, context.read<NotificationViewModel>()),
+        _buildHeader(context, context.read<NotificationViewModel>(), 0),
         Expanded(
           child: Center(
-            child: Text(
-              'No notifications yet.',
-              style: TextStyle(color: context.colors.textSecondary),
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.notifications_none,
+                    size: 80,
+                    color: context.colors.textSecondary.withOpacity(0.5),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'No notifications yet',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: context.colors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'When someone interacts with your posts,\nyou\'ll see it here',
+                    style: TextStyle(
+                      color: context.colors.textSecondary,
+                      fontSize: 14,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

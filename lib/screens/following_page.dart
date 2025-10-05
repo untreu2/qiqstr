@@ -262,30 +262,6 @@ class _FollowingPageState extends State<FollowingPage> {
   }
 
   Widget _buildContent(BuildContext context) {
-    if (_isLoading) {
-      return SingleChildScrollView(
-        child: Column(
-          children: [
-            _buildHeader(context),
-            SizedBox(height: MediaQuery.of(context).size.height * 0.3),
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(color: context.colors.accent),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Loading following list...',
-                    style: TextStyle(color: context.colors.textSecondary),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
     if (_error != null) {
       return SingleChildScrollView(
         child: Column(
@@ -336,7 +312,7 @@ class _FollowingPageState extends State<FollowingPage> {
       );
     }
 
-    if (_followingUsers.isEmpty) {
+    if (_followingUsers.isEmpty && !_isLoading) {
       return SingleChildScrollView(
         child: Column(
           children: [
@@ -380,21 +356,39 @@ class _FollowingPageState extends State<FollowingPage> {
           SliverToBoxAdapter(
             child: _buildHeader(context),
           ),
-          SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                if (index.isOdd) {
-                  return Divider(
-                    color: context.colors.border,
-                    height: 1,
-                  );
-                }
-                final userIndex = index ~/ 2;
-                return _buildUserTile(context, _followingUsers[userIndex]);
-              },
-              childCount: _followingUsers.length * 2 - 1,
+          if (_followingUsers.isEmpty && _isLoading) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 80),
+                child: Center(
+                  child: SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
+          ] else ...[
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  if (index.isOdd) {
+                    return Divider(
+                      color: context.colors.border,
+                      height: 1,
+                    );
+                  }
+                  final userIndex = index ~/ 2;
+                  return _buildUserTile(context, _followingUsers[userIndex]);
+                },
+                childCount: _followingUsers.length * 2 - 1,
+              ),
+            ),
+          ],
           const SliverToBoxAdapter(
             child: SizedBox(height: 24),
           ),

@@ -88,15 +88,16 @@ class _ThreadPageState extends State<ThreadPage> {
       builder: (context, rootNote) {
         return _buildThreadContent(context, viewModel, rootNote);
       },
-      loading: () => _buildLoadingState(context),
+      loading: () => _buildThreadContent(context, viewModel, null),
       error: (message) => _buildErrorState(context, message, viewModel),
       empty: (message) => _buildNotFoundState(context, viewModel),
     );
   }
 
-  Widget _buildThreadContent(BuildContext context, ThreadViewModel viewModel, NoteModel rootNote) {
-    final displayNote =
-        widget.focusedNoteId != null ? viewModel.threadStructureState.data?.getNote(widget.focusedNoteId!) ?? rootNote : rootNote;
+  Widget _buildThreadContent(BuildContext context, ThreadViewModel viewModel, NoteModel? rootNote) {
+    final displayNote = rootNote != null && widget.focusedNoteId != null 
+        ? viewModel.threadStructureState.data?.getNote(widget.focusedNoteId!) ?? rootNote 
+        : rootNote;
 
     return RefreshIndicator(
       onRefresh: () => viewModel.refreshThreadCommand.execute(),
@@ -108,11 +109,23 @@ class _ThreadPageState extends State<ThreadPage> {
           children: [
             _buildHeader(context),
 
-            _buildContextNote(context, viewModel, displayNote),
-
-            _buildMainNote(context, viewModel, displayNote),
-
-            _buildThreadReplies(context, viewModel, displayNote),
+            if (displayNote != null) ...[
+              _buildContextNote(context, viewModel, displayNote),
+              _buildMainNote(context, viewModel, displayNote),
+              _buildThreadReplies(context, viewModel, displayNote),
+            ] else ...[
+              const SizedBox(height: 80),
+              Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+            ],
 
             const SizedBox(height: 24.0),
           ],
@@ -459,31 +472,6 @@ class _ThreadPageState extends State<ThreadPage> {
       containerColor: context.colors.background,
       isSmallView: isSmallView,
       scrollController: _scrollController,
-    );
-  }
-
-
-  Widget _buildLoadingState(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          _buildHeader(context),
-          SizedBox(height: MediaQuery.of(context).size.height * 0.3),
-          Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(color: context.colors.primary),
-                const SizedBox(height: 16),
-                Text(
-                  'Loading thread...',
-                  style: TextStyle(color: context.colors.textSecondary),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 
