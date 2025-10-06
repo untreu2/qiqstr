@@ -39,7 +39,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
       {'icon': 'assets/home_gap.svg', 'index': 0, 'type': 'svg'},
       {'icon': 'assets/search_button.svg', 'index': 1, 'type': 'svg'},
       {'icon': 'add', 'index': -1, 'type': 'add'},
-      {'icon': 'wallet', 'index': 2, 'type': 'carbon'},
+      {'icon': 'assets/zap_button.svg', 'index': 2, 'type': 'svg'},
       {'icon': 'assets/notification_button.svg', 'index': 3, 'type': 'svg'},
     ];
 
@@ -54,7 +54,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
           child: Row(
             children: items.map((item) {
               final index = item['index'] as int;
-              
+
               if (item['type'] == 'add') {
                 return Expanded(
                   child: Bounce(
@@ -85,7 +85,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                   ),
                 );
               }
-              
+
               final bool isSelected = _currentIndex == index;
 
               return Expanded(
@@ -94,9 +94,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                   onTap: () => _handleNavigation(index),
                   behavior: HitTestBehavior.opaque,
                   child: Center(
-                    child: index == 3
-                        ? _buildNotificationIcon(item['icon'] as String, isSelected)
-                        : _buildRegularIcon(item, isSelected),
+                    child: index == 3 ? _buildNotificationIcon(item['icon'] as String, isSelected) : _buildRegularIcon(item, isSelected),
                   ),
                 ),
               );
@@ -120,23 +118,15 @@ class _HomeNavigatorState extends State<HomeNavigator> {
   }
 
   Widget _buildRegularIcon(Map<String, dynamic> item, bool isSelected) {
-    if (item['type'] == 'carbon') {
-      return Icon(
-        CarbonIcons.flash,
-        size: 22,
-        color: isSelected ? context.colors.accent : context.colors.textPrimary,
-      );
-    } else {
-      return SvgPicture.asset(
-        item['icon'] as String,
-        width: 20,
-        height: 20,
-        colorFilter: ColorFilter.mode(
-          isSelected ? context.colors.accent : context.colors.textPrimary,
-          BlendMode.srcIn,
-        ),
-      );
-    }
+    return SvgPicture.asset(
+      item['icon'] as String,
+      width: 20,
+      height: 20,
+      colorFilter: ColorFilter.mode(
+        isSelected ? context.colors.accent : context.colors.textPrimary,
+        BlendMode.srcIn,
+      ),
+    );
   }
 
   void _handleNavigation(int index) {

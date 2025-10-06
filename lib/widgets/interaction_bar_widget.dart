@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:carbon_icons/carbon_icons.dart';
 import '../theme/theme_manager.dart';
 import '../screens/share_note.dart';
 import '../screens/note_statistics_page.dart';
@@ -298,6 +299,7 @@ class _InteractionBarState extends State<InteractionBar> {
     required Color inactiveColor,
     required VoidCallback onTap,
     bool isStatsButton = false,
+    IconData? carbonIcon,
   }) {
     final effectiveColor = isActive ? activeColor : inactiveColor;
     final textScaleFactor = MediaQuery.textScaleFactorOf(context);
@@ -320,6 +322,8 @@ class _InteractionBarState extends State<InteractionBar> {
         children: [
           if (isStatsButton)
             Icon(Icons.bar_chart, size: statsIconSize, color: effectiveColor)
+          else if (carbonIcon != null)
+            Icon(carbonIcon, size: carbonIcon == CarbonIcons.renew ? iconSize + 2.0 : iconSize, color: effectiveColor)
           else if (iconPath != null)
             SvgPicture.asset(
               iconPath,
@@ -369,7 +373,7 @@ class _InteractionBarState extends State<InteractionBar> {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _buildButton(
-            iconPath: 'assets/reply_button.svg',
+            iconPath: 'assets/reply_button_2.svg',
             count: _replyCount,
             isActive: false,
             activeColor: colors.reply,
@@ -377,7 +381,8 @@ class _InteractionBarState extends State<InteractionBar> {
             onTap: _handleReplyTap,
           ),
           _buildButton(
-            iconPath: 'assets/repost_button.svg',
+            iconPath: null,
+            carbonIcon: CarbonIcons.renew,
             count: _repostCount,
             isActive: _hasReposted,
             activeColor: colors.repost,
