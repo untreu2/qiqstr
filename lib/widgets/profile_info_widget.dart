@@ -712,7 +712,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     return GestureDetector(
       onTap: _toggleFollow,
       child: Container(
-        width: 100,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         alignment: Alignment.center,
         decoration: BoxDecoration(
