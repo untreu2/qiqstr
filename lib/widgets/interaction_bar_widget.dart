@@ -302,17 +302,10 @@ class _InteractionBarState extends State<InteractionBar> {
     IconData? carbonIcon,
   }) {
     final effectiveColor = isActive ? activeColor : inactiveColor;
-    final textScaleFactor = MediaQuery.textScaleFactorOf(context);
-    final baseIconSize = widget.isBigSize ? 17.0 : 15.5;
-    final baseStatsIconSize = widget.isBigSize ? 23.0 : 21.0;
-    final baseFontSize = widget.isBigSize ? 16.0 : 15.0;
-    final baseSpacing = widget.isBigSize ? 7.0 : 6.5;
-
-    // Scale icons with text scale factor
-    final iconSize = baseIconSize * textScaleFactor;
-    final statsIconSize = baseStatsIconSize * textScaleFactor;
-    final fontSize = baseFontSize * textScaleFactor;
-    final spacing = baseSpacing * textScaleFactor;
+    final iconSize = widget.isBigSize ? 17.0 : 15.5;
+    final statsIconSize = widget.isBigSize ? 23.0 : 21.0;
+    final fontSize = widget.isBigSize ? 16.0 : 15.0;
+    final spacing = widget.isBigSize ? 7.0 : 6.5;
 
     return GestureDetector(
       onTap: onTap,
@@ -362,12 +355,10 @@ class _InteractionBarState extends State<InteractionBar> {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final textScaleFactor = MediaQuery.textScaleFactorOf(context);
-    final baseHeight = widget.isBigSize ? 36.0 : 32.0;
-    final dynamicHeight = baseHeight * textScaleFactor;
+    final height = widget.isBigSize ? 36.0 : 32.0;
 
     return SizedBox(
-      height: dynamicHeight,
+      height: height,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
