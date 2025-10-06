@@ -154,7 +154,11 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     }
   }
 
-  double get _fontSize => widget.size == NoteContentSize.big ? 18.0 : 16.0;
+  double _fontSize(BuildContext context) {
+    final textScaler = MediaQuery.textScalerOf(context);
+    final baseSize = widget.size == NoteContentSize.big ? 18.0 : 16.0;
+    return textScaler.scale(baseSize);
+  }
 
   Future<void> _onOpenLink(LinkableElement link) async {
     try {
@@ -177,20 +181,20 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     try {
       // Remove the # symbol if present
       final cleanHashtag = hashtag.startsWith('#') ? hashtag.substring(1) : hashtag;
-      
+
       debugPrint('[NoteContentWidget] Navigating to hashtag feed: #$cleanHashtag');
-      
+
       // Get current user npub for the feed page
       final authRepository = AppDI.get<AuthRepository>();
       final npubResult = await authRepository.getCurrentUserNpub();
-      
+
       if (npubResult.isError || npubResult.data == null) {
         if (mounted) {
           AppToast.error(context, 'Could not load hashtag feed');
         }
         return;
       }
-      
+
       if (mounted) {
         Navigator.of(context).push(
           MaterialPageRoute(
@@ -226,7 +230,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
             spans.add(TextSpan(
               text: text.substring(last, m.start),
               style: TextStyle(
-                fontSize: _fontSize,
+                fontSize: _fontSize(context),
                 color: colors.textPrimary,
               ),
             ));
@@ -239,7 +243,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
             spans.add(TextSpan(
               text: urlMatch,
               style: TextStyle(
-                fontSize: _fontSize,
+                fontSize: _fontSize(context),
                 color: colors.accent,
                 decoration: TextDecoration.underline,
               ),
@@ -249,7 +253,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
             spans.add(TextSpan(
               text: hashtagMatch,
               style: TextStyle(
-                fontSize: _fontSize,
+                fontSize: _fontSize(context),
                 color: colors.accent,
                 fontWeight: FontWeight.w500,
               ),
@@ -263,7 +267,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
           spans.add(TextSpan(
             text: text.substring(last),
             style: TextStyle(
-              fontSize: _fontSize,
+              fontSize: _fontSize(context),
               color: colors.textPrimary,
             ),
           ));
@@ -287,7 +291,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         spans.add(TextSpan(
           text: displayText,
           style: TextStyle(
-            fontSize: _fontSize,
+            fontSize: _fontSize(context),
             color: colors.accent,
             fontWeight: FontWeight.w500,
           ),
@@ -302,7 +306,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         spans.add(TextSpan(
           text: p['text'] as String,
           style: TextStyle(
-            fontSize: _fontSize,
+            fontSize: _fontSize(context),
             color: colors.accent,
             fontWeight: FontWeight.w500,
           ),
@@ -326,13 +330,11 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
               applyHeightToLastDescent: false,
             ),
           ),
-
         if (_mediaUrls.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: MediaPreviewWidget(mediaUrls: _mediaUrls),
           ),
-
         if (_linkUrls.isNotEmpty && _mediaUrls.isEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -348,7 +350,6 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
                   : _linkUrls.map((url) => LinkPreviewWidget(url: url)).toList(),
             ),
           ),
-
         if (_quoteIds.isNotEmpty)
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,

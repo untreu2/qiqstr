@@ -55,7 +55,7 @@ class _InteractionBarState extends State<InteractionBar> {
   @override
   void didUpdateWidget(InteractionBar oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
+
     if (oldWidget.note?.id != widget.note?.id) {
       setState(() {
         _hasReacted = false;
@@ -63,7 +63,7 @@ class _InteractionBarState extends State<InteractionBar> {
         _hasZapped = false;
       });
     }
-    
+
     if (oldWidget.note?.id != widget.note?.id ||
         oldWidget.note?.reactionCount != widget.note?.reactionCount ||
         oldWidget.note?.repostCount != widget.note?.repostCount ||
@@ -300,15 +300,23 @@ class _InteractionBarState extends State<InteractionBar> {
     bool isStatsButton = false,
   }) {
     final effectiveColor = isActive ? activeColor : inactiveColor;
-    final iconSize = widget.isBigSize ? 17.0 : 15.5;
-    final statsIconSize = widget.isBigSize ? 23.0 : 21.0;
-    final fontSize = widget.isBigSize ? 16.0 : 15.0;
-    final spacing = widget.isBigSize ? 7.0 : 6.5;
+    final textScaleFactor = MediaQuery.textScaleFactorOf(context);
+    final baseIconSize = widget.isBigSize ? 17.0 : 15.5;
+    final baseStatsIconSize = widget.isBigSize ? 23.0 : 21.0;
+    final baseFontSize = widget.isBigSize ? 16.0 : 15.0;
+    final baseSpacing = widget.isBigSize ? 7.0 : 6.5;
+
+    // Scale icons with text scale factor
+    final iconSize = baseIconSize * textScaleFactor;
+    final statsIconSize = baseStatsIconSize * textScaleFactor;
+    final fontSize = baseFontSize * textScaleFactor;
+    final spacing = baseSpacing * textScaleFactor;
 
     return GestureDetector(
       onTap: onTap,
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           if (isStatsButton)
             Icon(Icons.bar_chart, size: statsIconSize, color: effectiveColor)
@@ -350,11 +358,15 @@ class _InteractionBarState extends State<InteractionBar> {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final textScaleFactor = MediaQuery.textScaleFactorOf(context);
+    final baseHeight = widget.isBigSize ? 36.0 : 32.0;
+    final dynamicHeight = baseHeight * textScaleFactor;
 
     return SizedBox(
-      height: widget.isBigSize ? 36 : 32,
+      height: dynamicHeight,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _buildButton(
             iconPath: 'assets/reply_button.svg',
