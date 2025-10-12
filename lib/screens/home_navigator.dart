@@ -38,7 +38,7 @@ class _HomeNavigatorState extends State<HomeNavigator> {
       {'icon': 'assets/home_gap.svg', 'index': 0, 'type': 'svg'},
       {'icon': 'assets/search_button.svg', 'index': 1, 'type': 'svg'},
       {'icon': 'add', 'index': -1, 'type': 'add'},
-      {'icon': 'assets/zap_button.svg', 'index': 2, 'type': 'svg'},
+      {'icon': 'assets/wallet_icon.svg', 'index': 2, 'type': 'svg'},
       {'icon': 'assets/notification_button.svg', 'index': 3, 'type': 'svg'},
     ];
 
