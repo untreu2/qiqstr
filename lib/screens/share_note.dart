@@ -13,6 +13,7 @@ import '../theme/theme_manager.dart';
 import '../widgets/back_button_widget.dart';
 import '../widgets/toast_widget.dart';
 import '../widgets/quote_widget.dart';
+import '../widgets/video_preview.dart';
 
 class ShareNotePage extends StatefulWidget {
   final String? initialText;
@@ -382,6 +383,25 @@ class _ShareNotePageState extends State<ShareNotePage> {
     
     final extension = path.substring(lastDotIndex + 1);
     return _allowedExtensions.contains(extension);
+  }
+
+  bool _isVideoFile(String url) {
+    if (url.isEmpty) return false;
+    
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    
+    final path = uri.path.toLowerCase();
+    if (path.isEmpty) return false;
+    
+    final lastDotIndex = path.lastIndexOf('.');
+    if (lastDotIndex == -1 || lastDotIndex == path.length - 1) {
+      return false;
+    }
+    
+    final extension = path.substring(lastDotIndex + 1);
+    const videoExtensions = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v'];
+    return videoExtensions.contains(extension);
   }
 
   void _setMediaUploadingState(bool isUploading) {
@@ -948,6 +968,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Widget _buildMediaItem(String url, int index) {
+    final isVideo = _isVideoFile(url);
+    
     return Padding(
       key: ValueKey(url),
       padding: const EdgeInsets.only(right: 8.0),
@@ -955,17 +977,10 @@ class _ShareNotePageState extends State<ShareNotePage> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
-            child: Image.network(
-              url,
+            child: SizedBox(
               width: _mediaItemSize,
               height: _mediaItemSize,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                width: _mediaItemSize,
-                height: _mediaItemSize,
-                color: context.colors.surface,
-                child: const Icon(Icons.broken_image),
-              ),
+              child: isVideo ? _buildVideoPreview(url) : _buildImagePreview(url),
             ),
           ),
           Positioned(
@@ -977,6 +992,26 @@ class _ShareNotePageState extends State<ShareNotePage> {
       ),
     );
   }
+
+  Widget _buildVideoPreview(String url) {
+    return VP(url: url);
+  }
+
+  Widget _buildImagePreview(String url) {
+    return Image.network(
+      url,
+      width: _mediaItemSize,
+      height: _mediaItemSize,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => Container(
+        width: _mediaItemSize,
+        height: _mediaItemSize,
+        color: context.colors.surface,
+        child: const Icon(Icons.broken_image),
+      ),
+    );
+  }
+
 
   Widget _buildRemoveMediaButton(String url) {
     return Semantics(
