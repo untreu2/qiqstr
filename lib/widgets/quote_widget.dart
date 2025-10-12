@@ -33,6 +33,8 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
   bool _isLoading = true;
   bool _hasError = false;
   bool _isDisposed = false;
+  int _retryCount = 0;
+  static const int _maxRetries = 2;
 
   late final NostrDataService _nostrDataService;
   late final UserRepository _userRepository;
@@ -103,7 +105,7 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
   }
 
   void _startBackgroundFetch() {
-    Timer(const Duration(milliseconds: 1500), () {
+    Timer(const Duration(seconds: 8), () {
       if (_isDisposed || !mounted || _note != null) return;
       _setError();
     });
@@ -112,17 +114,35 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
       if (_isDisposed || !mounted) return;
 
       try {
-        await _nostrDataService.fetchSpecificNote(_eventId!);
-
+        debugPrint('[QuoteWidget] Starting background fetch for event: $_eventId');
+        final success = await _nostrDataService.fetchSpecificNote(_eventId!);
+        
         if (_isDisposed || !mounted) return;
 
-        final fetchedNote = _nostrDataService.cachedNotes.where((note) => note.id == _eventId).firstOrNull;
+        if (success) {
+          final fetchedNote = _nostrDataService.cachedNotes.where((note) => note.id == _eventId).firstOrNull;
+          if (fetchedNote != null) {
+            debugPrint('[QuoteWidget] Successfully fetched note: $_eventId');
+            _setNote(fetchedNote);
+            return;
+          }
+        }
 
-        if (fetchedNote != null) {
-          _setNote(fetchedNote);
+        // If not found, try alternative approach - check if note exists in any cached data
+        debugPrint('[QuoteWidget] Note not found via fetchSpecificNote, checking all cached notes...');
+        final allCachedNotes = _nostrDataService.cachedNotes;
+        final foundNote = allCachedNotes.where((note) => note.id == _eventId).firstOrNull;
+        
+        if (foundNote != null) {
+          debugPrint('[QuoteWidget] Found note in cached data: $_eventId');
+          _setNote(foundNote);
+        } else {
+          debugPrint('[QuoteWidget] Note not found in any cached data: $_eventId');
+          _retryOrSetError();
         }
       } catch (e) {
         debugPrint('[QuoteWidget] Background fetch error: $e');
+        _retryOrSetError();
       }
     });
   }
@@ -147,6 +167,23 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
       _isLoading = false;
       _hasError = true;
     });
+  }
+
+  void _retryOrSetError() {
+    if (_retryCount < _maxRetries) {
+      _retryCount++;
+      debugPrint('[QuoteWidget] Retrying fetch (attempt $_retryCount/$_maxRetries)');
+      
+      // Wait a bit before retrying
+      Timer(Duration(seconds: _retryCount * 2), () {
+        if (!_isDisposed && mounted) {
+          _startBackgroundFetch();
+        }
+      });
+    } else {
+      debugPrint('[QuoteWidget] Max retries reached, setting error');
+      _setError();
+    }
   }
 
   void _precomputeData(NoteModel note) {
@@ -320,14 +357,31 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: context.colors.border, width: 0.8),
       ),
-      child: Center(
-        child: Text(
-          'Event not found',
-          style: TextStyle(
+      child: Column(
+        children: [
+          Icon(
+            Icons.error_outline,
             color: context.colors.textSecondary,
-            fontSize: 14,
+            size: 20,
           ),
-        ),
+          const SizedBox(height: 8),
+          Text(
+            'Event not found',
+            style: TextStyle(
+              color: context.colors.textSecondary,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (_retryCount > 0)
+            Text(
+              'Tried $_retryCount times',
+              style: TextStyle(
+                color: context.colors.textSecondary,
+                fontSize: 12,
+              ),
+            ),
+        ],
       ),
     );
   }

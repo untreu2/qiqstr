@@ -2508,7 +2508,7 @@ class NostrDataService {
         return true;
       }
 
-      final limitedRelays = _relayManager.relayUrls.take(3).toList();
+      final limitedRelays = _relayManager.relayUrls.take(5).toList();
       bool noteFound = false;
 
       debugPrint('[NostrDataService] THREAD: Using ${limitedRelays.length} relays for direct fetch');
@@ -2573,7 +2573,7 @@ class NostrDataService {
             ws.add(NostrService.serializeRequest(request));
           }
 
-          await completer.future.timeout(const Duration(seconds: 3), onTimeout: () {
+          await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
             debugPrint('[NostrDataService] THREAD: Timeout waiting for note from $relayUrl');
           });
 

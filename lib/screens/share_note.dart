@@ -12,6 +12,7 @@ import '../models/user_model.dart';
 import '../theme/theme_manager.dart';
 import '../widgets/back_button_widget.dart';
 import '../widgets/toast_widget.dart';
+import '../widgets/quote_widget.dart';
 
 class ShareNotePage extends StatefulWidget {
   final String? initialText;
@@ -867,27 +868,13 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Widget _buildReplyPreview() {
+    if (widget.replyToNoteId == null || widget.replyToNoteId!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.colors.surface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: context.colors.border),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.reply, size: 16, color: context.colors.textSecondary),
-          const SizedBox(width: 8),
-          Text(
-            'Replying to note',
-            style: TextStyle(
-              color: context.colors.textSecondary,
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
+      child: QuoteWidget(bech32: _encodeEventId(widget.replyToNoteId!)),
     );
   }
 
@@ -1020,22 +1007,31 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
     return Padding(
       padding: const EdgeInsets.only(top: 16),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: context.colors.surface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: context.colors.border),
-        ),
-        child: Text(
-          'Quoting: ${widget.initialText!.replaceFirst('nostr:', '').substring(0, 8)}...',
-          style: TextStyle(
-            color: context.colors.textSecondary,
-            fontSize: 12,
-          ),
-        ),
-      ),
+      child: QuoteWidget(bech32: _encodeEventId(widget.initialText!)),
     );
+  }
+
+  String _encodeEventId(String eventId) {
+    try {
+      final cleanId = eventId.startsWith('nostr:') ? eventId.substring(6) : eventId;
+      
+      if (cleanId.startsWith('note1')) {
+        debugPrint('[ShareNotePage] Event ID already in note1 format: $cleanId');
+        return cleanId;
+      }
+      
+      if (RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(cleanId)) {
+        final encoded = encodeBasicBech32(cleanId, 'note');
+        debugPrint('[ShareNotePage] Encoded hex to note1: $encoded');
+        return encoded;
+      }
+      
+      debugPrint('[ShareNotePage] Using event ID as is: $cleanId');
+      return cleanId;
+    } catch (e) {
+      debugPrint('[ShareNotePage] Error encoding event ID: $e');
+      return eventId;
+    }
   }
 
   Widget _buildUserSuggestions() {
