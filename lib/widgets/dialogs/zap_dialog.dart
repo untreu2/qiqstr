@@ -11,6 +11,7 @@ import '../../theme/theme_manager.dart';
 import '../../core/di/app_di.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/repositories/wallet_repository.dart';
+import '../../data/services/nostr_data_service.dart';
 import '../../services/nostr_service.dart';
 import '../../services/relay_service.dart';
 import '../../constants/relays.dart';
@@ -166,6 +167,10 @@ Future<void> _payZapWithWallet(
       if (kDebugMode) {
         print('[ZapDialog] Zap event (kind 9735) published for note: ${note.id}');
       }
+      
+      // Mark this zap event as user-published to prevent self-processing
+      final nostrDataService = AppDI.get<NostrDataService>();
+      nostrDataService.markZapAsUserPublished(zapEvent.id);
       if (kDebugMode) {
         print('[ZapDialog] Zap amount: $sats sats, preimage: ${paymentResult.data!.preimage}');
       }

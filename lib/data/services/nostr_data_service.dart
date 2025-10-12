@@ -37,6 +37,8 @@ class NostrDataService {
   final Map<String, List<ZapModel>> _zapsMap = {};
   final Map<String, List<ReactionModel>> _repostsMap = {}; 
   final Set<String> _eventIds = {};
+  final Set<String> _processedZapIds = {}; // Track processed zap events to prevent duplicates
+  final Set<String> _userPublishedZapIds = {}; // Track zap events published by current user to prevent self-processing
 
   final Map<String, List<String>> _followingCache = {}; 
   final Map<String, DateTime> _followingCacheTime = {};
@@ -887,10 +889,27 @@ class NostrDataService {
     }
   }
 
+  void markZapAsUserPublished(String zapEventId) {
+    _userPublishedZapIds.add(zapEventId);
+  }
+
   void _processZapEvent(Map<String, dynamic> eventData) {
     try {
       final id = eventData['id'] as String;
-      final walletPubkey = eventData['pubkey'] as String; 
+      final walletPubkey = eventData['pubkey'] as String;
+      
+      if (_processedZapIds.contains(id)) {
+        return;
+      }
+      
+      if (_userPublishedZapIds.contains(id)) {
+        return;
+      }
+      
+      final currentUserHex = _authService.npubToHex(_currentUserNpub);
+      if (currentUserHex != null && walletPubkey == currentUserHex) {
+        return;
+      } 
       final content = eventData['content'] as String;
       final createdAt = eventData['created_at'] as int;
       final tags = eventData['tags'] as List<dynamic>;
@@ -971,6 +990,8 @@ class NostrDataService {
 
         if (!_zapsMap[targetEventId]!.any((z) => z.id == zap.id)) {
           _zapsMap[targetEventId]!.add(zap);
+          
+          _processedZapIds.add(id);
 
           final targetNote = _noteCache[targetEventId];
           if (targetNote != null) {
@@ -980,7 +1001,7 @@ class NostrDataService {
 
           _fetchUserProfile(zap.sender);
 
-          debugPrint('[NostrDataService]  Zap processed: ${zap.amount} sats from ${zap.sender} to ${zap.recipient}');
+          debugPrint('[NostrDataService] Zap processed: ${zap.amount} sats from ${zap.sender} to ${zap.recipient}');
         }
       }
     } catch (e) {
