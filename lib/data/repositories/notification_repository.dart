@@ -38,11 +38,25 @@ class NotificationRepository {
   void _setupRealTimeNotifications() {
     debugPrint('[NotificationRepository] Setting up real-time notification updates');
     
-    _notificationStreamSubscription = _nostrDataService.notificationsStream.listen((newNotifications) {
+    _notificationStreamSubscription = _nostrDataService.notificationsStream.listen((newNotifications) async {
       debugPrint('[NotificationRepository] Stream received ${newNotifications.length} notifications');
 
+      // Get current user to filter out self-interactions
+      final userResult = await _authService.getCurrentUserPublicKeyHex();
+      if (userResult.isError || userResult.data == null) {
+        debugPrint('[NotificationRepository] Could not get current user, skipping filtering');
+        return;
+      }
+
+      final userHexPubkey = userResult.data!;
+      
+      // Filter out notifications from the current user
+      final filteredNotifications = newNotifications.where((notification) {
+        return notification.author != userHexPubkey;
+      }).toList();
+
       int addedCount = 0;
-      for (final notification in newNotifications) {
+      for (final notification in filteredNotifications) {
         if (!_notifications.any((n) => n.id == notification.id)) {
           _notifications.add(notification);
           addedCount++;
@@ -51,7 +65,7 @@ class NotificationRepository {
       }
 
       if (addedCount > 0) {
-        debugPrint('[NotificationRepository] Added $addedCount new notifications, total: ${_notifications.length}');
+        debugPrint('[NotificationRepository] Added $addedCount new notifications (filtered from ${newNotifications.length}), total: ${_notifications.length}');
 
         _notifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
@@ -89,12 +103,17 @@ class NotificationRepository {
       );
 
       if (result.isSuccess && result.data != null) {
+        // Filter out notifications where the author is the current user
+        final filteredNotifications = result.data!.where((notification) {
+          return notification.author != userHexPubkey;
+        }).toList();
+
         _notifications.clear();
-        _notifications.addAll(result.data!);
+        _notifications.addAll(filteredNotifications);
 
-        _unreadCount = result.data!.length;
+        _unreadCount = filteredNotifications.length;
 
-        debugPrint('[NotificationRepository] Loaded ${_notifications.length} notifications');
+        debugPrint('[NotificationRepository] Loaded ${_notifications.length} notifications (filtered from ${result.data!.length})');
 
         _notificationsController.add(_notifications);
         _unreadCountController.add(_unreadCount);
@@ -112,9 +131,11 @@ class NotificationRepository {
     final standaloneNotifications = <NotificationModel>[];
 
     for (final notification in notifications) {
-      if (notification.type == 'zap') {
+      if (notification.type == 'zap' || notification.type == 'mention') {
+        // Show zaps and mentions individually
         standaloneNotifications.add(notification);
       } else {
+        // Group other types (reactions, reposts) by type and target event
         final key = '${notification.type}_${notification.targetEventId}';
         groups[key] = groups[key] ?? [];
         groups[key]!.add(notification);

@@ -14,6 +14,7 @@ import '../widgets/quote_widget.dart';
 import '../core/di/app_di.dart';
 import '../data/services/nostr_data_service.dart';
 import '../screens/profile_page.dart';
+import '../screens/thread_page.dart';
 
 class NotificationPage extends StatefulWidget {
   const NotificationPage({super.key});
@@ -135,25 +136,27 @@ class _NotificationPageState extends State<NotificationPage> {
       final profile = viewModel.userProfiles[first.author];
       final image = profile?.profileImage ?? '';
 
-      return Container(
-        color: context.colors.background,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  GestureDetector(
-                    onTap: () => _navigateToAuthorProfile(first.author),
-                    child: CircleAvatar(
-                      radius: 20,
-                      backgroundColor: context.colors.grey800,
-                      backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
-                      child: image.isEmpty ? Icon(Icons.person, size: 20, color: context.colors.textPrimary) : null,
+      return GestureDetector(
+        onTap: () => _navigateToTargetNote(first.targetEventId),
+        child: Container(
+          color: context.colors.background,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    GestureDetector(
+                      onTap: () => _navigateToAuthorProfile(first.author),
+                      child: CircleAvatar(
+                        radius: 20,
+                        backgroundColor: context.colors.grey800,
+                        backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
+                        child: image.isEmpty ? Icon(Icons.person, size: 20, color: context.colors.textPrimary) : null,
+                      ),
                     ),
-                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -206,27 +209,30 @@ class _NotificationPageState extends State<NotificationPage> {
             ],
           ),
         ),
-      );
+      ),
+    );
     } else if (item is NotificationModel && item.type == 'zap') {
       final profile = viewModel.userProfiles[item.author];
       final image = profile?.profileImage ?? '';
       final displayName = profile?.name.isNotEmpty == true ? profile!.name : 'Anonymous';
 
-      return Container(
-        color: context.colors.background,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  GestureDetector(
-                    onTap: () => _navigateToAuthorProfile(item.author),
-                    child: CircleAvatar(
-                      radius: 20,
-                      backgroundColor: Colors.amber.shade700,
+      return GestureDetector(
+        onTap: () => _navigateToTargetNote(item.targetEventId),
+        child: Container(
+          color: context.colors.background,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    GestureDetector(
+                      onTap: () => _navigateToAuthorProfile(item.author),
+                      child: CircleAvatar(
+                        radius: 20,
+                        backgroundColor: Colors.amber.shade700,
                       backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
                       child: image.isEmpty ? const Icon(Icons.flash_on, size: 20, color: Colors.white) : null,
                     ),
@@ -299,29 +305,32 @@ class _NotificationPageState extends State<NotificationPage> {
             ],
           ),
         ),
-      );
+      ),
+    );
     } else if (item is NotificationModel) {
       // Handle other single notification types (reaction, mention, repost)
       final profile = viewModel.userProfiles[item.author];
       final image = profile?.profileImage ?? '';
 
-      return Container(
-        color: context.colors.background,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  GestureDetector(
-                    onTap: () => _navigateToAuthorProfile(item.author),
-                    child: CircleAvatar(
-                      radius: 20,
-                      backgroundColor: context.colors.grey800,
-                      backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
-                      child: image.isEmpty ? Icon(Icons.person, size: 20, color: context.colors.textPrimary) : null,
+      return GestureDetector(
+        onTap: () => _navigateToTargetNote(item.targetEventId),
+        child: Container(
+          color: context.colors.background,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    GestureDetector(
+                      onTap: () => _navigateToAuthorProfile(item.author),
+                      child: CircleAvatar(
+                        radius: 20,
+                        backgroundColor: context.colors.grey800,
+                        backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
+                        child: image.isEmpty ? Icon(Icons.person, size: 20, color: context.colors.textPrimary) : null,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -369,7 +378,8 @@ class _NotificationPageState extends State<NotificationPage> {
             ],
           ),
         ),
-      );
+      ),
+    );
     }
 
     return const SizedBox.shrink();
@@ -419,6 +429,17 @@ class _NotificationPageState extends State<NotificationPage> {
       }
     } catch (e) {
       debugPrint('Error navigating to profile: $e');
+    }
+  }
+
+  void _navigateToTargetNote(String targetEventId) {
+    if (targetEventId.isNotEmpty) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ThreadPage(rootNoteId: targetEventId),
+        ),
+      );
     }
   }
 
