@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:qiqstr/data/services/auth_service.dart';
 import 'package:qiqstr/screens/home_navigator.dart';
 import 'package:qiqstr/screens/edit_new_account_profile.dart';
+import 'package:qiqstr/screens/keys_info_page.dart';
 
 import 'package:qiqstr/theme/theme_manager.dart';
 
@@ -14,36 +15,54 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final TextEditingController _nsecController = TextEditingController();
+  final TextEditingController _inputController = TextEditingController();
   String _message = '';
   bool _isLoading = false;
   final AuthService _authService = AuthService.instance;
 
   @override
   void dispose() {
-    _nsecController.dispose();
+    _inputController.dispose();
     super.dispose();
   }
 
-  Future<void> _loginWithNsecInput() async {
-    if (_nsecController.text.trim().isEmpty) return;
+  Future<void> _loginWithInput() async {
+    if (_inputController.text.trim().isEmpty) return;
     setState(() => _isLoading = true);
+    
+    final input = _inputController.text.trim();
+    
     try {
-      final result = await _authService.loginWithNsec(_nsecController.text.trim());
-      if (result.isSuccess) {
-        await _navigateToHome(result.data!);
+      if (input.startsWith('nsec1')) {
+        final result = await _authService.loginWithNsec(input);
+        if (result.isSuccess) {
+          await _navigateToHome(result.data!);
+        } else {
+          if (mounted) {
+            setState(() {
+              _message = 'Error: ${result.error}';
+              _isLoading = false;
+            });
+          }
+        }
       } else {
-        if (mounted) {
-          setState(() {
-            _message = 'Error: ${result.error}';
-            _isLoading = false;
-          });
+
+        final result = await _authService.loginWithMnemonic(input);
+        if (result.isSuccess) {
+          await _navigateToHome(result.data!);
+        } else {
+          if (mounted) {
+            setState(() {
+              _message = 'Error: ${result.error}';
+              _isLoading = false;
+            });
+          }
         }
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _message = 'Error: Invalid nsec input.';
+          _message = 'Error: Invalid input. Please check your NSEC or mnemonic phrase.';
           _isLoading = false;
         });
       }
@@ -53,9 +72,15 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _createNewAccount() async {
     setState(() => _isLoading = true);
     try {
-      final result = await _authService.createNewAccount();
+      final result = await _authService.createAccountWithMnemonic();
       if (result.isSuccess) {
-        await _navigateToProfileSetup(result.data!);
+
+        final mnemonicResult = await _authService.getCurrentUserMnemonic();
+        if (mnemonicResult.isSuccess && mnemonicResult.data != null) {
+          await _navigateToKeysInfo(result.data!, mnemonicResult.data!);
+        } else {
+          await _navigateToProfileSetup(result.data!);
+        }
       } else {
         if (mounted) {
           setState(() {
@@ -71,6 +96,20 @@ class _LoginPageState extends State<LoginPage> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _navigateToKeysInfo(String npub, String mnemonic) async {
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => KeysInfoPage(
+            npub: npub,
+            mnemonic: mnemonic,
+          ),
+        ),
+      );
     }
   }
 
@@ -114,10 +153,10 @@ class _LoginPageState extends State<LoginPage> {
           ),
           const SizedBox(height: 40),
           TextField(
-            controller: _nsecController,
+            controller: _inputController,
             style: TextStyle(color: context.colors.textPrimary),
             decoration: InputDecoration(
-              labelText: 'Enter your nsec...',
+              labelText: 'Enter your seed phrase or nsec...',
               labelStyle: TextStyle(color: context.colors.textSecondary),
               filled: true,
               fillColor: context.colors.inputFill,
@@ -126,11 +165,12 @@ class _LoginPageState extends State<LoginPage> {
                 borderSide: BorderSide.none,
               ),
             ),
-            obscureText: true,
+            maxLines: 3,
+            textAlignVertical: TextAlignVertical.top,
           ),
           const SizedBox(height: 20),
           GestureDetector(
-            onTap: _loginWithNsecInput,
+            onTap: _loginWithInput,
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 18),

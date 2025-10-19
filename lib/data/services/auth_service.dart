@@ -1,5 +1,7 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:nostr/nostr.dart';
+import 'package:bip39/bip39.dart' as bip39;
+import 'package:bip32/bip32.dart' as bip32;
 
 import '../../core/base/result.dart';
 
@@ -204,7 +206,7 @@ class AuthService {
       if (npub.startsWith('npub1')) {
         return decodeBasicBech32(npub, 'npub');
       } else if (npub.length == 64) {
-        return npub; // Already hex
+        return npub;
       }
       return null;
     } catch (e) {
@@ -239,7 +241,7 @@ class AuthService {
       if (nsec.startsWith('nsec1')) {
         return decodeBasicBech32(nsec, 'nsec');
       } else if (nsec.length == 64) {
-        return nsec; // Already hex
+        return nsec;
       }
       return null;
     } catch (e) {
@@ -281,6 +283,94 @@ class AuthService {
       return const Result.success(null);
     } catch (e) {
       return Result.error('Failed to clear all data: ${e.toString()}');
+    }
+  }
+
+  Future<Result<String>> generateMnemonic() async {
+    try {
+      final mnemonic = await bip39.generateMnemonic();
+      return Result.success(mnemonic);
+    } catch (e) {
+      return Result.error('Failed to generate mnemonic: ${e.toString()}');
+    }
+  }
+
+  Future<Result<String>> loginWithMnemonic(String mnemonic) async {
+    try {
+      if (mnemonic.trim().isEmpty) {
+        return const Result.error('Mnemonic cannot be empty');
+      }
+
+      final words = mnemonic.trim().split(' ');
+      if (words.length != 12) {
+        return const Result.error('Mnemonic must be exactly 12 words');
+      }
+
+      final isValid = await bip39.validateMnemonic(mnemonic.trim());
+      if (!isValid) {
+        return const Result.error('Invalid mnemonic phrase');
+      }
+
+      final seedBytes = bip39.mnemonicToSeed(mnemonic.trim());
+      
+      final bip32Root = bip32.BIP32.fromSeed(seedBytes);
+      final derivedKey = bip32Root.derivePath("m/44'/1237'/0'/0/0");
+      final privateKey = derivedKey.privateKey!.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+      try {
+        final privateKeyInt = BigInt.parse(privateKey, radix: 16);
+        if (privateKeyInt == BigInt.zero || privateKeyInt >= BigInt.parse('FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141', radix: 16)) {
+          return const Result.error('Invalid private key generated from mnemonic');
+        }
+      } catch (e) {
+        return const Result.error('Invalid private key generated from mnemonic');
+      }
+
+      String npub;
+      try {
+        final keychain = Keychain(privateKey);
+        npub = Nip19.encodePubkey(keychain.public);
+      } catch (e) {
+        return const Result.error('Failed to generate public key from mnemonic');
+      }
+
+      await Future.wait([
+        _secureStorage.write(key: 'npub', value: npub),
+        _secureStorage.write(key: 'privateKey', value: privateKey),
+        _secureStorage.write(key: 'mnemonic', value: mnemonic.trim()),
+      ]);
+
+      return Result.success(npub);
+    } catch (e) {
+      return Result.error('Login with mnemonic failed: ${e.toString()}');
+    }
+  }
+
+  Future<Result<String>> createAccountWithMnemonic() async {
+    try {
+      final mnemonicResult = await generateMnemonic();
+      if (mnemonicResult.isError) {
+        return Result.error(mnemonicResult.error!);
+      }
+
+      final mnemonic = mnemonicResult.data!;
+      final loginResult = await loginWithMnemonic(mnemonic);
+      
+      if (loginResult.isError) {
+        return Result.error(loginResult.error!);
+      }
+
+      return Result.success(loginResult.data!);
+    } catch (e) {
+      return Result.error('Failed to create account with mnemonic: ${e.toString()}');
+    }
+  }
+
+  Future<Result<String?>> getCurrentUserMnemonic() async {
+    try {
+      final mnemonic = await _secureStorage.read(key: 'mnemonic');
+      return Result.success(mnemonic);
+    } catch (e) {
+      return Result.error('Failed to read mnemonic: ${e.toString()}');
     }
   }
 }

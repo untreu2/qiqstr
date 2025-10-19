@@ -19,7 +19,9 @@ class _KeysPageState extends State<KeysPage> {
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
   String _nsecBech32 = 'Loading...';
   String _npubBech32 = 'Loading...';
+  String _mnemonic = 'Loading...';
   String? _copiedKeyType;
+  bool _showAdvanced = false;
 
   @override
   void initState() {
@@ -31,6 +33,7 @@ class _KeysPageState extends State<KeysPage> {
     try {
       final hexPrivateKey = await _secureStorage.read(key: 'privateKey');
       final npubBech32 = await _secureStorage.read(key: 'npub');
+      final mnemonic = await _secureStorage.read(key: 'mnemonic');
 
       if (hexPrivateKey != null && npubBech32 != null) {
         String nsecBech32;
@@ -43,17 +46,20 @@ class _KeysPageState extends State<KeysPage> {
         setState(() {
           _nsecBech32 = nsecBech32;
           _npubBech32 = npubBech32;
+          _mnemonic = mnemonic ?? 'Not available';
         });
       } else {
         setState(() {
           _nsecBech32 = 'Not found';
           _npubBech32 = 'Not found';
+          _mnemonic = 'Not found';
         });
       }
     } catch (e) {
       setState(() {
         _nsecBech32 = 'Error loading keys';
         _npubBech32 = 'Error loading keys';
+        _mnemonic = 'Error loading keys';
       });
       if (kDebugMode) {
         print('Error loading keys: \$e');
@@ -77,7 +83,9 @@ class _KeysPageState extends State<KeysPage> {
   }
 
   Widget _buildKeyDisplayCard(BuildContext context, String title, String value, String keyType, bool isCopied) {
-    final displayValue = keyType == 'nsec' ? '•' * 48 : value;
+    final displayValue = keyType == 'mnemonic' ? '•' * 48 : value;
+    final isMnemonic = keyType == 'mnemonic';
+    
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       padding: const EdgeInsets.all(20.0),
@@ -106,13 +114,14 @@ class _KeysPageState extends State<KeysPage> {
               Expanded(
                 child: Text(
                   displayValue,
-                  maxLines: 1,
+                  maxLines: isMnemonic ? 3 : 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: context.colors.textPrimary,
                     fontSize: 16,
                     fontWeight: FontWeight.w400,
-                    letterSpacing: keyType == 'nsec' ? 2 : 0,
+                    letterSpacing: keyType == 'mnemonic' ? 2 : 0,
+                    height: isMnemonic ? 1.4 : 1.0,
                   ),
                 ),
               ),
@@ -135,6 +144,29 @@ class _KeysPageState extends State<KeysPage> {
     );
   }
 
+  Widget _buildAdvancedLink(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Center(
+        child: GestureDetector(
+          onTap: () {
+            setState(() {
+              _showAdvanced = !_showAdvanced;
+            });
+          },
+          child: Text(
+            'Advanced',
+            style: TextStyle(
+              fontSize: 15,
+              color: context.colors.textSecondary,
+              decoration: TextDecoration.underline,
+              decorationColor: context.colors.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _buildHeader(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
@@ -190,18 +222,29 @@ class _KeysPageState extends State<KeysPage> {
               const SizedBox(height: 8),
               _buildKeyDisplayCard(
                 context,
-                'Private Key (nsec)',
-                _nsecBech32,
-                'nsec',
-                _copiedKeyType == 'nsec',
-              ),
-              _buildKeyDisplayCard(
-                context,
                 'Public Key (npub)',
                 _npubBech32,
                 'npub',
                 _copiedKeyType == 'npub',
               ),
+              if (_showAdvanced) ...[
+                _buildKeyDisplayCard(
+                  context,
+                  'Private Key (nsec)',
+                  _nsecBech32,
+                  'nsec',
+                  _copiedKeyType == 'nsec',
+                ),
+              ],
+              _buildKeyDisplayCard(
+                context,
+                'Seed Phrase',
+                _mnemonic,
+                'mnemonic',
+                _copiedKeyType == 'mnemonic',
+              ),
+              const SizedBox(height: 24),
+              _buildAdvancedLink(context),
               const SizedBox(height: 32),
             ],
           ),
