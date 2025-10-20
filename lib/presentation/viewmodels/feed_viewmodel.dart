@@ -128,7 +128,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     }
 
     _isLoadingFeed = true;
-    
+
     if (isHashtagMode) {
       debugPrint('[FeedViewModel] Loading hashtag feed for: #$_hashtag');
       await _loadHashtagFeed();
@@ -136,7 +136,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
       debugPrint('[FeedViewModel] Loading feed for user: $_currentUserNpub');
       await _loadUserFeed();
     }
-    
+
     _isLoadingFeed = false;
   }
 
@@ -281,22 +281,28 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
         if (!isDisposed && _feedState.isLoaded) {
           if (notes.isNotEmpty) {
             final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
-            final currentNoteIds = currentNotes.map((n) => n.id).toSet();
-            
-            final newNotes = notes.where((note) => !currentNoteIds.contains(note.id)).toList();
-            
-            if (newNotes.isNotEmpty) {
-              debugPrint(' [FeedViewModel] Adding ${newNotes.length} new notes to pending list');
-              
-              for (final note in newNotes) {
-                if (!_pendingNotes.any((n) => n.id == note.id)) {
-                  _pendingNotes.add(note);
-                }
-              }
-              
-              _pendingNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-              
+
+            if (currentNotes.isEmpty) {
+              debugPrint(' [FeedViewModel] Feed is empty, adding ${notes.length} new notes directly');
+              _feedState = LoadedState(notes);
+              _loadUserProfilesForNotes(notes);
               safeNotifyListeners();
+            } else {
+              final currentNoteIds = currentNotes.map((n) => n.id).toSet();
+              final newNotes = notes.where((note) => !currentNoteIds.contains(note.id)).toList();
+
+              if (newNotes.isNotEmpty) {
+                debugPrint(' [FeedViewModel] Adding ${newNotes.length} new notes to pending list');
+
+                for (final note in newNotes) {
+                  if (!_pendingNotes.any((n) => n.id == note.id)) {
+                    _pendingNotes.add(note);
+                  }
+                }
+
+                _pendingNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+                safeNotifyListeners();
+              }
             }
           } else {
             debugPrint('[FeedViewModel] Ignoring empty stream update to preserve loaded state');
@@ -314,17 +320,17 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     debugPrint('[FeedViewModel] Adding ${_pendingNotes.length} pending notes to feed');
 
     final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
-    
+
     final allNotes = [..._pendingNotes, ...currentNotes];
-    
+
     allNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-    
+
     _feedState = LoadedState(allNotes);
-    
+
     _loadUserProfilesForNotes(_pendingNotes);
-    
+
     _pendingNotes.clear();
-    
+
     safeNotifyListeners();
   }
 
@@ -447,6 +453,6 @@ class ChangeViewModeCommand extends ParameterizedCommand<NoteViewMode> {
 }
 
 enum NoteViewMode {
-  list, // List view
-  grid, // Grid view
+  list,
+  grid,
 }
