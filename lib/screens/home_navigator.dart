@@ -93,7 +93,11 @@ class _HomeNavigatorState extends State<HomeNavigator> {
                   onTap: () => _handleNavigation(index),
                   behavior: HitTestBehavior.opaque,
                   child: Center(
-                    child: index == 3 ? _buildNotificationIcon(item['icon'] as String, isSelected) : _buildRegularIcon(item, isSelected),
+                    child: index == 3
+                        ? _buildNotificationIcon(item['icon'] as String, isSelected)
+                        : index == 2
+                            ? _buildWalletIcon(item['icon'] as String, isSelected)
+                            : _buildRegularIcon(item, isSelected),
                   ),
                 ),
               );
@@ -109,6 +113,18 @@ class _HomeNavigatorState extends State<HomeNavigator> {
       iconPath,
       width: 20,
       height: 20,
+      colorFilter: ColorFilter.mode(
+        isSelected ? context.colors.accent : context.colors.textPrimary,
+        BlendMode.srcIn,
+      ),
+    );
+  }
+
+  Widget _buildWalletIcon(String iconPath, bool isSelected) {
+    return SvgPicture.asset(
+      iconPath,
+      width: 17,
+      height: 17,
       colorFilter: ColorFilter.mode(
         isSelected ? context.colors.accent : context.colors.textPrimary,
         BlendMode.srcIn,
