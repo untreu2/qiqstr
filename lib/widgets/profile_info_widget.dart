@@ -135,6 +135,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       _isLoadingProfile = true;
       debugPrint('[ProfileInfoWidget] Loading fresh profile data for: ${_userNotifier.value.pubkeyHex}');
 
+      await _userRepository.invalidateUserCache(_userNotifier.value.pubkeyHex);
       final result = await _userRepository.getUserProfile(_userNotifier.value.pubkeyHex);
 
       result.fold(

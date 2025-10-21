@@ -224,11 +224,13 @@ class UserRepository {
         return Result.error(updateResult.error!);
       }
 
+      await _cacheService.invalidate(updatedUser.pubkeyHex);
+      
       _cacheService.put(updatedUser);
 
       _currentUserController.add(updatedUser);
 
-      debugPrint('[UserRepository] Profile updated successfully and broadcasted to relays');
+      debugPrint('[UserRepository] Profile updated successfully, cache invalidated, and broadcasted to relays');
       return Result.success(updatedUser);
     } catch (e) {
       debugPrint('[UserRepository] Profile update error: $e');

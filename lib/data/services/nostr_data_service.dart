@@ -304,6 +304,7 @@ class NostrDataService {
       'nip05Verified': nip05Verified.toString(),
     };
 
+    _profileCache.remove(pubkey);
     _profileCache[pubkey] = CachedProfile(dataToCache, timestamp);
 
     final user = UserModel(
@@ -320,6 +321,7 @@ class NostrDataService {
     );
 
     try {
+      await _userCacheService.invalidate(pubkey);
       await _userCacheService.put(user);
       debugPrint('[NostrDataService]  Profile cached to 2-tier storage: ${user.name} (image: ${user.profileImage.isNotEmpty ? "✓" : "✗"})');
     } catch (e) {
@@ -327,7 +329,7 @@ class NostrDataService {
     }
 
     _usersController.add(_getUsersList());
-    debugPrint('[NostrDataService] Profile updated: ${user.name} (NIP-05: $nip05Verified)');
+    debugPrint('[NostrDataService] Profile updated and cache invalidated: ${user.name} (NIP-05: $nip05Verified)');
   }
 
   Future<void> _processKind1Event(Map<String, dynamic> eventData) async {
@@ -2315,6 +2317,7 @@ class NostrDataService {
         nip05Verified: false, 
       );
 
+      _profileCache.remove(pubkeyHex);
       _profileCache[pubkeyHex] = CachedProfile(
         profileContent.map((key, value) => MapEntry(key, value.toString())),
         updatedAt,
@@ -2322,7 +2325,7 @@ class NostrDataService {
 
       _usersController.add(_getUsersList());
 
-      debugPrint('[NostrDataService] Profile updated and cached successfully.');
+      debugPrint('[NostrDataService] Profile updated, cache invalidated, and cached successfully.');
       return Result.success(updatedUser);
     } catch (e, st) {
       debugPrint('[NostrDataService ERROR] Error updating profile: $e\n$st');

@@ -160,6 +160,7 @@ class UserCacheService {
   }
 
   Future<void> put(UserModel user, {Duration? ttl}) async {
+    _memoryCache.remove(user.pubkeyHex);
     _putInMemory(user, ttl: ttl);
 
     if (_isIsarInitialized) {
@@ -174,9 +175,10 @@ class UserCacheService {
           'website': user.website,
           'nip05Verified': user.nip05Verified.toString(),
         };
-        
+        await _isarService.deleteUserProfile(user.pubkeyHex);
         await _isarService.saveUserProfile(user.pubkeyHex, profileData);
         _persistentWrites++;
+        debugPrint('[UserCacheService] Profile cache updated: ${user.name}');
       } catch (e) {
         debugPrint('[UserCacheService] Error writing to persistent cache: $e');
       }

@@ -124,6 +124,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
       result.fold(
         (updatedUser) {
           _profileState = LoadedState(updatedUser);
+          _userRepository.invalidateUserCache(updatedUser.npub);
           _userRepository.cacheUser(updatedUser);
         },
         (error) => _profileState = ErrorState(error),

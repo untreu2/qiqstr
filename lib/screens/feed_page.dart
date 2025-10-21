@@ -66,6 +66,7 @@ class FeedPageState extends State<FeedPage> {
           setState(() {
             _currentUser = updatedUser;
             _profiles[updatedUser.npub] = updatedUser;
+            debugPrint('[FeedPage] Profile updated in UI: ${updatedUser.name} (image: ${updatedUser.profileImage.isNotEmpty ? "✓" : "✗"})');
           });
         }
       },
