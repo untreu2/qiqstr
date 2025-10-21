@@ -735,20 +735,12 @@ class _ShareNotePageState extends State<ShareNotePage> {
     final double topPadding = MediaQuery.of(context).padding.top;
     
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 8),
+      padding: EdgeInsets.fromLTRB(16, topPadding + 16, 16, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            'New Post',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.w700,
-              color: context.colors.textPrimary,
-              letterSpacing: -0.5,
-            ),
-          ),
+          const SizedBox.shrink(), 
           _buildAppBarActions(),
         ],
       ),
