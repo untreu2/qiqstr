@@ -13,11 +13,9 @@ import '../../../data/repositories/notification_repository.dart';
 import '../../../data/services/validation_service.dart';
 import '../../../data/services/nostr_data_service.dart';
 
-/// Module for registering all ViewModels
 class ViewModelsModule extends DIModule {
   @override
   Future<void> register() async {
-    // Register ViewModels as factories (new instance each time)
     AppDI.registerFactory<LoginViewModel>(() => LoginViewModel(
           authRepository: AppDI.get<AuthRepository>(),
           validationService: AppDI.get<ValidationService>(),

@@ -4,8 +4,6 @@ import 'package:flutter/foundation.dart';
 
 import 'app_error.dart';
 
-/// Base class for all ViewModels in the application
-/// Provides common functionality like error handling, loading states, and lifecycle management
 abstract class BaseViewModel extends ChangeNotifier {
   BaseViewModel() {
     initialize();
@@ -14,25 +12,19 @@ abstract class BaseViewModel extends ChangeNotifier {
   bool _isDisposed = false;
   bool get isDisposed => _isDisposed;
 
-  // Global error state
   AppError? _globalError;
   AppError? get globalError => _globalError;
 
-  // Global loading state
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
-  // Subscriptions for cleanup
   final List<StreamSubscription> _subscriptions = [];
   final List<Timer> _timers = [];
   final Map<String, int> _retryAttempts = {};
 
-  /// Called when ViewModel is created
-  /// Override this to perform initialization
   @protected
   void initialize() {}
 
-  /// Safely notify listeners only if not disposed
   @protected
   void safeNotifyListeners() {
     if (!_isDisposed) {
@@ -40,7 +32,6 @@ abstract class BaseViewModel extends ChangeNotifier {
     }
   }
 
-  /// Set global error state
   @protected
   void setError(AppError error) {
     _globalError = error;
@@ -48,7 +39,6 @@ abstract class BaseViewModel extends ChangeNotifier {
     safeNotifyListeners();
   }
 
-  /// Clear global error state
   @protected
   void clearError() {
     if (_globalError != null) {
@@ -57,7 +47,6 @@ abstract class BaseViewModel extends ChangeNotifier {
     }
   }
 
-  /// Set global loading state
   @protected
   void setLoading(bool loading) {
     if (_isLoading != loading) {
@@ -69,7 +58,6 @@ abstract class BaseViewModel extends ChangeNotifier {
     }
   }
 
-  /// Execute an operation with error handling and loading state
   @protected
   Future<void> executeOperation(
     String operationName,
@@ -83,7 +71,6 @@ abstract class BaseViewModel extends ChangeNotifier {
 
       await operation();
 
-      // Clear retry attempts on success
       _retryAttempts.remove(operationName);
     } catch (error) {
       final appError = _convertToAppError(error);
@@ -95,7 +82,6 @@ abstract class BaseViewModel extends ChangeNotifier {
     }
   }
 
-  /// Execute operation with retry logic
   @protected
   Future<void> executeWithRetry(
     String operationName,
@@ -112,13 +98,11 @@ abstract class BaseViewModel extends ChangeNotifier {
 
       await operation();
 
-      // Success - clear retry attempts
       _retryAttempts.remove(operationName);
     } catch (error) {
       final appError = _convertToAppError(error);
 
       if (currentAttempts < maxRetries && appError.isRetryable) {
-        // Retry after delay
         _retryAttempts[operationName] = currentAttempts + 1;
 
         final retryDelay = Duration(
@@ -131,13 +115,12 @@ abstract class BaseViewModel extends ChangeNotifier {
             operation,
             maxRetries: maxRetries,
             delay: delay,
-            showLoading: false, // Don't show loading for retries
+            showLoading: false,
           );
         });
 
         return;
       } else {
-        // Max retries reached or not retryable
         _retryAttempts.remove(operationName);
         setError(appError);
 
@@ -150,7 +133,6 @@ abstract class BaseViewModel extends ChangeNotifier {
     }
   }
 
-  /// Convert any error to AppError
   AppError _convertToAppError(dynamic error) {
     if (error is AppError) {
       return error;
@@ -165,7 +147,6 @@ abstract class BaseViewModel extends ChangeNotifier {
     }
   }
 
-  /// Add a subscription for automatic cleanup
   @protected
   void addSubscription(StreamSubscription subscription) {
     if (!_isDisposed) {
@@ -175,7 +156,6 @@ abstract class BaseViewModel extends ChangeNotifier {
     }
   }
 
-  /// Add a timer for automatic cleanup
   @protected
   void addTimer(Timer timer) {
     if (!_isDisposed) {
@@ -185,7 +165,6 @@ abstract class BaseViewModel extends ChangeNotifier {
     }
   }
 
-  /// Retry the last failed operation
   void retry() {
     if (_globalError != null && _globalError!.isRetryable) {
       clearError();
@@ -193,7 +172,6 @@ abstract class BaseViewModel extends ChangeNotifier {
     }
   }
 
-  /// Override this to implement retry logic
   @protected
   void onRetry() {}
 
@@ -201,36 +179,30 @@ abstract class BaseViewModel extends ChangeNotifier {
   void dispose() {
     _isDisposed = true;
 
-    // Cancel all subscriptions
     for (final subscription in _subscriptions) {
       subscription.cancel();
     }
     _subscriptions.clear();
 
-    // Cancel all timers
     for (final timer in _timers) {
       timer.cancel();
     }
     _timers.clear();
 
-    // Clear retry attempts
     _retryAttempts.clear();
 
     super.dispose();
   }
 }
 
-/// Mixin for ViewModels that need command pattern support
 mixin CommandMixin on BaseViewModel {
   final Map<String, Command> _commands = {};
 
-  /// Register a command
   @protected
   void registerCommand(String name, Command command) {
     _commands[name] = command;
   }
 
-  /// Execute a command by name
   Future<void> executeCommand(String name, [dynamic parameter]) async {
     final command = _commands[name];
     if (command != null) {
@@ -240,26 +212,20 @@ mixin CommandMixin on BaseViewModel {
     }
   }
 
-  /// Get command by name
   Command? getCommand(String name) => _commands[name];
 }
 
-/// Base class for all commands
 abstract class Command {
-  /// Execute the command
   Future<void> execute([dynamic parameter]);
 }
 
-/// Command that accepts no parameters
 abstract class ParameterlessCommand extends Command {
   @override
   Future<void> execute([dynamic parameter]) => executeImpl();
 
-  /// Implement this method in concrete commands
   Future<void> executeImpl();
 }
 
-/// Command that accepts a typed parameter
 abstract class ParameterizedCommand<T> extends Command {
   @override
   Future<void> execute([dynamic parameter]) {
@@ -270,11 +236,9 @@ abstract class ParameterizedCommand<T> extends Command {
     }
   }
 
-  /// Implement this method in concrete commands
   Future<void> executeImpl(T parameter);
 }
 
-/// Simple command implementation
 class SimpleCommand extends ParameterlessCommand {
   SimpleCommand(this._action);
 
@@ -284,7 +248,6 @@ class SimpleCommand extends ParameterlessCommand {
   Future<void> executeImpl() => _action();
 }
 
-/// Parameterized command implementation
 class SimpleParameterizedCommand<T> extends ParameterizedCommand<T> {
   SimpleParameterizedCommand(this._action);
 

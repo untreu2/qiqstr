@@ -57,7 +57,7 @@ class UserRepository {
         (error) {
           final basicUser = UserModel(
             pubkeyHex: npub,
-            name: npub.substring(0, 8), // Fallback name
+            name: npub.substring(0, 8),
             profileImage: '',
             about: '',
             nip05: '',
@@ -114,7 +114,7 @@ class UserRepository {
     final results = <String, Result<UserModel>>{};
 
     try {
-      final pubkeyHexMap = <String, String>{}; // hex -> npub
+      final pubkeyHexMap = <String, String>{};
       for (final npub in npubs) {
         final validation = _validationService.validateNpub(npub);
         if (validation.isSuccess) {
@@ -131,13 +131,11 @@ class UserRepository {
         results[npub] = Result.success(entry.value);
       }
 
-      final missingHexKeys = pubkeyHexMap.keys
-          .where((hex) => !cachedUsers.containsKey(hex))
-          .toList();
+      final missingHexKeys = pubkeyHexMap.keys.where((hex) => !cachedUsers.containsKey(hex)).toList();
 
       if (missingHexKeys.isNotEmpty) {
         debugPrint('[UserRepository] Batch fetching ${missingHexKeys.length} missing profiles');
-        
+
         final fetchedUsers = await _batchFetcher.fetchUsers(
           missingHexKeys,
           priority: priority,
@@ -157,13 +155,13 @@ class UserRepository {
       return results;
     } catch (e) {
       debugPrint('[UserRepository] Error batch fetching profiles: $e');
-      
+
       for (final npub in npubs) {
         if (!results.containsKey(npub)) {
           results[npub] = Result.error('Failed to fetch profile: $e');
         }
       }
-      
+
       return results;
     }
   }
@@ -225,7 +223,7 @@ class UserRepository {
       }
 
       await _cacheService.invalidate(updatedUser.pubkeyHex);
-      
+
       _cacheService.put(updatedUser);
 
       _currentUserController.add(updatedUser);
@@ -378,7 +376,7 @@ class UserRepository {
       if (followingResult.isSuccess) {
         currentFollowing = followingResult.data ?? [];
         debugPrint('[UserRepository] Current following list has ${currentFollowing.length} users');
-        debugPrint('[UserRepository] Following list: ${currentFollowing.take(5).toList()}...'); // Show first 5
+        debugPrint('[UserRepository] Following list: ${currentFollowing.take(5).toList()}...');
       } else {
         debugPrint('[UserRepository] Failed to get following list: ${followingResult.error}');
       }
@@ -449,7 +447,7 @@ class UserRepository {
 
       return followingResult.fold(
         (followingList) => Result.success(followingList.contains(targetUserHex)),
-        (error) => const Result.success(false), // Not following if can't get list
+        (error) => const Result.success(false),
       );
     } catch (e) {
       return Result.error('Failed to check follow status: $e');
@@ -513,7 +511,7 @@ class UserRepository {
 
           final basicUser = UserModel(
             pubkeyHex: npub,
-            name: npub.substring(0, 8), // Show npub prefix as name initially
+            name: npub.substring(0, 8),
             profileImage: '',
             about: '',
             nip05: '',
@@ -594,11 +592,11 @@ class UserRepository {
         }
       } else {
         debugPrint('[UserRepository]  Searching for users by name/nip05: "$trimmedQuery"');
-        
+
         final isarService = _cacheService.isarService;
         if (isarService.isInitialized) {
           final matchingProfiles = await isarService.searchUsersByName(trimmedQuery, limit: 50);
-          
+
           for (final isarProfile in matchingProfiles) {
             final profileData = isarProfile.toProfileData();
             final userModel = UserModel.fromCachedProfile(
@@ -607,7 +605,7 @@ class UserRepository {
             );
             searchResults.add(userModel);
           }
-          
+
           debugPrint('[UserRepository]  Found ${searchResults.length} users matching "$trimmedQuery"');
         } else {
           debugPrint('[UserRepository] ️ Isar not initialized, cannot search by name');
@@ -625,7 +623,7 @@ class UserRepository {
     final pubkeyHex = _authService.npubToHex(npub) ?? npub;
     return await _cacheService.get(pubkeyHex);
   }
-  
+
   UserModel? getCachedUserSync(String npub) {
     final pubkeyHex = _authService.npubToHex(npub) ?? npub;
     return _cacheService.getSync(pubkeyHex);

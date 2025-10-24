@@ -4,11 +4,9 @@ import '../../../data/services/validation_service.dart';
 import '../../../data/services/network_service.dart';
 import '../../../data/services/nostr_data_service.dart';
 
-/// Module for registering all services
 class ServicesModule extends DIModule {
   @override
   Future<void> register() async {
-    // Register core services as singletons
     AppDI.registerLazySingleton<AuthService>(() => AuthService.instance);
     AppDI.registerLazySingleton<ValidationService>(() => ValidationService.instance);
     AppDI.registerLazySingleton<NetworkService>(() => NetworkService.instance);

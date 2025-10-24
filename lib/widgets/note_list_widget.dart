@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import '../models/note_model.dart';
 import '../models/user_model.dart';
+import '../core/di/app_di.dart';
+import '../data/repositories/note_repository.dart';
 import 'note_widget.dart';
 
-class NoteListWidget extends StatelessWidget {
+class NoteListWidget extends StatefulWidget {
   final List<NoteModel> notes;
   final String? currentUserNpub;
   final ValueNotifier<List<NoteModel>> notesNotifier;
@@ -32,23 +34,69 @@ class NoteListWidget extends StatelessWidget {
   });
 
   @override
+  State<NoteListWidget> createState() => _NoteListWidgetState();
+}
+
+class _NoteListWidgetState extends State<NoteListWidget> {
+  late final NoteRepository _noteRepository;
+
+  @override
+  void initState() {
+    super.initState();
+    try {
+      _noteRepository = AppDI.get<NoteRepository>();
+      _loadInteractionsForVisibleNotes();
+    } catch (e) {
+      debugPrint('[NoteListWidget] InitState error: $e');
+    }
+  }
+
+  void _loadInteractionsForVisibleNotes() {
+    if (widget.notes.isEmpty) return;
+
+    final noteIds = widget.notes.take(10).map((note) {
+      if (note.isRepost && note.rootId != null && note.rootId!.isNotEmpty) {
+        return note.rootId!;
+      }
+      return note.id;
+    }).toList();
+
+    Future.microtask(() {
+      try {
+        _noteRepository.fetchInteractionsForNotes(noteIds);
+      } catch (e) {
+        debugPrint('[NoteListWidget] Error loading interactions: $e');
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(NoteListWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (oldWidget.notes != widget.notes) {
+      _loadInteractionsForVisibleNotes();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (errorMessage != null) {
+    if (widget.errorMessage != null) {
       return SliverToBoxAdapter(
         child: _ErrorState(
-          errorMessage: errorMessage!,
-          onRetry: onRetry ?? () {},
+          errorMessage: widget.errorMessage!,
+          onRetry: widget.onRetry ?? () {},
         ),
       );
     }
 
-    if (notes.isEmpty && isLoading) {
+    if (widget.notes.isEmpty && widget.isLoading) {
       return const SliverToBoxAdapter(
         child: _LoadingState(),
       );
     }
 
-    if (notes.isEmpty) {
+    if (widget.notes.isEmpty) {
       return const SliverToBoxAdapter(
         child: _EmptyState(),
       );
@@ -57,20 +105,20 @@ class NoteListWidget extends StatelessWidget {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
-          if (index == notes.length) {
-            if (hasMore && onLoadMore != null) {
-              return _LoadMoreButton(onPressed: onLoadMore!);
-            } else if (isLoading) {
+          if (index == widget.notes.length) {
+            if (widget.hasMore && widget.onLoadMore != null) {
+              return _LoadMoreButton(onPressed: widget.onLoadMore!);
+            } else if (widget.isLoading) {
               return const _LoadMoreIndicator();
             }
             return const SizedBox.shrink();
           }
 
-          if (index >= notes.length) {
+          if (index >= widget.notes.length) {
             return const SizedBox.shrink();
           }
 
-          final note = notes[index];
+          final note = widget.notes[index];
 
           return RepaintBoundary(
             key: ValueKey('note_${note.id}'),
@@ -79,20 +127,20 @@ class NoteListWidget extends StatelessWidget {
               children: [
                 NoteWidget(
                   note: note,
-                  currentUserNpub: currentUserNpub ?? '',
-                  notesNotifier: notesNotifier,
-                  profiles: profiles,
+                  currentUserNpub: widget.currentUserNpub ?? '',
+                  notesNotifier: widget.notesNotifier,
+                  profiles: widget.profiles,
                   containerColor: null,
                   isSmallView: true,
-                  scrollController: scrollController,
-                  notesListProvider: notesListProvider,
+                  scrollController: widget.scrollController,
+                  notesListProvider: widget.notesListProvider,
                 ),
-                if (index < notes.length - 1) const _NoteSeparator(),
+                if (index < widget.notes.length - 1) const _NoteSeparator(),
               ],
             ),
           );
         },
-        childCount: notes.length + (hasMore || isLoading ? 1 : 0),
+        childCount: widget.notes.length + (widget.hasMore || widget.isLoading ? 1 : 0),
         addAutomaticKeepAlives: true,
         addRepaintBoundaries: false,
       ),

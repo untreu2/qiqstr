@@ -6,7 +6,6 @@ import 'time_service.dart';
 class NoteProcessor {
   static final TimeService timeService = TimeService.instance;
 
-  /// Process a note event (kind 1) or reposted note content
   static void processNoteEvent(
     dynamic dataService,
     Map<String, dynamic> eventData,
@@ -22,12 +21,10 @@ class NoteProcessor {
       final createdAt = eventData['created_at'] as int;
       final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
 
-      // Skip if we already have this note
       if (dataService.eventIds.contains(noteId)) {
         return;
       }
 
-      // Check if this note is a reply using NIP-10 rules
       final replyInfo = _analyzeReplyStructure(eventData);
 
       final noteModel = NoteModel(
@@ -47,20 +44,16 @@ class NoteProcessor {
         replyMarker: replyInfo.replyMarker,
       );
 
-      // Set media detection
       noteModel.hasMedia = noteModel.hasMediaLazy;
 
-      // Add to data structures
       dataService.notes.add(noteModel);
       dataService.eventIds.add(noteModel.id);
       dataService.addNote(noteModel);
 
-      // Cache the note
       dataService._dataManager.notesBox?.put(noteModel.id, noteModel).catchError((e) {
         debugPrint('[NoteProcessor] Error caching note: $e');
       });
 
-      // Notify listeners if it's a new note for the current user
       if (dataService.onNewNote != null) {
         dataService.onNewNote!(noteModel);
       }
@@ -72,7 +65,6 @@ class NoteProcessor {
     }
   }
 
-  /// Analyze a note's reply structure according to NIP-10
   static ReplyInfo _analyzeReplyStructure(Map<String, dynamic> eventData) {
     final tags = List<dynamic>.from(eventData['tags'] ?? []);
 
@@ -83,7 +75,6 @@ class NoteProcessor {
     List<Map<String, String>> eTags = [];
     List<Map<String, String>> pTags = [];
 
-    // Process all tags
     for (var tag in tags) {
       if (tag is List && tag.isNotEmpty) {
         if (tag[0] == 'e' && tag.length >= 2) {
@@ -95,7 +86,6 @@ class NoteProcessor {
           };
           eTags.add(eTag);
 
-          // Check for NIP-10 markers
           if (tag.length >= 4) {
             final marker = tag[3] as String;
             if (marker == 'root') {
@@ -107,13 +97,10 @@ class NoteProcessor {
               replyMarker = 'reply';
               isReply = true;
             } else if (marker == 'mention') {
-              // This is just a mention, not a reply
               continue;
             }
           } else {
-            // Legacy positional e-tags (deprecated but still supported)
             if (!isReply) {
-              // First e-tag without marker is considered the parent/root
               parentId = tag[1] as String;
               isReply = true;
             }
@@ -129,12 +116,8 @@ class NoteProcessor {
       }
     }
 
-    // If we have both root and reply markers, use the appropriate parent
     if (rootId != null && parentId != null) {
-      // This is a reply in a thread, parentId is the immediate parent
-      // rootId stays as the thread root
     } else if (rootId != null && parentId == null) {
-      // This is a direct reply to the root
       parentId = rootId;
     }
 
@@ -148,7 +131,6 @@ class NoteProcessor {
     );
   }
 
-  /// Check if a repost content contains a reply
   static bool isRepostOfReply(String repostContent) {
     try {
       final contentJson = jsonDecode(repostContent) as Map<String, dynamic>;
@@ -160,7 +142,6 @@ class NoteProcessor {
     }
   }
 
-  /// Extract the original note from repost content
   static Map<String, dynamic>? extractOriginalNoteFromRepost(String repostContent) {
     try {
       return jsonDecode(repostContent) as Map<String, dynamic>;

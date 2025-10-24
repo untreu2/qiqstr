@@ -4,6 +4,7 @@ import '../models/note_model.dart';
 import '../models/user_model.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/user_repository.dart';
+import '../data/repositories/note_repository.dart';
 import '../services/time_service.dart';
 import '../theme/theme_manager.dart';
 import '../screens/thread_page.dart';
@@ -61,12 +62,14 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   bool _isDisposed = false;
   bool _isInitialized = false;
   late final UserRepository _userRepository;
+  late final NoteRepository _noteRepository;
 
   @override
   void initState() {
     super.initState();
     try {
       _userRepository = AppDI.get<UserRepository>();
+      _noteRepository = AppDI.get<NoteRepository>();
       _precomputeImmutableData();
       _initializeAsync();
     } catch (e) {
@@ -121,6 +124,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
         _setupUserListener();
         _loadInitialUserData();
         _loadUsersAsync();
+        _loadInteractionsAsync();
       } catch (e) {
         debugPrint('[NoteWidget] Async init error: $e');
       }
@@ -221,14 +225,13 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
       bool isProfileComplete(UserModel? user, String userId) {
         if (user == null) return false;
         if (user.name == 'Anonymous') return false;
-        if (user.name == userId.substring(0, 8)) return false; // Fallback user
+        if (user.name == userId.substring(0, 8)) return false;
         if (user.profileImage.isEmpty) return false;
         return true;
       }
 
       final reposterId = _reposterId;
-      if (isProfileComplete(authorUser, _authorId) &&
-          (reposterId == null || isProfileComplete(reposterUser, reposterId))) {
+      if (isProfileComplete(authorUser, _authorId) && (reposterId == null || isProfileComplete(reposterUser, reposterId))) {
         debugPrint('[NoteWidget] ✓ Using cached profiles with images for ${_noteId.substring(0, 8)}');
         return;
       }
@@ -245,8 +248,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
         final authorPreloaded = widget.notesListProvider.getPreloadedUser(_authorId);
         final reposterPreloaded = reposterId != null ? widget.notesListProvider.getPreloadedUser(reposterId) : null;
 
-        if (isProfileComplete(authorPreloaded, _authorId) &&
-            (reposterId == null || isProfileComplete(reposterPreloaded, reposterId))) {
+        if (isProfileComplete(authorPreloaded, _authorId) && (reposterId == null || isProfileComplete(reposterPreloaded, reposterId))) {
           return;
         }
       }
@@ -287,6 +289,21 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
       }
     } catch (e) {
       debugPrint('[NoteWidget] Load users async error: $e');
+    }
+  }
+
+  Future<void> _loadInteractionsAsync() async {
+    if (_isDisposed || !mounted) return;
+
+    try {
+      Future.microtask(() {
+        if (!_isDisposed && mounted) {
+          final interactionNoteId = _getInteractionNoteId();
+          _noteRepository.fetchInteractionsForNote(interactionNoteId);
+        }
+      });
+    } catch (e) {
+      debugPrint('[NoteWidget] Load interactions async error: $e');
     }
   }
 
@@ -447,7 +464,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
 
       if (_isRepost && widget.note.rootId != null && widget.note.rootId!.isNotEmpty) {
         rootId = widget.note.rootId!;
-        focusedId = null; // Focus on the original note
+        focusedId = null;
         debugPrint('[NoteWidget] Navigating to repost thread - original note: $rootId');
       } else if (_isReply && widget.note.rootId != null && widget.note.rootId!.isNotEmpty) {
         rootId = widget.note.rootId!;
@@ -507,82 +524,82 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   }
 
   Widget _buildNormalLayout(dynamic colors) {
-      return RepaintBoundary(
-        key: ValueKey(_widgetKey),
-        child: GestureDetector(
-          onTap: _navigateToThreadPage,
-          child: Container(
-            color: widget.containerColor ?? colors.background,
-            padding: const EdgeInsets.only(bottom: 2),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _SafeProfileSection(
-                        stateNotifier: _stateNotifier,
-                        isRepost: _isRepost,
-                        onAuthorTap: () {
-                          debugPrint('[NoteWidget] Author avatar tapped for: $_authorId');
-                          _navigateToProfile(_authorId);
-                        },
-                        onReposterTap: _reposterId != null
-                            ? () {
-                                final reposterId = _reposterId;
-                                _navigateToProfile(reposterId);
-                              }
-                            : null,
-                        colors: colors,
-                        widgetKey: _widgetKey,
+    return RepaintBoundary(
+      key: ValueKey(_widgetKey),
+      child: GestureDetector(
+        onTap: _navigateToThreadPage,
+        child: Container(
+          color: widget.containerColor ?? colors.background,
+          padding: const EdgeInsets.only(bottom: 2),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _SafeProfileSection(
+                      stateNotifier: _stateNotifier,
+                      isRepost: _isRepost,
+                      onAuthorTap: () {
+                        debugPrint('[NoteWidget] Author avatar tapped for: $_authorId');
+                        _navigateToProfile(_authorId);
+                      },
+                      onReposterTap: _reposterId != null
+                          ? () {
+                              final reposterId = _reposterId;
+                              _navigateToProfile(reposterId);
+                            }
+                          : null,
+                      colors: colors,
+                      widgetKey: _widgetKey,
                       isExpanded: false,
                       formattedTimestamp: _formattedTimestamp,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _SafeUserInfoSection(
+                            stateNotifier: _stateNotifier,
+                            formattedTimestamp: _formattedTimestamp,
+                            colors: colors,
+                          ),
+                          RepaintBoundary(
+                            child: _SafeContentSection(
+                              parsedContent: _shouldTruncate ? _truncatedContent! : _parsedContent,
+                              onMentionTap: _navigateToMentionProfile,
+                              onShowMoreTap: _shouldTruncate ? (_) => _navigateToThreadPage() : null,
+                              notesListProvider: widget.notesListProvider,
+                              noteId: _noteId,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          RepaintBoundary(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              child: widget.currentUserNpub.isNotEmpty
+                                  ? InteractionBar(
+                                      noteId: _getInteractionNoteId(),
+                                      currentUserNpub: widget.currentUserNpub,
+                                      note: widget.note,
+                                    )
+                                  : const SizedBox(height: 32),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _SafeUserInfoSection(
-                              stateNotifier: _stateNotifier,
-                              formattedTimestamp: _formattedTimestamp,
-                              colors: colors,
-                            ),
-                            RepaintBoundary(
-                              child: _SafeContentSection(
-                                parsedContent: _shouldTruncate ? _truncatedContent! : _parsedContent,
-                                onMentionTap: _navigateToMentionProfile,
-                                onShowMoreTap: _shouldTruncate ? (_) => _navigateToThreadPage() : null,
-                                notesListProvider: widget.notesListProvider,
-                                noteId: _noteId,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            RepaintBoundary(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 4),
-                                child: widget.currentUserNpub.isNotEmpty
-                                    ? InteractionBar(
-                                        noteId: _getInteractionNoteId(),
-                                        currentUserNpub: widget.currentUserNpub,
-                                        note: widget.note,
-                                      )
-                                    : const SizedBox(height: 32),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-      );
+      ),
+    );
   }
 
   Widget _buildExpandedLayout(dynamic colors) {
@@ -606,14 +623,14 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                       builder: (context, state, _) {
                         final hasRepost = _isRepost && _reposterId != null;
                         final hasReply = state.replyText != null;
-                        
+
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             if (hasRepost)
                               Padding(
                                 padding: EdgeInsets.only(
-                                  top: 4, 
+                                  top: 4,
                                   bottom: hasReply ? 2 : 4,
                                 ),
                                 child: Row(
@@ -852,44 +869,43 @@ class _SafeProfileSection extends StatelessWidget {
   }
 
   Widget _buildNormalProfile(_NoteState state) {
-          return Stack(
-            children: [
-              Padding(
-                padding: isRepost ? const EdgeInsets.only(top: 8, left: 10) : const EdgeInsets.only(top: 8),
-                child: GestureDetector(
-                  onTap: onAuthorTap,
-                  child: _getCachedAvatar(
-                    state.authorUser?.profileImage ?? '',
-                    22,
-                    '${widgetKey}_author_${state.authorUser?.profileImage.hashCode ?? 0}',
-                  ),
+    return Stack(
+      children: [
+        Padding(
+          padding: isRepost ? const EdgeInsets.only(top: 8, left: 10) : const EdgeInsets.only(top: 8),
+          child: GestureDetector(
+            onTap: onAuthorTap,
+            child: _getCachedAvatar(
+              state.authorUser?.profileImage ?? '',
+              22,
+              '${widgetKey}_author_${state.authorUser?.profileImage.hashCode ?? 0}',
+            ),
+          ),
+        ),
+        if (isRepost && state.reposterUser != null)
+          Positioned(
+            top: 0,
+            left: 0,
+            child: GestureDetector(
+              onTap: onReposterTap,
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: colors.surface,
+                ),
+                child: _getCachedAvatar(
+                  state.reposterUser?.profileImage ?? '',
+                  12,
+                  '${widgetKey}_reposter_${state.reposterUser?.profileImage.hashCode ?? 0}',
                 ),
               ),
-              if (isRepost && state.reposterUser != null)
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  child: GestureDetector(
-                    onTap: onReposterTap,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: colors.surface,
-                      ),
-                      child: _getCachedAvatar(
-                        state.reposterUser?.profileImage ?? '',
-                        12,
-                        '${widgetKey}_reposter_${state.reposterUser?.profileImage.hashCode ?? 0}',
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          );
+            ),
+          ),
+      ],
+    );
   }
 
   Widget _buildExpandedProfile(_NoteState state) {
-    // Tüm durumlar için yan yana göster (repost ve reply başlıkları yukarıda)
     return GestureDetector(
       onTap: onAuthorTap,
       child: Row(

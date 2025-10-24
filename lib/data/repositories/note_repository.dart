@@ -68,7 +68,7 @@ class NoteRepository {
       debugPrint('[NoteRepository] getFeedNotesFromFollowList for user: $currentUserNpub');
 
       final result = await _nostrDataService.fetchFeedNotes(
-        authorNpubs: [currentUserNpub], // Special case: triggers follow list expansion
+        authorNpubs: [currentUserNpub],
         limit: limit,
         until: until,
         since: since,
@@ -284,7 +284,7 @@ class NoteRepository {
     try {
       final existingNote = _notes.where((n) => n.id == note.id).firstOrNull;
       if (existingNote != null) {
-        return const Result.success(null); // Note already exists
+        return const Result.success(null);
       }
 
       _notes.add(note);
@@ -396,8 +396,8 @@ class NoteRepository {
   NoteStats getNoteStats(String noteId) {
     return NoteStats(
       reactionCount: _reactions[noteId]?.length ?? 0,
-      replyCount: 0, // Simplified: No separate reply tracking
-      repostCount: 0, // Simplified: No separate repost tracking
+      replyCount: 0,
+      repostCount: 0,
       zapAmount: _zaps[noteId]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0,
     );
   }
@@ -553,6 +553,75 @@ class NoteRepository {
 
       debugPrint(' [NoteRepository] Forwarded note updates to InteractionBar listeners');
     });
+  }
+
+  Future<void> fetchInteractionsForNote(String noteId) async {
+    try {
+      await _nostrDataService.fetchInteractionsForNotes([noteId], forceLoad: false);
+
+      _updateNoteReplyCount(noteId);
+    } catch (e) {
+      debugPrint('[NoteRepository] Error fetching interactions for note $noteId: $e');
+    }
+  }
+
+  Future<void> fetchInteractionsForNotes(List<String> noteIds) async {
+    try {
+      if (noteIds.isEmpty) return;
+
+      await _nostrDataService.fetchInteractionsForNotes(noteIds, forceLoad: false);
+
+      for (final noteId in noteIds) {
+        _updateNoteReplyCount(noteId);
+      }
+    } catch (e) {
+      debugPrint('[NoteRepository] Error fetching interactions for notes: $e');
+    }
+  }
+
+  void _updateNoteReplyCount(String noteId) {
+    try {
+      final note = _notes.where((n) => n.id == noteId).firstOrNull;
+      if (note != null) {
+        final cachedNotes = _nostrDataService.cachedNotes;
+        final replyCount = cachedNotes.where((reply) => reply.isReply && (reply.parentId == noteId || reply.rootId == noteId)).length;
+
+        if (note.replyCount != replyCount) {
+          note.replyCount = replyCount;
+
+          _notesController.add(_notes);
+        }
+      }
+    } catch (e) {
+      debugPrint('[NoteRepository] Error updating note reply count: $e');
+    }
+  }
+
+  bool hasUserReacted(String noteId, String userNpub) {
+    try {
+      return _nostrDataService.hasUserReacted(noteId, userNpub);
+    } catch (e) {
+      debugPrint('[NoteRepository] Error checking user reaction: $e');
+      return false;
+    }
+  }
+
+  bool hasUserReposted(String noteId, String userNpub) {
+    try {
+      return _nostrDataService.hasUserReposted(noteId, userNpub);
+    } catch (e) {
+      debugPrint('[NoteRepository] Error checking user repost: $e');
+      return false;
+    }
+  }
+
+  bool hasUserZapped(String noteId, String userNpub) {
+    try {
+      return _nostrDataService.hasUserZapped(noteId, userNpub);
+    } catch (e) {
+      debugPrint('[NoteRepository] Error checking user zap: $e');
+      return false;
+    }
   }
 
   void dispose() {

@@ -6,10 +6,10 @@ import '../../services/nostr_service.dart';
 import '../../services/relay_service.dart';
 
 enum FetchPriority {
-  urgent,    // Fetch immediately (e.g., user is viewing this profile)
-  high,      // Fetch soon (e.g., visible in feed)
-  normal,    // Fetch when convenient (e.g., background prefetch)
-  low,       // Fetch when idle (e.g., speculative prefetch)
+  urgent,
+  high,
+  normal,
+  low,
 }
 
 class UserFetchRequest {
@@ -48,17 +48,17 @@ class UserBatchFetcher {
 
   final WebSocketManager _relayManager = WebSocketManager.instance;
 
-  static const int maxBatchSize = 50; // Maximum users per batch
-  static const Duration batchTimeout = Duration(milliseconds: 300); // Wait time before processing batch
-  static const Duration requestTimeout = Duration(seconds: 5); // Timeout per batch request
-  static const int maxConcurrentBatches = 3; // Maximum concurrent batch requests
+  static const int maxBatchSize = 50;
+  static const Duration batchTimeout = Duration(milliseconds: 300);
+  static const Duration requestTimeout = Duration(seconds: 5);
+  static const int maxConcurrentBatches = 3;
 
   final PriorityQueue<UserFetchRequest> _requestQueue = PriorityQueue<UserFetchRequest>(
-    (a, b) => b.priorityValue.compareTo(a.priorityValue), // Higher priority first
+    (a, b) => b.priorityValue.compareTo(a.priorityValue),
   );
 
   final Set<String> _queuedPubkeys = {};
-  
+
   Timer? _batchTimer;
   int _activeBatches = 0;
   bool _isProcessing = false;
@@ -108,7 +108,7 @@ class UserBatchFetcher {
     FetchPriority priority = FetchPriority.normal,
   }) async {
     final futures = <String, Future<UserModel?>>{};
-    
+
     for (final pubkeyHex in pubkeyHexList) {
       futures[pubkeyHex] = fetchUser(pubkeyHex, priority: priority);
     }
@@ -136,7 +136,7 @@ class UserBatchFetcher {
   void _triggerImmediateBatch() {
     _batchTimer?.cancel();
     _processBatch();
-    _startBatchProcessor(); // Restart timer
+    _startBatchProcessor();
   }
 
   Future<void> _processBatch() async {
@@ -220,7 +220,7 @@ class UserBatchFetcher {
                   try {
                     final parsedContent = jsonDecode(content);
                     final profileData = <String, String>{};
-                    
+
                     parsedContent.forEach((key, value) {
                       final keyStr = key.toString();
                       if (keyStr == 'picture') {
@@ -285,9 +285,7 @@ class UserBatchFetcher {
   }
 
   Map<String, dynamic> getStats() {
-    final successRate = _totalRequests > 0 
-        ? (_successfulFetches / _totalRequests * 100).toStringAsFixed(1)
-        : '0.0';
+    final successRate = _totalRequests > 0 ? (_successfulFetches / _totalRequests * 100).toStringAsFixed(1) : '0.0';
 
     return {
       'totalRequests': _totalRequests,
@@ -297,9 +295,7 @@ class UserBatchFetcher {
       'successRate': '$successRate%',
       'queueSize': _requestQueue.length,
       'activeBatches': _activeBatches,
-      'avgBatchSize': _batchesSent > 0 
-          ? (_totalRequests / _batchesSent).toStringAsFixed(1) 
-          : '0.0',
+      'avgBatchSize': _batchesSent > 0 ? (_totalRequests / _batchesSent).toStringAsFixed(1) : '0.0',
     };
   }
 
@@ -350,4 +346,3 @@ class PriorityQueue<T> {
     _queue.clear();
   }
 }
-

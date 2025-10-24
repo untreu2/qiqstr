@@ -105,7 +105,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
     Future.delayed(const Duration(milliseconds: 50), () {
       if (mounted) {
-        _loadUserProfileAsync(); // Load fresh profile data
+        _loadUserProfileAsync();
       }
     });
 

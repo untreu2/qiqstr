@@ -305,9 +305,7 @@ class MediaService {
       }
 
       await prefs.setString('media_cache_v2', jsonEncode(cacheMap));
-    } catch (e) {
-      // Silently ignore cache persistence errors to avoid disrupting app functionality
-    }
+    } catch (e) {}
   }
 
   void _schedulePeriodicCleanup() {
@@ -461,7 +459,6 @@ class MediaService {
     Future.microtask(() => _saveCacheToPersistentStorage());
   }
 
-  /// Send media to Blossom server - matches legacy DataService.sendMedia exactly
   Future<String> sendMedia(String filePath, String blossomUrl) async {
     const secureStorage = FlutterSecureStorage();
 
@@ -478,7 +475,6 @@ class MediaService {
     final fileBytes = await file.readAsBytes();
     final sha256Hash = sha256.convert(fileBytes).toString();
 
-    // Determine MIME type (matches legacy exactly)
     String mimeType = 'application/octet-stream';
     final lowerPath = filePath.toLowerCase();
     if (lowerPath.endsWith('.jpg') || lowerPath.endsWith('.jpeg')) {
@@ -491,7 +487,6 @@ class MediaService {
       mimeType = 'video/mp4';
     }
 
-    // Create Blossom auth event (kind 24242) - matches legacy exactly
     final expiration = timeService.add(Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000;
 
     final authEvent = Event.from(
@@ -508,7 +503,6 @@ class MediaService {
     final encodedAuth = base64.encode(utf8.encode(jsonEncode(authEvent.toJson())));
     final authHeader = 'Nostr $encodedAuth';
 
-    // Upload to Blossom server (matches legacy exactly)
     final cleanedUrl = blossomUrl.replaceAll(RegExp(r'/+$'), '');
     final uri = Uri.parse('$cleanedUrl/upload');
 

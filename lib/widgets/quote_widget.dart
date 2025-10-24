@@ -116,7 +116,7 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
       try {
         debugPrint('[QuoteWidget] Starting background fetch for event: $_eventId');
         final success = await _nostrDataService.fetchSpecificNote(_eventId!);
-        
+
         if (_isDisposed || !mounted) return;
 
         if (success) {
@@ -128,11 +128,10 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
           }
         }
 
-        // If not found, try alternative approach - check if note exists in any cached data
         debugPrint('[QuoteWidget] Note not found via fetchSpecificNote, checking all cached notes...');
         final allCachedNotes = _nostrDataService.cachedNotes;
         final foundNote = allCachedNotes.where((note) => note.id == _eventId).firstOrNull;
-        
+
         if (foundNote != null) {
           debugPrint('[QuoteWidget] Found note in cached data: $_eventId');
           _setNote(foundNote);
@@ -173,8 +172,7 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
     if (_retryCount < _maxRetries) {
       _retryCount++;
       debugPrint('[QuoteWidget] Retrying fetch (attempt $_retryCount/$_maxRetries)');
-      
-      // Wait a bit before retrying
+
       Timer(Duration(seconds: _retryCount * 2), () {
         if (!_isDisposed && mounted) {
           _startBackgroundFetch();

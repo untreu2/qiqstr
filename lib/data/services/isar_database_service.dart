@@ -31,12 +31,12 @@ class IsarDatabaseService {
       debugPrint('[IsarDatabaseService] Initializing Isar database...');
 
       final dir = await getApplicationDocumentsDirectory();
-      
+
       _isar = await Isar.open(
         [UserModelIsarSchema],
         directory: dir.path,
         name: 'qiqstr_db',
-        inspector: kDebugMode, // Enable inspector in debug mode
+        inspector: kDebugMode,
       );
 
       _isInitialized = true;
@@ -55,7 +55,6 @@ class IsarDatabaseService {
   Future<void> waitForInitialization() async {
     await _initCompleter.future;
   }
-
 
   Future<void> saveUserProfile(String pubkeyHex, Map<String, String> profileData) async {
     try {
@@ -92,10 +91,7 @@ class IsarDatabaseService {
   Future<Map<String, String>?> getUserProfile(String pubkeyHex) async {
     try {
       final db = await isar;
-      final user = await db.userModelIsars
-          .where()
-          .pubkeyHexEqualTo(pubkeyHex)
-          .findFirst();
+      final user = await db.userModelIsars.where().pubkeyHexEqualTo(pubkeyHex).findFirst();
 
       if (user != null) {
         debugPrint('[IsarDatabaseService]  Retrieved profile from Isar: ${user.name}');
@@ -115,10 +111,7 @@ class IsarDatabaseService {
       final results = <String, Map<String, String>>{};
 
       for (final pubkeyHex in pubkeyHexList) {
-        final user = await db.userModelIsars
-            .where()
-            .pubkeyHexEqualTo(pubkeyHex)
-            .findFirst();
+        final user = await db.userModelIsars.where().pubkeyHexEqualTo(pubkeyHex).findFirst();
 
         if (user != null) {
           results[pubkeyHex] = user.toProfileData();
@@ -136,10 +129,7 @@ class IsarDatabaseService {
   Future<bool> hasUserProfile(String pubkeyHex) async {
     try {
       final db = await isar;
-      final count = await db.userModelIsars
-          .where()
-          .pubkeyHexEqualTo(pubkeyHex)
-          .count();
+      final count = await db.userModelIsars.where().pubkeyHexEqualTo(pubkeyHex).count();
       return count > 0;
     } catch (e) {
       debugPrint('[IsarDatabaseService] Error checking profile existence: $e');
@@ -175,15 +165,18 @@ class IsarDatabaseService {
 
       final db = await isar;
       final lowerQuery = query.toLowerCase();
-      
+
       final allProfiles = await db.userModelIsars.where().findAll();
-      
-      final matchingProfiles = allProfiles.where((profile) {
-        final nameLower = profile.name.toLowerCase();
-        final nip05Lower = profile.nip05.toLowerCase();
-        
-        return nameLower.contains(lowerQuery) || nip05Lower.contains(lowerQuery);
-      }).take(limit).toList();
+
+      final matchingProfiles = allProfiles
+          .where((profile) {
+            final nameLower = profile.name.toLowerCase();
+            final nip05Lower = profile.nip05.toLowerCase();
+
+            return nameLower.contains(lowerQuery) || nip05Lower.contains(lowerQuery);
+          })
+          .take(limit)
+          .toList();
 
       debugPrint('[IsarDatabaseService]  Found ${matchingProfiles.length} profiles matching "$query"');
       return matchingProfiles;
@@ -196,14 +189,15 @@ class IsarDatabaseService {
   Future<List<UserModelIsar>> getRandomUsersWithImages({int limit = 50}) async {
     try {
       final db = await isar;
-      
+
       final allProfiles = await db.userModelIsars.where().findAll();
-      final completeProfiles = allProfiles.where((profile) => 
-        profile.profileImage.isNotEmpty && 
-        profile.name != 'Anonymous' &&
-        profile.name.isNotEmpty &&
-        (profile.about.isNotEmpty || profile.nip05.isNotEmpty) // Has either about or nip05
-      ).toList();
+      final completeProfiles = allProfiles
+          .where((profile) =>
+              profile.profileImage.isNotEmpty &&
+              profile.name != 'Anonymous' &&
+              profile.name.isNotEmpty &&
+              (profile.about.isNotEmpty || profile.nip05.isNotEmpty))
+          .toList();
 
       if (completeProfiles.isEmpty) {
         debugPrint('[IsarDatabaseService] No complete profiles found');
@@ -235,11 +229,8 @@ class IsarDatabaseService {
     try {
       final db = await isar;
       final cutoffDate = DateTime.now().subtract(ttl);
-      
-      final expiredProfiles = await db.userModelIsars
-          .filter()
-          .cachedAtLessThan(cutoffDate)
-          .findAll();
+
+      final expiredProfiles = await db.userModelIsars.filter().cachedAtLessThan(cutoffDate).findAll();
 
       if (expiredProfiles.isEmpty) {
         return 0;
@@ -328,4 +319,3 @@ class IsarDatabaseService {
     _instance = null;
   }
 }
-

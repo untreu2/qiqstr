@@ -36,7 +36,7 @@ class _InteractionBarState extends State<InteractionBar> {
 
   bool _hasReacted = false;
   bool _hasReposted = false;
-  bool _hasZapped = false; // Optimistic zap state for button color only
+  bool _hasZapped = false;
   int _reactionCount = 0;
   int _repostCount = 0;
   int _replyCount = 0;
@@ -63,6 +63,8 @@ class _InteractionBarState extends State<InteractionBar> {
         _hasReposted = false;
         _hasZapped = false;
       });
+
+      _loadInteractionCounts();
     }
 
     if (oldWidget.note?.id != widget.note?.id ||
@@ -91,11 +93,18 @@ class _InteractionBarState extends State<InteractionBar> {
         final newReplyCount = updatedNote.replyCount;
         final newZapAmount = updatedNote.zapAmount;
 
+        final userHasReacted = _noteRepository.hasUserReacted(widget.noteId, widget.currentUserNpub);
+        final userHasReposted = _noteRepository.hasUserReposted(widget.noteId, widget.currentUserNpub);
+        final userHasZapped = _noteRepository.hasUserZapped(widget.noteId, widget.currentUserNpub);
+
         bool shouldUpdate = false;
         int finalReactionCount = _reactionCount;
         int finalRepostCount = _repostCount;
         int finalReplyCount = _replyCount;
         int finalZapAmount = _zapAmount;
+        bool finalHasReacted = _hasReacted;
+        bool finalHasReposted = _hasReposted;
+        bool finalHasZapped = _hasZapped;
 
         if (newReactionCount != _reactionCount && newReactionCount >= _reactionCount) {
           finalReactionCount = newReactionCount;
@@ -114,16 +123,29 @@ class _InteractionBarState extends State<InteractionBar> {
           shouldUpdate = true;
         }
 
+        if (userHasReacted != _hasReacted) {
+          finalHasReacted = userHasReacted;
+          shouldUpdate = true;
+        }
+        if (userHasReposted != _hasReposted) {
+          finalHasReposted = userHasReposted;
+          shouldUpdate = true;
+        }
+        if (userHasZapped != _hasZapped) {
+          finalHasZapped = userHasZapped;
+          shouldUpdate = true;
+        }
+
         if (shouldUpdate) {
           setState(() {
             _reactionCount = finalReactionCount;
             _repostCount = finalRepostCount;
             _replyCount = finalReplyCount;
             _zapAmount = finalZapAmount;
+            _hasReacted = finalHasReacted;
+            _hasReposted = finalHasReposted;
+            _hasZapped = finalHasZapped;
           });
-
-          debugPrint(
-              '[InteractionBar] Updated counts from stream for ${widget.noteId}: reactions=$_reactionCount, reposts=$_repostCount, replies=$_replyCount, zaps=$_zapAmount');
         } else {
           debugPrint('[InteractionBar] No stream updates for ${widget.noteId}');
           debugPrint('  Current: reactions=$_reactionCount, reposts=$_repostCount, replies=$_replyCount, zaps=$_zapAmount');
@@ -140,11 +162,18 @@ class _InteractionBarState extends State<InteractionBar> {
       final newReplyCount = widget.note!.replyCount;
       final newZapAmount = widget.note!.zapAmount;
 
+      final userHasReacted = _noteRepository.hasUserReacted(widget.noteId, widget.currentUserNpub);
+      final userHasReposted = _noteRepository.hasUserReposted(widget.noteId, widget.currentUserNpub);
+      final userHasZapped = _noteRepository.hasUserZapped(widget.noteId, widget.currentUserNpub);
+
       bool shouldUpdate = false;
       int finalReactionCount = _reactionCount;
       int finalRepostCount = _repostCount;
       int finalReplyCount = _replyCount;
       int finalZapAmount = _zapAmount;
+      bool finalHasReacted = _hasReacted;
+      bool finalHasReposted = _hasReposted;
+      bool finalHasZapped = _hasZapped;
 
       if (newReactionCount != _reactionCount && (newReactionCount > _reactionCount || _reactionCount == 0)) {
         finalReactionCount = newReactionCount;
@@ -163,13 +192,28 @@ class _InteractionBarState extends State<InteractionBar> {
         shouldUpdate = true;
       }
 
+      if (userHasReacted != _hasReacted) {
+        finalHasReacted = userHasReacted;
+        shouldUpdate = true;
+      }
+      if (userHasReposted != _hasReposted) {
+        finalHasReposted = userHasReposted;
+        shouldUpdate = true;
+      }
+      if (userHasZapped != _hasZapped) {
+        finalHasZapped = userHasZapped;
+        shouldUpdate = true;
+      }
+
       if (_reactionCount == 0 && _repostCount == 0 && _replyCount == 0 && _zapAmount == 0) {
         finalReactionCount = newReactionCount;
         finalRepostCount = newRepostCount;
         finalReplyCount = newReplyCount;
         finalZapAmount = newZapAmount;
+        finalHasReacted = userHasReacted;
+        finalHasReposted = userHasReposted;
+        finalHasZapped = userHasZapped;
         shouldUpdate = true;
-        debugPrint('[InteractionBar] 🆕 Fresh mount - using note counts for ${widget.noteId}');
       }
 
       if (shouldUpdate) {
@@ -178,10 +222,10 @@ class _InteractionBarState extends State<InteractionBar> {
           _repostCount = finalRepostCount;
           _replyCount = finalReplyCount;
           _zapAmount = finalZapAmount;
+          _hasReacted = finalHasReacted;
+          _hasReposted = finalHasReposted;
+          _hasZapped = finalHasZapped;
         });
-
-        debugPrint(
-            '[InteractionBar] Updated counts for ${widget.noteId}: reactions=$_reactionCount, reposts=$_repostCount, replies=$_replyCount, zaps=$_zapAmount');
       } else {
         debugPrint('[InteractionBar] No count changes for ${widget.noteId}');
         debugPrint('  Current: reactions=$_reactionCount, reposts=$_repostCount, replies=$_replyCount, zaps=$_zapAmount');
@@ -194,6 +238,9 @@ class _InteractionBarState extends State<InteractionBar> {
           _repostCount = 0;
           _replyCount = 0;
           _zapAmount = 0;
+          _hasReacted = false;
+          _hasReposted = false;
+          _hasZapped = false;
         });
 
         debugPrint('[InteractionBar] No note provided, using default counts');
@@ -391,7 +438,7 @@ class _InteractionBarState extends State<InteractionBar> {
           _buildButton(
             iconPath: 'assets/zap_button.svg',
             count: _zapAmount,
-            isActive: _hasZapped, // Optimistic color change
+            isActive: _hasZapped,
             activeColor: colors.zap,
             inactiveColor: colors.secondary,
             onTap: _handleZapTap,

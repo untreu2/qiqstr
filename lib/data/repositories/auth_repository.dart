@@ -255,9 +255,9 @@ class AuthResult {
 }
 
 enum AuthResultType {
-  login, // Normal login
-  newAccount, // New account creation
-  recovery, // Account recovery
+  login,
+  newAccount,
+  recovery,
 }
 
 class AuthStatus {

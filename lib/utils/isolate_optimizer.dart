@@ -230,9 +230,7 @@ class _PooledIsolate {
     try {
       receivePort.close();
       isolate.kill();
-    } catch (e) {
-      // Silently ignore errors during isolate disposal to ensure cleanup completes
-    }
+    } catch (e) {}
   }
 }
 

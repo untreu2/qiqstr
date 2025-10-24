@@ -179,12 +179,10 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
 
   Future<void> _onHashtagTap(String hashtag) async {
     try {
-      // Remove the # symbol if present
       final cleanHashtag = hashtag.startsWith('#') ? hashtag.substring(1) : hashtag;
 
       debugPrint('[NoteContentWidget] Navigating to hashtag feed: #$cleanHashtag');
 
-      // Get current user npub for the feed page
       final authRepository = AppDI.get<AuthRepository>();
       final npubResult = await authRepository.getCurrentUserNpub();
 

@@ -19,10 +19,8 @@ void main() {
   runZonedGuarded(() async {
     WidgetsFlutterBinding.ensureInitialized();
 
-    // Initialize dependency injection
     await AppDI.initialize();
 
-    // Eagerly initialize NostrDataService to start relay connections immediately
     AppDI.get<NostrDataService>();
 
     timeService.startPeriodicRefresh();
@@ -53,7 +51,6 @@ void main() {
       logError('Could not set platform error handler', 'Main', e);
     }
 
-    // Check for existing nsec to determine initial route
     final initialHome = await _determineInitialHome();
 
     runApp(
@@ -75,22 +72,18 @@ void main() {
   });
 }
 
-/// Determine the initial home widget based on authentication status
 Future<Widget> _determineInitialHome() async {
   try {
     final authService = AppDI.get<AuthService>();
 
-    // Check for stored nsec
     final nsecResult = await authService.getUserNsec();
 
     if (nsecResult.isSuccess && nsecResult.data != null && nsecResult.data!.isNotEmpty) {
-      // nsec exists, get npub and go directly to feed
       final npubResult = await authService.getCurrentUserNpub();
 
       if (npubResult.isSuccess && npubResult.data != null && npubResult.data!.isNotEmpty) {
         debugPrint(' [Main] Found stored credentials, navigating directly to HomeNavigator');
 
-        // Start listening for notifications automatically for authenticated users
         await _initializeNotifications();
 
         return HomeNavigator(npub: npubResult.data!);
@@ -105,21 +98,17 @@ Future<Widget> _determineInitialHome() async {
   }
 }
 
-/// Initialize notifications for authenticated users
 Future<void> _initializeNotifications() async {
   try {
     debugPrint(' [Main] Initializing notifications...');
 
-    // Initialize notification repository
     final notificationRepository = AppDI.get<NotificationRepository>();
 
-    // Start fetching notifications automatically - this will start listening
     final result = await notificationRepository.getNotifications(limit: 50);
 
     if (result.isSuccess) {
       debugPrint(' [Main] Notifications initialized successfully: ${result.data?.length ?? 0} notifications');
 
-      // Start background listening for new notifications
       _startBackgroundNotificationListening();
     } else {
       debugPrint(' [Main] Failed to initialize notifications: ${result.error}');
@@ -129,14 +118,12 @@ Future<void> _initializeNotifications() async {
   }
 }
 
-/// Start background notification listening
 void _startBackgroundNotificationListening() {
   try {
     debugPrint(' [Main] Starting background notification listening...');
 
     final notificationRepository = AppDI.get<NotificationRepository>();
 
-    // Listen to notification stream in background
     notificationRepository.notificationsStream.listen(
       (notifications) {
         debugPrint(' [Main] Background notification update: ${notifications.length} notifications');
@@ -146,7 +133,6 @@ void _startBackgroundNotificationListening() {
       },
     );
 
-    // Periodically refresh notifications every 30 seconds
     Timer.periodic(const Duration(seconds: 30), (timer) async {
       try {
         await notificationRepository.refreshNotifications();

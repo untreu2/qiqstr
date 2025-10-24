@@ -35,12 +35,12 @@ class NostrDataService {
   final Map<String, List<NotificationModel>> _notificationCache = {};
   final Map<String, List<ReactionModel>> _reactionsMap = {};
   final Map<String, List<ZapModel>> _zapsMap = {};
-  final Map<String, List<ReactionModel>> _repostsMap = {}; 
+  final Map<String, List<ReactionModel>> _repostsMap = {};
   final Set<String> _eventIds = {};
-  final Set<String> _processedZapIds = {}; // Track processed zap events to prevent duplicates
-  final Set<String> _userPublishedZapIds = {}; // Track zap events published by current user to prevent self-processing
+  final Set<String> _processedZapIds = {};
+  final Set<String> _userPublishedZapIds = {};
 
-  final Map<String, List<String>> _followingCache = {}; 
+  final Map<String, List<String>> _followingCache = {};
   final Map<String, DateTime> _followingCacheTime = {};
   final Duration _followingCacheTTL = const Duration(minutes: 10);
 
@@ -100,7 +100,7 @@ class NostrDataService {
 
     debugPrint('[NostrDataService] No valid follow cache - REJECTING note from: $authorHexPubkey');
     _refreshFollowCacheInBackground();
-    return false; 
+    return false;
   }
 
   void _refreshFollowCacheInBackground() async {
@@ -121,7 +121,7 @@ class NostrDataService {
 
   void _setupRelayEventHandling() {
     _relayManager.connectRelays(
-      [], 
+      [],
       onEvent: _handleRelayEvent,
       onDisconnected: _handleRelayDisconnection,
       serviceId: 'nostr_data_service',
@@ -161,8 +161,8 @@ class NostrDataService {
       debugPrint('[NostrDataService] Fetching initial global content...');
 
       final filter = NostrService.createNotesFilter(
-        authors: null, 
-        kinds: [1], 
+        authors: null,
+        kinds: [1],
         limit: 30,
         since: (DateTime.now().subtract(const Duration(hours: 24))).millisecondsSinceEpoch ~/ 1000,
       );
@@ -229,22 +229,22 @@ class NostrDataService {
       }
 
       switch (kind) {
-        case 0: 
+        case 0:
           _processProfileEvent(eventData);
           break;
-        case 1: 
+        case 1:
           await _processKind1Event(eventData);
           break;
-        case 3: 
+        case 3:
           _processFollowEvent(eventData);
           break;
-        case 6: 
+        case 6:
           await _processRepostEvent(eventData);
           break;
-        case 7: 
+        case 7:
           _processReactionEvent(eventData);
           break;
-        case 9735: 
+        case 9735:
           _processZapEvent(eventData);
           break;
       }
@@ -465,6 +465,8 @@ class NostrDataService {
 
       debugPrint('[NostrDataService] Note processed without automatic interaction fetch: $id');
 
+      _updateAllReplyCountsForNote(id);
+
       _scheduleUIUpdate();
 
       _fetchUserProfile(authorNpub);
@@ -549,6 +551,8 @@ class NostrDataService {
 
       _noteCache[id] = replyNote;
       _eventIds.add(id);
+
+      _updateParentNoteReplyCount(actualParentId ?? parentEventId);
 
       debugPrint('[NostrDataService] Reply processed without automatic interaction fetch: $id');
 
@@ -708,7 +712,7 @@ class NostrDataService {
                   debugPrint('   Marker[$i]: "$marker"');
                   if (marker == 'root') {
                     detectedRootId = eventId;
-                    detectedParentId = eventId; 
+                    detectedParentId = eventId;
                     detectedIsReply = true;
                     debugPrint('  ROOT marker found - this is a direct reply! rootId: $detectedRootId, parentId: $detectedParentId');
                   } else if (marker == 'reply') {
@@ -723,7 +727,7 @@ class NostrDataService {
                 } else {
                   if (detectedParentId == null) {
                     detectedParentId = eventId;
-                    detectedRootId = eventId; 
+                    detectedRootId = eventId;
                     detectedIsReply = true;
                     debugPrint('  Legacy e-tag found - this is a reply! eventId: $detectedParentId');
                   }
@@ -740,7 +744,7 @@ class NostrDataService {
                 content: displayContent,
                 author: displayAuthor,
                 timestamp: DateTime.fromMillisecondsSinceEpoch((originalContent['created_at'] as int? ?? createdAt) * 1000),
-                isReply: detectedIsReply, 
+                isReply: detectedIsReply,
                 isRepost: false,
                 rootId: detectedRootId,
                 parentId: detectedParentId,
@@ -775,7 +779,7 @@ class NostrDataService {
           content: displayContent,
           author: displayAuthor,
           timestamp: timestamp,
-          isReply: finalIsReply, 
+          isReply: finalIsReply,
           isRepost: true,
           rootId: finalRootId ?? originalEventId,
           parentId: finalParentId,
@@ -899,19 +903,19 @@ class NostrDataService {
     try {
       final id = eventData['id'] as String;
       final walletPubkey = eventData['pubkey'] as String;
-      
+
       if (_processedZapIds.contains(id)) {
         return;
       }
-      
+
       if (_userPublishedZapIds.contains(id)) {
         return;
       }
-      
+
       final currentUserHex = _authService.npubToHex(_currentUserNpub);
       if (currentUserHex != null && walletPubkey == currentUserHex) {
         return;
-      } 
+      }
       final content = eventData['content'] as String;
       final createdAt = eventData['created_at'] as int;
       final tags = eventData['tags'] as List<dynamic>;
@@ -934,7 +938,7 @@ class NostrDataService {
             description = tag[1] as String;
           } else if (tag[0] == 'amount' && tag.length >= 2) {
             try {
-              amount = int.parse(tag[1] as String) ~/ 1000; 
+              amount = int.parse(tag[1] as String) ~/ 1000;
             } catch (e) {
               amount = 0;
             }
@@ -942,7 +946,7 @@ class NostrDataService {
         }
       }
 
-      String realZapperPubkey = walletPubkey; 
+      String realZapperPubkey = walletPubkey;
       String? zapComment;
 
       if (description.isNotEmpty) {
@@ -979,12 +983,12 @@ class NostrDataService {
       if (targetEventId != null) {
         final zap = ZapModel(
           id: id,
-          sender: _authService.hexToNpub(realZapperPubkey) ?? realZapperPubkey, 
+          sender: _authService.hexToNpub(realZapperPubkey) ?? realZapperPubkey,
           recipient: _authService.hexToNpub(recipient) ?? recipient,
           targetEventId: targetEventId,
           timestamp: DateTime.fromMillisecondsSinceEpoch(createdAt * 1000),
           bolt11: bolt11,
-          comment: zapComment ?? (content.isNotEmpty ? content : null), 
+          comment: zapComment ?? (content.isNotEmpty ? content : null),
           amount: amount,
         );
 
@@ -992,7 +996,7 @@ class NostrDataService {
 
         if (!_zapsMap[targetEventId]!.any((z) => z.id == zap.id)) {
           _zapsMap[targetEventId]!.add(zap);
-          
+
           _processedZapIds.add(id);
 
           final targetNote = _noteCache[targetEventId];
@@ -1198,7 +1202,7 @@ class NostrDataService {
       final now = timeService.now;
 
       if (cachedProfile != null && now.difference(cachedProfile.fetchedAt) < _profileCacheTTL) {
-        return; 
+        return;
       }
 
       final filter = NostrService.createProfileFilter(
@@ -1233,7 +1237,7 @@ class NostrDataService {
 
       if (authorHexKeys.isEmpty) {
         debugPrint('[NostrDataService] Fetching global timeline');
-        targetAuthors = []; 
+        targetAuthors = [];
       } else if (authorHexKeys.length == 1 && authorHexKeys.first == _authService.npubToHex(_currentUserNpub)) {
         debugPrint('[NostrDataService] Feed mode - fetching follow list first (NIP-02)');
         isFeedMode = true;
@@ -1253,8 +1257,8 @@ class NostrDataService {
             '[NostrDataService]  Follow list result: success=${followingResult.isSuccess}, data=${followingResult.data?.length ?? 0}');
 
         if (followingResult.isSuccess && followingResult.data != null && followingResult.data!.isNotEmpty) {
-          targetAuthors = List<String>.from(followingResult.data!); 
-          targetAuthors.add(currentUserHex); 
+          targetAuthors = List<String>.from(followingResult.data!);
+          targetAuthors.add(currentUserHex);
           debugPrint('[NostrDataService] Following list found: ${targetAuthors.length} hex pubkeys');
           debugPrint('[NostrDataService]  Target authors (hex): ${targetAuthors.take(5).toList()}... (showing first 5)');
 
@@ -1266,7 +1270,7 @@ class NostrDataService {
         } else {
           debugPrint('[NostrDataService]  No follow list found - returning empty feed');
           debugPrint('[NostrDataService] Follow result error: ${followingResult.error}');
-          return Result.success([]); 
+          return Result.success([]);
         }
       } else {
         targetAuthors = authorHexKeys;
@@ -1276,7 +1280,7 @@ class NostrDataService {
 
       final filter = NostrService.createNotesFilter(
         authors: targetAuthors.isEmpty ? null : targetAuthors,
-        kinds: [1, 6], 
+        kinds: [1, 6],
         limit: limit,
         since: since != null ? since.millisecondsSinceEpoch ~/ 1000 : null,
         until: until != null ? until.millisecondsSinceEpoch ~/ 1000 : null,
@@ -1302,7 +1306,7 @@ class NostrDataService {
         Timer(const Duration(seconds: 3), () {
           if (!completer.isCompleted) {
             debugPrint('[NostrDataService] Timeout waiting for relay responses');
-            completer.complete([]); 
+            completer.complete([]);
           }
         });
 
@@ -1350,8 +1354,8 @@ class NostrDataService {
       }
 
       final filter = NostrService.createNotesFilter(
-        authors: [pubkeyHex], 
-        kinds: [1, 6], 
+        authors: [pubkeyHex],
+        kinds: [1, 6],
         limit: limit,
         since: since != null ? since.millisecondsSinceEpoch ~/ 1000 : null,
         until: until != null ? until.millisecondsSinceEpoch ~/ 1000 : null,
@@ -1658,7 +1662,7 @@ class NostrDataService {
       await Future.wait(
         limitedRelays.map((relayUrl) async {
           if (_isClosed) return;
-          
+
           WebSocket? ws;
           StreamSubscription? sub;
           try {
@@ -1715,7 +1719,7 @@ class NostrDataService {
                 '#t': [hashtag.toLowerCase()],
                 'limit': limit,
               };
-              
+
               if (since != null) {
                 filterMap['since'] = since.millisecondsSinceEpoch ~/ 1000;
               }
@@ -1742,14 +1746,12 @@ class NostrDataService {
 
       final hashtagNotes = hashtagNotesMap.values.toList();
 
-      
       hashtagNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
       final limitedNotes = hashtagNotes.take(limit).toList();
 
       debugPrint('[NostrDataService] HASHTAG: Returning ${limitedNotes.length} notes for #$hashtag (found ${hashtagNotes.length} total)');
 
-      
       _scheduleUIUpdate();
 
       return Result.success(limitedNotes);
@@ -1919,7 +1921,7 @@ class NostrDataService {
         if (_relayManager.activeSockets.isEmpty) {
           debugPrint('[NostrDataService] No active relay connections, attempting to connect...');
           await _relayManager.connectRelays(
-            [], 
+            [],
             onEvent: _handleRelayEvent,
             onDisconnected: _handleRelayDisconnection,
             serviceId: 'note_post',
@@ -2059,7 +2061,7 @@ class NostrDataService {
         if (_relayManager.activeSockets.isEmpty) {
           debugPrint('[NostrDataService] No active relay connections, attempting to connect...');
           await _relayManager.connectRelays(
-            [], 
+            [],
             onEvent: _handleRelayEvent,
             onDisconnected: _handleRelayDisconnection,
             serviceId: 'repost',
@@ -2134,7 +2136,7 @@ class NostrDataService {
       final List<Map<String, String>> eTags = [];
       final List<Map<String, String>> pTags = [];
 
-      final authorHex = _authService.npubToHex(parentNote.author) ?? parentNote.author; 
+      final authorHex = _authService.npubToHex(parentNote.author) ?? parentNote.author;
 
       if (actualRootId != actualReplyId) {
         tags.add(['e', actualRootId, '', 'root', authorHex]);
@@ -2240,7 +2242,6 @@ class NostrDataService {
       _eventIds.add(reply.id);
       _scheduleUIUpdate();
 
-
       debugPrint('[NostrDataService] NIP-10 compliant reply posted successfully');
       return Result.success(reply);
     } catch (e) {
@@ -2287,7 +2288,7 @@ class NostrDataService {
         if (_relayManager.activeSockets.isEmpty) {
           debugPrint('[NostrDataService] No active relay connections, attempting to connect...');
           await _relayManager.connectRelays(
-            [], 
+            [],
             onEvent: _handleRelayEvent,
             onDisconnected: _handleRelayDisconnection,
             serviceId: 'profile_update',
@@ -2314,7 +2315,7 @@ class NostrDataService {
         lud16: user.lud16,
         website: user.website,
         updatedAt: updatedAt,
-        nip05Verified: false, 
+        nip05Verified: false,
       );
 
       _profileCache.remove(pubkeyHex);
@@ -2463,7 +2464,7 @@ class NostrDataService {
                     if (tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length >= 2) {
                       final followedHexPubkey = tag[1] as String;
                       if (!following.contains(followedHexPubkey)) {
-                        following.add(followedHexPubkey); 
+                        following.add(followedHexPubkey);
                         debugPrint('[NostrDataService] Found followed user (hex): $followedHexPubkey');
                       }
                     }
@@ -2739,12 +2740,7 @@ class NostrDataService {
   Future<void> fetchInteractionsForNotes(List<String> noteIds, {bool forceLoad = false}) async {
     if (_isClosed || noteIds.isEmpty) return;
 
-    if (!forceLoad) {
-      debugPrint('[NostrDataService] Automatic interaction fetching disabled - use forceLoad=true for thread pages only');
-      return;
-    }
-
-    debugPrint('[NostrDataService] Manual interaction fetching for ${noteIds.length} notes');
+    debugPrint('[NostrDataService] ${forceLoad ? 'Manual' : 'Automatic'} interaction fetching for ${noteIds.length} notes');
 
     final now = DateTime.now();
     final noteIdsToFetch = <String>[];
@@ -2774,12 +2770,67 @@ class NostrDataService {
 
       _scheduleUIUpdate();
 
+      for (final eventId in noteIdsToFetch) {
+        _updateNoteReplyCount(eventId);
+      }
+
       debugPrint('[NostrDataService] Manual interaction fetching completed for ${noteIdsToFetch.length} notes');
     }
 
     if (_lastInteractionFetch.length > 1000) {
       final cutoffTime = now.subtract(const Duration(hours: 1));
       _lastInteractionFetch.removeWhere((key, timestamp) => timestamp.isBefore(cutoffTime));
+    }
+  }
+
+  void _updateParentNoteReplyCount(String parentNoteId) {
+    try {
+      final parentNote = _noteCache[parentNoteId];
+      if (parentNote != null) {
+        final replyCount =
+            _noteCache.values.where((note) => note.isReply && (note.parentId == parentNoteId || note.rootId == parentNoteId)).length;
+
+        parentNote.replyCount = replyCount;
+        debugPrint('[NostrDataService] Updated reply count for note $parentNoteId: $replyCount');
+      }
+    } catch (e) {
+      debugPrint('[NostrDataService] Error updating parent note reply count: $e');
+    }
+  }
+
+  void _updateNoteReplyCount(String noteId) {
+    try {
+      final note = _noteCache[noteId];
+      if (note != null) {
+        final replyCount = _noteCache.values.where((reply) => reply.isReply && (reply.parentId == noteId || reply.rootId == noteId)).length;
+
+        if (note.replyCount != replyCount) {
+          note.replyCount = replyCount;
+          debugPrint('[NostrDataService] Updated reply count for note $noteId: $replyCount');
+
+          _scheduleUIUpdate();
+        }
+      }
+    } catch (e) {
+      debugPrint('[NostrDataService] Error updating note reply count: $e');
+    }
+  }
+
+  void _updateAllReplyCountsForNote(String noteId) {
+    try {
+      _updateNoteReplyCount(noteId);
+
+      final note = _noteCache[noteId];
+      if (note != null && note.isReply) {
+        if (note.parentId != null) {
+          _updateNoteReplyCount(note.parentId!);
+        }
+        if (note.rootId != null && note.rootId != note.parentId) {
+          _updateNoteReplyCount(note.rootId!);
+        }
+      }
+    } catch (e) {
+      debugPrint('[NostrDataService] Error updating all reply counts: $e');
     }
   }
 
@@ -2818,7 +2869,7 @@ class NostrDataService {
         if (_relayManager.activeSockets.isEmpty) {
           debugPrint('[NostrDataService] No active relay connections, attempting to connect...');
           await _relayManager.connectRelays(
-            [], 
+            [],
             onEvent: _handleRelayEvent,
             onDisconnected: _handleRelayDisconnection,
             serviceId: 'quote_post',
@@ -2970,7 +3021,7 @@ class NostrDataService {
         if (_relayManager.activeSockets.isEmpty) {
           debugPrint('[NostrDataService] No active relay connections, attempting to connect...');
           await _relayManager.connectRelays(
-            [], 
+            [],
             onEvent: _handleRelayEvent,
             onDisconnected: _handleRelayDisconnection,
             serviceId: 'follow_event',
@@ -3036,6 +3087,36 @@ class NostrDataService {
 
   List<ZapModel> getZapsForNote(String noteId) {
     return _zapsMap[noteId] ?? [];
+  }
+
+  bool hasUserReacted(String noteId, String userNpub) {
+    try {
+      final reactions = _reactionsMap[noteId] ?? [];
+      return reactions.any((reaction) => reaction.author == userNpub);
+    } catch (e) {
+      debugPrint('[NostrDataService] Error checking user reaction: $e');
+      return false;
+    }
+  }
+
+  bool hasUserReposted(String noteId, String userNpub) {
+    try {
+      final reposts = _repostsMap[noteId] ?? [];
+      return reposts.any((repost) => repost.author == userNpub);
+    } catch (e) {
+      debugPrint('[NostrDataService] Error checking user repost: $e');
+      return false;
+    }
+  }
+
+  bool hasUserZapped(String noteId, String userNpub) {
+    try {
+      final zaps = _zapsMap[noteId] ?? [];
+      return zaps.any((zap) => zap.sender == userNpub);
+    } catch (e) {
+      debugPrint('[NostrDataService] Error checking user zap: $e');
+      return false;
+    }
   }
 
   Map<String, List<ReactionModel>> get reactionsMap => Map.unmodifiable(_reactionsMap);

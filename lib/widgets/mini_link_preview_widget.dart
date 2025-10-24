@@ -20,9 +20,7 @@ Future<LinkPreviewModel?> _fetchAndParseMiniLink(String url) async {
 
       return LinkPreviewModel(title: parsedTitle, imageUrl: parsedImage);
     }
-  } catch (e) {
-    // Silently ignore link preview parsing errors
-  }
+  } catch (e) {}
   return null;
 }
 

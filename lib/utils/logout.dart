@@ -8,15 +8,12 @@ import '../widgets/toast_widget.dart';
 
 class Logout {
   static Future<void> performLogout(BuildContext context) async {
-    // Store references before async operations
     final navigator = Navigator.of(context);
 
     try {
-      // Clear authentication via repository
       final authRepository = AppDI.get<AuthRepository>();
       await authRepository.logout();
 
-      // Clear secure storage
       const storage = FlutterSecureStorage();
       await storage.deleteAll();
       if (kDebugMode) {

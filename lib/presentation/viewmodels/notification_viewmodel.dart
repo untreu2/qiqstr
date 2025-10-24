@@ -143,7 +143,7 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
     for (final entry in results.entries) {
       entry.value.fold(
         (user) => _userProfiles[entry.key] = user,
-        (_) {}, // Ignore profile loading errors
+        (_) {},
       );
     }
 
@@ -172,22 +172,20 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
 
   void _subscribeToNotificationUpdates() {
     debugPrint('[NotificationViewModel] Setting up notification stream subscriptions');
-    
+
     addSubscription(
       _notificationRepository.notificationsStream.listen((notifications) {
         if (!isDisposed) {
           debugPrint('[NotificationViewModel] Received ${notifications.length} notifications from stream');
-          
+
           final groupedNotifications = _notificationRepository.groupNotifications(notifications);
-          
+
           _loadUserProfiles(notifications);
-          
+
           _fetchTargetEvents(notifications);
-          
-          _notificationsState = groupedNotifications.isEmpty 
-              ? const EmptyState('No notifications yet') 
-              : LoadedState(groupedNotifications);
-          
+
+          _notificationsState = groupedNotifications.isEmpty ? const EmptyState('No notifications yet') : LoadedState(groupedNotifications);
+
           debugPrint('[NotificationViewModel] Updated state with ${groupedNotifications.length} grouped items');
           safeNotifyListeners();
         }
@@ -203,7 +201,7 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
         }
       }),
     );
-    
+
     debugPrint('[NotificationViewModel] Stream subscriptions active');
   }
 

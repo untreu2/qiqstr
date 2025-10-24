@@ -10,6 +10,7 @@ import '../core/ui/ui_state_builder.dart';
 import '../core/di/app_di.dart';
 import '../presentation/providers/viewmodel_provider.dart';
 import '../presentation/viewmodels/thread_viewmodel.dart';
+import '../data/repositories/auth_repository.dart';
 
 class ThreadPage extends StatefulWidget {
   final String rootNoteId;
@@ -30,6 +31,8 @@ class _ThreadPageState extends State<ThreadPage> {
   final GlobalKey _focusedNoteKey = GlobalKey();
   late ValueNotifier<List<NoteModel>> _notesNotifier;
   final Map<String, UserModel> _profiles = {};
+  late final AuthRepository _authRepository;
+  String _currentUserNpub = '';
 
   int _visibleRepliesCount = 10;
   static const int _repliesPerPage = 10;
@@ -39,11 +42,26 @@ class _ThreadPageState extends State<ThreadPage> {
     super.initState();
     _scrollController = ScrollController();
     _notesNotifier = ValueNotifier<List<NoteModel>>([]);
-    
+    _authRepository = AppDI.get<AuthRepository>();
+    _loadCurrentUser();
+
     if (widget.focusedNoteId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _scheduleScrollToFocusedNote();
       });
+    }
+  }
+
+  Future<void> _loadCurrentUser() async {
+    try {
+      final result = await _authRepository.getCurrentUserNpub();
+      if (result.isSuccess && result.data != null) {
+        setState(() {
+          _currentUserNpub = result.data!;
+        });
+      }
+    } catch (e) {
+      debugPrint('[ThreadPage] Error loading current user: $e');
     }
   }
 
@@ -95,8 +113,8 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Widget _buildThreadContent(BuildContext context, ThreadViewModel viewModel, NoteModel? rootNote) {
-    final displayNote = rootNote != null && widget.focusedNoteId != null 
-        ? viewModel.threadStructureState.data?.getNote(widget.focusedNoteId!) ?? rootNote 
+    final displayNote = rootNote != null && widget.focusedNoteId != null
+        ? viewModel.threadStructureState.data?.getNote(widget.focusedNoteId!) ?? rootNote
         : rootNote;
 
     return RefreshIndicator(
@@ -108,7 +126,6 @@ class _ThreadPageState extends State<ThreadPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildHeader(context),
-
             if (displayNote != null) ...[
               _buildContextNote(context, viewModel, displayNote),
               _buildMainNote(context, viewModel, displayNote),
@@ -126,7 +143,6 @@ class _ThreadPageState extends State<ThreadPage> {
                 ),
               ),
             ],
-
             const SizedBox(height: 24.0),
           ],
         ),
@@ -136,7 +152,7 @@ class _ThreadPageState extends State<ThreadPage> {
 
   Widget _buildHeader(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
-    
+
     return Padding(
       padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 0),
       child: Text(
@@ -178,10 +194,10 @@ class _ThreadPageState extends State<ThreadPage> {
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
       child: FocusedNoteWidget(
         note: note,
-        currentUserNpub: viewModel.currentRootNote?.author ?? '',
+        currentUserNpub: _currentUserNpub,
         notesNotifier: _notesNotifier,
         profiles: _profiles,
-        notesListProvider: null, // ThreadPage doesn't use notesListProvider
+        notesListProvider: null,
       ),
     );
   }
@@ -225,7 +241,7 @@ class _ThreadPageState extends State<ThreadPage> {
         final allDirectReplies = threadStructure.getChildren(displayNote.id);
 
         final directReplies = allDirectReplies.where((reply) => !reply.isRepost).toList()
-          ..sort((a, b) => a.timestamp.compareTo(b.timestamp)); // Ensure consistent ordering
+          ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
         debugPrint(' [ThreadPage] Found ${directReplies.length} direct replies (filtered and sorted) for ${displayNote.id}');
 
@@ -264,11 +280,10 @@ class _ThreadPageState extends State<ThreadPage> {
                   viewModel,
                   reply,
                   threadStructure,
-                  0, // depth
+                  0,
                 ),
               );
             }),
-
             if (hasMoreReplies) ...[
               const SizedBox(height: 16.0),
               _buildLoadMoreButton(context, directReplies.length),
@@ -346,7 +361,7 @@ class _ThreadPageState extends State<ThreadPage> {
     int depth,
   ) {
     const double baseIndentWidth = 24.0;
-    const int maxDepth = 2; // Maximum 2 levels of nesting for clean UI
+    const int maxDepth = 2;
     final double currentIndent = depth * baseIndentWidth;
 
     final isFocused = reply.id == widget.focusedNoteId;
@@ -363,14 +378,12 @@ class _ThreadPageState extends State<ThreadPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (depth > 0) SizedBox(width: currentIndent),
-
             Expanded(
               child: Column(
                 key: isFocused ? _focusedNoteKey : null,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 2),
-
                   Container(
                     margin: const EdgeInsets.only(right: 8),
                     child: _buildEnhancedNoteWidget(
@@ -380,9 +393,7 @@ class _ThreadPageState extends State<ThreadPage> {
                       depth,
                     ),
                   ),
-
                   const SizedBox(height: 4),
-
                   if (depth < maxDepth && hasNestedReplies) ...[
                     const SizedBox(height: 4),
                     ...nestedReplies.take(5).map(
@@ -394,7 +405,6 @@ class _ThreadPageState extends State<ThreadPage> {
                             depth + 1,
                           ),
                         ),
-
                     if (nestedReplies.length > 5)
                       Container(
                         margin: EdgeInsets.only(
@@ -447,7 +457,7 @@ class _ThreadPageState extends State<ThreadPage> {
 
     return NoteWidget(
       note: note,
-      currentUserNpub: viewModel.currentRootNote?.author ?? '',
+      currentUserNpub: _currentUserNpub,
       notesNotifier: _notesNotifier,
       profiles: _profiles,
       containerColor: Colors.transparent,
@@ -466,7 +476,7 @@ class _ThreadPageState extends State<ThreadPage> {
 
     return NoteWidget(
       note: note,
-      currentUserNpub: viewModel.currentRootNote?.author ?? '',
+      currentUserNpub: _currentUserNpub,
       notesNotifier: _notesNotifier,
       profiles: _profiles,
       containerColor: context.colors.background,
@@ -581,7 +591,7 @@ class _ThreadPageState extends State<ThreadPage> {
 
     Future.delayed(const Duration(milliseconds: 300), () {
       if (!mounted) return;
-      
+
       _attemptScrollToFocusedNote(retries: 5);
     });
   }
@@ -595,7 +605,7 @@ class _ThreadPageState extends State<ThreadPage> {
         context,
         duration: const Duration(milliseconds: 500),
         curve: Curves.easeInOut,
-        alignment: 0.15, // Position slightly from top for better visibility
+        alignment: 0.15,
       );
     } else {
       Future.delayed(const Duration(milliseconds: 200), () {
@@ -603,5 +613,4 @@ class _ThreadPageState extends State<ThreadPage> {
       });
     }
   }
-
 }

@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import '../base/ui_state.dart';
 
-/// Widget that builds UI based on UIState
-/// Provides consistent loading, error, and empty state handling
 class UIStateBuilder<T> extends StatelessWidget {
   const UIStateBuilder({
     super.key,
@@ -14,22 +12,16 @@ class UIStateBuilder<T> extends StatelessWidget {
     this.initial,
   });
 
-  /// The current UIState
   final UIState<T> state;
 
-  /// Builder for loaded state
   final Widget Function(BuildContext context, T data) builder;
 
-  /// Builder for loading state (optional)
   final Widget Function()? loading;
 
-  /// Builder for error state (optional)
   final Widget Function(String message)? error;
 
-  /// Builder for empty state (optional)
   final Widget Function(String? message)? empty;
 
-  /// Builder for initial state (optional)
   final Widget Function()? initial;
 
   @override
@@ -56,7 +48,7 @@ class UIStateBuilder<T> extends StatelessWidget {
           child: CircularProgressIndicator(),
         );
       case LoadingType.refreshing:
-        return const SizedBox.shrink(); // RefreshIndicator handles this
+        return const SizedBox.shrink();
       case LoadingType.loadingMore:
         return Container(
           padding: const EdgeInsets.all(16),
@@ -68,7 +60,7 @@ class UIStateBuilder<T> extends StatelessWidget {
           ),
         );
       case LoadingType.backgroundRefresh:
-        return const SizedBox.shrink(); // Silent background loading
+        return const SizedBox.shrink();
     }
   }
 
@@ -104,9 +96,7 @@ class UIStateBuilder<T> extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: () {
-                // Retry functionality would be handled by parent widget
-              },
+              onPressed: () {},
               icon: const Icon(Icons.refresh),
               label: const Text('Try Again'),
             ),
@@ -145,7 +135,6 @@ class UIStateBuilder<T> extends StatelessWidget {
   }
 }
 
-/// Sliver version of UIStateBuilder for use in CustomScrollView
 class SliverUIStateBuilder<T> extends StatelessWidget {
   const SliverUIStateBuilder({
     super.key,
@@ -157,22 +146,16 @@ class SliverUIStateBuilder<T> extends StatelessWidget {
     this.initial,
   });
 
-  /// The current UIState
   final UIState<T> state;
 
-  /// Builder for loaded state
   final Widget Function(BuildContext context, T data) builder;
 
-  /// Builder for loading state (optional)
   final Widget Function()? loading;
 
-  /// Builder for error state (optional)
   final Widget Function(String message)? error;
 
-  /// Builder for empty state (optional)
   final Widget Function(String? message)? empty;
 
-  /// Builder for initial state (optional)
   final Widget Function()? initial;
 
   @override
@@ -265,9 +248,7 @@ class SliverUIStateBuilder<T> extends StatelessWidget {
   }
 }
 
-/// Extension on UIState for easy widget building
 extension UIStateWidgetExtensions<T> on UIState<T> {
-  /// Convert UIState to widget using UIStateBuilder
   Widget toWidget({
     required Widget Function(BuildContext context, T data) builder,
     Widget Function()? loading,
@@ -287,7 +268,6 @@ extension UIStateWidgetExtensions<T> on UIState<T> {
     );
   }
 
-  /// Convert UIState to sliver widget
   Widget toSliverWidget({
     required Widget Function(BuildContext context, T data) builder,
     Widget Function()? loading,

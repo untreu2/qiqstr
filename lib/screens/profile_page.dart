@@ -7,6 +7,7 @@ import '../widgets/back_button_widget.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart' as widgets;
 import '../core/di/app_di.dart';
 import '../presentation/viewmodels/profile_viewmodel.dart';
+import '../data/repositories/auth_repository.dart';
 import '../core/ui/ui_state_builder.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -21,9 +22,11 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   late ScrollController _scrollController;
   late ProfileViewModel _profileViewModel;
+  late AuthRepository _authRepository;
 
   final ValueNotifier<List<NoteModel>> _notesNotifier = ValueNotifier([]);
   final Map<String, UserModel> _profiles = {};
+  String? _currentUserNpub;
 
   @override
   void initState() {
@@ -31,11 +34,33 @@ class _ProfilePageState extends State<ProfilePage> {
     _scrollController = ScrollController();
 
     _profileViewModel = AppDI.get<ProfileViewModel>();
+    _authRepository = AppDI.get<AuthRepository>();
     _profileViewModel.initialize();
 
     _profiles[widget.user.npub] = widget.user;
 
+    _loadCurrentUser();
     _profileViewModel.initializeWithUser(widget.user.npub);
+  }
+
+  void _loadCurrentUser() async {
+    try {
+      final result = await _authRepository.getCurrentUserNpub();
+      result.fold(
+        (npub) {
+          if (mounted) {
+            setState(() {
+              _currentUserNpub = npub;
+            });
+          }
+        },
+        (error) {
+          debugPrint('[ProfilePage] Failed to get current user: $error');
+        },
+      );
+    } catch (e) {
+      debugPrint('[ProfilePage] Error loading current user: $e');
+    }
   }
 
   @override
@@ -118,7 +143,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
             return widgets.NoteListWidget(
               notes: notes,
-              currentUserNpub: widget.user.npub,
+              currentUserNpub: _currentUserNpub ?? '',
               notesNotifier: _notesNotifier,
               profiles: _profiles,
               isLoading: false,

@@ -9,11 +9,9 @@ import '../../../data/services/validation_service.dart';
 import '../../../data/services/network_service.dart';
 import '../../../data/services/nostr_data_service.dart';
 
-/// Module for registering all repositories
 class RepositoriesModule extends DIModule {
   @override
   Future<void> register() async {
-    // Register repositories with their dependencies
     AppDI.registerLazySingleton<AuthRepository>(() => AuthRepository(
           authService: AppDI.get<AuthService>(),
           validationService: AppDI.get<ValidationService>(),

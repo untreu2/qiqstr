@@ -87,13 +87,13 @@ class WalletRepository {
         _clientKeychain!.private,
         '02${_connection!.walletPubKey}',
         payloadJson,
-        true, // cipher = true for encryption
+        true, //
       );
 
       debugPrint('[WalletRepository] Encrypted content: ${encryptedContent.substring(0, 50)}...');
 
       final event = Event.from(
-        kind: 23194, // NWC request
+        kind: 23194,
         tags: [
           ['p', _connection!.walletPubKey]
         ],
@@ -132,7 +132,7 @@ class WalletRepository {
                     final decryptedContent = nip4cipher(
                       _clientKeychain!.private,
                       '02${_connection!.walletPubKey}',
-                      responseEvent.content.split('?iv=')[0], // Only the ciphertext part
+                      responseEvent.content.split('?iv=')[0],
                       false, // cipher = false for decryption
                       nonce: _extractNonce(responseEvent.content),
                     );

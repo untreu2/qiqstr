@@ -366,9 +366,9 @@ class NetworkStatus {
 }
 
 enum NetworkQuality {
-  none, // No connection
-  poor, // >600ms
-  fair, // 300-600ms
-  good, // 100-300ms
-  excellent, // <100ms
+  none,
+  poor,
+  fair,
+  good,
+  excellent,
 }

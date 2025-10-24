@@ -430,7 +430,6 @@ class NostrService {
     );
   }
 
-
   static Request createRequest(Filter filter) {
     final uuid = generateUUID();
     final cacheKey = 'single_${filter.hashCode}';
@@ -509,20 +508,14 @@ class NostrService {
   }) {
     List<List<String>> tags = [];
 
-    // Working format: 5-element e tags with empty relay URL
     if (replyId != null && replyId != rootId) {
-      // Thread reply: both root and reply tags
       tags.add(['e', rootId, '', 'root', parentAuthor]);
       tags.add(['e', replyId, '', 'reply', parentAuthor]);
     } else {
-      // Direct reply to root
       tags.add(['e', rootId, '', 'root', parentAuthor]);
     }
 
-    // Add p tag (2 elements only, no relay info)
     tags.add(['p', parentAuthor]);
-
-    // Note: NO r tags in working format!
 
     return tags;
   }
@@ -604,7 +597,7 @@ class NostrService {
 
   static String _generateEventCacheKey(int kind, String content, String privateKey, List<List<String>>? tags) {
     final tagsStr = tags?.map((tag) => tag.join(':')).join('|') ?? '';
-    // SECURITY FIX: Use public key instead of private key for cache key
+
     final keychain = Keychain(privateKey);
     final publicKeyHash = keychain.public.hashCode;
     return 'event_${kind}_${content.hashCode}_${publicKeyHash}_${tagsStr.hashCode}';

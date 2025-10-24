@@ -1,5 +1,3 @@
-/// Base class for all application errors
-/// Provides a consistent error handling interface
 abstract class AppError {
   const AppError({
     required this.message,
@@ -8,26 +6,20 @@ abstract class AppError {
     this.isRetryable = true,
   });
 
-  /// Technical error message for debugging
   final String message;
 
-  /// User-friendly message to display in UI
   final String? userMessage;
 
-  /// Error code for programmatic handling
   final String? code;
 
-  /// Whether this error can be retried
   final bool isRetryable;
 
-  /// User-friendly message to display in UI
   String get displayMessage => userMessage ?? message;
 
   @override
   String toString() => 'AppError(message: $message, code: $code)';
 }
 
-/// Network-related errors
 class NetworkError extends AppError {
   const NetworkError({
     required super.message,
@@ -83,7 +75,6 @@ enum NetworkErrorType {
   unknown,
 }
 
-/// Authentication-related errors
 class AuthError extends AppError {
   const AuthError({
     required super.message,
@@ -127,7 +118,6 @@ enum AuthErrorType {
   unknown,
 }
 
-/// Validation-related errors
 class ValidationError extends AppError {
   const ValidationError({
     required super.message,
@@ -171,7 +161,6 @@ class ValidationError extends AppError {
   String toString() => 'ValidationError(field: $field, message: $message)';
 }
 
-/// Cache-related errors
 class CacheError extends AppError {
   const CacheError({
     required super.message,
@@ -208,7 +197,6 @@ enum CacheErrorType {
   unknown,
 }
 
-/// Parse/Data format errors
 class ParseError extends AppError {
   const ParseError({
     required super.message,
@@ -237,7 +225,6 @@ class ParseError extends AppError {
   String toString() => 'ParseError(message: $message, data: $data)';
 }
 
-/// Generic unknown error
 class UnknownError extends AppError {
   const UnknownError({
     required super.message,
