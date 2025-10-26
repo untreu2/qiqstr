@@ -10,6 +10,7 @@ import '../theme/theme_manager.dart';
 import '../screens/edit_profile.dart';
 import '../screens/following_page.dart';
 import '../widgets/photo_viewer_widget.dart';
+import '../widgets/note_content_widget.dart';
 import '../widgets/toast_widget.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/auth_repository.dart';
@@ -61,19 +62,43 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   bool _isLoadingProfile = false;
   StreamSubscription<UserModel>? _userStreamSubscription;
 
+  Map<String, dynamic> _parseBioContent(String bioText) {
+    if (bioText.isEmpty) {
+      return {
+        'textParts': <Map<String, dynamic>>[],
+        'mediaUrls': <String>[],
+        'linkUrls': <String>[],
+        'quoteIds': <String>[],
+      };
+    }
+
+    return {
+      'textParts': [
+        {
+          'type': 'text',
+          'text': bioText,
+        }
+      ],
+      'mediaUrls': <String>[],
+      'linkUrls': <String>[],
+      'quoteIds': <String>[],
+    };
+  }
+
   Widget _buildBioContent(UserModel user) {
     if (user.about.isEmpty) {
       return const SizedBox.shrink();
     }
 
+    final parsedContent = _parseBioContent(user.about);
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2.0),
-      child: Text(
-        user.about,
-        style: TextStyle(
-          color: context.colors.textPrimary,
-          fontSize: 14,
-        ),
+      child: NoteContentWidget(
+        parsedContent: parsedContent,
+        noteId: 'bio_${user.pubkeyHex}',
+        onNavigateToMentionProfile: widget.onNavigateToProfile,
+        size: NoteContentSize.small,
       ),
     );
   }
