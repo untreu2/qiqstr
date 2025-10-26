@@ -17,7 +17,7 @@ import '../../services/relay_service.dart';
 import '../../constants/relays.dart';
 import '../toast_widget.dart';
 
-Future<void> _payZapWithWallet(
+Future<bool> _payZapWithWallet(
   BuildContext context,
   UserModel user,
   NoteModel note,
@@ -32,7 +32,7 @@ Future<void> _payZapWithWallet(
       if (context.mounted) {
         AppToast.warning(context, 'Please connect your wallet first');
       }
-      return;
+      return false;
     }
 
     if (context.mounted) {
@@ -97,7 +97,7 @@ Future<void> _payZapWithWallet(
     final List<List<String>> tags = [
       ['relays', ...relays.map((e) => e.toString())],
       ['amount', amountMillisats],
-      ['p', recipientPubkeyHex], // Recipient's pubkey in hex format
+      ['p', recipientPubkeyHex],
     ];
 
     if (lnurlBech32.isNotEmpty) {
@@ -133,167 +133,213 @@ Future<void> _payZapWithWallet(
       throw Exception('Invoice not returned by zap server.');
     }
 
+    debugPrint('[ZapDialog] About to pay invoice: ${invoice.substring(0, 20)}...');
     final paymentResult = await walletRepository.payInvoice(invoice);
 
+    debugPrint('[ZapDialog] Payment result: ${paymentResult.isSuccess ? 'SUCCESS' : 'FAILED'}');
     if (paymentResult.isError) {
+      debugPrint('[ZapDialog] Payment error: ${paymentResult.error}');
       throw Exception(paymentResult.error);
     }
 
-    try {
-      final webSocketManager = WebSocketManager.instance;
+    debugPrint('[ZapDialog] Payment successful, result: ${paymentResult.data}');
 
-      final serializedZapRequest = NostrService.serializeEvent(zapRequest);
-      await webSocketManager.priorityBroadcast(serializedZapRequest);
-
-      if (kDebugMode) {
-        print('[ZapDialog] Zap request event (kind 9734) published for note: ${note.id}');
-      }
-
-      final zapEvent = Event.from(
-        kind: 9735, // Zap event
-        tags: [
-          ['bolt11', invoice],
-          ['description', jsonEncode(NostrService.eventToJson(zapRequest))],
-          ['p', recipientPubkeyHex],
-          ['e', note.id], // Note reference
-        ],
-        content: comment, // Zap comment
-        privkey: privateKey,
-      );
-
-      final serializedZapEvent = NostrService.serializeEvent(zapEvent);
-      await webSocketManager.priorityBroadcast(serializedZapEvent);
-
-      if (kDebugMode) {
-        print('[ZapDialog] Zap event (kind 9735) published for note: ${note.id}');
-      }
-      
-      // Mark this zap event as user-published to prevent self-processing
-      final nostrDataService = AppDI.get<NostrDataService>();
-      nostrDataService.markZapAsUserPublished(zapEvent.id);
-      if (kDebugMode) {
-        print('[ZapDialog] Zap amount: $sats sats, preimage: ${paymentResult.data!.preimage}');
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('[ZapDialog] Error creating/publishing zap event: $e');
-      }
-    }
+    // Payment successful! Show success immediately
     if (context.mounted) {
       AppToast.hide(context);
       AppToast.success(context, 'Zapped $sats sats to ${user.name} on their note!');
     }
+
+    // Publish Nostr events in the background without affecting success status
+    _publishZapEventsAsync(zapRequest, invoice, recipientPubkeyHex, note, comment, privateKey, sats, paymentResult);
+
+    return true;
   } catch (e) {
     if (context.mounted) {
       AppToast.hide(context);
       AppToast.error(context, 'Failed to zap: $e');
     }
+    return false;
   }
 }
 
-Future<void> showZapDialog({
+void _publishZapEventsAsync(
+  Event zapRequest,
+  String invoice,
+  String recipientPubkeyHex,
+  NoteModel note,
+  String comment,
+  String privateKey,
+  int sats,
+  dynamic paymentResult,
+) async {
+  try {
+    final webSocketManager = WebSocketManager.instance;
+
+    final serializedZapRequest = NostrService.serializeEvent(zapRequest);
+    await webSocketManager.priorityBroadcast(serializedZapRequest);
+
+    if (kDebugMode) {
+      print('[ZapDialog] Zap request event (kind 9734) published for note: ${note.id}');
+    }
+
+    final zapEvent = Event.from(
+      kind: 9735, // Zap event
+      tags: [
+        ['bolt11', invoice],
+        ['description', jsonEncode(NostrService.eventToJson(zapRequest))],
+        ['p', recipientPubkeyHex],
+        ['e', note.id], // Note reference
+      ],
+      content: comment, // Zap comment
+      privkey: privateKey,
+    );
+
+    final serializedZapEvent = NostrService.serializeEvent(zapEvent);
+    await webSocketManager.priorityBroadcast(serializedZapEvent);
+
+    if (kDebugMode) {
+      print('[ZapDialog] Zap event (kind 9735) published for note: ${note.id}');
+    }
+
+    // Mark this zap event as user-published to prevent self-processing
+    final nostrDataService = AppDI.get<NostrDataService>();
+    nostrDataService.markZapAsUserPublished(zapEvent.id);
+    if (kDebugMode) {
+      print('[ZapDialog] Zap amount: $sats sats, preimage: ${paymentResult.data?.preimage}');
+    }
+  } catch (e) {
+    if (kDebugMode) {
+      print('[ZapDialog] Error creating/publishing zap event: $e');
+    }
+  }
+}
+
+Future<void> _processZapPayment(
+  BuildContext context,
+  NoteModel note,
+  int sats,
+  String comment,
+) async {
+  try {
+    final userRepository = AppDI.get<UserRepository>();
+    final userResult = await userRepository.getUserProfile(note.author);
+
+    await userResult.fold(
+      (user) async {
+        if (user.lud16.isEmpty) {
+          AppToast.error(context, 'User does not have a lightning address configured.', duration: const Duration(seconds: 1));
+          return;
+        }
+
+        await _payZapWithWallet(context, user, note, sats, comment);
+      },
+      (error) {
+        AppToast.error(context, 'Error loading user profile: $error', duration: const Duration(seconds: 1));
+      },
+    );
+  } catch (e) {
+    AppToast.error(context, 'Failed to process zap: $e', duration: const Duration(seconds: 1));
+  }
+}
+
+Future<Map<String, dynamic>> showZapDialog({
   required BuildContext context,
   required NoteModel note,
 }) async {
   final amountController = TextEditingController(text: '21');
   final noteController = TextEditingController();
 
-  return showModalBottomSheet(
+  final result = await showModalBottomSheet<Map<String, dynamic>>(
     context: context,
     isScrollControlled: true,
     backgroundColor: context.colors.background,
     shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-    builder: (modalContext) => Padding(
-      padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(modalContext).viewInsets.bottom + 40, top: 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: amountController,
-            keyboardType: TextInputType.number,
-            style: TextStyle(color: context.colors.textPrimary),
-            decoration: InputDecoration(
-              labelText: 'Amount (sats)',
-              labelStyle: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: context.colors.textSecondary,
+    builder: (modalContext) => StatefulBuilder(
+      builder: (context, setState) {
+        return Padding(
+          padding: EdgeInsets.only(left: 16, right: 16, bottom: MediaQuery.of(modalContext).viewInsets.bottom + 40, top: 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amountController,
+                keyboardType: TextInputType.number,
+                style: TextStyle(color: context.colors.textPrimary),
+                decoration: InputDecoration(
+                  labelText: 'Amount (sats)',
+                  labelStyle: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: context.colors.textSecondary,
+                  ),
+                  filled: true,
+                  fillColor: context.colors.inputFill,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(25),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                ),
               ),
-              filled: true,
-              fillColor: context.colors.inputFill,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(25),
-                borderSide: BorderSide.none,
+              const SizedBox(height: 16),
+              TextField(
+                controller: noteController,
+                style: TextStyle(color: context.colors.textPrimary),
+                decoration: InputDecoration(
+                  labelText: 'Comment (Optional)',
+                  labelStyle: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: context.colors.textSecondary,
+                  ),
+                  filled: true,
+                  fillColor: context.colors.inputFill,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(25),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                ),
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: noteController,
-            style: TextStyle(color: context.colors.textPrimary),
-            decoration: InputDecoration(
-              labelText: 'Comment (Optional)',
-              labelStyle: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: context.colors.textSecondary,
-              ),
-              filled: true,
-              fillColor: context.colors.inputFill,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(25),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            ),
-          ),
-          const SizedBox(height: 24),
-          GestureDetector(
-            onTap: () async {
-              final sats = int.tryParse(amountController.text.trim());
-              if (sats == null || sats <= 0) {
-                AppToast.error(modalContext, 'Enter a valid amount', duration: const Duration(seconds: 1));
-                return;
-              }
-
-              Navigator.pop(modalContext);
-
-              final userRepository = AppDI.get<UserRepository>();
-              final userResult = await userRepository.getUserProfile(note.author);
-
-              userResult.fold(
-                (user) {
-                  if (user.lud16.isEmpty) {
-                    AppToast.error(context, 'User does not have a lightning address configured.', duration: const Duration(seconds: 1));
+              const SizedBox(height: 24),
+              GestureDetector(
+                onTap: () {
+                  final sats = int.tryParse(amountController.text.trim());
+                  if (sats == null || sats <= 0) {
+                    AppToast.error(modalContext, 'Enter a valid amount', duration: const Duration(seconds: 1));
                     return;
                   }
 
-                  _payZapWithWallet(context, user, note, sats, noteController.text.trim());
+                  Navigator.pop(modalContext, {
+                    'success': true,
+                    'amount': sats,
+                  });
+
+                  _processZapPayment(context, note, sats, noteController.text.trim());
                 },
-                (error) {
-                  AppToast.error(context, 'Error loading user profile: $error', duration: const Duration(seconds: 1));
-                },
-              );
-            },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: context.colors.buttonPrimary,
-                borderRadius: BorderRadius.circular(40),
-              ),
-              child: Text(
-                'Send',
-                style: TextStyle(
-                  color: context.colors.buttonText,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: context.colors.buttonPrimary,
+                    borderRadius: BorderRadius.circular(40),
+                  ),
+                  child: Text(
+                    'Send',
+                    style: TextStyle(
+                      color: context.colors.buttonText,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     ),
   );
+
+  return result ?? {'success': false, 'amount': 0};
 }

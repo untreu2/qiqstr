@@ -306,23 +306,28 @@ class _InteractionBarState extends State<InteractionBar> {
     }
   }
 
-  void _handleZapTap() {
+  void _handleZapTap() async {
     if (widget.note == null || _hasZapped) return;
 
-    setState(() {
-      _hasZapped = true;
-    });
+    debugPrint('[InteractionBar] Starting zap for note: ${widget.noteId}');
 
-    showZapDialog(
+    final zapResult = await showZapDialog(
       context: context,
       note: widget.note!,
-    ).then((_) {
-      if (mounted) {
-        setState(() {
-          _hasZapped = false;
-        });
-      }
-    });
+    );
+
+    final zapSuccess = zapResult['success'] as bool;
+    final zapAmount = zapResult['amount'] as int;
+
+    debugPrint('[InteractionBar] Zap result: ${zapSuccess ? 'SUCCESS' : 'FAILED'}, amount: $zapAmount');
+
+    if (mounted && zapSuccess) {
+      setState(() {
+        _hasZapped = true;
+        _zapAmount += zapAmount;
+      });
+      debugPrint('[InteractionBar] Updated UI - hasZapped: $_hasZapped, zapAmount: $_zapAmount');
+    }
   }
 
   void _handleStatsTap() {

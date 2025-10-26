@@ -4,7 +4,6 @@ import '../theme/theme_manager.dart';
 import '../widgets/back_button_widget.dart';
 import '../screens/relay_page.dart';
 import '../screens/keys_page.dart';
-import '../screens/nwc_settings_page.dart';
 import '../utils/logout.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -46,7 +45,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _buildHeader(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
-    
+
     return Padding(
       padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 8),
       child: Column(
@@ -102,19 +101,6 @@ class _SettingsPageState extends State<SettingsPage> {
               context,
               MaterialPageRoute(
                 builder: (context) => const KeysPage(),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          _buildSettingsItem(
-            context: context,
-            title: 'Wallet',
-            subtitle: '',
-            icon: CarbonIcons.wallet,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const NwcSettingsPage(),
               ),
             ),
           ),
@@ -300,4 +286,3 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 }
-

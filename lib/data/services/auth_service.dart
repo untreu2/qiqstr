@@ -4,6 +4,8 @@ import 'package:bip39/bip39.dart' as bip39;
 import 'package:bip32/bip32.dart' as bip32;
 
 import '../../core/base/result.dart';
+import '../../models/wallet_model.dart';
+import 'coinos_service.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -288,7 +290,7 @@ class AuthService {
 
   Future<Result<String>> generateMnemonic() async {
     try {
-      final mnemonic = await bip39.generateMnemonic();
+      final mnemonic = bip39.generateMnemonic();
       return Result.success(mnemonic);
     } catch (e) {
       return Result.error('Failed to generate mnemonic: ${e.toString()}');
@@ -306,19 +308,20 @@ class AuthService {
         return const Result.error('Mnemonic must be exactly 12 words');
       }
 
-      final isValid = await bip39.validateMnemonic(mnemonic.trim());
+      final isValid = bip39.validateMnemonic(mnemonic.trim());
       if (!isValid) {
         return const Result.error('Invalid mnemonic phrase');
       }
 
       final seedBytes = bip39.mnemonicToSeed(mnemonic.trim());
-      
+
       final bip32Root = bip32.BIP32.fromSeed(seedBytes);
       final derivedKey = bip32Root.derivePath("m/44'/1237'/0'/0/0");
       final privateKey = derivedKey.privateKey!.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
       try {
         final privateKeyInt = BigInt.parse(privateKey, radix: 16);
-        if (privateKeyInt == BigInt.zero || privateKeyInt >= BigInt.parse('FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141', radix: 16)) {
+        if (privateKeyInt == BigInt.zero ||
+            privateKeyInt >= BigInt.parse('FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141', radix: 16)) {
           return const Result.error('Invalid private key generated from mnemonic');
         }
       } catch (e) {
@@ -354,7 +357,7 @@ class AuthService {
 
       final mnemonic = mnemonicResult.data!;
       final loginResult = await loginWithMnemonic(mnemonic);
-      
+
       if (loginResult.isError) {
         return Result.error(loginResult.error!);
       }
@@ -371,6 +374,67 @@ class AuthService {
       return Result.success(mnemonic);
     } catch (e) {
       return Result.error('Failed to read mnemonic: ${e.toString()}');
+    }
+  }
+
+  Future<Result<CoinosAuthResult>> authenticateWithCoinos() async {
+    try {
+      final coinosService = CoinosService();
+
+      final authResult = await coinosService.authenticateWithNostr();
+
+      if (authResult.isError) {
+        return Result.error(authResult.error!);
+      }
+
+      return Result.success(authResult.data!);
+    } catch (e) {
+      return Result.error('Coinos Nostr authentication failed: ${e.toString()}');
+    }
+  }
+
+  Future<Result<CoinosAuthResult>> autoLoginCoinos() async {
+    try {
+      final coinosService = CoinosService();
+
+      final authResult = await coinosService.autoLogin();
+      if (authResult.isError) {
+        return Result.error(authResult.error!);
+      }
+
+      return Result.success(authResult.data!);
+    } catch (e) {
+      return Result.error('Coinos auto-login failed: ${e.toString()}');
+    }
+  }
+
+  Future<Result<bool>> isCoinosAuthenticated() async {
+    try {
+      final coinosService = CoinosService();
+      final isAuthResult = await coinosService.isAuthenticated();
+      return isAuthResult;
+    } catch (e) {
+      return Result.error('Failed to check Coinos authentication: ${e.toString()}');
+    }
+  }
+
+  Future<Result<CoinosUser?>> getCoinosUser() async {
+    try {
+      final coinosService = CoinosService();
+      final userResult = await coinosService.getStoredUser();
+      return userResult;
+    } catch (e) {
+      return Result.error('Failed to get Coinos user: ${e.toString()}');
+    }
+  }
+
+  Future<Result<void>> clearCoinosData() async {
+    try {
+      final coinosService = CoinosService();
+      final clearResult = await coinosService.clearAuthData();
+      return clearResult;
+    } catch (e) {
+      return Result.error('Failed to clear Coinos data: ${e.toString()}');
     }
   }
 }

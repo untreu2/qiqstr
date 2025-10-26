@@ -1,260 +1,102 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
-import 'dart:math';
 
-import 'package:flutter/material.dart';
-import 'package:nostr/nostr.dart';
-
-// ignore: implementation_imports
-import 'package:nostr/src/crypto/nip_004.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../core/base/result.dart';
 import '../../models/wallet_model.dart';
 import '../services/auth_service.dart';
+import '../services/coinos_service.dart';
 import '../services/validation_service.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class WalletRepository {
-  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage();
+  final CoinosService _coinosService;
 
-  WalletConnection? _connection;
-  Keychain? _clientKeychain;
-
-  final StreamController<WalletBalance> _balanceController = StreamController<WalletBalance>.broadcast();
-  final StreamController<List<TransactionDetails>> _transactionsController = StreamController<List<TransactionDetails>>.broadcast();
+  final StreamController<CoinosBalance> _balanceController = StreamController<CoinosBalance>.broadcast();
+  final StreamController<List<CoinosPayment>> _transactionsController = StreamController<List<CoinosPayment>>.broadcast();
 
   WalletRepository({
+    required CoinosService coinosService,
     required AuthService authService,
     required ValidationService validationService,
-  });
+  }) : _coinosService = coinosService;
 
-  Stream<WalletBalance> get balanceStream => _balanceController.stream;
-  Stream<List<TransactionDetails>> get transactionsStream => _transactionsController.stream;
+  Stream<CoinosBalance> get balanceStream => _balanceController.stream;
+  Stream<List<CoinosPayment>> get transactionsStream => _transactionsController.stream;
 
-  Future<Result<WalletConnection>> connectWallet(String nwcUri) async {
+  Future<Result<CoinosUser>> authenticateWithCoinos() async {
     try {
-      debugPrint('[WalletRepository] Connecting to wallet with URI: ${nwcUri.substring(0, 50)}...');
+      debugPrint('[WalletRepository] Starting Coinos authentication');
 
-      if (!nwcUri.startsWith('nostr+walletconnect://')) {
-        return const Result.error('Invalid NWC URI format. Must start with "nostr+walletconnect://"');
+      final authResult = await _coinosService.autoLogin();
+      if (authResult.isError) {
+        return Result.error(authResult.error!);
       }
 
-      final connection = WalletConnection.fromUri(nwcUri);
+      final user = authResult.data!.user;
+      debugPrint('[WalletRepository] Authentication successful for user: ${user.username}');
 
-      final clientKeychain = Keychain(connection.clientSecret);
-
-      final updatedConnection = WalletConnection(
-        relayUrl: connection.relayUrl,
-        walletPubKey: connection.walletPubKey,
-        clientSecret: connection.clientSecret,
-        clientPubKey: clientKeychain.public,
-      );
-
-      _connection = updatedConnection;
-      _clientKeychain = clientKeychain;
-
-      await _secureStorage.write(key: 'nwc_uri', value: nwcUri);
-
-      debugPrint('[WalletRepository] Successfully connected to wallet');
-      debugPrint('[WalletRepository] Relay: ${connection.relayUrl}');
-      debugPrint('[WalletRepository] Wallet PubKey: ${connection.walletPubKey}');
-      debugPrint('[WalletRepository] Client PubKey: ${clientKeychain.public}');
-      debugPrint('[WalletRepository] NWC URI saved to secure storage');
-
-      return Result.success(updatedConnection);
+      return Result.success(user);
     } catch (e) {
-      debugPrint('[WalletRepository] Connection error: $e');
-      return Result.error('Failed to connect to wallet: $e');
+      debugPrint('[WalletRepository] Authentication error: $e');
+      return Result.error('Authentication failed: $e');
     }
   }
 
-  Future<Result<String>> _sendRequest(String method, Map<String, dynamic> params) async {
-    WebSocket? ws;
+  Future<Result<CoinosUser>> authenticateWithNostr() async {
     try {
-      if (_connection == null || _clientKeychain == null) {
-        return const Result.error('Wallet not connected');
+      debugPrint('[WalletRepository] Authenticating with Nostr');
+
+      final authResult = await _coinosService.authenticateWithNostr();
+
+      if (authResult.isError) {
+        return Result.error(authResult.error!);
       }
 
-      debugPrint('[WalletRepository] Sending $method request with params: $params');
+      final user = authResult.data!.user;
+      debugPrint('[WalletRepository] Nostr authentication successful for user: ${user.username}');
 
-      final request = NWCRequest(method: method, params: params);
-      final payloadJson = request.toJsonString();
-
-      debugPrint('[WalletRepository] Request payload: $payloadJson');
-
-      final encryptedContent = nip4cipher(
-        _clientKeychain!.private,
-        '02${_connection!.walletPubKey}',
-        payloadJson,
-        true, //
-      );
-
-      debugPrint('[WalletRepository] Encrypted content: ${encryptedContent.substring(0, 50)}...');
-
-      final event = Event.from(
-        kind: 23194,
-        tags: [
-          ['p', _connection!.walletPubKey]
-        ],
-        content: encryptedContent,
-        privkey: _clientKeychain!.private,
-      );
-
-      debugPrint('[WalletRepository] Created event: ${event.id}');
-
-      ws = await WebSocket.connect(_connection!.relayUrl);
-      debugPrint('[WalletRepository] Connected to wallet relay: ${_connection!.relayUrl}');
-
-      final subscriptionId = _generateSubscriptionId();
-      final responseCompleter = Completer<String>();
-
-      late StreamSubscription wsSubscription;
-
-      wsSubscription = ws.listen(
-        (message) {
-          try {
-            if (responseCompleter.isCompleted) return;
-
-            debugPrint('[WalletRepository] Received WebSocket message: $message');
-            final data = jsonDecode(message);
-
-            if (data is List && data.length >= 3) {
-              if (data[0] == 'EVENT' && data[1] == subscriptionId) {
-                final eventData = data[2] as Map<String, dynamic>;
-                final responseEvent = Event.fromJson(eventData);
-
-                debugPrint('[WalletRepository] Received response event: ${responseEvent.id}');
-
-                final eTags = responseEvent.tags.where((tag) => tag.length >= 2 && tag[0] == 'e').toList();
-                if (eTags.any((tag) => tag[1] == event.id)) {
-                  try {
-                    final decryptedContent = nip4cipher(
-                      _clientKeychain!.private,
-                      '02${_connection!.walletPubKey}',
-                      responseEvent.content.split('?iv=')[0],
-                      false, // cipher = false for decryption
-                      nonce: _extractNonce(responseEvent.content),
-                    );
-
-                    debugPrint('[WalletRepository] Decrypted response: $decryptedContent');
-                    responseCompleter.complete(decryptedContent);
-                  } catch (e) {
-                    debugPrint('[WalletRepository] Decryption error: $e');
-                    responseCompleter.completeError('Failed to decrypt response: $e');
-                  }
-                }
-              } else if (data[0] == 'EOSE' && data[1] == subscriptionId) {
-                debugPrint('[WalletRepository] End of stored events for subscription: $subscriptionId');
-              }
-            }
-          } catch (e) {
-            debugPrint('[WalletRepository] Message parsing error: $e');
-          }
-        },
-        onError: (error) {
-          debugPrint('[WalletRepository] WebSocket error: $error');
-          if (!responseCompleter.isCompleted) {
-            responseCompleter.completeError('WebSocket error: $error');
-          }
-        },
-        onDone: () {
-          debugPrint('[WalletRepository] WebSocket connection closed');
-          if (!responseCompleter.isCompleted) {
-            responseCompleter.completeError('WebSocket connection closed');
-          }
-        },
-      );
-
-      final subscribeMessage = jsonEncode([
-        'REQ',
-        subscriptionId,
-        {
-          'kinds': [23195], // NWC response
-          'authors': [_connection!.walletPubKey],
-          '#e': [event.id],
-          'limit': 1,
-        }
-      ]);
-
-      debugPrint('[WalletRepository] Sending subscription: $subscribeMessage');
-      ws.add(subscribeMessage);
-
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      final eventMessage = jsonEncode(['EVENT', event.toJson()]);
-      debugPrint('[WalletRepository] Sending event: ${eventMessage.substring(0, 100)}...');
-      ws.add(eventMessage);
-
-      debugPrint('[WalletRepository] Request event published: ${event.id}');
-
-      final timeoutTimer = Timer(const Duration(seconds: 30), () {
-        if (!responseCompleter.isCompleted) {
-          responseCompleter.completeError('Request timeout');
-        }
-      });
-
-      try {
-        final response = await responseCompleter.future;
-        timeoutTimer.cancel();
-
-        debugPrint('[WalletRepository] Successfully received response for $method');
-        return Result.success(response);
-      } catch (e) {
-        timeoutTimer.cancel();
-        rethrow;
-      } finally {
-        try {
-          await wsSubscription.cancel();
-          await ws.close();
-        } catch (e) {
-          debugPrint('[WalletRepository] Error closing WebSocket: $e');
-        }
-      }
+      return Result.success(user);
     } catch (e) {
-      debugPrint('[WalletRepository] Request error: $e');
-      try {
-        await ws?.close();
-      } catch (e2) {
-        debugPrint('[WalletRepository] Error closing WebSocket on error: $e2');
-      }
-      return Result.error('Request failed: $e');
+      debugPrint('[WalletRepository] Nostr authentication error: $e');
+      return Result.error('Nostr authentication failed: $e');
     }
   }
 
-  String _extractNonce(String encryptedContent) {
-    final parts = encryptedContent.split('?iv=');
-    if (parts.length != 2) {
-      throw Exception('Invalid encrypted content format');
-    }
-    return parts[1];
-  }
-
-  String _generateSubscriptionId() {
-    final random = Random.secure();
-    final bytes = List<int>.generate(16, (i) => random.nextInt(256));
-    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-  }
-
-  Future<Result<WalletBalance>> getBalance() async {
+  Future<Result<CoinosUser?>> autoConnect() async {
     try {
-      final response = await _sendRequest('get_balance', {});
+      debugPrint('[WalletRepository] Attempting auto-connect');
 
-      return response.fold(
-        (responseJson) {
-          final responseData = jsonDecode(responseJson) as Map<String, dynamic>;
-          final nwcResponse = NWCResponse<WalletBalance>.fromJson(
-            responseData,
-            (json) => WalletBalance.fromJson(json),
-          );
+      final isAuthenticatedResult = await _coinosService.isAuthenticated();
+      if (isAuthenticatedResult.isSuccess && isAuthenticatedResult.data == true) {
+        final userResult = await _coinosService.getStoredUser();
+        if (userResult.isSuccess && userResult.data != null) {
+          debugPrint('[WalletRepository] Auto-connect successful');
+          return Result.success(userResult.data);
+        }
+      }
 
-          if (nwcResponse.isError) {
-            return Result.error(nwcResponse.error ?? 'Unknown error');
-          }
+      debugPrint('[WalletRepository] Auto-connect failed, attempting re-authentication');
+      final authResult = await authenticateWithCoinos();
+      return authResult.fold(
+        (user) => Result.success(user),
+        (error) {
+          debugPrint('[WalletRepository] Re-authentication failed: $error');
+          return Result.success(null);
+        },
+      );
+    } catch (e) {
+      debugPrint('[WalletRepository] Auto-connect error: $e');
+      return Result.success(null);
+    }
+  }
 
-          final balance = nwcResponse.result!;
+  Future<Result<CoinosBalance>> getBalance() async {
+    try {
+      final result = await _coinosService.getBalance();
+
+      return result.fold(
+        (balance) {
           _balanceController.add(balance);
-
           return Result.success(balance);
         },
         (error) => Result.error(error),
@@ -270,24 +112,31 @@ class WalletRepository {
         return const Result.error('Amount must be greater than 0');
       }
 
-      final response = await _sendRequest('make_invoice', {
-        'amount': amount,
-        'description': memo,
-      });
+      final result = await _coinosService.createInvoice(
+        amount: amount,
+        type: 'lightning',
+      );
 
-      return response.fold(
-        (responseJson) {
-          final responseData = jsonDecode(responseJson) as Map<String, dynamic>;
-          final nwcResponse = NWCResponse<InvoiceDetails>.fromJson(
-            responseData,
-            (json) => InvoiceDetails.fromJson(json),
-          );
+      return result.fold(
+        (invoice) {
+          debugPrint('[WalletRepository] Invoice created: ${invoice.toString()}');
 
-          if (nwcResponse.isError) {
-            return Result.error(nwcResponse.error ?? 'Unknown error');
+          String? invoiceString;
+
+          if (invoice.bolt11 != null && invoice.bolt11!.isNotEmpty) {
+            invoiceString = invoice.bolt11;
+          } else if (invoice.text != null && invoice.text!.isNotEmpty) {
+            invoiceString = invoice.text;
+          } else if (invoice.hash != null && invoice.hash!.isNotEmpty) {
+            invoiceString = invoice.hash;
           }
 
-          return Result.success(nwcResponse.result!.invoice);
+          if (invoiceString != null && invoiceString.isNotEmpty) {
+            return Result.success(invoiceString);
+          } else {
+            debugPrint('[WalletRepository] Invoice response fields: bolt11=${invoice.bolt11}, text=${invoice.text}, hash=${invoice.hash}');
+            return const Result.error('Invalid invoice response - no invoice string found');
+          }
         },
         (error) => Result.error(error),
       );
@@ -296,38 +145,42 @@ class WalletRepository {
     }
   }
 
-  Future<Result<PaymentResult>> payInvoice(String invoice) async {
+  Future<Result<CoinosPaymentResult>> payInvoice(String invoice) async {
     try {
+      debugPrint('[WalletRepository] Attempting to pay invoice: ${invoice.substring(0, 20)}...');
+
       if (invoice.trim().isEmpty) {
         return const Result.error('Invoice cannot be empty');
       }
 
-      final response = await _sendRequest('pay_invoice', {
-        'invoice': invoice,
-      });
+      final result = await _coinosService.payInvoice(invoice);
 
-      return response.fold(
-        (responseJson) {
-          final responseData = jsonDecode(responseJson) as Map<String, dynamic>;
-          final nwcResponse = NWCResponse<PaymentResult>.fromJson(
-            responseData,
-            (json) => PaymentResult.fromJson(json),
-          );
+      return result.fold(
+        (paymentResult) {
+          debugPrint('[WalletRepository] Payment result received: $paymentResult');
+          debugPrint('[WalletRepository] Payment isSuccess: ${paymentResult.isSuccess}');
 
-          if (nwcResponse.isError) {
-            return Result.error(nwcResponse.error ?? 'Unknown error');
+          if (paymentResult.isSuccess) {
+            debugPrint('[WalletRepository] Payment successful');
+            return Result.success(paymentResult);
+          } else {
+            final errorMsg = paymentResult.error ?? 'Payment failed - no specific error';
+            debugPrint('[WalletRepository] Payment failed: $errorMsg');
+            return Result.error(errorMsg);
           }
-
-          return Result.success(nwcResponse.result!);
         },
-        (error) => Result.error(error),
+        (error) {
+          debugPrint('[WalletRepository] Payment service error: $error');
+          return Result.error(error);
+        },
       );
     } catch (e) {
+      debugPrint('[WalletRepository] Payment exception: $e');
       return Result.error('Failed to pay invoice: $e');
     }
   }
 
-  Future<Result<KeysendResult>> payKeysend(String pubkey, int amount) async {
+  Future<Result<CoinosPaymentResult>> payKeysend(String pubkey, int amount) async {
     try {
       if (pubkey.trim().isEmpty) {
         return const Result.error('Pubkey cannot be empty');
@@ -337,85 +190,31 @@ class WalletRepository {
         return const Result.error('Amount must be greater than 0');
       }
 
-      final response = await _sendRequest('pay_keysend', {
-        'amount': amount,
-        'pubkey': pubkey,
-      });
-
-      return response.fold(
-        (responseJson) {
-          final responseData = jsonDecode(responseJson) as Map<String, dynamic>;
-          final nwcResponse = NWCResponse<KeysendResult>.fromJson(
-            responseData,
-            (json) => KeysendResult.fromJson(json),
-          );
-
-          if (nwcResponse.isError) {
-            return Result.error(nwcResponse.error ?? 'Unknown error');
-          }
-
-          return Result.success(nwcResponse.result!);
-        },
-        (error) => Result.error(error),
-      );
+      return const Result.error('Keysend not supported by Coinos API');
     } catch (e) {
       return Result.error('Failed to send keysend payment: $e');
     }
   }
 
-  Future<Result<InvoiceDetails>> lookupInvoice(String invoice) async {
+  Future<Result<CoinosInvoice>> lookupInvoice(String invoice) async {
     try {
       if (invoice.trim().isEmpty) {
         return const Result.error('Invoice cannot be empty');
       }
 
-      final response = await _sendRequest('lookup_invoice', {
-        'invoice': invoice,
-      });
-
-      return response.fold(
-        (responseJson) {
-          final responseData = jsonDecode(responseJson) as Map<String, dynamic>;
-          final nwcResponse = NWCResponse<InvoiceDetails>.fromJson(
-            responseData,
-            (json) => InvoiceDetails.fromJson(json),
-          );
-
-          if (nwcResponse.isError) {
-            return Result.error(nwcResponse.error ?? 'Unknown error');
-          }
-
-          return Result.success(nwcResponse.result!);
-        },
-        (error) => Result.error(error),
-      );
+      return const Result.error('Invoice lookup not yet implemented');
     } catch (e) {
       return Result.error('Failed to lookup invoice: $e');
     }
   }
 
-  Future<Result<List<TransactionDetails>>> listTransactions() async {
+  Future<Result<List<CoinosPayment>>> listTransactions() async {
     try {
-      final response = await _sendRequest('list_transactions', {});
+      final result = await _coinosService.getPaymentHistory(limit: 50);
 
-      return response.fold(
-        (responseJson) {
-          final responseData = jsonDecode(responseJson) as Map<String, dynamic>;
-
-          if (responseData.containsKey('error')) {
-            return Result.error(responseData['error'] as String);
-          }
-
-          final result = responseData['result'] as Map<String, dynamic>?;
-          if (result == null) {
-            return const Result.error('Invalid response format');
-          }
-
-          final transactionsJson = result['transactions'] as List<dynamic>? ?? [];
-          final transactions = transactionsJson.map((json) => InvoiceDetails.fromJson(json as Map<String, dynamic>)).toList();
-
+      return result.fold(
+        (transactions) {
           _transactionsController.add(transactions);
-
           return Result.success(transactions);
         },
         (error) => Result.error(error),
@@ -425,24 +224,12 @@ class WalletRepository {
     }
   }
 
-  Future<Result<WalletInfo>> getInfo() async {
+  Future<Result<CoinosUser>> getInfo() async {
     try {
-      final response = await _sendRequest('get_info', {});
+      final result = await _coinosService.getAccountInfo();
 
-      return response.fold(
-        (responseJson) {
-          final responseData = jsonDecode(responseJson) as Map<String, dynamic>;
-          final nwcResponse = NWCResponse<WalletInfo>.fromJson(
-            responseData,
-            (json) => WalletInfo.fromJson(json),
-          );
-
-          if (nwcResponse.isError) {
-            return Result.error(nwcResponse.error ?? 'Unknown error');
-          }
-
-          return Result.success(nwcResponse.result!);
-        },
+      return result.fold(
+        (user) => Result.success(user),
         (error) => Result.error(error),
       );
     } catch (e) {
@@ -450,35 +237,110 @@ class WalletRepository {
     }
   }
 
-  Future<Result<WalletConnection?>> autoConnect() async {
+  Future<Result<CoinosPaymentResult>> sendInternalPayment({
+    required String username,
+    required int amount,
+  }) async {
     try {
-      final savedNwcUri = await _secureStorage.read(key: 'nwc_uri');
-      if (savedNwcUri != null && savedNwcUri.isNotEmpty) {
-        debugPrint('[WalletRepository] Found saved NWC URI, attempting auto-connect');
-        final result = await connectWallet(savedNwcUri);
-        return result.fold(
-          (connection) => Result.success(connection),
-          (error) {
-            debugPrint('[WalletRepository] Auto-connect failed: $error');
-            return Result.success(null);
-          },
-        );
+      if (username.trim().isEmpty) {
+        return const Result.error('Username cannot be empty');
       }
-      return Result.success(null);
+
+      if (amount <= 0) {
+        return const Result.error('Amount must be greater than 0');
+      }
+
+      final result = await _coinosService.sendInternalPayment(
+        username: username,
+        amount: amount,
+      );
+
+      return result.fold(
+        (paymentResult) {
+          if (paymentResult.isSuccess) {
+            return Result.success(paymentResult);
+          } else {
+            return Result.error(paymentResult.error ?? 'Internal payment failed');
+          }
+        },
+        (error) => Result.error(error),
+      );
     } catch (e) {
-      debugPrint('[WalletRepository] Auto-connect error: $e');
-      return Result.success(null);
+      return Result.error('Failed to send internal payment: $e');
     }
   }
 
-  bool get isConnected => _connection != null && _clientKeychain != null;
+  Future<Result<CoinosPaymentResult>> sendBitcoinPayment({
+    required String address,
+    required int amount,
+  }) async {
+    try {
+      if (address.trim().isEmpty) {
+        return const Result.error('Address cannot be empty');
+      }
 
-  WalletConnection? get currentConnection => _connection;
+      if (amount <= 0) {
+        return const Result.error('Amount must be greater than 0');
+      }
+
+      final result = await _coinosService.sendBitcoinPayment(
+        address: address,
+        amount: amount,
+      );
+
+      return result.fold(
+        (paymentResult) {
+          if (paymentResult.isSuccess) {
+            return Result.success(paymentResult);
+          } else {
+            return Result.error(paymentResult.error ?? 'Bitcoin payment failed');
+          }
+        },
+        (error) => Result.error(error),
+      );
+    } catch (e) {
+      return Result.error('Failed to send bitcoin payment: $e');
+    }
+  }
+
+  Future<Result<CoinosPaymentResult>> sendToLightningAddress({
+    required String lightningAddress,
+    required int amount,
+  }) async {
+    try {
+      if (lightningAddress.trim().isEmpty) {
+        return const Result.error('Lightning address cannot be empty');
+      }
+
+      if (amount <= 0) {
+        return const Result.error('Amount must be greater than 0');
+      }
+
+      final result = await _coinosService.payInvoice(lightningAddress);
+
+      return result.fold(
+        (paymentResult) {
+          if (paymentResult.isSuccess) {
+            return Result.success(paymentResult);
+          } else {
+            return Result.error(paymentResult.error ?? 'Lightning address payment failed');
+          }
+        },
+        (error) => Result.error(error),
+      );
+    } catch (e) {
+      return Result.error('Failed to send to lightning address: $e');
+    }
+  }
+
+  bool get isConnected => true;
+
+  CoinosUser? get currentConnection => null;
 
   Future<bool> get hasSavedConnection async {
     try {
-      final savedNwcUri = await _secureStorage.read(key: 'nwc_uri');
-      return savedNwcUri != null && savedNwcUri.isNotEmpty;
+      final tokenResult = await _coinosService.getStoredToken();
+      return tokenResult.isSuccess && tokenResult.data != null;
     } catch (e) {
       return false;
     }
@@ -486,12 +348,8 @@ class WalletRepository {
 
   Future<Result<void>> disconnect() async {
     try {
-      await _secureStorage.delete(key: 'nwc_uri');
-
-      _connection = null;
-      _clientKeychain = null;
-
-      debugPrint('[WalletRepository] Wallet disconnected and NWC URI removed');
+      await _coinosService.clearAuthData();
+      debugPrint('[WalletRepository] Wallet disconnected');
       return const Result.success(null);
     } catch (e) {
       return Result.error('Failed to disconnect: $e');
@@ -501,7 +359,6 @@ class WalletRepository {
   void dispose() {
     _balanceController.close();
     _transactionsController.close();
-    _connection = null;
-    _clientKeychain = null;
+    _coinosService.dispose();
   }
 }

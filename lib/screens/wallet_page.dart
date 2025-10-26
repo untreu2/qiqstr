@@ -16,19 +16,18 @@ class WalletPage extends StatefulWidget {
 }
 
 class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMixin {
-  final TextEditingController _nwcController = TextEditingController();
   final _walletRepository = AppDI.get<WalletRepository>();
 
-  WalletConnection? _connection;
-  WalletBalance? _balance;
-  List<TransactionDetails>? _transactions;
+  CoinosUser? _user;
+  CoinosBalance? _balance;
+  List<CoinosPayment>? _transactions;
   bool _isConnecting = false;
   bool _isLoadingTransactions = false;
   String? _error;
   Timer? _balanceTimer;
 
   @override
-  bool get wantKeepAlive => false; 
+  bool get wantKeepAlive => false;
 
   @override
   void initState() {
@@ -39,48 +38,17 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
   Future<void> _autoConnect() async {
     final result = await _walletRepository.autoConnect();
     result.fold(
-      (connection) {
-        if (connection != null) {
+      (user) {
+        if (user != null) {
           setState(() {
-            _connection = connection;
+            _user = user;
           });
           _getBalance();
           _getTransactions();
           _startBalanceTimer();
         }
       },
-      (error) {
-      },
-    );
-  }
-
-  Future<void> _connectWallet() async {
-    if (_nwcController.text.trim().isEmpty) {
-      _setError('Please enter a valid NWC URI');
-      return;
-    }
-
-    setState(() {
-      _isConnecting = true;
-      _error = null;
-    });
-
-    final result = await _walletRepository.connectWallet(_nwcController.text.trim());
-
-    result.fold(
-      (connection) {
-        setState(() {
-          _connection = connection;
-          _isConnecting = false;
-        });
-        _getBalance();
-        _getTransactions();
-        _startBalanceTimer();
-        _nwcController.clear();
-      },
-      (error) {
-        _setError(error);
-      },
+      (error) {},
     );
   }
 
@@ -126,10 +94,9 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
 
   void _startBalanceTimer() {
     _balanceTimer?.cancel();
-    
-    
+
     _balanceTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      if (_connection != null && mounted) {
+      if (_user != null && mounted) {
         _getBalance();
       }
     });
@@ -147,6 +114,44 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
     });
   }
 
+  Future<void> _connectWithNostr() async {
+    setState(() {
+      _isConnecting = true;
+      _error = null;
+    });
+
+    try {
+      final result = await _walletRepository.authenticateWithNostr();
+
+      if (mounted) {
+        result.fold(
+          (user) {
+            setState(() {
+              _user = user;
+              _isConnecting = false;
+            });
+            _getBalance();
+            _getTransactions();
+            _startBalanceTimer();
+          },
+          (error) {
+            setState(() {
+              _error = error;
+              _isConnecting = false;
+            });
+          },
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to connect: $e';
+          _isConnecting = false;
+        });
+      }
+    }
+  }
+
   Widget _buildHeader(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 60, 16, 8),
@@ -160,17 +165,6 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
         ),
       ),
     );
-  }
-
-  Future<void> _pasteFromClipboard() async {
-    final clipboardData = await Clipboard.getData('text/plain');
-    if (clipboardData != null && clipboardData.text != null) {
-      _nwcController.text = clipboardData.text!;
-      
-      if (_nwcController.text.trim().isNotEmpty) {
-        _connectWallet();
-      }
-    }
   }
 
   Widget _buildConnectionBottomBar(BuildContext context) {
@@ -195,50 +189,34 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
           top: 12,
           bottom: MediaQuery.of(context).padding.bottom + 12,
         ),
-        child: TextField(
-          controller: _nwcController,
-          style: TextStyle(color: context.colors.buttonText),
-          enabled: !_isConnecting,
-          decoration: InputDecoration(
-            hintText: 'Paste NWC URI here...',
-            hintStyle: TextStyle(color: context.colors.buttonText.withValues(alpha: 0.6)),
-            suffixIcon: Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: GestureDetector(
-                onTap: _isConnecting ? null : _pasteFromClipboard,
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: _isConnecting ? context.colors.background.withValues(alpha: 0.5) : context.colors.background,
-                    shape: BoxShape.circle,
-                  ),
-                  child: _isConnecting
-                      ? Padding(
-                          padding: const EdgeInsets.all(10),
-                          child: CircularProgressIndicator(
-                            color: context.colors.textPrimary,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : Icon(
-                          Icons.content_paste,
-                          color: context.colors.textPrimary,
-                          size: 20,
-                        ),
-                ),
-              ),
-            ),
-            filled: true,
-            fillColor: context.colors.buttonPrimary,
-            border: OutlineInputBorder(
+        child: GestureDetector(
+          onTap: _isConnecting ? null : _connectWithNostr,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: context.colors.buttonPrimary,
               borderRadius: BorderRadius.circular(40),
-              borderSide: BorderSide.none,
             ),
-            contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+            child: _isConnecting
+                ? SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
+                    ),
+                  )
+                : Text(
+                    'Connect Wallet',
+                    style: TextStyle(
+                      color: context.colors.buttonText,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
           ),
-          maxLines: 1,
-          onSubmitted: (_) => _connectWallet(),
         ),
       ),
     );
@@ -267,7 +245,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
             ),
             const SizedBox(height: 12),
             Text(
-              'Paste your NWC connection URI below to get started',
+              'Connect using your Nostr identity to get started',
               style: TextStyle(
                 fontSize: 16,
                 color: context.colors.textSecondary,
@@ -282,7 +260,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
   }
 
   Widget _buildMainContent(BuildContext context) {
-    if (_connection == null) {
+    if (_user == null) {
       return const SizedBox.shrink();
     }
 
@@ -291,35 +269,89 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _balance != null
-                        ? ((_balance!.balance / 1000).floor()).toString()
-                        : '0',
-                    style: TextStyle(
-                      fontSize: 72,
-                      fontWeight: FontWeight.w600,
-                      color: context.colors.textPrimary,
-                      height: 1.0,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _balance != null ? _balance!.balance.toString() : '0',
+                      style: TextStyle(
+                        fontSize: 72,
+                        fontWeight: FontWeight.w600,
+                        color: context.colors.textPrimary,
+                        height: 1.0,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'sats',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w400,
-                      color: context.colors.textSecondary,
+                    const SizedBox(width: 8),
+                    Text(
+                      'sats',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w400,
+                        color: context.colors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (_user != null) ...[
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: GestureDetector(
+                      onTap: () {
+                        final cleanUsername = _user!.username.trim().replaceAll(' ', '');
+                        Clipboard.setData(ClipboardData(text: '$cleanUsername@coinos.io'));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Lightning address copied to clipboard'),
+                            duration: const Duration(seconds: 2),
+                            backgroundColor: context.colors.overlayLight,
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: context.colors.overlayLight,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.flash_on,
+                              size: 16,
+                              color: context.colors.textSecondary,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${_user!.username.trim().replaceAll(' ', '')}@coinos.io',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: context.colors.textSecondary,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(
+                              Icons.copy,
+                              size: 16,
+                              color: context.colors.textSecondary,
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ],
-              ),
+              ],
             ),
           ),
           SizedBox(
@@ -383,7 +415,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
     }
 
     final recentTransactions = _transactions!.take(4).toList();
-    
+
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       itemCount: recentTransactions.length,
@@ -394,9 +426,17 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
     );
   }
 
-  Widget _buildTransactionTile(BuildContext context, TransactionDetails tx) {
-    final isIncoming = tx.type == 'incoming';
-    final dateTime = DateTime.fromMillisecondsSinceEpoch(tx.createdAt * 1000);
+  Widget _buildTransactionTile(BuildContext context, CoinosPayment tx) {
+    final isIncoming = tx.isIncoming;
+    final createdAt = tx.createdAt ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+    DateTime dateTime;
+    if (createdAt > 1000000000000) {
+      dateTime = DateTime.fromMillisecondsSinceEpoch(createdAt);
+    } else {
+      dateTime = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
+    }
+
     final formatted = '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
 
     return Padding(
@@ -444,7 +484,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
           ),
           const SizedBox(width: 12),
           Text(
-            '${isIncoming ? '+' : '-'}${(tx.amount / 1000).floor()} sats',
+            '${isIncoming ? '+' : '-'}${tx.amount.abs()} sats',
             style: TextStyle(
               color: context.colors.textPrimary,
               fontWeight: FontWeight.w600,
@@ -522,13 +562,12 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
   @override
   void dispose() {
     _stopBalanceTimer();
-    _nwcController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); 
+    super.build(context);
     return Consumer<ThemeManager>(
       builder: (context, themeManager, child) {
         return Scaffold(
@@ -539,7 +578,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildHeader(context),
-                  if (_connection == null) ...[
+                  if (_user == null) ...[
                     Expanded(child: _buildEmptyWalletState(context)),
                     const SizedBox(height: 80),
                   ] else ...[
@@ -548,9 +587,8 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
                   _buildError(context),
                 ],
               ),
-              if (_connection == null)
-                _buildConnectionBottomBar(context),
-              if (_connection != null)
+              if (_user == null) _buildConnectionBottomBar(context),
+              if (_user != null)
                 Positioned(
                   left: 0,
                   right: 0,
@@ -657,7 +695,6 @@ class ReceiveDialog extends StatefulWidget {
 
 class _ReceiveDialogState extends State<ReceiveDialog> {
   final TextEditingController _amountController = TextEditingController();
-  final TextEditingController _memoController = TextEditingController();
 
   bool _isLoading = false;
   String? _invoice;
@@ -667,7 +704,6 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
   @override
   void dispose() {
     _amountController.dispose();
-    _memoController.dispose();
     super.dispose();
   }
 
@@ -687,8 +723,8 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
 
     try {
       final result = await widget.walletRepository.makeInvoice(
-        amountValue * 1000, 
-        _memoController.text.trim().isEmpty ? 'Receive $amountValue sats' : _memoController.text.trim(),
+        amountValue,
+        'Receive $amountValue sats',
       );
 
       if (mounted) {
@@ -771,26 +807,6 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
             style: TextStyle(color: context.colors.textPrimary),
             decoration: InputDecoration(
               labelText: 'Amount (sats)',
-              labelStyle: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: context.colors.textSecondary,
-              ),
-              filled: true,
-              fillColor: context.colors.inputFill,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(25),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _memoController,
-            enabled: !_isLoading,
-            style: TextStyle(color: context.colors.textPrimary),
-            decoration: InputDecoration(
-              labelText: 'Memo (Optional)',
               labelStyle: TextStyle(
                 fontWeight: FontWeight.w600,
                 color: context.colors.textSecondary,
@@ -897,7 +913,7 @@ class _SendDialogState extends State<SendDialog> {
           _isLoading = false;
           result.fold(
             (paymentResult) {
-              _successMessage = 'Payment sent! Preimage: ${paymentResult.preimage}';
+              _successMessage = 'Payment sent! Preimage: ${paymentResult.preimage ?? 'N/A'}';
               widget.onPaymentSuccess();
             },
             (errorResult) {

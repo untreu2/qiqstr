@@ -8,6 +8,7 @@ import '../../../data/services/auth_service.dart';
 import '../../../data/services/validation_service.dart';
 import '../../../data/services/network_service.dart';
 import '../../../data/services/nostr_data_service.dart';
+import '../../../data/services/coinos_service.dart';
 
 class RepositoriesModule extends DIModule {
   @override
@@ -36,6 +37,7 @@ class RepositoriesModule extends DIModule {
         ));
 
     AppDI.registerLazySingleton<WalletRepository>(() => WalletRepository(
+          coinosService: AppDI.get<CoinosService>(),
           authService: AppDI.get<AuthService>(),
           validationService: AppDI.get<ValidationService>(),
         ));

@@ -1,6 +1,3 @@
-import 'dart:convert';
-
-
 class WalletResult<T> {
   final T? data;
   final String? error;
@@ -17,290 +14,360 @@ class WalletResult<T> {
   bool get isError => !isSuccess;
 }
 
-class WalletConnection {
-  final String relayUrl;
-  final String walletPubKey;
-  final String clientSecret;
-  final String clientPubKey;
+class CoinosUser {
+  final String id;
+  final String username;
+  final String pubkey;
+  final String display;
+  final String? picture;
+  final String currency;
+  final int? balance;
 
-  const WalletConnection({
-    required this.relayUrl,
-    required this.walletPubKey,
-    required this.clientSecret,
-    required this.clientPubKey,
+  const CoinosUser({
+    required this.id,
+    required this.username,
+    required this.pubkey,
+    required this.display,
+    this.picture,
+    required this.currency,
+    this.balance,
   });
 
-  factory WalletConnection.fromUri(String nwcUri) {
-    final uri = Uri.parse(nwcUri);
-    final walletPubKey = uri.host.isNotEmpty ? uri.host : uri.path.replaceFirst('/', '');
-    final query = uri.queryParameters;
-
-    final relayUrl = Uri.decodeComponent(query['relay'] ?? '');
-    final secret = query['secret'] ?? '';
-
-    if (relayUrl.isEmpty) {
-      throw Exception('relay parameter missing');
-    }
-    if (secret.isEmpty) {
-      throw Exception('secret parameter missing');
-    }
-
-    return WalletConnection(
-      relayUrl: relayUrl,
-      walletPubKey: walletPubKey,
-      clientSecret: secret,
-      clientPubKey: '', // Will be generated from secret
+  factory CoinosUser.fromJson(Map<String, dynamic> json) {
+    return CoinosUser(
+      id: json['id'] as String? ?? '',
+      username: json['username'] as String? ?? '',
+      pubkey: json['pubkey'] as String? ?? '',
+      display: json['display'] as String? ?? '',
+      picture: json['picture'] as String?,
+      currency: json['currency'] as String? ?? 'USD',
+      balance: _parseToInt(json['balance']),
     );
   }
 
+  static int? _parseToInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'username': username,
+        'pubkey': pubkey,
+        'display': display,
+        'picture': picture,
+        'currency': currency,
+        'balance': balance,
+      };
+
   @override
-  String toString() => 'WalletConnection(relay: $relayUrl, wallet: $walletPubKey)';
+  String toString() => 'CoinosUser(id: $id, username: $username, pubkey: $pubkey)';
 }
 
-class WalletBalance {
-  final int balance; // in millisatoshis
+class CoinosAuthResult {
+  final CoinosUser user;
+  final String token;
 
-  const WalletBalance({required this.balance});
+  const CoinosAuthResult({
+    required this.user,
+    required this.token,
+  });
 
-  factory WalletBalance.fromJson(Map<String, dynamic> json) {
-    return WalletBalance(
-      balance: json['balance'] as int? ?? 0,
+  factory CoinosAuthResult.fromJson(Map<String, dynamic> json) {
+    return CoinosAuthResult(
+      user: CoinosUser.fromJson(json['user'] as Map<String, dynamic>),
+      token: json['token'] as String,
     );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'user': user.toJson(),
+        'token': token,
+      };
+
+  @override
+  String toString() => 'CoinosAuthResult(user: $user, token: $token)';
+}
+
+class CoinosBalance {
+  final int balance;
+
+  const CoinosBalance({required this.balance});
+
+  factory CoinosBalance.fromJson(Map<String, dynamic> json) {
+    return CoinosBalance(
+      balance: _parseToInt(json['balance']) ?? 0,
+    );
+  }
+
+  static int? _parseToInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
   }
 
   Map<String, dynamic> toJson() => {'balance': balance};
 
   @override
-  String toString() => 'WalletBalance(balance: $balance msat)';
+  String toString() => 'CoinosBalance(balance: $balance sats)';
 }
 
-class InvoiceDetails {
-  final String type;
-  final String invoice;
-  final String description;
-  final String descriptionHash;
-  final String preimage;
-  final String paymentHash;
+class CoinosInvoice {
+  final String? id;
+  final String? hash;
+  final String? bolt11;
+  final String? address;
+  final String? text;
   final int amount;
-  final int feesPaid;
-  final int createdAt;
-  final int expiresAt;
-  final int settledAt;
-  final Map<String, dynamic> metadata;
+  final String? description;
+  final String? webhook;
+  final String? secret;
+  final String type;
+  final int? rate;
+  final int? tip;
+  final int? network;
+  final int? received;
+  final String? currency;
+  final int? createdAt;
+  final int? confirmedAt;
+  final String? preimage;
+  final String? paymentHash;
 
-  const InvoiceDetails({
-    required this.type,
-    required this.invoice,
-    required this.description,
-    required this.descriptionHash,
-    required this.preimage,
-    required this.paymentHash,
+  const CoinosInvoice({
+    this.id,
+    this.hash,
+    this.bolt11,
+    this.address,
+    this.text,
     required this.amount,
-    required this.feesPaid,
-    required this.createdAt,
-    required this.expiresAt,
-    required this.settledAt,
-    required this.metadata,
+    this.description,
+    this.webhook,
+    this.secret,
+    required this.type,
+    this.rate,
+    this.tip,
+    this.network,
+    this.received,
+    this.currency,
+    this.createdAt,
+    this.confirmedAt,
+    this.preimage,
+    this.paymentHash,
   });
 
-  factory InvoiceDetails.fromJson(Map<String, dynamic> json) {
-    return InvoiceDetails(
-      type: json['type'] as String? ?? '',
-      invoice: json['invoice'] as String? ?? '',
-      description: json['description'] as String? ?? '',
-      descriptionHash: json['description_hash'] as String? ?? '',
-      preimage: json['preimage'] as String? ?? '',
-      paymentHash: json['payment_hash'] as String? ?? '',
-      amount: json['amount'] as int? ?? 0,
-      feesPaid: json['fees_paid'] as int? ?? 0,
-      createdAt: json['created_at'] as int? ?? 0,
-      expiresAt: json['expires_at'] as int? ?? 0,
-      settledAt: json['settled_at'] as int? ?? 0,
-      metadata: json['metadata'] as Map<String, dynamic>? ?? {},
+  factory CoinosInvoice.fromJson(Map<String, dynamic> json) {
+    return CoinosInvoice(
+      id: json['id'] as String?,
+      hash: json['hash'] as String?,
+      bolt11: json['bolt11'] as String?,
+      address: json['address'] as String?,
+      text: json['text'] as String?,
+      amount: _parseToInt(json['amount']) ?? 0,
+      description: json['description'] as String?,
+      webhook: json['webhook'] as String?,
+      secret: json['secret'] as String?,
+      type: json['type'] as String? ?? 'lightning',
+      rate: _parseToInt(json['rate']),
+      tip: _parseToInt(json['tip']),
+      network: _parseToInt(json['network']),
+      received: _parseToInt(json['received']),
+      currency: json['currency'] as String?,
+      createdAt: _parseToInt(json['created']),
+      confirmedAt: _parseToInt(json['confirmed']),
+      preimage: json['preimage'] as String?,
+      paymentHash: json['hash'] as String?,
     );
   }
 
+  static int? _parseToInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
   Map<String, dynamic> toJson() => {
-        'type': type,
-        'invoice': invoice,
-        'description': description,
-        'description_hash': descriptionHash,
-        'preimage': preimage,
-        'payment_hash': paymentHash,
+        'id': id,
+        'hash': hash,
+        'bolt11': bolt11,
+        'address': address,
+        'text': text,
         'amount': amount,
-        'fees_paid': feesPaid,
-        'created_at': createdAt,
-        'expires_at': expiresAt,
-        'settled_at': settledAt,
-        'metadata': metadata,
-      };
-
-  @override
-  String toString() => 'InvoiceDetails(type: $type, amount: $amount, hash: $paymentHash)';
-}
-
-class PaymentResult {
-  final String preimage;
-  final int feesPaid;
-
-  const PaymentResult({
-    required this.preimage,
-    required this.feesPaid,
-  });
-
-  factory PaymentResult.fromJson(Map<String, dynamic> json) {
-    return PaymentResult(
-      preimage: json['preimage'] as String? ?? '',
-      feesPaid: json['fees_paid'] as int? ?? 0,
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-        'preimage': preimage,
-        'fees_paid': feesPaid,
-      };
-
-  @override
-  String toString() => 'PaymentResult(preimage: $preimage, fees: $feesPaid)';
-}
-
-class KeysendResult {
-  final String preimage;
-  final int feesPaid;
-
-  const KeysendResult({
-    required this.preimage,
-    required this.feesPaid,
-  });
-
-  factory KeysendResult.fromJson(Map<String, dynamic> json) {
-    return KeysendResult(
-      preimage: json['preimage'] as String? ?? '',
-      feesPaid: json['fees_paid'] as int? ?? 0,
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-        'preimage': preimage,
-        'fees_paid': feesPaid,
-      };
-
-  @override
-  String toString() => 'KeysendResult(preimage: $preimage, fees: $feesPaid)';
-}
-
-typedef TransactionDetails = InvoiceDetails;
-
-class WalletInfo {
-  final String alias;
-  final String pubkey;
-  final String network;
-  final List<String> methods;
-  final String color;
-  final int blockHeight;
-  final String blockHash;
-  final List<String> notifications;
-
-  const WalletInfo({
-    required this.alias,
-    required this.pubkey,
-    required this.network,
-    required this.methods,
-    required this.color,
-    required this.blockHeight,
-    required this.blockHash,
-    required this.notifications,
-  });
-
-  factory WalletInfo.fromJson(Map<String, dynamic> json) {
-    return WalletInfo(
-      alias: json['alias'] as String? ?? '',
-      pubkey: json['pubkey'] as String? ?? '',
-      network: json['network'] as String? ?? '',
-      methods: (json['methods'] as List<dynamic>?)?.cast<String>() ?? [],
-      color: json['color'] as String? ?? '',
-      blockHeight: json['block_height'] as int? ?? 0,
-      blockHash: json['block_hash'] as String? ?? '',
-      notifications: (json['notifications'] as List<dynamic>?)?.cast<String>() ?? [],
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-        'alias': alias,
-        'pubkey': pubkey,
+        'description': description,
+        'webhook': webhook,
+        'secret': secret,
+        'type': type,
+        'rate': rate,
+        'tip': tip,
         'network': network,
-        'methods': methods,
-        'color': color,
-        'block_height': blockHeight,
-        'block_hash': blockHash,
-        'notifications': notifications,
+        'received': received,
+        'currency': currency,
+        'created': createdAt,
+        'confirmed': confirmedAt,
+        'preimage': preimage,
       };
 
+  bool get isPaid => received != null && received! > 0;
+  bool get isExpired => false;
+
   @override
-  String toString() => 'WalletInfo(alias: $alias, network: $network, methods: $methods)';
+  String toString() => 'CoinosInvoice(id: $id, amount: $amount, type: $type)';
 }
 
-class NWCRequest {
-  final String method;
-  final Map<String, dynamic> params;
+class CoinosPaymentResult {
+  final String? preimage;
+  final String? hash;
+  final int? fee;
+  final String? error;
+  final bool? paid;
+  final String? status;
 
-  const NWCRequest({
-    required this.method,
-    required this.params,
+  const CoinosPaymentResult({
+    this.preimage,
+    this.hash,
+    this.fee,
+    this.error,
+    this.paid,
+    this.status,
   });
 
-  Map<String, dynamic> toJson() => {
-        'method': method,
-        'params': params,
-      };
-
-  String toJsonString() => jsonEncode(toJson());
-
-  @override
-  String toString() => 'NWCRequest(method: $method, params: $params)';
-}
-
-class NWCResponse<T> {
-  final T? result;
-  final String? error;
-
-  const NWCResponse({this.result, this.error});
-
-  factory NWCResponse.fromJson(Map<String, dynamic> json, T Function(Map<String, dynamic>) fromJson) {
-    try {
-      if (json.containsKey('error') && json['error'] != null) {
-        final errorValue = json['error'];
-        String errorMessage;
-        if (errorValue is String) {
-          errorMessage = errorValue;
-        } else if (errorValue is Map) {
-          errorMessage = errorValue['message']?.toString() ?? errorValue.toString();
-        } else {
-          errorMessage = errorValue.toString();
-        }
-        return NWCResponse<T>(error: errorMessage);
-      }
-
-      if (json.containsKey('result')) {
-        final resultValue = json['result'];
-        if (resultValue is Map<String, dynamic>) {
-          return NWCResponse<T>(result: fromJson(resultValue));
-        } else if (resultValue == null) {
-          return NWCResponse<T>(error: 'Result is null');
-        } else {
-          return NWCResponse<T>(error: 'Invalid result format: ${resultValue.runtimeType}');
-        }
-      }
-
-      return NWCResponse<T>(error: 'No result or error field in response');
-    } catch (e) {
-      return NWCResponse<T>(error: 'Failed to parse response: $e');
-    }
+  factory CoinosPaymentResult.fromJson(Map<String, dynamic> json) {
+    return CoinosPaymentResult(
+      preimage: json['preimage'] as String?,
+      hash: json['hash'] as String?,
+      fee: _parseToInt(json['fee']),
+      error: json['error'] as String?,
+      paid: json['paid'] as bool?,
+      status: json['status'] as String?,
+    );
   }
 
-  bool get isSuccess => error == null && result != null;
-  bool get isError => error != null;
+  static int? _parseToInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  Map<String, dynamic> toJson() => {
+        'preimage': preimage,
+        'hash': hash,
+        'fee': fee,
+        'error': error,
+        'paid': paid,
+        'status': status,
+      };
+
+  bool get isSuccess {
+    if (error != null && error!.isNotEmpty) return false;
+
+    if (paid == true) return true;
+
+    if (status != null && (status == 'paid' || status == 'success' || status == 'complete')) return true;
+
+    if (preimage != null && preimage!.isNotEmpty) return true;
+
+    if (hash != null && hash!.isNotEmpty && error == null) return true;
+
+    return false;
+  }
 
   @override
-  String toString() => 'NWCResponse(result: $result, error: $error)';
+  String toString() => 'CoinosPaymentResult(preimage: $preimage, fee: $fee, error: $error, paid: $paid, status: $status)';
 }
+
+class CoinosPayment {
+  final String? id;
+  final String? hash;
+  final int amount;
+  final String? description;
+  final String type;
+  final String? username;
+  final String? address;
+  final int? fee;
+  final int? tip;
+  final int? rate;
+  final String? currency;
+  final int? createdAt;
+  final int? confirmedAt;
+  final String? preimage;
+  final bool confirmed;
+
+  const CoinosPayment({
+    this.id,
+    this.hash,
+    required this.amount,
+    this.description,
+    required this.type,
+    this.username,
+    this.address,
+    this.fee,
+    this.tip,
+    this.rate,
+    this.currency,
+    this.createdAt,
+    this.confirmedAt,
+    this.preimage,
+    required this.confirmed,
+  });
+
+  factory CoinosPayment.fromJson(Map<String, dynamic> json) {
+    return CoinosPayment(
+      id: json['id'] as String?,
+      hash: json['hash'] as String?,
+      amount: _parseToInt(json['amount']) ?? 0,
+      description: json['description'] as String?,
+      type: json['type'] as String? ?? 'lightning',
+      username: json['username'] as String?,
+      address: json['address'] as String?,
+      fee: _parseToInt(json['fee']),
+      tip: _parseToInt(json['tip']),
+      rate: _parseToInt(json['rate']),
+      currency: json['currency'] as String?,
+      createdAt: _parseToInt(json['created']),
+      confirmedAt: _parseToInt(json['confirmed']),
+      preimage: json['preimage'] as String?,
+      confirmed: json['confirmed'] != null,
+    );
+  }
+
+  static int? _parseToInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'hash': hash,
+        'amount': amount,
+        'description': description,
+        'type': type,
+        'username': username,
+        'address': address,
+        'fee': fee,
+        'tip': tip,
+        'rate': rate,
+        'currency': currency,
+        'created': createdAt,
+        'confirmed': confirmedAt,
+        'preimage': preimage,
+      };
+
+  bool get isIncoming => type == 'lightning' && amount > 0 && confirmed;
+  bool get isOutgoing => type == 'lightning' && amount < 0;
+
+  @override
+  String toString() => 'CoinosPayment(id: $id, amount: $amount, type: $type)';
+}
+
+typedef TransactionDetails = CoinosPayment;
