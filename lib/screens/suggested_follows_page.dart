@@ -128,95 +128,79 @@ class SuggestedFollowsPage extends StatelessWidget {
   Widget _buildUserTile(BuildContext context, SuggestedFollowsViewModel viewModel, UserModel user) {
     final isSelected = viewModel.selectedUsers.contains(user.npub);
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-      decoration: BoxDecoration(
-        color: context.colors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isSelected ? context.colors.primary : context.colors.border,
-          width: isSelected ? 2 : 1,
-        ),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => viewModel.toggleUserSelection(user.npub),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 30,
-                  backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
-                  backgroundColor: Colors.grey.shade700,
-                  child: user.profileImage.isEmpty
-                      ? Icon(
-                          Icons.person,
-                          size: 36,
-                          color: context.colors.textSecondary,
-                        )
-                      : null,
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              user.name.isNotEmpty ? user.name : 'Anonymous',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                color: context.colors.textPrimary,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (user.nip05.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                '• ${user.nip05}',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: context.colors.secondary,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: GestureDetector(
+        onTap: () => viewModel.toggleUserSelection(user.npub),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+          decoration: BoxDecoration(
+            color: isSelected ? context.colors.overlayLight.withValues(alpha: 0.7) : context.colors.overlayLight,
+            borderRadius: BorderRadius.circular(40),
+            border: isSelected ? Border.all(color: context.colors.accent.withValues(alpha: 0.3), width: 1) : null,
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
+                backgroundColor: Colors.grey.shade800,
+                child: user.profileImage.isEmpty
+                    ? Icon(
+                        Icons.person,
+                        size: 26,
+                        color: context.colors.textSecondary,
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        user.name.isNotEmpty ? user.name : 'Anonymous',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          color: context.colors.textPrimary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (user.nip05.isNotEmpty && user.nip05Verified) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.verified,
+                        size: 16,
+                        color: context.colors.accent,
                       ),
                     ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                width: 24,
+                height: 24,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isSelected ? context.colors.accent : Colors.transparent,
+                  border: Border.all(
+                    color: isSelected ? context.colors.accent : context.colors.border,
+                    width: 2,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isSelected ? context.colors.primary : Colors.transparent,
-                    border: Border.all(
-                      color: isSelected ? context.colors.primary : context.colors.border,
-                      width: 2,
-                    ),
-                  ),
-                  child: isSelected
-                      ? Icon(
-                          Icons.check,
-                          color: context.colors.buttonText,
-                          size: 16,
-                        )
-                      : null,
-                ),
-              ],
-            ),
+                child: isSelected
+                    ? Icon(
+                        Icons.check,
+                        color: context.colors.buttonText,
+                        size: 16,
+                      )
+                    : null,
+              ),
+            ],
           ),
         ),
       ),

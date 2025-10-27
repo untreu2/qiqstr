@@ -40,6 +40,9 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   NoteViewMode _viewMode = NoteViewMode.list;
   NoteViewMode get viewMode => _viewMode;
 
+  FeedSortMode _sortMode = FeedSortMode.latest;
+  FeedSortMode get sortMode => _sortMode;
+
   bool _isLoadingMore = false;
   bool get isLoadingMore => _isLoadingMore;
 
@@ -161,9 +164,10 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             _feedState = const LoadedState(<NoteModel>[]);
           } else {
             debugPrint(' [FeedViewModel] Setting loaded state with ${notes.length} real notes');
-            _feedState = LoadedState(notes);
+            final sortedNotes = _sortNotes(notes);
+            _feedState = LoadedState(sortedNotes);
 
-            await _loadUserProfilesForNotes(notes);
+            await _loadUserProfilesForNotes(sortedNotes);
           }
 
           _subscribeToRealTimeUpdates();
@@ -199,9 +203,10 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             _feedState = const LoadedState(<NoteModel>[]);
           } else {
             debugPrint(' [FeedViewModel] Setting loaded state with ${notes.length} hashtag notes');
-            _feedState = LoadedState(notes);
+            final sortedNotes = _sortNotes(notes);
+            _feedState = LoadedState(sortedNotes);
 
-            await _loadUserProfilesForNotes(notes);
+            await _loadUserProfilesForNotes(sortedNotes);
           }
         },
         (error) async {
@@ -244,7 +249,8 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
         (newNotes) {
           if (newNotes.isNotEmpty) {
             final allNotes = [...currentNotes, ...newNotes];
-            _feedState = LoadedState(allNotes);
+            final sortedNotes = _sortNotes(allNotes);
+            _feedState = LoadedState(sortedNotes);
 
             _loadUserProfilesForNotes(newNotes);
 
@@ -264,6 +270,36 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
       _viewMode = mode;
       safeNotifyListeners();
     }
+  }
+
+  void toggleSortMode() {
+    _sortMode = _sortMode == FeedSortMode.latest ? FeedSortMode.mostInteracted : FeedSortMode.latest;
+
+    if (_feedState is LoadedState<List<NoteModel>>) {
+      final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
+      final sortedNotes = _sortNotes(List.from(currentNotes));
+      _feedState = LoadedState(sortedNotes);
+    }
+
+    safeNotifyListeners();
+  }
+
+  List<NoteModel> _sortNotes(List<NoteModel> notes) {
+    if (_sortMode == FeedSortMode.mostInteracted) {
+      notes.sort((a, b) {
+        int scoreA = a.reactionCount + a.repostCount + a.replyCount + (a.zapAmount ~/ 1000);
+        int scoreB = b.reactionCount + b.repostCount + b.replyCount + (b.zapAmount ~/ 1000);
+
+        if (scoreA == scoreB) {
+          return b.timestamp.compareTo(a.timestamp);
+        }
+
+        return scoreB.compareTo(scoreA);
+      });
+    } else {
+      notes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    }
+    return notes;
   }
 
   void _subscribeToRealTimeUpdates() {
@@ -323,9 +359,9 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
     final allNotes = [..._pendingNotes, ...currentNotes];
 
-    allNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    final sortedNotes = _sortNotes(allNotes);
 
-    _feedState = LoadedState(allNotes);
+    _feedState = LoadedState(sortedNotes);
 
     _loadUserProfilesForNotes(_pendingNotes);
 
@@ -455,4 +491,9 @@ class ChangeViewModeCommand extends ParameterizedCommand<NoteViewMode> {
 enum NoteViewMode {
   list,
   grid,
+}
+
+enum FeedSortMode {
+  latest,
+  mostInteracted,
 }

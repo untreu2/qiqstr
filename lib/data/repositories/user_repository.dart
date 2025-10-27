@@ -10,6 +10,7 @@ import '../services/nostr_data_service.dart';
 import '../services/user_cache_service.dart';
 import '../services/user_batch_fetcher.dart';
 import '../services/isar_database_service.dart';
+import '../services/follow_cache_service.dart';
 
 class UserRepository {
   final AuthService _authService;
@@ -17,6 +18,7 @@ class UserRepository {
   final NostrDataService _nostrDataService;
   final UserCacheService _cacheService;
   final UserBatchFetcher _batchFetcher;
+  final FollowCacheService _followCacheService;
 
   final StreamController<UserModel> _currentUserController = StreamController<UserModel>.broadcast();
   final StreamController<List<UserModel>> _followingListController = StreamController<List<UserModel>>.broadcast();
@@ -27,11 +29,13 @@ class UserRepository {
     required NostrDataService nostrDataService,
     UserCacheService? cacheService,
     UserBatchFetcher? batchFetcher,
+    FollowCacheService? followCacheService,
   })  : _authService = authService,
         _validationService = validationService,
         _nostrDataService = nostrDataService,
         _cacheService = cacheService ?? UserCacheService.instance,
-        _batchFetcher = batchFetcher ?? UserBatchFetcher.instance;
+        _batchFetcher = batchFetcher ?? UserBatchFetcher.instance,
+        _followCacheService = followCacheService ?? FollowCacheService.instance;
 
   Stream<UserModel> get currentUserStream => _currentUserController.stream;
   Stream<List<UserModel>> get followingListStream => _followingListController.stream;
@@ -291,12 +295,12 @@ class UserRepository {
         debugPrint('[UserRepository] Error converting target npub to hex: $e');
       }
 
-      final followingResult = await _nostrDataService.getFollowingList(currentUserHex);
+      final cachedFollowing = await _followCacheService.getOrFetch(currentUserHex, () async {
+        final result = await _nostrDataService.getFollowingList(currentUserHex);
+        return result.isSuccess ? result.data : null;
+      });
 
-      List<String> currentFollowing = [];
-      if (followingResult.isSuccess) {
-        currentFollowing = followingResult.data ?? [];
-      }
+      List<String> currentFollowing = cachedFollowing ?? [];
 
       if (currentFollowing.contains(targetUserHex)) {
         debugPrint('[UserRepository] Already following $targetUserHex');
@@ -310,10 +314,16 @@ class UserRepository {
         return const Result.error('Cannot publish empty follow list');
       }
 
-      return await _nostrDataService.publishFollowEvent(
+      final result = await _nostrDataService.publishFollowEvent(
         followingHexList: currentFollowing,
         privateKey: privateKey,
       );
+
+      if (result.isSuccess) {
+        await _followCacheService.put(currentUserHex, currentFollowing);
+      }
+
+      return result;
     } catch (e) {
       return Result.error('Failed to follow user: $e');
     }
@@ -370,15 +380,15 @@ class UserRepository {
       }
 
       debugPrint('[UserRepository] Getting following list for: $currentUserHex');
-      final followingResult = await _nostrDataService.getFollowingList(currentUserHex);
+      final cachedFollowing = await _followCacheService.getOrFetch(currentUserHex, () async {
+        final result = await _nostrDataService.getFollowingList(currentUserHex);
+        return result.isSuccess ? result.data : null;
+      });
 
-      List<String> currentFollowing = [];
-      if (followingResult.isSuccess) {
-        currentFollowing = followingResult.data ?? [];
-        debugPrint('[UserRepository] Current following list has ${currentFollowing.length} users');
+      List<String> currentFollowing = cachedFollowing ?? [];
+      debugPrint('[UserRepository] Current following list has ${currentFollowing.length} users');
+      if (currentFollowing.isNotEmpty) {
         debugPrint('[UserRepository] Following list: ${currentFollowing.take(5).toList()}...');
-      } else {
-        debugPrint('[UserRepository] Failed to get following list: ${followingResult.error}');
       }
 
       final isCurrentlyFollowing = currentFollowing.contains(targetUserHex);
@@ -402,6 +412,10 @@ class UserRepository {
         followingHexList: currentFollowing,
         privateKey: privateKey,
       );
+
+      if (publishResult.isSuccess) {
+        await _followCacheService.put(currentUserHex, currentFollowing);
+      }
 
       debugPrint('[UserRepository] Publish result: ${publishResult.isSuccess ? 'SUCCESS' : 'FAILED - ${publishResult.error}'}');
       return publishResult;
@@ -443,12 +457,12 @@ class UserRepository {
         debugPrint('[UserRepository] Error converting target npub to hex: $e');
       }
 
-      final followingResult = await _nostrDataService.getFollowingList(currentUserHex);
+      final cachedFollowing = await _followCacheService.getOrFetch(currentUserHex, () async {
+        final result = await _nostrDataService.getFollowingList(currentUserHex);
+        return result.isSuccess ? result.data : null;
+      });
 
-      return followingResult.fold(
-        (followingList) => Result.success(followingList.contains(targetUserHex)),
-        (error) => const Result.success(false),
-      );
+      return Result.success(cachedFollowing?.contains(targetUserHex) ?? false);
     } catch (e) {
       return Result.error('Failed to check follow status: $e');
     }
@@ -485,14 +499,17 @@ class UserRepository {
         debugPrint('[UserRepository] Error converting user npub to hex: $e');
       }
 
-      final followingResult = await _nostrDataService.getFollowingList(userHex);
+      final cachedFollowing = await _followCacheService.getOrFetch(userHex, () async {
+        final result = await _nostrDataService.getFollowingList(userHex);
+        return result.isSuccess ? result.data : null;
+      });
 
-      if (followingResult.isError) {
-        debugPrint('[UserRepository] Error getting following hex list: ${followingResult.error}');
-        return Result.error(followingResult.error!);
+      if (cachedFollowing == null) {
+        debugPrint('[UserRepository] Error getting following hex list for $userHex');
+        return const Result.error('Failed to get following list');
       }
 
-      final followingHexList = followingResult.data ?? [];
+      final followingHexList = cachedFollowing;
       debugPrint('[UserRepository] Got ${followingHexList.length} following hex keys');
 
       final List<UserModel> followingUsers = [];

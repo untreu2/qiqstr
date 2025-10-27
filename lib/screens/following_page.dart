@@ -88,7 +88,7 @@ class _FollowingPageState extends State<FollowingPage> {
 
   Future<void> _loadUserProfile(String npub) async {
     if (_loadingStates[npub] == true || _loadedUsers.containsKey(npub)) {
-      return; // Already loading or loaded
+      return;
     }
 
     _loadingStates[npub] = true;
@@ -143,7 +143,7 @@ class _FollowingPageState extends State<FollowingPage> {
 
   Widget _buildHeader(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
-    
+
     return Padding(
       padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 0),
       child: Text(
@@ -171,91 +171,94 @@ class _FollowingPageState extends State<FollowingPage> {
       displayName = user.npub.startsWith('npub1') ? '${user.npub.substring(0, 16)}...' : 'Unknown User';
     }
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ProfilePage(user: loadedUser),
-          ),
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 28,
-              backgroundImage: loadedUser.profileImage.isNotEmpty ? CachedNetworkImageProvider(loadedUser.profileImage) : null,
-              backgroundColor: Colors.grey.shade800,
-              child: loadedUser.profileImage.isEmpty
-                  ? Icon(
-                      Icons.person,
-                      size: 32,
-                      color: context.colors.textSecondary,
-                    )
-                  : null,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ProfilePage(user: loadedUser),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          displayName,
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: isLoading ? context.colors.textSecondary : context.colors.textPrimary,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (loadedUser.nip05.isNotEmpty) ...[
-                        Flexible(
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: 8),
-                            child: Text(
-                              '• ${loadedUser.nip05}',
-                              style: TextStyle(fontSize: 14, color: context.colors.secondary),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  if (isLoading) ...[
-                    const SizedBox(height: 4),
+          );
+        },
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+          decoration: BoxDecoration(
+            color: context.colors.overlayLight,
+            borderRadius: BorderRadius.circular(40),
+          ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundImage: loadedUser.profileImage.isNotEmpty ? CachedNetworkImageProvider(loadedUser.profileImage) : null,
+                backgroundColor: Colors.grey.shade800,
+                child: loadedUser.profileImage.isEmpty
+                    ? Icon(
+                        Icons.person,
+                        size: 26,
+                        color: context.colors.textSecondary,
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Row(
                       children: [
-                        SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.5,
-                            color: context.colors.textSecondary,
+                        Flexible(
+                          child: Text(
+                            displayName,
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              color: isLoading ? context.colors.textSecondary : context.colors.textPrimary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Loading profile...',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: context.colors.textSecondary,
+                        if (loadedUser.nip05.isNotEmpty && loadedUser.nip05Verified) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.verified,
+                            size: 16,
+                            color: context.colors.accent,
                           ),
-                        ),
+                        ],
                       ],
                     ),
+                    if (isLoading) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: context.colors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Loading profile...',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: context.colors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -376,16 +379,9 @@ class _FollowingPageState extends State<FollowingPage> {
             SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
-                  if (index.isOdd) {
-                    return Divider(
-                      color: context.colors.border,
-                      height: 1,
-                    );
-                  }
-                  final userIndex = index ~/ 2;
-                  return _buildUserTile(context, _followingUsers[userIndex]);
+                  return _buildUserTile(context, _followingUsers[index]);
                 },
-                childCount: _followingUsers.length * 2 - 1,
+                childCount: _followingUsers.length,
               ),
             ),
           ],

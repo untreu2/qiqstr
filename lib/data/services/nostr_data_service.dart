@@ -19,12 +19,14 @@ import '../../services/time_service.dart';
 import '../../services/nip05_verification_service.dart';
 import 'auth_service.dart';
 import 'user_cache_service.dart';
+import 'follow_cache_service.dart';
 
 class NostrDataService {
   final AuthService _authService;
   final WebSocketManager _relayManager;
   final Nip05VerificationService _nip05Service = Nip05VerificationService.instance;
   final UserCacheService _userCacheService = UserCacheService.instance;
+  final FollowCacheService _followCacheService = FollowCacheService.instance;
 
   final StreamController<List<NoteModel>> _notesController = StreamController<List<NoteModel>>.broadcast();
   final StreamController<List<UserModel>> _usersController = StreamController<List<UserModel>>.broadcast();
@@ -39,10 +41,6 @@ class NostrDataService {
   final Set<String> _eventIds = {};
   final Set<String> _processedZapIds = {};
   final Set<String> _userPublishedZapIds = {};
-
-  final Map<String, List<String>> _followingCache = {};
-  final Map<String, DateTime> _followingCacheTime = {};
-  final Duration _followingCacheTTL = const Duration(minutes: 10);
 
   final Set<String> _pendingOptimisticReactionIds = {};
   final Duration _profileCacheTTL = const Duration(minutes: 30);
@@ -86,16 +84,11 @@ class NostrDataService {
       return true;
     }
 
-    final cachedFollowing = _followingCache[_currentUserNpub];
-    final cacheTime = _followingCacheTime[_currentUserNpub];
-
-    if (cachedFollowing != null && cacheTime != null) {
-      final isValid = DateTime.now().difference(cacheTime) < _followingCacheTTL;
-      if (isValid) {
-        final isFollowed = cachedFollowing.contains(authorHexPubkey);
-        debugPrint('[NostrDataService]  Author $authorHexPubkey ${isFollowed ? 'IS' : 'NOT'} in follow list (cached)');
-        return isFollowed;
-      }
+    final cachedFollowing = _followCacheService.getSync(currentUserHex ?? _currentUserNpub);
+    if (cachedFollowing != null) {
+      final isFollowed = cachedFollowing.contains(authorHexPubkey);
+      debugPrint('[NostrDataService]  Author $authorHexPubkey ${isFollowed ? 'IS' : 'NOT'} in follow list (cached)');
+      return isFollowed;
     }
 
     debugPrint('[NostrDataService] No valid follow cache - REJECTING note from: $authorHexPubkey');
@@ -107,12 +100,12 @@ class NostrDataService {
     if (_currentUserNpub.isNotEmpty) {
       try {
         debugPrint('[NostrDataService]  Refreshing follow cache in background...');
-        final result = await getFollowingList(_currentUserNpub);
-        if (result.isSuccess && result.data != null) {
-          _followingCache[_currentUserNpub] = result.data!;
-          _followingCacheTime[_currentUserNpub] = DateTime.now();
-          debugPrint('[NostrDataService] Follow cache refreshed: ${result.data!.length} following');
-        }
+        final currentUserHex = _authService.npubToHex(_currentUserNpub) ?? _currentUserNpub;
+        await _followCacheService.getOrFetch(currentUserHex, () async {
+          final result = await getFollowingList(_currentUserNpub);
+          return result.isSuccess ? result.data : null;
+        });
+        debugPrint('[NostrDataService] Follow cache refreshed via FollowCacheService');
       } catch (e) {
         debugPrint('[NostrDataService]  Error refreshing follow cache: $e');
       }
@@ -139,14 +132,12 @@ class NostrDataService {
         _currentUserNpub = currentUser.data!;
         debugPrint('[NostrDataService] Initializing follow list cache for: $_currentUserNpub');
 
-        final followingResult = await getFollowingList(_currentUserNpub);
-        if (followingResult.isSuccess && followingResult.data != null) {
-          _followingCache[_currentUserNpub] = followingResult.data!;
-          _followingCacheTime[_currentUserNpub] = DateTime.now();
-          debugPrint('[NostrDataService] Follow list cache initialized: ${followingResult.data!.length} following');
-        } else {
-          debugPrint('[NostrDataService]  No follow list found during initialization');
-        }
+        final currentUserHex = _authService.npubToHex(_currentUserNpub) ?? _currentUserNpub;
+        await _followCacheService.getOrFetch(currentUserHex, () async {
+          final result = await getFollowingList(_currentUserNpub);
+          return result.isSuccess ? result.data : null;
+        });
+        debugPrint('[NostrDataService] Follow list cache initialized via FollowCacheService');
       }
 
       _fetchInitialGlobalContent();
@@ -236,7 +227,7 @@ class NostrDataService {
           await _processKind1Event(eventData);
           break;
         case 3:
-          _processFollowEvent(eventData);
+          await _processFollowEvent(eventData);
           break;
         case 6:
           await _processRepostEvent(eventData);
@@ -870,7 +861,7 @@ class NostrDataService {
     }
   }
 
-  void _processFollowEvent(Map<String, dynamic> eventData) {
+  Future<void> _processFollowEvent(Map<String, dynamic> eventData) async {
     try {
       final pubkey = eventData['pubkey'] as String;
       final tags = eventData['tags'] as List<dynamic>;
@@ -882,11 +873,11 @@ class NostrDataService {
         }
       }
 
-      final userNpub = _authService.hexToNpub(pubkey);
-      if (userNpub != null) {
-        _followingCache[userNpub] = newFollowing;
-        _followingCacheTime[userNpub] = DateTime.now();
-        debugPrint('[NostrDataService]  Updated follow cache for $userNpub: ${newFollowing.length} following');
+      try {
+        await _followCacheService.put(pubkey, newFollowing);
+        debugPrint('[NostrDataService]  Updated follow cache for $pubkey: ${newFollowing.length} following');
+      } catch (e) {
+        debugPrint('[NostrDataService] Error updating follow cache: $e');
       }
 
       debugPrint('[NostrDataService] Follow event processed: ${newFollowing.length} following');
@@ -3051,11 +3042,14 @@ class NostrDataService {
         }
       }
 
-      _followingCache[currentUserNpub] = followingHexList;
-      _followingCacheTime[currentUserNpub] = DateTime.now();
-
-      debugPrint('[NostrDataService] Follow event broadcasted DIRECTLY and cached locally');
-      debugPrint('[NostrDataService] Updated follow cache for $currentUserNpub: ${followingHexList.length} following');
+      try {
+        final currentUserHex = _authService.npubToHex(currentUserNpub) ?? currentUserNpub;
+        await _followCacheService.put(currentUserHex, followingHexList);
+        debugPrint('[NostrDataService] Follow event broadcasted DIRECTLY and cached locally');
+        debugPrint('[NostrDataService] Updated follow cache for $currentUserNpub: ${followingHexList.length} following');
+      } catch (e) {
+        debugPrint('[NostrDataService] Error caching follow list: $e');
+      }
 
       return const Result.success(null);
     } catch (e) {
