@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
@@ -103,18 +104,32 @@ class _NotificationPageState extends State<NotificationPage> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Notifications',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: context.colors.textPrimary,
-                  letterSpacing: -0.5,
-                ),
+              Row(
+                children: [
+                  SvgPicture.asset(
+                    'assets/notification_button.svg',
+                    width: 21,
+                    height: 21,
+                    colorFilter: ColorFilter.mode(
+                      context.colors.textPrimary,
+                      BlendMode.srcIn,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Notifications',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w700,
+                      color: context.colors.textPrimary,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ],
               ),
               if (notificationCount > 0)
                 Padding(
-                  padding: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.only(top: 4, left: 33),
                   child: Text(
                     '$notificationCount notification${notificationCount != 1 ? 's' : ''}',
                     style: TextStyle(

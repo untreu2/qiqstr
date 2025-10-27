@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -114,6 +115,16 @@ class _UserSearchPageState extends State<UserSearchPage> {
       padding: const EdgeInsets.fromLTRB(16, 60, 16, 8),
       child: Row(
         children: [
+          SvgPicture.asset(
+            'assets/search_button.svg',
+            width: 20,
+            height: 20,
+            colorFilter: ColorFilter.mode(
+              context.colors.textPrimary,
+              BlendMode.srcIn,
+            ),
+          ),
+          const SizedBox(width: 12),
           Text(
             'Search users',
             style: TextStyle(

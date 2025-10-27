@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 
 import '../core/di/app_di.dart';
 import '../data/repositories/wallet_repository.dart';
 import '../models/wallet_model.dart';
 import '../theme/theme_manager.dart';
-import '../widgets/snackbar_widget.dart';
 
 class WalletPage extends StatefulWidget {
   const WalletPage({super.key});
@@ -156,14 +156,28 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
   Widget _buildHeader(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 60, 16, 8),
-      child: Text(
-        'Wallet',
-        style: TextStyle(
-          fontSize: 28,
-          fontWeight: FontWeight.w700,
-          color: context.colors.textPrimary,
-          letterSpacing: -0.5,
-        ),
+      child: Row(
+        children: [
+          SvgPicture.asset(
+            'assets/wallet_icon.svg',
+            width: 18,
+            height: 18,
+            colorFilter: ColorFilter.mode(
+              context.colors.textPrimary,
+              BlendMode.srcIn,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            'Wallet',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: context.colors.textPrimary,
+              letterSpacing: -0.5,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -277,7 +291,6 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   mainAxisAlignment: MainAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       _balance != null ? _balance!.balance.toString() : '0',
@@ -299,77 +312,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                if (_user != null) ...[
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: GestureDetector(
-                      onTap: () {
-                        final cleanUsername = _user!.username.trim().replaceAll(' ', '');
-                        Clipboard.setData(ClipboardData(text: '$cleanUsername@coinos.io'));
-                        AppSnackbar.success(
-                          context,
-                          'Lightning address copied to clipboard',
-                          duration: const Duration(seconds: 2),
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: context.colors.overlayLight,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '${_user!.username.trim().replaceAll(' ', '')}@coinos.io',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: context.colors.textSecondary,
-                                fontFamily: 'monospace',
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Icon(
-                              Icons.copy,
-                              size: 16,
-                              color: context.colors.textSecondary,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
               ],
-            ),
-          ),
-          SizedBox(
-            height: 12,
-            child: Center(
-              child: Container(
-                height: 0.5,
-                decoration: BoxDecoration(
-                  color: context.colors.textSecondary.withValues(alpha: 0.3),
-                ),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Recent transactions',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: context.colors.textPrimary,
-                ),
-              ),
             ),
           ),
           Expanded(
@@ -407,10 +350,10 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
       );
     }
 
-    final recentTransactions = _transactions!.take(4).toList();
+    final recentTransactions = _transactions!.take(6).toList();
 
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: EdgeInsets.zero,
       itemCount: recentTransactions.length,
       itemBuilder: (context, index) {
         final tx = recentTransactions[index];
@@ -433,58 +376,66 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
     final formatted = '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 0),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: context.colors.surface,
-              borderRadius: BorderRadius.circular(20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: context.colors.overlayLight,
+          borderRadius: BorderRadius.circular(40),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: context.colors.surface,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(
+                isIncoming ? Icons.arrow_downward : Icons.arrow_upward,
+                color: context.colors.textPrimary,
+                size: 16,
+              ),
             ),
-            child: Icon(
-              isIncoming ? Icons.arrow_downward : Icons.arrow_upward,
-              color: context.colors.textPrimary,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isIncoming ? 'Received' : 'Sent',
-                  style: TextStyle(
-                    color: context.colors.textPrimary,
-                    fontWeight: FontWeight.w500,
-                    fontSize: 16,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isIncoming ? 'Received' : 'Sent',
+                    style: TextStyle(
+                      color: context.colors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  formatted,
-                  style: TextStyle(
-                    color: context.colors.textSecondary,
-                    fontSize: 13,
+                  const SizedBox(height: 2),
+                  Text(
+                    formatted,
+                    style: TextStyle(
+                      color: context.colors.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            '${isIncoming ? '+' : '-'}${tx.amount.abs()} sats',
-            style: TextStyle(
-              color: context.colors.textPrimary,
-              fontWeight: FontWeight.w600,
-              fontSize: 16,
+            const SizedBox(width: 8),
+            Text(
+              '${isIncoming ? '+' : '-'}${tx.amount.abs()} sats',
+              style: TextStyle(
+                color: context.colors.textPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
