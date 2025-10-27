@@ -13,7 +13,7 @@ import 'link_preview_widget.dart';
 import 'media_preview_widget.dart';
 import 'mini_link_preview_widget.dart';
 import 'quote_widget.dart';
-import 'toast_widget.dart';
+import 'snackbar_widget.dart';
 
 enum NoteContentSize { small, big }
 
@@ -167,12 +167,12 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         await launchUrl(url);
       } else {
         if (mounted) {
-          AppToast.error(context, 'Could not launch ${link.url}');
+          AppSnackbar.error(context, 'Could not launch ${link.url}');
         }
       }
     } catch (e) {
       if (mounted) {
-        AppToast.error(context, 'Error opening link: $e');
+        AppSnackbar.error(context, 'Error opening link: $e');
       }
     }
   }
@@ -188,7 +188,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
 
       if (npubResult.isError || npubResult.data == null) {
         if (mounted) {
-          AppToast.error(context, 'Could not load hashtag feed');
+          AppSnackbar.error(context, 'Could not load hashtag feed');
         }
         return;
       }
@@ -206,7 +206,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     } catch (e) {
       debugPrint('[NoteContentWidget] Error navigating to hashtag: $e');
       if (mounted) {
-        AppToast.error(context, 'Error opening hashtag');
+        AppSnackbar.error(context, 'Error opening hashtag');
       }
     }
   }

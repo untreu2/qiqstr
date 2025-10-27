@@ -8,7 +8,7 @@ import '../screens/suggested_follows_page.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/user_repository.dart';
 import '../services/media_service.dart';
-import '../widgets/toast_widget.dart';
+import '../widgets/snackbar_widget.dart';
 import '../widgets/back_button_widget.dart';
 
 class EditNewAccountProfilePage extends StatefulWidget {
@@ -73,14 +73,14 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
           });
 
           if (mounted) {
-            AppToast.success(context, 'Profile image uploaded successfully.');
+            AppSnackbar.success(context, 'Profile image uploaded successfully.');
           }
           if (kDebugMode) {
             print('[EditNewAccountProfile] Media uploaded successfully: $mediaUrl');
           }
         } catch (uploadError) {
           if (mounted) {
-            AppToast.error(context, 'Upload failed: $uploadError');
+            AppSnackbar.error(context, 'Upload failed: $uploadError');
           }
           setState(() {
             _pictureController.text = ''; // Clear on upload failure
@@ -89,7 +89,7 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
       }
     } catch (e) {
       if (mounted) {
-        AppToast.error(context, 'Upload failed: $e');
+        AppSnackbar.error(context, 'Upload failed: $e');
       }
     } finally {
       setState(() {
@@ -123,14 +123,11 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
       result.fold(
         (success) {
           debugPrint('[EditNewAccountProfile] Profile updated successfully');
-          if (mounted) {
-            AppToast.success(context, 'Profile updated successfully!');
-          }
         },
         (error) {
           debugPrint('[EditNewAccountProfile] Profile update failed: $error');
           if (mounted) {
-            AppToast.error(context, 'Profile update failed: $error');
+            AppSnackbar.error(context, 'Profile update failed: $error');
           }
         },
       );
@@ -150,7 +147,7 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
     } catch (e) {
       debugPrint('[EditNewAccountProfile] Error saving profile: $e');
       if (mounted) {
-        AppToast.error(context, 'Failed to update profile: ${e.toString()}');
+        AppSnackbar.error(context, 'Failed to update profile: ${e.toString()}');
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -167,7 +164,7 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
 
   Widget _buildHeader(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
-    
+
     return Padding(
       padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 8),
       child: Column(

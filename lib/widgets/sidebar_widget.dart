@@ -131,7 +131,7 @@ class _UserProfileHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
-    
+
     return Padding(
       padding: EdgeInsets.fromLTRB(20, topPadding + 16, 20, 0),
       child: Column(
@@ -274,35 +274,40 @@ Widget _buildModernSidebarItem({
   Color? iconColor,
   Color? textColor,
 }) {
-  return InkWell(
+  return GestureDetector(
     onTap: onTap,
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+    child: Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+      decoration: BoxDecoration(
+        color: colors.overlayLight,
+        borderRadius: BorderRadius.circular(40),
+      ),
       child: Row(
         children: [
           if (icon != null)
             Icon(
               icon,
-              size: 24,
+              size: 22,
               color: iconColor ?? colors.textPrimary,
             )
           else if (svgAsset != null)
             SvgPicture.asset(
               svgAsset,
-              width: 24,
-              height: 24,
+              width: 22,
+              height: 22,
               colorFilter: ColorFilter.mode(
                 iconColor ?? colors.textPrimary,
                 BlendMode.srcIn,
               ),
             ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 8),
           Text(
             label,
             style: TextStyle(
               color: textColor ?? colors.textPrimary,
-              fontSize: 18,
-                  fontWeight: FontWeight.w600,
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],

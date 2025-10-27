@@ -45,13 +45,13 @@ class _UserSearchPageState extends State<UserSearchPage> {
 
     try {
       final isarService = _userRepository.isarService;
-      
+
       if (!isarService.isInitialized) {
         await isarService.waitForInitialization();
       }
-      
+
       final randomIsarProfiles = await isarService.getRandomUsersWithImages(limit: 50);
-      
+
       final userModels = randomIsarProfiles.map((isarProfile) {
         final profileData = isarProfile.toProfileData();
         return UserModel.fromCachedProfile(
@@ -59,7 +59,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
           profileData,
         );
       }).toList();
-      
+
       if (mounted) {
         setState(() {
           _randomUsers = userModels;
@@ -136,68 +136,66 @@ class _UserSearchPageState extends State<UserSearchPage> {
   }
 
   Widget _buildUserTile(BuildContext context, UserModel user) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ProfilePage(user: user),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ProfilePage(user: user),
+            ),
+          );
+        },
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+          decoration: BoxDecoration(
+            color: context.colors.overlayLight,
+            borderRadius: BorderRadius.circular(40),
           ),
-        );
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 28,
-              backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
-              backgroundColor: Colors.grey.shade800,
-              child: user.profileImage.isEmpty
-                  ? Icon(
-                      Icons.person,
-                      size: 32,
-                      color: context.colors.textSecondary,
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          user.name.length > 25 ? '${user.name.substring(0, 25)}...' : user.name,
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w600,
-                            color: context.colors.textPrimary,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (user.nip05.isNotEmpty) ...[
-                        Flexible(
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: 8),
-                            child: Text(
-                              '• ${user.nip05}',
-                              style: TextStyle(fontSize: 14, color: context.colors.secondary),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
+                backgroundColor: Colors.grey.shade800,
+                child: user.profileImage.isEmpty
+                    ? Icon(
+                        Icons.person,
+                        size: 26,
+                        color: context.colors.textSecondary,
+                      )
+                    : null,
               ),
-            ),
-          ],
+              const SizedBox(width: 16),
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        user.name.length > 25 ? '${user.name.substring(0, 25)}...' : user.name,
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          color: context.colors.textPrimary,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (user.nip05.isNotEmpty && user.nip05Verified) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.verified,
+                        size: 16,
+                        color: context.colors.accent,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -289,14 +287,10 @@ class _UserSearchPageState extends State<UserSearchPage> {
     }
 
     if (_filteredUsers.isNotEmpty) {
-      return ListView.separated(
+      return ListView.builder(
         padding: EdgeInsets.zero,
         itemCount: _filteredUsers.length,
         itemBuilder: (context, index) => _buildUserTile(context, _filteredUsers[index]),
-        separatorBuilder: (_, __) => Divider(
-          color: context.colors.border,
-          height: 1,
-        ),
       );
     }
 
@@ -329,14 +323,10 @@ class _UserSearchPageState extends State<UserSearchPage> {
       );
     }
 
-    return ListView.separated(
+    return ListView.builder(
       padding: EdgeInsets.zero,
       itemCount: _randomUsers.length,
       itemBuilder: (context, index) => _buildUserTile(context, _randomUsers[index]),
-      separatorBuilder: (_, __) => Divider(
-        color: context.colors.border,
-        height: 1,
-      ),
     );
   }
 

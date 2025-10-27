@@ -7,6 +7,7 @@ import '../core/di/app_di.dart';
 import '../data/repositories/wallet_repository.dart';
 import '../models/wallet_model.dart';
 import '../theme/theme_manager.dart';
+import '../widgets/snackbar_widget.dart';
 
 class WalletPage extends StatefulWidget {
   const WalletPage({super.key});
@@ -306,12 +307,10 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
                       onTap: () {
                         final cleanUsername = _user!.username.trim().replaceAll(' ', '');
                         Clipboard.setData(ClipboardData(text: '$cleanUsername@coinos.io'));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Lightning address copied to clipboard'),
-                            duration: const Duration(seconds: 2),
-                            backgroundColor: context.colors.overlayLight,
-                          ),
+                        AppSnackbar.success(
+                          context,
+                          'Lightning address copied to clipboard',
+                          duration: const Duration(seconds: 2),
                         );
                       },
                       child: Container(
@@ -324,12 +323,6 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
                           mainAxisAlignment: MainAxisAlignment.start,
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              Icons.flash_on,
-                              size: 16,
-                              color: context.colors.textSecondary,
-                            ),
-                            const SizedBox(width: 6),
                             Text(
                               '${_user!.username.trim().replaceAll(' ', '')}@coinos.io',
                               style: TextStyle(

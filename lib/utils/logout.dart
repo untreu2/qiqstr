@@ -4,7 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../screens/login_page.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/auth_repository.dart';
-import '../widgets/toast_widget.dart';
+import '../widgets/snackbar_widget.dart';
 
 class Logout {
   static Future<void> performLogout(BuildContext context) async {
@@ -29,7 +29,7 @@ class Logout {
         print('Error during logout: $e');
       }
       if (context.mounted) {
-        AppToast.error(context, 'Error during logout. Please try again.');
+        AppSnackbar.error(context, 'Error during logout. Please try again.');
       }
     }
   }

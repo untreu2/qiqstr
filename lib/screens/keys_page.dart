@@ -5,7 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:nostr/nostr.dart';
 import 'package:qiqstr/theme/theme_manager.dart';
 import '../widgets/back_button_widget.dart';
-import '../widgets/toast_widget.dart';
+import '../widgets/snackbar_widget.dart';
 import 'package:provider/provider.dart';
 
 class KeysPage extends StatefulWidget {
@@ -71,7 +71,7 @@ class _KeysPageState extends State<KeysPage> {
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
 
-    AppToast.success(context, '${keyType.toUpperCase()} copied to clipboard!');
+    AppSnackbar.success(context, '${keyType.toUpperCase()} copied to clipboard!');
 
     setState(() => _copiedKeyType = keyType);
 
@@ -85,7 +85,7 @@ class _KeysPageState extends State<KeysPage> {
   Widget _buildKeyDisplayCard(BuildContext context, String title, String value, String keyType, bool isCopied) {
     final displayValue = keyType == 'mnemonic' ? '•' * 48 : value;
     final isMnemonic = keyType == 'mnemonic';
-    
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       padding: const EdgeInsets.all(20.0),
@@ -170,7 +170,7 @@ class _KeysPageState extends State<KeysPage> {
 
   Widget _buildHeader(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
-    
+
     return Padding(
       padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 8),
       child: Column(
@@ -254,4 +254,3 @@ class _KeysPageState extends State<KeysPage> {
     );
   }
 }
-

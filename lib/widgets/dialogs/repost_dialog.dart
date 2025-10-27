@@ -7,7 +7,7 @@ import '../../theme/theme_manager.dart';
 import '../../core/di/app_di.dart';
 import '../../data/repositories/note_repository.dart';
 import '../../data/repositories/auth_repository.dart';
-import '../toast_widget.dart';
+import '../snackbar_widget.dart';
 
 Future<void> showRepostDialog({
   required BuildContext context,
@@ -115,7 +115,7 @@ Future<void> _performRepost(
     final currentUserResult = await authRepository.getCurrentUserNpub();
     if (currentUserResult.isError || currentUserResult.data == null) {
       if (context.mounted) {
-        AppToast.error(context, 'Please log in to repost');
+        AppSnackbar.error(context, 'Please log in to repost');
       }
       return;
     }
@@ -123,7 +123,7 @@ Future<void> _performRepost(
     final result = await noteRepository.repostNote(note.id);
     if (result.isError) {
       if (context.mounted) {
-        AppToast.error(context, 'Failed to repost: ${result.error}');
+        AppSnackbar.error(context, 'Failed to repost: ${result.error}');
       }
     } else {
       onRepostSuccess?.call();
@@ -133,7 +133,7 @@ Future<void> _performRepost(
       print('Error reposting note: $e');
     }
     if (context.mounted) {
-      AppToast.error(context, 'Failed to repost note');
+      AppSnackbar.error(context, 'Failed to repost note');
     }
   }
 }

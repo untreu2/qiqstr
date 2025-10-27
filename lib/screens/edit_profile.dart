@@ -7,7 +7,7 @@ import '../presentation/viewmodels/edit_profile_viewmodel.dart';
 import '../data/repositories/user_repository.dart';
 import 'package:file_picker/file_picker.dart';
 import '../services/media_service.dart';
-import '../widgets/toast_widget.dart';
+import '../widgets/snackbar_widget.dart';
 import '../widgets/back_button_widget.dart';
 
 class EditOwnProfilePage extends StatelessWidget {
@@ -130,14 +130,14 @@ class _EditProfileContentState extends State<_EditProfileContent> {
           }
 
           if (mounted) {
-            AppToast.success(context, '$label uploaded successfully.');
+            AppSnackbar.success(context, '$label uploaded successfully.');
           }
           if (kDebugMode) {
             print('[EditProfile] Media uploaded successfully: $mediaUrl');
           }
         } catch (uploadError) {
           if (mounted) {
-            AppToast.error(context, 'Upload failed: $uploadError');
+            AppSnackbar.error(context, 'Upload failed: $uploadError');
           }
           setState(() {
             controller.text = ''; // Clear on upload failure
@@ -146,7 +146,7 @@ class _EditProfileContentState extends State<_EditProfileContent> {
       }
     } catch (e) {
       if (mounted) {
-        AppToast.error(context, 'Upload failed: $e');
+        AppSnackbar.error(context, 'Upload failed: $e');
       }
     } finally {
       setState(() {
@@ -183,11 +183,10 @@ class _EditProfileContentState extends State<_EditProfileContent> {
       if (mounted) {
         result.fold(
           (updatedUser) {
-            AppToast.success(context, 'Profile updated successfully!');
             Navigator.pop(context);
           },
           (error) {
-            AppToast.error(context, 'Failed to update profile: $error');
+            AppSnackbar.error(context, 'Failed to update profile: $error');
           },
         );
       }
@@ -196,7 +195,7 @@ class _EditProfileContentState extends State<_EditProfileContent> {
         print('[EditProfile] Error saving profile: $e');
       }
       if (mounted) {
-        AppToast.error(context, 'Failed to update profile: ${e.toString()}');
+        AppSnackbar.error(context, 'Failed to update profile: ${e.toString()}');
       }
     }
   }
@@ -226,7 +225,7 @@ class _EditProfileContentState extends State<_EditProfileContent> {
 
   Widget _buildHeader(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
-    
+
     return Padding(
       padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 8),
       child: Column(

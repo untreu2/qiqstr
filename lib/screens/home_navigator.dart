@@ -111,8 +111,8 @@ class _HomeNavigatorState extends State<HomeNavigator> {
   Widget _buildNotificationIcon(String iconPath, bool isSelected) {
     return SvgPicture.asset(
       iconPath,
-      width: 20,
-      height: 20,
+      width: 21,
+      height: 21,
       colorFilter: ColorFilter.mode(
         isSelected ? context.colors.accent : context.colors.textPrimary,
         BlendMode.srcIn,
@@ -123,8 +123,8 @@ class _HomeNavigatorState extends State<HomeNavigator> {
   Widget _buildWalletIcon(String iconPath, bool isSelected) {
     return SvgPicture.asset(
       iconPath,
-      width: 17,
-      height: 17,
+      width: 18,
+      height: 18,
       colorFilter: ColorFilter.mode(
         isSelected ? context.colors.accent : context.colors.textPrimary,
         BlendMode.srcIn,

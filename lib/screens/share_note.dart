@@ -11,7 +11,7 @@ import 'package:nostr_nip19/nostr_nip19.dart';
 import '../models/user_model.dart';
 import '../theme/theme_manager.dart';
 import '../widgets/back_button_widget.dart';
-import '../widgets/toast_widget.dart';
+import '../widgets/snackbar_widget.dart';
 import '../widgets/quote_widget.dart';
 import '../widgets/video_preview.dart';
 
@@ -57,10 +57,21 @@ class _ShareNotePageState extends State<ShareNotePage> {
   static const String _fileTooLargeMessage = 'File is too large (max 50MB)';
   static const String _invalidFileTypeMessage = 'Invalid file type. Only images and videos are allowed';
   static const String _emptyNoteMessage = 'Please enter a note or add media';
-  
+
   static const List<String> _allowedExtensions = [
-    'jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif',
-    'mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v',
+    'jpg',
+    'jpeg',
+    'png',
+    'gif',
+    'webp',
+    'heic',
+    'heif',
+    'mp4',
+    'mov',
+    'avi',
+    'mkv',
+    'webm',
+    'm4v',
   ];
 
   static const String _uploadingText = 'Uploading...';
@@ -210,16 +221,16 @@ class _ShareNotePageState extends State<ShareNotePage> {
   Future<void> _loadUsers() async {
     try {
       debugPrint('[ShareNotePage] Loading users from Isar database...');
-      
+
       final isarService = _userRepository.isarService;
-      
+
       if (!isarService.isInitialized) {
         debugPrint('[ShareNotePage] Isar not initialized, waiting...');
         await isarService.waitForInitialization();
       }
-      
+
       final isarProfiles = await isarService.getAllUserProfiles();
-      
+
       final userModels = isarProfiles.map((isarProfile) {
         final profileData = isarProfile.toProfileData();
         return UserModel.fromCachedProfile(
@@ -227,7 +238,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
           profileData,
         );
       }).toList();
-      
+
       if (mounted) {
         setState(() {
           _allUsers = userModels;
@@ -237,7 +248,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
     } catch (e) {
       debugPrint('[ShareNotePage]  Error loading users from Isar: $e');
       _showErrorSnackBar('$_errorLoadingUsers: ${e.toString()}');
-      
+
       try {
         final cachedUsers = _dataService.cachedUsers;
         if (mounted) {
@@ -335,13 +346,13 @@ class _ShareNotePageState extends State<ShareNotePage> {
       final mediaResult = await _dataService.sendMedia(file.path!, _serverUrl);
       if (mediaResult.isSuccess && mediaResult.data != null) {
         final uploadedUrl = mediaResult.data!;
-        
+
         if (!_isValidMediaUrl(uploadedUrl)) {
           _showErrorSnackBar('${file.name}: Server returned invalid media URL (no valid extension)');
           debugPrint('[ShareNotePage] Invalid media URL from server: $uploadedUrl');
           return;
         }
-        
+
         if (mounted) {
           setState(() {
             _mediaUrls.add(uploadedUrl);
@@ -362,43 +373,43 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   bool _isFileTypeValid(PlatformFile file) {
     if (file.name.isEmpty) return false;
-    
+
     final extension = file.name.split('.').last.toLowerCase();
     return _allowedExtensions.contains(extension);
   }
 
   bool _isValidMediaUrl(String url) {
     if (url.isEmpty) return false;
-    
+
     final uri = Uri.tryParse(url);
     if (uri == null) return false;
-    
+
     final path = uri.path.toLowerCase();
     if (path.isEmpty) return false;
-    
+
     final lastDotIndex = path.lastIndexOf('.');
     if (lastDotIndex == -1 || lastDotIndex == path.length - 1) {
       return false;
     }
-    
+
     final extension = path.substring(lastDotIndex + 1);
     return _allowedExtensions.contains(extension);
   }
 
   bool _isVideoFile(String url) {
     if (url.isEmpty) return false;
-    
+
     final uri = Uri.tryParse(url);
     if (uri == null) return false;
-    
+
     final path = uri.path.toLowerCase();
     if (path.isEmpty) return false;
-    
+
     final lastDotIndex = path.lastIndexOf('.');
     if (lastDotIndex == -1 || lastDotIndex == path.length - 1) {
       return false;
     }
-    
+
     final extension = path.substring(lastDotIndex + 1);
     const videoExtensions = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'm4v'];
     return videoExtensions.contains(extension);
@@ -525,7 +536,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
     // Regex to find hashtags (#word)
     final hashtagRegex = RegExp(r'#(\w+)');
     final matches = hashtagRegex.allMatches(content);
-    
+
     return matches
         .map((match) => match.group(1)!.toLowerCase()) // NIP-24 requires lowercase
         .toSet() // Remove duplicates
@@ -715,15 +726,14 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   void _showErrorSnackBar(String message) {
     if (!mounted) return;
-    AppToast.error(context, message);
+    AppSnackbar.error(context, message);
   }
 
   void _showRetryableError(String error) {
     if (!mounted) return;
-    AppToast.show(
+    AppSnackbar.error(
       context,
       '$_errorSharingNote: $error',
-      type: ToastType.error,
       action: SnackBarAction(
         label: _retryText,
         onPressed: _shareNote,
@@ -733,14 +743,14 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   Widget _buildHeader(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
-    
+
     return Padding(
       padding: EdgeInsets.fromLTRB(16, topPadding + 16, 16, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const SizedBox.shrink(), 
+          const SizedBox.shrink(),
           _buildAppBarActions(),
         ],
       ),
@@ -883,7 +893,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
     if (widget.replyToNoteId == null || widget.replyToNoteId!.isEmpty) {
       return const SizedBox.shrink();
     }
-    
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       child: QuoteWidget(bech32: _encodeEventId(widget.replyToNoteId!)),
@@ -904,13 +914,9 @@ class _ShareNotePageState extends State<ShareNotePage> {
   Widget _buildUserAvatar() {
     return CircleAvatar(
       radius: _avatarRadius,
-      backgroundImage: _currentUser?.profileImage.isNotEmpty == true
-          ? CachedNetworkImageProvider(_currentUser!.profileImage)
-          : null,
+      backgroundImage: _currentUser?.profileImage.isNotEmpty == true ? CachedNetworkImageProvider(_currentUser!.profileImage) : null,
       backgroundColor: context.colors.surfaceTransparent,
-      child: _currentUser?.profileImage.isEmpty != false
-          ? Icon(Icons.person, color: context.colors.textPrimary, size: 20)
-          : null,
+      child: _currentUser?.profileImage.isEmpty != false ? Icon(Icons.person, color: context.colors.textPrimary, size: 20) : null,
     );
   }
 
@@ -961,7 +967,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   Widget _buildMediaItem(String url, int index) {
     final isVideo = _isVideoFile(url);
-    
+
     return Padding(
       key: ValueKey(url),
       padding: const EdgeInsets.only(right: 8.0),
@@ -1004,7 +1010,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
     );
   }
 
-
   Widget _buildRemoveMediaButton(String url) {
     return Semantics(
       label: 'Remove this media file',
@@ -1041,18 +1046,18 @@ class _ShareNotePageState extends State<ShareNotePage> {
   String _encodeEventId(String eventId) {
     try {
       final cleanId = eventId.startsWith('nostr:') ? eventId.substring(6) : eventId;
-      
+
       if (cleanId.startsWith('note1')) {
         debugPrint('[ShareNotePage] Event ID already in note1 format: $cleanId');
         return cleanId;
       }
-      
+
       if (RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(cleanId)) {
         final encoded = encodeBasicBech32(cleanId, 'note');
         debugPrint('[ShareNotePage] Encoded hex to note1: $encoded');
         return encoded;
       }
-      
+
       debugPrint('[ShareNotePage] Using event ID as is: $cleanId');
       return cleanId;
     } catch (e) {

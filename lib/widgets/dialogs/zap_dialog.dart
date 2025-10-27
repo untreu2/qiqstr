@@ -15,7 +15,7 @@ import '../../data/services/nostr_data_service.dart';
 import '../../services/nostr_service.dart';
 import '../../services/relay_service.dart';
 import '../../constants/relays.dart';
-import '../toast_widget.dart';
+import '../snackbar_widget.dart';
 
 Future<bool> _payZapWithWallet(
   BuildContext context,
@@ -30,13 +30,13 @@ Future<bool> _payZapWithWallet(
   try {
     if (!walletRepository.isConnected) {
       if (context.mounted) {
-        AppToast.warning(context, 'Please connect your wallet first');
+        AppSnackbar.warning(context, 'Please connect your wallet first');
       }
       return false;
     }
 
     if (context.mounted) {
-      AppToast.info(context, 'Processing payment...', duration: const Duration(seconds: 30));
+      AppSnackbar.info(context, 'Processing payment...', duration: const Duration(seconds: 30));
     }
 
     final privateKey = await secureStorage.read(key: 'privateKey');
@@ -146,8 +146,8 @@ Future<bool> _payZapWithWallet(
 
     // Payment successful! Show success immediately
     if (context.mounted) {
-      AppToast.hide(context);
-      AppToast.success(context, 'Zapped $sats sats to ${user.name} on their note!');
+      AppSnackbar.hide(context);
+      AppSnackbar.success(context, 'Zapped $sats sats to ${user.name} on their note!');
     }
 
     // Publish Nostr events in the background without affecting success status
@@ -156,8 +156,8 @@ Future<bool> _payZapWithWallet(
     return true;
   } catch (e) {
     if (context.mounted) {
-      AppToast.hide(context);
-      AppToast.error(context, 'Failed to zap: $e');
+      AppSnackbar.hide(context);
+      AppSnackbar.error(context, 'Failed to zap: $e');
     }
     return false;
   }
@@ -228,18 +228,18 @@ Future<void> _processZapPayment(
     await userResult.fold(
       (user) async {
         if (user.lud16.isEmpty) {
-          AppToast.error(context, 'User does not have a lightning address configured.', duration: const Duration(seconds: 1));
+          AppSnackbar.error(context, 'User does not have a lightning address configured.', duration: const Duration(seconds: 1));
           return;
         }
 
         await _payZapWithWallet(context, user, note, sats, comment);
       },
       (error) {
-        AppToast.error(context, 'Error loading user profile: $error', duration: const Duration(seconds: 1));
+        AppSnackbar.error(context, 'Error loading user profile: $error', duration: const Duration(seconds: 1));
       },
     );
   } catch (e) {
-    AppToast.error(context, 'Failed to process zap: $e', duration: const Duration(seconds: 1));
+    AppSnackbar.error(context, 'Failed to process zap: $e', duration: const Duration(seconds: 1));
   }
 }
 
@@ -305,7 +305,7 @@ Future<Map<String, dynamic>> showZapDialog({
                 onTap: () {
                   final sats = int.tryParse(amountController.text.trim());
                   if (sats == null || sats <= 0) {
-                    AppToast.error(modalContext, 'Enter a valid amount', duration: const Duration(seconds: 1));
+                    AppSnackbar.error(modalContext, 'Enter a valid amount', duration: const Duration(seconds: 1));
                     return;
                   }
 

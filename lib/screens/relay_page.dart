@@ -9,7 +9,7 @@ import '../data/repositories/auth_repository.dart';
 import '../services/nostr_service.dart';
 import '../services/relay_service.dart';
 import '../widgets/back_button_widget.dart';
-import '../widgets/toast_widget.dart';
+import '../widgets/snackbar_widget.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:async';
@@ -93,7 +93,7 @@ class _RelayPageState extends State<RelayPage> {
         _isLoading = false;
       });
       if (mounted) {
-        AppToast.error(context, 'Error loading relays: ${e.toString()}');
+        AppSnackbar.error(context, 'Error loading relays: ${e.toString()}');
       }
     }
   }
@@ -108,13 +108,13 @@ class _RelayPageState extends State<RelayPage> {
     try {
       final privateKeyResult = await _authRepository.getCurrentUserPrivateKey();
       if (privateKeyResult.isError || privateKeyResult.data == null) {
-        _showSnackBar('Private key not found. Please set up your profile first', isError: true);
+        AppSnackbar.error(context, 'Private key not found. Please set up your profile first');
         return;
       }
 
       final npubResult = await _authRepository.getCurrentUserNpub();
       if (npubResult.isError || npubResult.data == null) {
-        _showSnackBar('Please set up your profile first', isError: true);
+        AppSnackbar.error(context, 'Please set up your profile first');
         return;
       }
 
@@ -139,7 +139,7 @@ class _RelayPageState extends State<RelayPage> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('published_relay_list', jsonEncode(NostrService.eventToJson(event)));
 
-      _showSnackBar('Relay list published successfully (${relayTags.length} relays in list)');
+      AppSnackbar.success(context, 'Relay list published successfully (${relayTags.length} relays in list)');
 
       if (kDebugMode) {
         print('Relay list event published: ${event.id}');
@@ -148,7 +148,7 @@ class _RelayPageState extends State<RelayPage> {
       if (kDebugMode) {
         print('Error publishing relays: $e');
       }
-      _showSnackBar('Error publishing relay list: ${e.toString()}', isError: true);
+      AppSnackbar.error(context, 'Error publishing relay list: ${e.toString()}');
     } finally {
       if (mounted) {
         setState(() {
@@ -201,16 +201,6 @@ class _RelayPageState extends State<RelayPage> {
     }
   }
 
-  void _showSnackBar(String message, {bool isError = false}) {
-    if (mounted) {
-      if (isError) {
-        AppToast.error(context, message);
-      } else {
-        AppToast.success(context, message);
-      }
-    }
-  }
-
   Future<void> _fetchUserRelays() async {
     setState(() => _isFetchingUserRelays = true);
 
@@ -234,16 +224,16 @@ class _RelayPageState extends State<RelayPage> {
         await _useUserRelays();
 
         if (mounted) {
-          AppToast.success(context, 'Found and applied ${_userRelays.length} relays from your profile');
+          AppSnackbar.success(context, 'Found and applied ${_userRelays.length} relays from your profile');
         }
       } else {
         if (mounted) {
-          AppToast.info(context, 'No relay list found in your profile');
+          AppSnackbar.info(context, 'No relay list found in your profile');
         }
       }
     } catch (e) {
       if (mounted) {
-        AppToast.error(context, 'Error fetching user relays: ${e.toString()}');
+        AppSnackbar.error(context, 'Error fetching user relays: ${e.toString()}');
       }
     } finally {
       setState(() => _isFetchingUserRelays = false);
@@ -374,7 +364,7 @@ class _RelayPageState extends State<RelayPage> {
 
   Future<void> _useUserRelays() async {
     if (_userRelays.isEmpty) {
-      AppToast.info(context, 'No user relays available. Please fetch them first.');
+      AppSnackbar.info(context, 'No user relays available. Please fetch them first.');
       return;
     }
 
@@ -394,11 +384,11 @@ class _RelayPageState extends State<RelayPage> {
       await prefs.setBool('using_user_relays', true);
 
       if (mounted) {
-        AppToast.success(context, 'Now using your personal relays (${writeRelays.length} main relays)');
+        AppSnackbar.success(context, 'Now using your personal relays (${writeRelays.length} main relays)');
       }
     } catch (e) {
       if (mounted) {
-        AppToast.error(context, 'Error applying user relays: ${e.toString()}');
+        AppSnackbar.error(context, 'Error applying user relays: ${e.toString()}');
       }
     }
   }
@@ -408,10 +398,10 @@ class _RelayPageState extends State<RelayPage> {
       if (kDebugMode) {
         print('[RelayPage] Saving ${_relays.length} relays: $_relays');
       }
-      
+
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList('custom_main_relays', _relays);
-      
+
       if (kDebugMode) {
         final saved = prefs.getStringList('custom_main_relays');
         print('[RelayPage] Saved to SharedPreferences: $saved');
@@ -423,14 +413,14 @@ class _RelayPageState extends State<RelayPage> {
       await WebSocketManager.instance.reloadCustomRelays();
 
       if (mounted) {
-        AppToast.success(context, 'Relays saved successfully');
+        AppSnackbar.success(context, 'Relays saved successfully');
       }
     } catch (e) {
       if (kDebugMode) {
         print('[RelayPage] Error saving relays: $e');
       }
       if (mounted) {
-        AppToast.error(context, 'Error saving relays: ${e.toString()}');
+        AppSnackbar.error(context, 'Error saving relays: ${e.toString()}');
       }
     }
   }
@@ -444,19 +434,19 @@ class _RelayPageState extends State<RelayPage> {
     final url = _addRelayController.text.trim();
 
     if (url.isEmpty) {
-      AppToast.error(context, 'Please enter a relay URL');
+      AppSnackbar.error(context, 'Please enter a relay URL');
       return;
     }
 
     if (!_isValidRelayUrl(url)) {
-      AppToast.error(context, 'Please enter a valid WebSocket URL (wss:// or ws://)');
+      AppSnackbar.error(context, 'Please enter a valid WebSocket URL (wss:// or ws://)');
       return;
     }
 
     final targetList = _relays;
 
     if (targetList.contains(url)) {
-      AppToast.error(context, 'Relay already exists in this category');
+      AppSnackbar.error(context, 'Relay already exists in this category');
       return;
     }
 
@@ -472,11 +462,11 @@ class _RelayPageState extends State<RelayPage> {
 
       if (mounted) {
         Navigator.pop(context);
-        AppToast.success(context, 'Relay added to Main list');
+        AppSnackbar.success(context, 'Relay added to Main list');
       }
     } catch (e) {
       if (mounted) {
-        AppToast.error(context, 'Error adding relay: ${e.toString()}');
+        AppSnackbar.error(context, 'Error adding relay: ${e.toString()}');
       }
     } finally {
       setState(() => _isAddingRelay = false);
@@ -491,7 +481,7 @@ class _RelayPageState extends State<RelayPage> {
     await _saveRelays();
 
     if (mounted) {
-      AppToast.success(context, 'Relay removed successfully');
+      AppSnackbar.success(context, 'Relay removed successfully');
     }
   }
 
@@ -525,7 +515,7 @@ class _RelayPageState extends State<RelayPage> {
                 });
                 await _saveRelays();
                 if (mounted && context.mounted) {
-                  AppToast.success(context, 'Relays reset to defaults');
+                  AppSnackbar.success(context, 'Relays reset to defaults');
                 }
               },
               child: Container(
@@ -682,7 +672,7 @@ class _RelayPageState extends State<RelayPage> {
 
   Widget _buildHeader(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
-    
+
     return Padding(
       padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 8),
       child: Column(

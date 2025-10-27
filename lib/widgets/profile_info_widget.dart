@@ -11,7 +11,7 @@ import '../screens/edit_profile.dart';
 import '../screens/following_page.dart';
 import '../widgets/photo_viewer_widget.dart';
 import '../widgets/note_content_widget.dart';
-import '../widgets/toast_widget.dart';
+import '../widgets/snackbar_widget.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/auth_repository.dart';
 import '../data/repositories/user_repository.dart';
@@ -378,7 +378,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           });
 
           if (mounted) {
-            AppToast.error(context, 'Failed to $operationName user: $error');
+            AppSnackbar.error(context, 'Failed to $operationName user: $error');
           }
         },
       );
@@ -630,11 +630,11 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   void _showVerificationTooltip(BuildContext context, String nip05) {
     final domain = nip05.split('@').last;
-    AppToast.info(context, 'This user is verified by $domain');
+    AppSnackbar.info(context, 'This user is verified by $domain');
   }
 
   Widget _buildOptimizedBanner(BuildContext context, UserModel user, double screenWidth) {
-    final double bannerHeight = screenWidth * (5 / 10);
+    final double bannerHeight = screenWidth * (4 / 10);
 
     return GestureDetector(
       onTap: () {
