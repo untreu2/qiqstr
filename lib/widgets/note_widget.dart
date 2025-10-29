@@ -526,8 +526,10 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   Widget _buildNormalLayout(dynamic colors) {
     return RepaintBoundary(
       key: ValueKey(_widgetKey),
-      child: GestureDetector(
+      child: InkWell(
         onTap: _navigateToThreadPage,
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
         child: Container(
           color: widget.containerColor ?? colors.background,
           padding: const EdgeInsets.only(bottom: 2),
@@ -605,8 +607,10 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   Widget _buildExpandedLayout(dynamic colors) {
     return RepaintBoundary(
       key: ValueKey(_widgetKey),
-      child: GestureDetector(
+      child: InkWell(
         onTap: _navigateToThreadPage,
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
         child: Container(
           color: widget.containerColor ?? colors.background,
           padding: const EdgeInsets.only(bottom: 2),

@@ -132,7 +132,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
                   profiles: widget.profiles,
                   containerColor: null,
                   isSmallView: true,
-                  scrollController: widget.scrollController,
+                  scrollController: null,
                   notesListProvider: widget.notesListProvider,
                 ),
                 if (index < widget.notes.length - 1) const _NoteSeparator(),
@@ -142,7 +142,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         },
         childCount: widget.notes.length + (widget.hasMore || widget.isLoading ? 1 : 0),
         addAutomaticKeepAlives: true,
-        addRepaintBoundaries: false,
+        addRepaintBoundaries: true,
       ),
     );
   }

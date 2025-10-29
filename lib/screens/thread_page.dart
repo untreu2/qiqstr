@@ -119,20 +119,26 @@ class _ThreadPageState extends State<ThreadPage> {
 
     return RefreshIndicator(
       onRefresh: () => viewModel.refreshThreadCommand.execute(),
-      child: SingleChildScrollView(
-        key: PageStorageKey<String>('thread_${widget.rootNoteId}'),
+      child: CustomScrollView(
         controller: _scrollController,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildHeader(context),
-            if (displayNote != null) ...[
-              _buildContextNote(context, viewModel, displayNote),
-              _buildMainNote(context, viewModel, displayNote),
-              _buildThreadReplies(context, viewModel, displayNote),
-            ] else ...[
-              const SizedBox(height: 80),
-              Center(
+        slivers: [
+          SliverToBoxAdapter(
+            child: _buildHeader(context),
+          ),
+          if (displayNote != null) ...[
+            SliverToBoxAdapter(
+              child: _buildContextNote(context, viewModel, displayNote),
+            ),
+            SliverToBoxAdapter(
+              child: _buildMainNote(context, viewModel, displayNote),
+            ),
+            _buildThreadRepliesSliver(context, viewModel, displayNote),
+          ] else ...[
+            SliverToBoxAdapter(
+              child: const SizedBox(height: 80),
+            ),
+            SliverToBoxAdapter(
+              child: Center(
                 child: SizedBox(
                   width: 24,
                   height: 24,
@@ -142,10 +148,12 @@ class _ThreadPageState extends State<ThreadPage> {
                   ),
                 ),
               ),
-            ],
-            const SizedBox(height: 24.0),
+            ),
           ],
-        ),
+          SliverToBoxAdapter(
+            child: const SizedBox(height: 24.0),
+          ),
+        ],
       ),
     );
   }
@@ -202,8 +210,8 @@ class _ThreadPageState extends State<ThreadPage> {
     );
   }
 
-  Widget _buildThreadReplies(BuildContext context, ThreadViewModel viewModel, NoteModel displayNote) {
-    debugPrint(' [ThreadPage] Building thread replies for display note: ${displayNote.id}');
+  Widget _buildThreadRepliesSliver(BuildContext context, ThreadViewModel viewModel, NoteModel displayNote) {
+    debugPrint(' [ThreadPage] Building thread replies sliver for display note: ${displayNote.id}');
 
     return UIStateBuilder<List<NoteModel>>(
       state: viewModel.repliesState,
@@ -214,18 +222,20 @@ class _ThreadPageState extends State<ThreadPage> {
 
         if (threadStructureState.isLoading) {
           debugPrint('[ThreadPage] Thread structure still loading, showing loader');
-          return Container(
-            padding: const EdgeInsets.all(32),
-            child: Center(
-              child: Column(
-                children: [
-                  CircularProgressIndicator(color: context.colors.primary),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Building thread structure...',
-                    style: TextStyle(color: context.colors.textSecondary),
-                  ),
-                ],
+          return SliverToBoxAdapter(
+            child: Container(
+              padding: const EdgeInsets.all(32),
+              child: Center(
+                child: Column(
+                  children: [
+                    CircularProgressIndicator(color: context.colors.primary),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Building thread structure...',
+                      style: TextStyle(color: context.colors.textSecondary),
+                    ),
+                  ],
+                ),
               ),
             ),
           );
@@ -234,7 +244,7 @@ class _ThreadPageState extends State<ThreadPage> {
         final threadStructure = threadStructureState.data;
         if (threadStructure == null) {
           debugPrint('[ThreadPage] Thread structure is null, showing empty widget');
-          return const SizedBox.shrink();
+          return const SliverToBoxAdapter(child: SizedBox.shrink());
         }
 
         debugPrint(' [ThreadPage] Thread structure ready, getting children for: ${displayNote.id}');
@@ -247,14 +257,16 @@ class _ThreadPageState extends State<ThreadPage> {
 
         if (directReplies.isEmpty) {
           debugPrint(' [ThreadPage] No direct replies found, showing "No replies yet"');
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32.0),
-              child: Text(
-                'No replies yet',
-                style: TextStyle(
-                  color: context.colors.textSecondary,
-                  fontSize: 16,
+          return SliverToBoxAdapter(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32.0),
+                child: Text(
+                  'No replies yet',
+                  style: TextStyle(
+                    color: context.colors.textSecondary,
+                    fontSize: 16,
+                  ),
                 ),
               ),
             ),
@@ -265,56 +277,65 @@ class _ThreadPageState extends State<ThreadPage> {
         final hasMoreReplies = directReplies.length > _visibleRepliesCount;
 
         debugPrint(' [ThreadPage] Building ${visibleReplies.length} reply widgets out of ${directReplies.length} total');
-        return Column(
-          children: [
-            const SizedBox(height: 8.0),
-            ...visibleReplies.asMap().entries.map((entry) {
-              final index = entry.key;
-              final reply = entry.value;
-              debugPrint(' [ThreadPage] Creating widget for reply [$index]: ${reply.id}');
-              return AnimatedContainer(
-                key: ValueKey(reply.id),
-                duration: const Duration(milliseconds: 300),
-                child: _buildThreadReply(
-                  context,
-                  viewModel,
-                  reply,
-                  threadStructure,
-                  0,
-                ),
-              );
-            }),
-            if (hasMoreReplies) ...[
-              const SizedBox(height: 16.0),
-              _buildLoadMoreButton(context, directReplies.length),
-              const SizedBox(height: 8.0),
-            ],
-          ],
+        return SliverList(
+          delegate: SliverChildBuilderDelegate(
+            (context, index) {
+              if (index < visibleReplies.length) {
+                final reply = visibleReplies[index];
+                debugPrint(' [ThreadPage] Creating widget for reply [$index]: ${reply.id}');
+                return AnimatedContainer(
+                  key: ValueKey(reply.id),
+                  duration: const Duration(milliseconds: 300),
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: _buildThreadReply(
+                      context,
+                      viewModel,
+                      reply,
+                      threadStructure,
+                      0,
+                    ),
+                  ),
+                );
+              } else if (index == visibleReplies.length && hasMoreReplies) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16.0),
+                  child: _buildLoadMoreButton(context, directReplies.length),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+            childCount: visibleReplies.length + (hasMoreReplies ? 1 : 0),
+          ),
         );
       },
-      loading: () => Container(
-        padding: const EdgeInsets.all(32),
-        child: Center(
-          child: Column(
-            children: [
-              CircularProgressIndicator(color: context.colors.primary),
-              const SizedBox(height: 16),
-              Text(
-                'Loading replies...',
-                style: TextStyle(color: context.colors.textSecondary),
-              ),
-            ],
+      loading: () => SliverToBoxAdapter(
+        child: Container(
+          padding: const EdgeInsets.all(32),
+          child: Center(
+            child: Column(
+              children: [
+                CircularProgressIndicator(color: context.colors.primary),
+                const SizedBox(height: 16),
+                Text(
+                  'Loading replies...',
+                  style: TextStyle(color: context.colors.textSecondary),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-      empty: (message) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
-          child: Text(
-            'No replies yet',
-            style: TextStyle(
-              color: context.colors.textSecondary,
-              fontSize: 16,
+      empty: (message) => SliverToBoxAdapter(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Text(
+              'No replies yet',
+              style: TextStyle(
+                color: context.colors.textSecondary,
+                fontSize: 16,
+              ),
             ),
           ),
         ),
