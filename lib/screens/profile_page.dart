@@ -146,8 +146,9 @@ class _ProfilePageState extends State<ProfilePage> {
               currentUserNpub: _currentUserNpub ?? '',
               notesNotifier: _notesNotifier,
               profiles: _profiles,
-              isLoading: false,
-              hasMore: false,
+              isLoading: _profileViewModel.isLoadingMore,
+              canLoadMore: _profileViewModel.canLoadMoreProfileNotes,
+              onLoadMore: _profileViewModel.loadMoreProfileNotes,
               scrollController: _scrollController,
             );
           },

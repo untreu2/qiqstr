@@ -41,17 +41,25 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
   String _currentProfileNpub = '';
   String get currentProfileNpub => _currentProfileNpub;
 
+  int _currentLimit = 200;
+  int get currentLimit => _currentLimit;
+
+  bool _isLoadingMore = false;
+  bool get isLoadingMore => _isLoadingMore;
+
   LoadProfileCommand? _loadProfileCommand;
   UpdateProfileCommand? _updateProfileCommand;
   ToggleFollowCommand? _toggleFollowCommand;
   LoadFollowingListCommand? _loadFollowingListCommand;
   LoadProfileNotesCommand? _loadProfileNotesCommand;
+  LoadMoreProfileNotesCommand? _loadMoreProfileNotesCommand;
 
   LoadProfileCommand get loadProfileCommand => _loadProfileCommand ??= LoadProfileCommand(this);
   UpdateProfileCommand get updateProfileCommand => _updateProfileCommand ??= UpdateProfileCommand(this);
   ToggleFollowCommand get toggleFollowCommand => _toggleFollowCommand ??= ToggleFollowCommand(this);
   LoadFollowingListCommand get loadFollowingListCommand => _loadFollowingListCommand ??= LoadFollowingListCommand(this);
   LoadProfileNotesCommand get loadProfileNotesCommand => _loadProfileNotesCommand ??= LoadProfileNotesCommand(this);
+  LoadMoreProfileNotesCommand get loadMoreProfileNotesCommand => _loadMoreProfileNotesCommand ??= LoadMoreProfileNotesCommand(this);
 
   @override
   void initialize() {
@@ -62,6 +70,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
     registerCommand('toggleFollow', toggleFollowCommand);
     registerCommand('loadFollowingList', loadFollowingListCommand);
     registerCommand('loadProfileNotes', loadProfileNotesCommand);
+    registerCommand('loadMoreProfileNotes', loadMoreProfileNotesCommand);
 
     _subscribeToUserUpdates();
   }
@@ -189,7 +198,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
       try {
         final result = await _noteRepository.getProfileNotes(
           authorNpub: userNpub,
-          limit: 50,
+          limit: _currentLimit,
         );
 
         result.fold(
@@ -235,6 +244,56 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
     });
   }
 
+  Future<void> loadMoreProfileNotes() async {
+    if (_isLoadingMore || _profileNotesState is! LoadedState<List<NoteModel>>) return;
+
+    _isLoadingMore = true;
+    safeNotifyListeners();
+
+    try {
+      _currentLimit += 50;
+      debugPrint('[ProfileViewModel] Loading more profile notes with new limit: $_currentLimit');
+
+      final result = await _noteRepository.getProfileNotes(
+        authorNpub: _currentProfileNpub,
+        limit: _currentLimit,
+      );
+
+      result.fold(
+        (notes) {
+          if (notes.isNotEmpty) {
+            final filteredNotes = notes.where((note) {
+              if (!note.isReply && !note.isRepost) {
+                return true;
+              }
+
+              if (note.isRepost) {
+                return true;
+              }
+
+              if (note.isReply && !note.isRepost) {
+                return false;
+              }
+
+              return true;
+            }).toList();
+
+            _profileNotesState = filteredNotes.isEmpty ? const EmptyState('No notes from this user yet') : LoadedState(filteredNotes);
+            safeNotifyListeners();
+          }
+        },
+        (error) {
+          debugPrint('[ProfileViewModel] Error loading more profile notes: $error');
+          _profileNotesState = ErrorState('Failed to load more notes: $error');
+          safeNotifyListeners();
+        },
+      );
+    } finally {
+      _isLoadingMore = false;
+      safeNotifyListeners();
+    }
+  }
+
   Future<void> _checkIfCurrentUser() async {
     try {
       final result = await _authRepository.getCurrentUserNpub();
@@ -276,6 +335,12 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
   String? get profileErrorMessage => _profileState.error;
 
   String? get followingListErrorMessage => _followingListState.error;
+
+  List<NoteModel> get currentProfileNotes {
+    return _profileNotesState.data ?? [];
+  }
+
+  bool get canLoadMoreProfileNotes => _profileNotesState.isLoaded && !_isLoadingMore;
 
   @override
   void onRetry() {
@@ -340,4 +405,13 @@ class LoadProfileNotesCommand extends ParameterizedCommand<String> {
 
   @override
   Future<void> executeImpl(String npub) => _viewModel.loadProfileNotes(npub);
+}
+
+class LoadMoreProfileNotesCommand extends ParameterlessCommand {
+  final ProfileViewModel _viewModel;
+
+  LoadMoreProfileNotesCommand(this._viewModel);
+
+  @override
+  Future<void> executeImpl() => _viewModel.loadMoreProfileNotes();
 }

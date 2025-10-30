@@ -11,7 +11,7 @@ class NoteListWidget extends StatefulWidget {
   final ValueNotifier<List<NoteModel>> notesNotifier;
   final Map<String, UserModel> profiles;
   final bool isLoading;
-  final bool hasMore;
+  final bool canLoadMore;
   final VoidCallback? onLoadMore;
   final String? errorMessage;
   final VoidCallback? onRetry;
@@ -25,7 +25,7 @@ class NoteListWidget extends StatefulWidget {
     required this.notesNotifier,
     required this.profiles,
     this.isLoading = false,
-    this.hasMore = false,
+    this.canLoadMore = false,
     this.onLoadMore,
     this.errorMessage,
     this.onRetry,
@@ -106,7 +106,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       delegate: SliverChildBuilderDelegate(
         (context, index) {
           if (index == widget.notes.length) {
-            if (widget.hasMore && widget.onLoadMore != null) {
+            if (widget.canLoadMore && widget.onLoadMore != null) {
               return _LoadMoreButton(onPressed: widget.onLoadMore!);
             } else if (widget.isLoading) {
               return const _LoadMoreIndicator();
@@ -140,7 +140,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
             ),
           );
         },
-        childCount: widget.notes.length + (widget.hasMore || widget.isLoading ? 1 : 0),
+        childCount: widget.notes.length + (widget.canLoadMore || widget.isLoading ? 1 : 0),
         addAutomaticKeepAlives: true,
         addRepaintBoundaries: true,
       ),

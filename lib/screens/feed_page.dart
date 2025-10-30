@@ -411,8 +411,8 @@ class FeedPageState extends State<FeedPage> {
                               notesNotifier: _notesNotifier,
                               profiles: _profiles,
                               isLoading: viewModel.isLoadingMore,
-                              hasMore: viewModel.canLoadMore,
-                              onLoadMore: notes.length >= 20 ? viewModel.loadMoreNotes : null,
+                              canLoadMore: viewModel.canLoadMore,
+                              onLoadMore: viewModel.loadMoreNotes,
                               scrollController: _scrollController,
                             );
                           },

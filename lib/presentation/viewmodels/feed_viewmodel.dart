@@ -59,6 +59,9 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   final List<NoteModel> _pendingNotes = [];
   int get pendingNotesCount => _pendingNotes.length;
 
+  int _currentLimit = 200;
+  int get currentLimit => _currentLimit;
+
   RefreshFeedCommand? _refreshFeedCommand;
   LoadMoreFeedCommand? _loadMoreFeedCommand;
   ChangeViewModeCommand? _changeViewModeCommand;
@@ -148,22 +151,22 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
       _feedState = const LoadingState();
       safeNotifyListeners();
 
-      debugPrint(' [FeedViewModel] Requesting feed notes from repository...');
+      debugPrint('[FeedViewModel] Requesting feed notes from repository with limit: $_currentLimit');
 
       final result = await _noteRepository.getFeedNotesFromFollowList(
         currentUserNpub: _currentUserNpub,
-        limit: 50,
+        limit: _currentLimit,
       );
 
       await result.fold(
         (notes) async {
-          debugPrint(' [FeedViewModel] Repository returned ${notes.length} notes');
+          debugPrint('[FeedViewModel] Repository returned ${notes.length} notes');
 
           if (notes.isEmpty) {
             debugPrint('[FeedViewModel] Empty feed - user may not be following anyone');
             _feedState = const LoadedState(<NoteModel>[]);
           } else {
-            debugPrint(' [FeedViewModel] Setting loaded state with ${notes.length} real notes');
+            debugPrint('[FeedViewModel] Setting loaded state with ${notes.length} real notes');
             final sortedNotes = _sortNotes(notes);
             _feedState = LoadedState(sortedNotes);
 
@@ -173,7 +176,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           _subscribeToRealTimeUpdates();
         },
         (error) async {
-          debugPrint(' [FeedViewModel] Error loading feed: $error');
+          debugPrint('[FeedViewModel] Error loading feed: $error');
           _feedState = ErrorState(error);
         },
       );
@@ -187,22 +190,22 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
       _feedState = const LoadingState();
       safeNotifyListeners();
 
-      debugPrint(' [FeedViewModel] Requesting hashtag notes from repository for: #$_hashtag');
+      debugPrint('[FeedViewModel] Requesting hashtag notes from repository for: #$_hashtag with limit: $_currentLimit');
 
       final result = await _noteRepository.getHashtagNotes(
         hashtag: _hashtag!,
-        limit: 50,
+        limit: _currentLimit,
       );
 
       await result.fold(
         (notes) async {
-          debugPrint(' [FeedViewModel] Repository returned ${notes.length} notes for #$_hashtag');
+          debugPrint('[FeedViewModel] Repository returned ${notes.length} notes for #$_hashtag');
 
           if (notes.isEmpty) {
             debugPrint('[FeedViewModel] No notes found for hashtag: #$_hashtag');
             _feedState = const LoadedState(<NoteModel>[]);
           } else {
-            debugPrint(' [FeedViewModel] Setting loaded state with ${notes.length} hashtag notes');
+            debugPrint('[FeedViewModel] Setting loaded state with ${notes.length} hashtag notes');
             final sortedNotes = _sortNotes(notes);
             _feedState = LoadedState(sortedNotes);
 
@@ -210,7 +213,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           }
         },
         (error) async {
-          debugPrint(' [FeedViewModel] Error loading hashtag feed: $error');
+          debugPrint('[FeedViewModel] Error loading hashtag feed: $error');
           _feedState = ErrorState(error);
         },
       );
@@ -230,30 +233,25 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     safeNotifyListeners();
 
     try {
-      final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
-      final oldestNote = currentNotes.isNotEmpty ? currentNotes.last : null;
+      _currentLimit += 50;
+      debugPrint('[FeedViewModel] Loading more notes with new limit: $_currentLimit');
 
       final result = isHashtagMode
           ? await _noteRepository.getHashtagNotes(
               hashtag: _hashtag!,
-              limit: 25,
-              until: oldestNote?.timestamp,
+              limit: _currentLimit,
             )
           : await _noteRepository.getFeedNotesFromFollowList(
               currentUserNpub: _currentUserNpub,
-              limit: 25,
-              until: oldestNote?.timestamp,
+              limit: _currentLimit,
             );
 
       result.fold(
-        (newNotes) {
-          if (newNotes.isNotEmpty) {
-            final allNotes = [...currentNotes, ...newNotes];
-            final sortedNotes = _sortNotes(allNotes);
+        (notes) {
+          if (notes.isNotEmpty) {
+            final sortedNotes = _sortNotes(notes);
             _feedState = LoadedState(sortedNotes);
-
-            _loadUserProfilesForNotes(newNotes);
-
+            _loadUserProfilesForNotes(notes);
             safeNotifyListeners();
           }
         },
@@ -312,25 +310,25 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
     addSubscription(
       _noteRepository.realTimeNotesStream.listen((notes) {
-        debugPrint(' [FeedViewModel] Received stream update: ${notes.length} notes');
+        debugPrint('[FeedViewModel] Received stream update: ${notes.length} notes');
 
         if (!isDisposed && _feedState.isLoaded) {
           if (notes.isNotEmpty) {
             final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
 
             if (currentNotes.isEmpty) {
-              debugPrint(' [FeedViewModel] Feed is empty, adding ${notes.length} new notes directly');
+              debugPrint('[FeedViewModel] Feed is empty, adding ${notes.length} new notes directly');
               _feedState = LoadedState(notes);
               _loadUserProfilesForNotes(notes);
               safeNotifyListeners();
             } else {
-              final currentNoteIds = currentNotes.map((n) => n.id).toSet();
-              final newNotes = notes.where((note) => !currentNoteIds.contains(note.id)).toList();
+              final latestCurrentNote = currentNotes.first;
+              final newerNotes = notes.where((note) => note.timestamp.isAfter(latestCurrentNote.timestamp)).toList();
 
-              if (newNotes.isNotEmpty) {
-                debugPrint(' [FeedViewModel] Adding ${newNotes.length} new notes to pending list');
+              if (newerNotes.isNotEmpty) {
+                debugPrint('[FeedViewModel] Adding ${newerNotes.length} newer notes to pending list');
 
-                for (final note in newNotes) {
+                for (final note in newerNotes) {
                   if (!_pendingNotes.any((n) => n.id == note.id)) {
                     _pendingNotes.add(note);
                   }
@@ -344,7 +342,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             debugPrint('[FeedViewModel] Ignoring empty stream update to preserve loaded state');
           }
         } else {
-          debugPrint(' [FeedViewModel] Not updating - disposed: $isDisposed, feedState: ${_feedState.runtimeType}');
+          debugPrint('[FeedViewModel] Not updating - disposed: $isDisposed, feedState: ${_feedState.runtimeType}');
         }
       }),
     );
@@ -374,7 +372,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     return _feedState.data ?? [];
   }
 
-  bool get canLoadMore => _feedState.isLoaded && !_isLoadingMore && currentNotes.isNotEmpty;
+  bool get canLoadMore => _feedState.isLoaded && !_isLoadingMore;
 
   bool get isEmpty => _feedState.isEmpty;
 
