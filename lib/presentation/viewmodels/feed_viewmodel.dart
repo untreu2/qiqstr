@@ -59,7 +59,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   final List<NoteModel> _pendingNotes = [];
   int get pendingNotesCount => _pendingNotes.length;
 
-  int _currentLimit = 200;
+  int _currentLimit = 50;
   int get currentLimit => _currentLimit;
 
   RefreshFeedCommand? _refreshFeedCommand;

@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:qiqstr/models/note_model.dart';
@@ -11,6 +13,8 @@ import '../core/di/app_di.dart';
 import '../presentation/providers/viewmodel_provider.dart';
 import '../presentation/viewmodels/thread_viewmodel.dart';
 import '../data/repositories/auth_repository.dart';
+import '../data/repositories/user_repository.dart';
+import '../screens/share_note.dart';
 
 class ThreadPage extends StatefulWidget {
   final String rootNoteId;
@@ -32,10 +36,17 @@ class _ThreadPageState extends State<ThreadPage> {
   late ValueNotifier<List<NoteModel>> _notesNotifier;
   final Map<String, UserModel> _profiles = {};
   late final AuthRepository _authRepository;
+  late final UserRepository _userRepository;
   String _currentUserNpub = '';
+  UserModel? _currentUser;
 
-  int _visibleRepliesCount = 10;
-  static const int _repliesPerPage = 10;
+  int _visibleRepliesCount = 5;
+  static const int _repliesPerPage = 5;
+  static const int _maxInitialReplies = 20;
+  static const int _maxNestedReplies = 3;
+  
+  Timer? _refreshDebounceTimer;
+  bool _isRefreshing = false;
 
   @override
   void initState() {
@@ -43,6 +54,7 @@ class _ThreadPageState extends State<ThreadPage> {
     _scrollController = ScrollController();
     _notesNotifier = ValueNotifier<List<NoteModel>>([]);
     _authRepository = AppDI.get<AuthRepository>();
+    _userRepository = AppDI.get<UserRepository>();
     _loadCurrentUser();
 
     if (widget.focusedNoteId != null) {
@@ -59,6 +71,14 @@ class _ThreadPageState extends State<ThreadPage> {
         setState(() {
           _currentUserNpub = result.data!;
         });
+        
+        
+        final userResult = await _userRepository.getCurrentUser();
+        if (userResult.isSuccess && userResult.data != null) {
+          setState(() {
+            _currentUser = userResult.data!;
+          });
+        }
       }
     } catch (e) {
       debugPrint('[ThreadPage] Error loading current user: $e');
@@ -67,6 +87,7 @@ class _ThreadPageState extends State<ThreadPage> {
 
   @override
   void dispose() {
+    _refreshDebounceTimer?.cancel();
     _scrollController.dispose();
     _notesNotifier.dispose();
     super.dispose();
@@ -118,7 +139,7 @@ class _ThreadPageState extends State<ThreadPage> {
         : rootNote;
 
     return RefreshIndicator(
-      onRefresh: () => viewModel.refreshThreadCommand.execute(),
+      onRefresh: () => _debouncedRefresh(viewModel),
       child: CustomScrollView(
         controller: _scrollController,
         slivers: [
@@ -131,6 +152,9 @@ class _ThreadPageState extends State<ThreadPage> {
             ),
             SliverToBoxAdapter(
               child: _buildMainNote(context, viewModel, displayNote),
+            ),
+            SliverToBoxAdapter(
+              child: _buildReplyInputSection(context),
             ),
             _buildThreadRepliesSliver(context, viewModel, displayNote),
           ] else ...[
@@ -210,6 +234,80 @@ class _ThreadPageState extends State<ThreadPage> {
     );
   }
 
+  Widget _buildReplyInputSection(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: GestureDetector(
+        onTap: _handleReplyInputTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: context.colors.background,
+            borderRadius: BorderRadius.circular(40),
+            border: Border.all(
+              color: context.colors.primary.withValues(alpha: 0.2),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: context.colors.primary.withValues(alpha: 0.1),
+                ),
+                child: ClipOval(
+                  child: _currentUser?.profileImage.isNotEmpty == true
+                      ? Image.network(
+                          _currentUser!.profileImage,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Icon(
+                              Icons.person,
+                              size: 24,
+                              color: context.colors.primary,
+                            );
+                          },
+                        )
+                      : Icon(
+                          Icons.person,
+                          size: 24,
+                          color: context.colors.primary,
+                        ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              
+              Expanded(
+                child: Text(
+                  'Add a reply...',
+                  style: TextStyle(
+                    color: context.colors.textSecondary,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _handleReplyInputTap() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ShareNotePage(
+          replyToNoteId: widget.rootNoteId,
+        ),
+      ),
+    );
+  }
+
   Widget _buildThreadRepliesSliver(BuildContext context, ThreadViewModel viewModel, NoteModel displayNote) {
     debugPrint(' [ThreadPage] Building thread replies sliver for display note: ${displayNote.id}');
 
@@ -273,8 +371,10 @@ class _ThreadPageState extends State<ThreadPage> {
           );
         }
 
-        final visibleReplies = directReplies.take(_visibleRepliesCount).toList();
-        final hasMoreReplies = directReplies.length > _visibleRepliesCount;
+        
+        final maxVisible = math.min(_visibleRepliesCount, _maxInitialReplies);
+        final visibleReplies = directReplies.take(maxVisible).toList();
+        final hasMoreReplies = directReplies.length > maxVisible;
 
         debugPrint(' [ThreadPage] Building ${visibleReplies.length} reply widgets out of ${directReplies.length} total');
         return SliverList(
@@ -283,17 +383,20 @@ class _ThreadPageState extends State<ThreadPage> {
               if (index < visibleReplies.length) {
                 final reply = visibleReplies[index];
                 debugPrint(' [ThreadPage] Creating widget for reply [$index]: ${reply.id}');
-                return AnimatedContainer(
-                  key: ValueKey(reply.id),
-                  duration: const Duration(milliseconds: 300),
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 8.0),
-                    child: _buildThreadReply(
-                      context,
-                      viewModel,
-                      reply,
-                      threadStructure,
-                      0,
+                return RepaintBoundary(
+                  key: ValueKey('reply_list_${reply.id}'),
+                  child: AnimatedContainer(
+                    key: ValueKey(reply.id),
+                    duration: const Duration(milliseconds: 200),
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: _buildThreadReply(
+                        context,
+                        viewModel,
+                        reply,
+                        threadStructure,
+                        0,
+                      ),
                     ),
                   ),
                 );
@@ -306,6 +409,8 @@ class _ThreadPageState extends State<ThreadPage> {
               return const SizedBox.shrink();
             },
             childCount: visibleReplies.length + (hasMoreReplies ? 1 : 0),
+            addAutomaticKeepAlives: false,
+            addRepaintBoundaries: false,
           ),
         );
       },
@@ -350,7 +455,10 @@ class _ThreadPageState extends State<ThreadPage> {
         child: OutlinedButton(
           onPressed: () {
             setState(() {
-              _visibleRepliesCount += _repliesPerPage;
+              _visibleRepliesCount = math.min(
+                _visibleRepliesCount + _repliesPerPage,
+                totalReplies,
+              );
             });
           },
           style: OutlinedButton.styleFrom(
@@ -362,7 +470,7 @@ class _ThreadPageState extends State<ThreadPage> {
             ),
           ),
           child: Text(
-            'Load More',
+            'Load more (${totalReplies - _visibleRepliesCount} remaining)',
             style: TextStyle(
               color: context.colors.primary,
               fontSize: 14,
@@ -391,6 +499,7 @@ class _ThreadPageState extends State<ThreadPage> {
     final hasNestedReplies = nestedReplies.isNotEmpty;
 
     return RepaintBoundary(
+      key: ValueKey('reply_${reply.id}_$depth'),
       child: Container(
         margin: EdgeInsets.only(
           bottom: depth == 0 ? 12.0 : 6.0,
@@ -417,7 +526,7 @@ class _ThreadPageState extends State<ThreadPage> {
                   const SizedBox(height: 4),
                   if (depth < maxDepth && hasNestedReplies) ...[
                     const SizedBox(height: 4),
-                    ...nestedReplies.take(5).map(
+                    ...nestedReplies.take(_maxNestedReplies).map(
                           (nestedReply) => _buildThreadReply(
                             context,
                             viewModel,
@@ -426,7 +535,7 @@ class _ThreadPageState extends State<ThreadPage> {
                             depth + 1,
                           ),
                         ),
-                    if (nestedReplies.length > 5)
+                    if (nestedReplies.length > _maxNestedReplies)
                       Container(
                         margin: EdgeInsets.only(
                           left: (depth + 1) * baseIndentWidth + 12,
@@ -434,7 +543,7 @@ class _ThreadPageState extends State<ThreadPage> {
                           bottom: 8,
                         ),
                         child: Text(
-                          '${nestedReplies.length - 5} more replies...',
+                          '${nestedReplies.length - _maxNestedReplies} more replies...',
                           style: TextStyle(
                             color: context.colors.textSecondary,
                             fontSize: 12,
@@ -476,14 +585,17 @@ class _ThreadPageState extends State<ThreadPage> {
   ) {
     _profiles.addAll(viewModel.userProfiles);
 
-    return NoteWidget(
-      note: note,
-      currentUserNpub: _currentUserNpub,
-      notesNotifier: _notesNotifier,
-      profiles: _profiles,
-      containerColor: Colors.transparent,
-      isSmallView: depth > 1,
-      scrollController: _scrollController,
+    return RepaintBoundary(
+      key: ValueKey('note_${note.id}_$depth'),
+      child: NoteWidget(
+        note: note,
+        currentUserNpub: _currentUserNpub,
+        notesNotifier: _notesNotifier,
+        profiles: _profiles,
+        containerColor: Colors.transparent,
+        isSmallView: depth > 1,
+        scrollController: _scrollController,
+      ),
     );
   }
 
@@ -495,14 +607,17 @@ class _ThreadPageState extends State<ThreadPage> {
     final viewModel = context.read<ThreadViewModel>();
     _profiles.addAll(viewModel.userProfiles);
 
-    return NoteWidget(
-      note: note,
-      currentUserNpub: _currentUserNpub,
-      notesNotifier: _notesNotifier,
-      profiles: _profiles,
-      containerColor: context.colors.background,
-      isSmallView: isSmallView,
-      scrollController: _scrollController,
+    return RepaintBoundary(
+      key: ValueKey('simple_note_${note.id}'),
+      child: NoteWidget(
+        note: note,
+        currentUserNpub: _currentUserNpub,
+        notesNotifier: _notesNotifier,
+        profiles: _profiles,
+        containerColor: context.colors.background,
+        isSmallView: isSmallView,
+        scrollController: _scrollController,
+      ),
     );
   }
 
@@ -633,5 +748,28 @@ class _ThreadPageState extends State<ThreadPage> {
         _attemptScrollToFocusedNote(retries: retries - 1);
       });
     }
+  }
+
+  Future<void> _debouncedRefresh(ThreadViewModel viewModel) async {
+    if (_isRefreshing) return;
+    
+    _refreshDebounceTimer?.cancel();
+    _refreshDebounceTimer = Timer(const Duration(milliseconds: 300), () async {
+      if (!mounted) return;
+      
+      setState(() {
+        _isRefreshing = true;
+      });
+      
+      try {
+        await viewModel.refreshThreadCommand.execute();
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isRefreshing = false;
+          });
+        }
+      }
+    });
   }
 }

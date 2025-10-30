@@ -41,7 +41,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
   String _currentProfileNpub = '';
   String get currentProfileNpub => _currentProfileNpub;
 
-  int _currentLimit = 200;
+  int _currentLimit = 50;
   int get currentLimit => _currentLimit;
 
   bool _isLoadingMore = false;
