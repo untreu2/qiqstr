@@ -452,7 +452,7 @@ class FeedPageState extends State<FeedPage> {
                   ),
                 ),
               ),
-              if (viewModel.pendingNotesCount > 0 && widget.hashtag == null)
+              if (viewModel.pendingNotesCount > 0 && widget.hashtag == null && viewModel.sortMode != FeedSortMode.mostInteracted)
                 Positioned(
                   bottom: 104,
                   left: 0,
