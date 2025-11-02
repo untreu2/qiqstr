@@ -14,6 +14,7 @@ import '../widgets/note_content_widget.dart';
 import '../widgets/quote_widget.dart';
 import '../core/di/app_di.dart';
 import '../data/services/nostr_data_service.dart';
+import '../data/services/auth_service.dart';
 import '../screens/profile_page.dart';
 import '../screens/thread_page.dart';
 
@@ -25,6 +26,41 @@ class NotificationPage extends StatefulWidget {
 }
 
 class _NotificationPageState extends State<NotificationPage> {
+  String? _currentUserNpub;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrentUser();
+  }
+
+  Future<void> _loadCurrentUser() async {
+    final authService = AuthService.instance;
+    final result = await authService.getCurrentUserNpub();
+    if (result.isSuccess && result.data != null) {
+      setState(() {
+        _currentUserNpub = result.data;
+      });
+    }
+  }
+
+  bool _isSelfNotification(dynamic item) {
+    if (_currentUserNpub == null) return false;
+
+    if (item is NotificationGroup) {
+      // Check if any notification in the group is from the current user
+      return item.notifications.any((notification) => notification.author == _currentUserNpub);
+    } else if (item is NotificationModel) {
+      return item.author == _currentUserNpub;
+    }
+
+    return false;
+  }
+
+  List<dynamic> _filterSelfNotifications(List<dynamic> notifications) {
+    return notifications.where((item) => !_isSelfNotification(item)).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return ViewModelProvider.notification(
@@ -32,7 +68,7 @@ class _NotificationPageState extends State<NotificationPage> {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (viewModel.isInitialized && !viewModel.isNotificationsLoading) {
             viewModel.loadNotificationsCommand.execute();
-            
+
             Future.delayed(const Duration(milliseconds: 500), () {
               if (context.mounted) {
                 viewModel.markAllAsReadCommand.execute();
@@ -48,12 +84,15 @@ class _NotificationPageState extends State<NotificationPage> {
               return UIStateBuilder<List<dynamic>>(
                 state: vm.notificationsState,
                 builder: (context, notifications) {
+                  // Filter out self-notifications
+                  final filteredNotifications = _filterSelfNotifications(notifications);
+
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildHeader(context, vm, notifications.length),
+                      _buildHeader(context, vm, filteredNotifications.length),
                       Expanded(
-                        child: notifications.isEmpty
+                        child: filteredNotifications.isEmpty
                             ? _buildEmptyState(context)
                             : RefreshIndicator(
                                 onRefresh: () => vm.refreshNotificationsCommand.execute(),
@@ -61,9 +100,9 @@ class _NotificationPageState extends State<NotificationPage> {
                                 child: ListView.separated(
                                   padding: const EdgeInsets.only(bottom: 80),
                                   physics: const AlwaysScrollableScrollPhysics(),
-                                  itemCount: notifications.length,
+                                  itemCount: filteredNotifications.length,
                                   itemBuilder: (context, index) => _buildNotificationTile(
-                                    notifications[index],
+                                    filteredNotifications[index],
                                     vm,
                                     index,
                                   ),
@@ -172,60 +211,60 @@ class _NotificationPageState extends State<NotificationPage> {
                         child: image.isEmpty ? Icon(Icons.person, size: 20, color: context.colors.textPrimary) : null,
                       ),
                     ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Builder(
-                          builder: (context) {
-                            final titleText = viewModel.buildGroupTitle(item);
-                            final titleStyle = TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 15,
-                              color: context.colors.textPrimary,
-                              height: 1.3,
-                            );
-                            if (item.notifications.length == 1) {
-                              return GestureDetector(
-                                onTap: () => _navigateToAuthorProfile(first.author),
-                                child: Text(titleText, style: titleStyle),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Builder(
+                            builder: (context) {
+                              final titleText = viewModel.buildGroupTitle(item);
+                              final titleStyle = TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                                color: context.colors.textPrimary,
+                                height: 1.3,
                               );
-                            } else {
-                              return Text(titleText, style: titleStyle);
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _formatTimestamp(first.timestamp),
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: context.colors.textSecondary,
+                              if (item.notifications.length == 1) {
+                                return GestureDetector(
+                                  onTap: () => _navigateToAuthorProfile(first.author),
+                                  child: Text(titleText, style: titleStyle),
+                                );
+                              } else {
+                                return Text(titleText, style: titleStyle);
+                              }
+                            },
                           ),
-                        ),
-                        if (first.type == 'mention' && first.content.trim().isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            _formatTimestamp(first.timestamp),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: context.colors.textSecondary,
+                            ),
+                          ),
+                          if (first.type == 'mention' && first.content.trim().isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            NoteContentWidget(
+                              parsedContent: _parseContent(first.content),
+                              noteId: first.id,
+                              onNavigateToMentionProfile: _navigateToProfileFromContent,
+                            ),
+                          ],
                           const SizedBox(height: 8),
-                          NoteContentWidget(
-                            parsedContent: _parseContent(first.content),
-                            noteId: first.id,
-                            onNavigateToMentionProfile: _navigateToProfileFromContent,
+                          QuoteWidget(
+                            bech32: _encodeEventId(first.targetEventId),
                           ),
                         ],
-                        const SizedBox(height: 8),
-                        QuoteWidget(
-                          bech32: _encodeEventId(first.targetEventId),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-    );
+      );
     } else if (item is NotificationModel && item.type == 'zap') {
       final profile = viewModel.userProfiles[item.author];
       final image = profile?.profileImage ?? '';
@@ -248,80 +287,80 @@ class _NotificationPageState extends State<NotificationPage> {
                       child: CircleAvatar(
                         radius: 20,
                         backgroundColor: Colors.amber.shade700,
-                      backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
-                      child: image.isEmpty ? const Icon(Icons.flash_on, size: 20, color: Colors.white) : null,
+                        backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
+                        child: image.isEmpty ? const Icon(Icons.flash_on, size: 20, color: Colors.white) : null,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        GestureDetector(
-                          onTap: () => _navigateToAuthorProfile(item.author),
-                          child: RichText(
-                            text: TextSpan(
-                              children: [
-                                TextSpan(
-                                  text: displayName,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 15,
-                                    color: context.colors.textPrimary,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          GestureDetector(
+                            onTap: () => _navigateToAuthorProfile(item.author),
+                            child: RichText(
+                              text: TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: displayName,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 15,
+                                      color: context.colors.textPrimary,
+                                    ),
                                   ),
-                                ),
-                                TextSpan(
-                                  text: ' zapped your post ',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w400,
-                                    fontSize: 15,
-                                    color: context.colors.textPrimary,
+                                  TextSpan(
+                                    text: ' zapped your post ',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w400,
+                                      fontSize: 15,
+                                      color: context.colors.textPrimary,
+                                    ),
                                   ),
-                                ),
-                                TextSpan(
-                                  text: '${item.amount} sats',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 15,
-                                    color: Colors.amber.shade700,
+                                  TextSpan(
+                                    text: '${item.amount} sats',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15,
+                                      color: Colors.amber.shade700,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _formatTimestamp(item.timestamp),
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: context.colors.textSecondary,
-                          ),
-                        ),
-                        if (item.content.trim().isNotEmpty) ...[
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 4),
                           Text(
-                            item.content,
+                            _formatTimestamp(item.timestamp),
                             style: TextStyle(
+                              fontSize: 13,
                               color: context.colors.textSecondary,
-                              fontSize: 14,
                             ),
+                          ),
+                          if (item.content.trim().isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              item.content,
+                              style: TextStyle(
+                                color: context.colors.textSecondary,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          QuoteWidget(
+                            bech32: _encodeEventId(item.targetEventId),
                           ),
                         ],
-                        const SizedBox(height: 8),
-                        QuoteWidget(
-                          bech32: _encodeEventId(item.targetEventId),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-    );
+      );
     } else if (item is NotificationModel) {
       // Handle other single notification types (reaction, mention, repost)
       final profile = viewModel.userProfiles[item.author];
@@ -346,55 +385,55 @@ class _NotificationPageState extends State<NotificationPage> {
                         backgroundColor: context.colors.grey800,
                         backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
                         child: image.isEmpty ? Icon(Icons.person, size: 20, color: context.colors.textPrimary) : null,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        GestureDetector(
-                          onTap: () => _navigateToAuthorProfile(item.author),
-                          child: Text(
-                            viewModel.buildGroupTitle(item),
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 15,
-                              color: context.colors.textPrimary,
-                              height: 1.3,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          GestureDetector(
+                            onTap: () => _navigateToAuthorProfile(item.author),
+                            child: Text(
+                              viewModel.buildGroupTitle(item),
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                                color: context.colors.textPrimary,
+                                height: 1.3,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _formatTimestamp(item.timestamp),
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: context.colors.textSecondary,
+                          const SizedBox(height: 4),
+                          Text(
+                            _formatTimestamp(item.timestamp),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: context.colors.textSecondary,
+                            ),
                           ),
-                        ),
-                        if (item.type == 'mention' && item.content.trim().isNotEmpty) ...[
+                          if (item.type == 'mention' && item.content.trim().isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            NoteContentWidget(
+                              parsedContent: _parseContent(item.content),
+                              noteId: item.id,
+                              onNavigateToMentionProfile: _navigateToProfileFromContent,
+                            ),
+                          ],
                           const SizedBox(height: 8),
-                          NoteContentWidget(
-                            parsedContent: _parseContent(item.content),
-                            noteId: item.id,
-                            onNavigateToMentionProfile: _navigateToProfileFromContent,
+                          QuoteWidget(
+                            bech32: _encodeEventId(item.targetEventId),
                           ),
                         ],
-                        const SizedBox(height: 8),
-                        QuoteWidget(
-                          bech32: _encodeEventId(item.targetEventId),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-    );
+      );
     }
 
     return const SizedBox.shrink();
