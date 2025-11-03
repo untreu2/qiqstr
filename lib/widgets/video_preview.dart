@@ -203,24 +203,11 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
         onVerticalDragEnd: _handleVerticalDragEnd,
         child: Stack(
           children: [
-            if (_isInitialized)
-              Positioned.fill(
-                child: Transform.scale(
-                  scale: 1.2,
-                  child: ClipRect(
-                    child: AspectRatio(
-                      aspectRatio: _controller.value.aspectRatio,
-                      child: ImageFiltered(
-                        imageFilter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
-                        child: Container(
-                          color: Colors.black.withValues(alpha: 0.3),
-                          child: VideoPlayer(_controller),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+            Positioned.fill(
+              child: Container(
+                color: Colors.black,
               ),
+            ),
             if (_isInitialized)
               Center(
                 child: AspectRatio(
@@ -241,7 +228,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                   child: Container(
                     margin: const EdgeInsets.symmetric(horizontal: 16),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(25.0),
+                      borderRadius: BorderRadius.circular(40),
                       child: BackdropFilter(
                         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                         child: Container(
@@ -252,7 +239,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                               color: Colors.white.withValues(alpha: 0.2),
                               width: 1.5,
                             ),
-                            borderRadius: BorderRadius.circular(25.0),
+                            borderRadius: BorderRadius.circular(40),
                           ),
                           child: Row(
                             children: [
@@ -260,6 +247,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                                 icon: Icon(
                                   _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
                                   color: Colors.white,
+                                  size: 22,
                                 ),
                                 onPressed: () {
                                   setState(() {
@@ -282,7 +270,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                                   child: SliderTheme(
                                     data: SliderTheme.of(context).copyWith(
                                       activeTrackColor: AppColors.accent,
-                                      inactiveTrackColor: Colors.white24,
+                                      inactiveTrackColor: Colors.white.withValues(alpha: 0.24),
                                       thumbColor: Colors.white,
                                       thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
                                       overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
@@ -305,7 +293,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                                 style: const TextStyle(color: Colors.white),
                               ),
                               IconButton(
-                                icon: const Icon(Icons.close, color: Colors.white),
+                                icon: const Icon(Icons.close, color: Colors.white, size: 22),
                                 onPressed: () {
                                   Navigator.pop(context);
                                 },

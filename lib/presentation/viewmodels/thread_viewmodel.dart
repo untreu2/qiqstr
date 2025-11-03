@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
-import 'package:flutter/widgets.dart';
 import '../../core/base/base_view_model.dart';
 import '../../core/base/ui_state.dart';
 import '../../core/base/app_error.dart';

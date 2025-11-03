@@ -55,27 +55,8 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: CachedNetworkImage(
-              imageUrl: widget.imageUrls[currentIndex],
-              fit: BoxFit.cover,
-              imageBuilder: (context, imageProvider) => ClipRect(
-                child: ImageFiltered(
-                  imageFilter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      image: DecorationImage(
-                        image: imageProvider,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                    child: Container(
-                      color: Colors.black.withValues(alpha: 0.3),
-                    ),
-                  ),
-                ),
-              ),
-              placeholder: (context, url) => Container(color: Colors.black),
-              errorWidget: (context, url, error) => Container(color: Colors.black),
+            child: Container(
+              color: Colors.black,
             ),
           ),
           PhotoViewGallery.builder(
@@ -113,7 +94,7 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(25.0),
+                borderRadius: BorderRadius.circular(40),
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                   child: Container(
@@ -124,7 +105,7 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
                         color: Colors.white.withValues(alpha: 0.2),
                         width: 1.5,
                       ),
-                      borderRadius: BorderRadius.circular(25.0),
+                      borderRadius: BorderRadius.circular(40),
                     ),
                     child: Row(
                       children: [
@@ -142,7 +123,7 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                          icon: const Icon(Icons.close, color: Colors.white, size: 22),
                           onPressed: () => Navigator.of(context).pop(),
                         ),
                       ],
