@@ -95,10 +95,13 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 8),
-          child: CircularProgressIndicator(strokeWidth: 1.5),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: CircularProgressIndicator(
+            strokeWidth: 1.5,
+            color: context.colors.accent,
+          ),
         ),
       );
     }
@@ -140,7 +143,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                color: context.colors.overlayDark,
+                color: context.colors.textPrimary,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -151,7 +154,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w500,
-                        color: context.colors.textPrimary,
+                        color: context.colors.background,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -159,7 +162,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
                       Uri.parse(widget.url).host.replaceFirst('www.', ''),
                       style: TextStyle(
                         fontSize: 11,
-                        color: context.colors.textSecondary,
+                        color: context.colors.background.withValues(alpha: 0.7),
                       ),
                     ),
                   ],
@@ -174,9 +177,13 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
 
   Widget _placeholder() {
     return Container(
-      color: context.colors.grey900,
+      color: context.colors.overlayLight,
       child: Center(
-        child: Icon(Icons.link, color: context.colors.textTertiary),
+        child: Icon(
+          Icons.link,
+          color: context.colors.textSecondary,
+          size: 28,
+        ),
       ),
     );
   }
