@@ -296,7 +296,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     if (_isDisposed || !mounted) return;
 
     try {
-      Future.microtask(() {
+      Future.delayed(const Duration(milliseconds: 100), () {
         if (!_isDisposed && mounted) {
           final interactionNoteId = _getInteractionNoteId();
           _noteRepository.fetchInteractionsForNote(interactionNoteId);

@@ -66,26 +66,50 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     required String rootNoteId,
     String? focusedNoteId,
   }) {
-    debugPrint('[ThreadViewModel] Initializing thread: $rootNoteId, focused: $focusedNoteId');
     _rootNoteId = rootNoteId;
     _focusedNoteId = focusedNoteId;
-    loadThread();
-    _subscribeToThreadUpdates();
 
-    debugPrint(' [ThreadViewModel] INSTANT thread loading started');
-    _loadThreadInstantly();
+    _nostrDataService.setContext('thread');
+
+    _subscribeToThreadUpdates();
+    loadThread();
   }
 
   Future<void> loadThread() async {
     await executeOperation('loadThread', () async {
-      debugPrint(' [ThreadViewModel] Loading thread for: $_rootNoteId');
-
       try {
         final cachedRootResult = await _noteRepository.getNoteById(_rootNoteId);
+        final cachedRepliesResult = await _noteRepository.getThreadReplies(_rootNoteId);
+
+        bool hasImmediateData = false;
+
         if (cachedRootResult.isSuccess && cachedRootResult.data != null) {
           _rootNoteState = LoadedState(cachedRootResult.data!);
+          hasImmediateData = true;
+        }
+
+        if (cachedRepliesResult.isSuccess && cachedRepliesResult.data != null) {
+          _repliesState = LoadedState(cachedRepliesResult.data!);
+
+          final structure = _buildThreadStructure(cachedRootResult.data!, cachedRepliesResult.data!);
+          _threadStructureState = LoadedState(structure);
+
+          hasImmediateData = true;
+        }
+
+        if (hasImmediateData) {
           safeNotifyListeners();
-          debugPrint(' [ThreadViewModel] Root note loaded from cache immediately');
+
+          final allThreadNotes = [
+            if (cachedRootResult.isSuccess && cachedRootResult.data != null) cachedRootResult.data!,
+            if (cachedRepliesResult.isSuccess && cachedRepliesResult.data != null) ...cachedRepliesResult.data!,
+          ];
+
+          if (allThreadNotes.isNotEmpty) {
+            final allNoteIds = allThreadNotes.map((n) => n.id).toList();
+            _fetchInteractionsAndUpdateNotes(allNoteIds);
+            _loadUserProfiles(allThreadNotes);
+          }
         } else {
           _rootNoteState = const LoadingState();
           safeNotifyListeners();
@@ -118,53 +142,44 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         if (repliesResult.isSuccess) {
           final replies = repliesResult.data!;
 
-          final allThreadNotes = [rootNote, ...replies];
-          final allNoteIds = allThreadNotes.map((n) => n.id).toList();
+          // Only update if we have fresh data different from cache
+          final shouldUpdate = !hasImmediateData || _hasDataChanged(rootNote, replies);
+          if (shouldUpdate) {
+            final allThreadNotes = [rootNote, ...replies];
+            final allNoteIds = allThreadNotes.map((n) => n.id).toList();
 
-          final updatedNotes = await _calculateInitialInteractionCounts(allThreadNotes);
-          final updatedRootNote = updatedNotes.firstWhere((n) => n.id == rootNote.id);
-          final updatedReplies = updatedNotes.where((n) => n.id != rootNote.id).toList();
+            final updatedNotes = await _calculateInitialInteractionCounts(allThreadNotes);
+            final updatedRootNote = updatedNotes.firstWhere((n) => n.id == rootNote.id);
+            final updatedReplies = updatedNotes.where((n) => n.id != rootNote.id).toList();
 
-          _rootNoteState = LoadedState(updatedRootNote);
-          _repliesState = LoadedState(updatedReplies);
+            _rootNoteState = LoadedState(updatedRootNote);
+            _repliesState = LoadedState(updatedReplies);
 
-          final structure = _buildThreadStructure(updatedRootNote, updatedReplies);
-          _threadStructureState = LoadedState(structure);
+            final structure = _buildThreadStructure(updatedRootNote, updatedReplies);
+            _threadStructureState = LoadedState(structure);
 
-          debugPrint(' [ThreadViewModel] Initial counts calculated for ${allNoteIds.length} notes');
-
-          Future.delayed(const Duration(seconds: 3), () {
             if (!isDisposed) {
-              debugPrint(' [ThreadViewModel] Starting delayed interaction fetch...');
               _fetchInteractionsAndUpdateNotes(allNoteIds);
             }
-          });
 
-          _loadUserProfiles(allThreadNotes);
+            _loadUserProfiles(allThreadNotes);
+            safeNotifyListeners();
+          }
+
+          // Setup periodic refresh only once after successful load
+          if (!isDisposed) {
+            _setupPeriodicInteractionRefresh();
+          }
         } else {
           _repliesState = ErrorState(repliesResult.error!);
+          safeNotifyListeners();
         }
-
-        safeNotifyListeners();
-        debugPrint(' [ThreadViewModel] Thread loading completed');
       } catch (e) {
-        debugPrint(' [ThreadViewModel] Error in thread loading: $e');
         _rootNoteState = ErrorState('Failed to load thread: $e');
         _repliesState = ErrorState('Failed to load thread: $e');
         safeNotifyListeners();
       }
     });
-  }
-
-  Future<void> _loadThreadInstantly() async {
-    loadThread();
-
-    if (_rootNoteId.isNotEmpty) {
-      debugPrint(' [ThreadViewModel] Pre-loading interactions for root: $_rootNoteId');
-      _fetchInteractionsAndUpdateNotes([_rootNoteId]);
-    }
-
-    _setupPeriodicInteractionRefresh();
   }
 
   Future<List<NoteModel>> _calculateInitialInteractionCounts(List<NoteModel> threadNotes) async {
@@ -208,39 +223,27 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         _persistentRepostCounts[note.id] = repostCount;
 
         updatedNotes.add(updatedNote);
-        debugPrint(' [ThreadViewModel] Initial counts persisted for ${note.id}: replies=$replyCount, reposts=$repostCount');
       }
 
       return updatedNotes;
     } catch (e) {
-      debugPrint(' [ThreadViewModel] Error calculating initial counts: $e');
-      return threadNotes; // Return original notes if calculation fails
+      return threadNotes;
     }
   }
 
   Future<void> _fetchInteractionsAndUpdateNotes(List<String> noteIds) async {
     try {
-      debugPrint(' [ThreadViewModel] Enhanced interaction fetch for: $noteIds');
-
       final allInteractionIds = <String>[];
       allInteractionIds.addAll(noteIds);
 
       await _addOriginalNoteIdsForReposts(allInteractionIds);
 
-      debugPrint('[ThreadViewModel] Total interaction IDs to fetch: ${allInteractionIds.length}');
-
       await _nostrDataService.fetchInteractionsForNotes(allInteractionIds, forceLoad: true);
-
-      await Future.delayed(const Duration(milliseconds: 500));
 
       await _performEnhancedNoteUpdates(allInteractionIds);
 
       _triggerThreadUIUpdates();
-
-      debugPrint(' [ThreadViewModel] Enhanced interaction fetch completed for ${allInteractionIds.length} notes');
-    } catch (e) {
-      debugPrint(' [ThreadViewModel] Error in enhanced interaction fetch: $e');
-    }
+    } catch (e) {}
   }
 
   Future<void> _performEnhancedNoteUpdates(List<String> noteIds) async {
@@ -255,8 +258,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
         await _noteRepository.updateNote(updatedRootNote);
         _rootNoteState = LoadedState(updatedRootNote);
-        debugPrint(
-            ' [ThreadViewModel] Root note updated in repository: reactions=${updatedRootNote.reactionCount}, replies=${updatedRootNote.replyCount}, reposts=${updatedRootNote.repostCount}');
       }
 
       if (_repliesState.isLoaded) {
@@ -268,8 +269,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
           await _noteRepository.updateNote(updatedReply);
           updatedReplies.add(updatedReply);
-          debugPrint(
-              ' [ThreadViewModel] Reply ${reply.id} updated in repository: reactions=${updatedReply.reactionCount}, replies=${updatedReply.replyCount}, reposts=${updatedReply.repostCount}');
         }
 
         _repliesState = LoadedState(updatedReplies);
@@ -279,11 +278,7 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
           _threadStructureState = LoadedState(structure);
         }
       }
-
-      debugPrint(' [ThreadViewModel] Enhanced note updates with proper counts completed and persisted to repository');
-    } catch (e) {
-      debugPrint(' [ThreadViewModel] Error in enhanced note updates: $e');
-    }
+    } catch (e) {}
   }
 
   Future<void> _calculateAndUpdateInteractionCounts(List<String> noteIds, List<NoteModel> cachedNotes) async {
@@ -297,15 +292,11 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
         final reposts = cachedNotes.where((note) => note.isRepost && note.rootId == noteId).length;
         repostCounts[noteId] = reposts;
-
-        debugPrint('[ThreadViewModel] Note $noteId: $directReplies replies, $reposts reposts');
       }
 
       _tempReplyCounts = replyCounts;
       _tempRepostCounts = repostCounts;
-    } catch (e) {
-      debugPrint(' [ThreadViewModel] Error calculating interaction counts: $e');
-    }
+    } catch (e) {}
   }
 
   final Map<String, int> _persistentReplyCounts = {};
@@ -330,8 +321,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     final finalReplyCount = _persistentReplyCounts[originalNote.id] ?? replyCount;
     final finalRepostCount = _persistentRepostCounts[originalNote.id] ?? repostCount;
 
-    debugPrint(' [ThreadViewModel] Preserving counts for ${originalNote.id}: replies=$finalReplyCount, reposts=$finalRepostCount');
-
     return NoteModel(
       id: latestNote.id,
       content: latestNote.content,
@@ -342,13 +331,13 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
       repostTimestamp: latestNote.repostTimestamp,
       repostCount: finalRepostCount,
       rawWs: latestNote.rawWs,
-      reactionCount: latestNote.reactionCount, // This comes from NostrDataService
+      reactionCount: latestNote.reactionCount,
       replyCount: finalReplyCount,
       hasMedia: latestNote.hasMedia,
       estimatedHeight: latestNote.estimatedHeight,
       isVideo: latestNote.isVideo,
       videoUrl: latestNote.videoUrl,
-      zapAmount: latestNote.zapAmount, // This comes from NostrDataService
+      zapAmount: latestNote.zapAmount,
       isReply: latestNote.isReply,
       parentId: latestNote.parentId,
       rootId: latestNote.rootId,
@@ -361,14 +350,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
   void _triggerThreadUIUpdates() {
     safeNotifyListeners();
-
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (!isDisposed) {
-        safeNotifyListeners();
-      }
-    });
-
-    debugPrint(' [ThreadViewModel] Thread UI updates triggered');
   }
 
   Future<void> _addOriginalNoteIdsForReposts(List<String> interactionIds) async {
@@ -386,13 +367,37 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         if (note.isRepost && note.rootId != null && note.rootId!.isNotEmpty) {
           if (!interactionIds.contains(note.rootId!)) {
             interactionIds.add(note.rootId!);
-            debugPrint(' [ThreadViewModel] Added original note ID for repost: ${note.rootId}');
           }
         }
       }
-    } catch (e) {
-      debugPrint(' [ThreadViewModel] Error adding original note IDs: $e');
+    } catch (e) {}
+  }
+
+  bool _hasDataChanged(NoteModel? newRootNote, List<NoteModel> newReplies) {
+    if (_rootNoteState.isLoaded && newRootNote != null) {
+      final currentRoot = _rootNoteState.data!;
+      if (currentRoot.id != newRootNote.id ||
+          currentRoot.reactionCount != newRootNote.reactionCount ||
+          currentRoot.replyCount != newRootNote.replyCount ||
+          currentRoot.repostCount != newRootNote.repostCount) {
+        return true;
+      }
     }
+
+    if (_repliesState.isLoaded) {
+      final currentReplies = _repliesState.data!;
+      if (currentReplies.length != newReplies.length) {
+        return true;
+      }
+
+      final currentIds = currentReplies.map((r) => r.id).toSet();
+      final newIds = newReplies.map((r) => r.id).toSet();
+      if (!currentIds.containsAll(newIds) || !newIds.containsAll(currentIds)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   void _setupPeriodicInteractionRefresh() {
@@ -409,7 +414,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         }
 
         if (allNoteIds.isNotEmpty) {
-          debugPrint(' [ThreadViewModel] Enhanced periodic refresh for ${allNoteIds.length} notes');
           await _fetchInteractionsAndUpdateNotes(allNoteIds);
         }
       }
@@ -439,8 +443,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
       final relevantUpdates = updatedNotes.where((note) => threadNoteIds.contains(note.id)).toList();
 
       if (relevantUpdates.isNotEmpty) {
-        debugPrint(' [ThreadViewModel] Real-time updates for ${relevantUpdates.length} thread notes');
-
         for (final updatedNote in relevantUpdates) {
           if (_rootNoteState.isLoaded && _rootNoteState.data!.id == updatedNote.id) {
             _rootNoteState = LoadedState(updatedNote);
@@ -462,13 +464,10 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
           _triggerThreadUIUpdates();
         }
       }
-    } catch (e) {
-      debugPrint(' [ThreadViewModel] Error handling real-time updates: $e');
-    }
+    } catch (e) {}
   }
 
   Future<void> refreshThread() async {
-    debugPrint(' [ThreadViewModel] INSTANT thread refresh');
     await loadThread();
   }
 
@@ -490,7 +489,7 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         rootId: rootId ?? _rootNoteId,
         replyId: parentNoteId,
         parentAuthor: parentNote.author,
-        relayUrls: ['wss://relay.damus.io'], // Default relay
+        relayUrls: ['wss://relay.damus.io'],
       );
 
       if (result.isError) {
@@ -503,8 +502,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
   Future<void> _loadUserProfiles(List<NoteModel> notes) async {
     try {
-      debugPrint('[ThreadViewModel] Loading user profiles for ${notes.length} notes');
-
       final Set<String> authorIds = {};
       for (final note in notes) {
         authorIds.add(note.author);
@@ -513,19 +510,14 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         }
       }
 
-      debugPrint('[ThreadViewModel] Found ${authorIds.length} unique authors to load');
-
       final missingAuthorIds = authorIds.where((id) {
         final cachedProfile = _userProfiles[id];
         return cachedProfile == null || cachedProfile.profileImage.isEmpty;
       }).toList();
 
       if (missingAuthorIds.isEmpty) {
-        debugPrint('[ThreadViewModel] All profiles already cached with images');
         return;
       }
-
-      debugPrint('[ThreadViewModel] Batch fetching ${missingAuthorIds.length} profiles (including those with missing images)');
 
       final results = await _userRepository.getUserProfiles(
         missingAuthorIds,
@@ -536,7 +528,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         entry.value.fold(
           (user) {
             _userProfiles[entry.key] = user;
-            debugPrint('[ThreadViewModel]  Loaded profile: ${user.name} (image: ${user.profileImage.isNotEmpty ? "✓" : "✗"})');
           },
           (error) {
             if (!_userProfiles.containsKey(entry.key)) {
@@ -557,28 +548,20 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         );
       }
 
-      debugPrint('[ThreadViewModel]  Profile batch loading complete, total cached: ${_userProfiles.length}');
-      safeNotifyListeners(); // Notify UI about profile updates
-    } catch (e) {
-      debugPrint('[ThreadViewModel]  Error loading user profiles: $e');
-    }
+      safeNotifyListeners();
+    } catch (e) {}
   }
 
   ThreadStructure _buildThreadStructure(NoteModel root, List<NoteModel> replies) {
-    debugPrint(' [ThreadViewModel] Building thread structure for root: ${root.id}');
-    debugPrint(' [ThreadViewModel] Processing ${replies.length} replies');
-
     final Map<String, List<NoteModel>> childrenMap = {};
     final Map<String, NoteModel> notesMap = {root.id: root};
 
     for (final reply in replies) {
       notesMap[reply.id] = reply;
-      debugPrint('[ThreadViewModel] Reply ${reply.id}: parentId=${reply.parentId}, rootId=${reply.rootId}, isReply=${reply.isReply}');
     }
 
     for (final reply in replies) {
       final parentId = reply.parentId ?? root.id;
-      debugPrint('[ThreadViewModel] Linking reply ${reply.id} to parent $parentId');
 
       childrenMap.putIfAbsent(parentId, () => []);
       childrenMap[parentId]!.add(reply);
@@ -586,14 +569,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
     for (final children in childrenMap.values) {
       children.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    }
-
-    debugPrint(' [ThreadViewModel] Thread structure complete:');
-    debugPrint('   Root note: ${root.id}');
-    debugPrint('   Total replies: ${replies.length}');
-    debugPrint('   Children map keys: ${childrenMap.keys.toList()}');
-    for (final entry in childrenMap.entries) {
-      debugPrint('   Parent ${entry.key} has ${entry.value.length} children: ${entry.value.map((n) => n.id).toList()}');
     }
 
     return ThreadStructure(
@@ -618,7 +593,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
               .toList();
 
           if (newThreadNotes.isNotEmpty) {
-            debugPrint('[ThreadViewModel] Received ${newThreadNotes.length} thread updates from stream');
             loadThread();
           }
         }
@@ -628,42 +602,32 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
   Future<void> reactToNote(String noteId, String reaction) async {
     try {
-      debugPrint('[ThreadViewModel] Reacting to note: $noteId with $reaction');
-
       final result = await _noteRepository.reactToNote(noteId, reaction);
       result.fold(
         (_) {
-          debugPrint('[ThreadViewModel] Reaction sent successfully');
           loadThread();
         },
         (error) {
-          debugPrint('[ThreadViewModel] Reaction failed: $error');
           setError(NetworkError(message: 'Failed to react: $error'));
         },
       );
     } catch (e) {
-      debugPrint('[ThreadViewModel] Exception in reactToNote: $e');
       setError(NetworkError(message: 'Failed to react: $e'));
     }
   }
 
   Future<void> repostNote(String noteId) async {
     try {
-      debugPrint('[ThreadViewModel] Reposting note: $noteId');
-
       final result = await _noteRepository.repostNote(noteId);
       result.fold(
         (_) {
-          debugPrint('[ThreadViewModel] Repost sent successfully');
           loadThread();
         },
         (error) {
-          debugPrint('[ThreadViewModel] Repost failed: $error');
           setError(NetworkError(message: 'Failed to repost: $error'));
         },
       );
     } catch (e) {
-      debugPrint('[ThreadViewModel] Exception in repostNote: $e');
       setError(NetworkError(message: 'Failed to repost: $e'));
     }
   }
@@ -700,27 +664,19 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
   Future<void> _persistCalculatedCountsOnDispose() async {
     try {
-      debugPrint(' [ThreadViewModel] Persisting calculated counts on dispose...');
-
       if (_rootNoteState.isLoaded && _rootNoteState.data != null) {
         final rootNote = _rootNoteState.data!;
         final persistedRootNote = await _createNoteWithPersistedCounts(rootNote);
         await _noteRepository.updateNote(persistedRootNote);
-        debugPrint(' [ThreadViewModel] Root note counts persisted: ${rootNote.id}');
       }
 
       if (_repliesState.isLoaded && _repliesState.data != null) {
         for (final reply in _repliesState.data!) {
           final persistedReply = await _createNoteWithPersistedCounts(reply);
           await _noteRepository.updateNote(persistedReply);
-          debugPrint(' [ThreadViewModel] Reply counts persisted: ${reply.id}');
         }
       }
-
-      debugPrint(' [ThreadViewModel] All calculated counts persisted to repository');
-    } catch (e) {
-      debugPrint(' [ThreadViewModel] Error persisting counts on dispose: $e');
-    }
+    } catch (e) {}
   }
 
   Future<NoteModel> _createNoteWithPersistedCounts(NoteModel note) async {

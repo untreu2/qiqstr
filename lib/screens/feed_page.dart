@@ -452,49 +452,6 @@ class FeedPageState extends State<FeedPage> {
                   ),
                 ),
               ),
-              if (viewModel.pendingNotesCount > 0 && widget.hashtag == null && viewModel.sortMode != FeedSortMode.mostInteracted)
-                Positioned(
-                  bottom: 104,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: GestureDetector(
-                      onTap: () {
-                        viewModel.addPendingNotesToFeed();
-                        scrollToTop();
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: colors.buttonPrimary,
-                          borderRadius: BorderRadius.circular(25),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.2),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.arrow_upward, size: 15, color: colors.buttonText),
-                            const SizedBox(width: 5),
-                            Text(
-                              'Show new notes',
-                              style: TextStyle(
-                                color: colors.buttonText,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
             ],
           ),
         );

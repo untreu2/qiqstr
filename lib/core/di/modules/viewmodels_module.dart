@@ -25,6 +25,7 @@ class ViewModelsModule extends DIModule {
           noteRepository: AppDI.get<NoteRepository>(),
           authRepository: AppDI.get<AuthRepository>(),
           userRepository: AppDI.get<UserRepository>(),
+          nostrDataService: AppDI.get<NostrDataService>(),
         ));
 
     AppDI.registerFactory<ProfileViewModel>(() => ProfileViewModel(

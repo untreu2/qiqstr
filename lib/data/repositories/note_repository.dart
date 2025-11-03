@@ -162,6 +162,9 @@ class NoteRepository {
     try {
       debugPrint('[NoteRepository] Looking for note ID: $noteId');
 
+      // Set thread context for single note fetching
+      _nostrDataService.setContext('thread');
+
       final localNote = _notes.where((n) => n.id == noteId).firstOrNull;
       if (localNote != null) {
         debugPrint('[NoteRepository] Found note in local cache: ${localNote.id}');
@@ -221,6 +224,9 @@ class NoteRepository {
   Future<Result<List<NoteModel>>> getThreadReplies(String rootNoteId) async {
     try {
       debugPrint('[NoteRepository] Getting thread replies for root: $rootNoteId');
+
+      // Set thread context to bypass feed filtering
+      _nostrDataService.setContext('thread');
 
       final allNotes = <NoteModel>[];
 

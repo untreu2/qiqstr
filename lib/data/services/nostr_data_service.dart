@@ -78,7 +78,21 @@ class NostrDataService {
 
   AuthService get authService => _authService;
 
+  // Context for current operation - determines filtering behavior
+  String _currentContext = 'feed'; // 'feed', 'thread', 'profile', 'hashtag'
+
+  void setContext(String context) {
+    _currentContext = context;
+    debugPrint('[NostrDataService] Context set to: $_currentContext');
+  }
+
   bool _shouldIncludeNoteInFeed(String authorHexPubkey, bool isRepost) {
+    // In thread, profile, or hashtag context, accept all notes
+    if (_currentContext != 'feed') {
+      debugPrint('[NostrDataService] $_currentContext mode: accepting all notes from $authorHexPubkey');
+      return true;
+    }
+
     final currentUserHex = _authService.npubToHex(_currentUserNpub);
     if (currentUserHex == authorHexPubkey) {
       return true;
@@ -87,11 +101,11 @@ class NostrDataService {
     final cachedFollowing = _followCacheService.getSync(currentUserHex ?? _currentUserNpub);
     if (cachedFollowing != null) {
       final isFollowed = cachedFollowing.contains(authorHexPubkey);
-      debugPrint('[NostrDataService]  Author $authorHexPubkey ${isFollowed ? 'IS' : 'NOT'} in follow list (cached)');
+      debugPrint('[NostrDataService] FEED mode: Author $authorHexPubkey ${isFollowed ? 'IS' : 'NOT'} in follow list (cached)');
       return isFollowed;
     }
 
-    debugPrint('[NostrDataService] No valid follow cache - REJECTING note from: $authorHexPubkey');
+    debugPrint('[NostrDataService] FEED mode: No valid follow cache - REJECTING note from: $authorHexPubkey');
     _refreshFollowCacheInBackground();
     return false;
   }
@@ -1228,9 +1242,11 @@ class NostrDataService {
 
       if (authorHexKeys.isEmpty) {
         debugPrint('[NostrDataService] Fetching global timeline');
+        setContext('global');
         targetAuthors = [];
       } else if (authorHexKeys.length == 1 && authorHexKeys.first == _authService.npubToHex(_currentUserNpub)) {
         debugPrint('[NostrDataService] Feed mode - fetching follow list first (NIP-02)');
+        setContext('feed');
         isFeedMode = true;
 
         final currentUserHex = _authService.npubToHex(_currentUserNpub);
@@ -1264,6 +1280,7 @@ class NostrDataService {
           return Result.success([]);
         }
       } else {
+        setContext('profile');
         targetAuthors = authorHexKeys;
         debugPrint('[NostrDataService] Profile mode - fetching notes for: ${authorHexKeys.length} hex pubkeys');
         debugPrint('[NostrDataService] Profile authors (hex): $targetAuthors');
@@ -1337,6 +1354,8 @@ class NostrDataService {
     DateTime? since,
   }) async {
     try {
+      // Set context to profile mode to bypass follow filtering
+      setContext('profile');
       debugPrint('[NostrDataService] PROFILE MODE: Fetching notes for $userNpub (bypassing ALL feed filters)');
 
       final pubkeyHex = _authService.npubToHex(userNpub);
@@ -1643,6 +1662,8 @@ class NostrDataService {
     DateTime? since,
   }) async {
     try {
+      // Set context to hashtag mode to bypass follow filtering
+      setContext('hashtag');
       debugPrint('[NostrDataService] HASHTAG MODE: Fetching GLOBAL notes for #$hashtag with server-side filtering');
 
       final Map<String, NoteModel> hashtagNotesMap = {};
