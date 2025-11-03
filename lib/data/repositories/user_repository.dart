@@ -226,9 +226,7 @@ class UserRepository {
         return Result.error(updateResult.error!);
       }
 
-      await _cacheService.invalidate(updatedUser.pubkeyHex);
-
-      _cacheService.put(updatedUser);
+      await _cacheService.put(updatedUser);
 
       _currentUserController.add(updatedUser);
 

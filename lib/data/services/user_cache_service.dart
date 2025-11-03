@@ -175,7 +175,6 @@ class UserCacheService {
           'website': user.website,
           'nip05Verified': user.nip05Verified.toString(),
         };
-        await _isarService.deleteUserProfile(user.pubkeyHex);
         await _isarService.saveUserProfile(user.pubkeyHex, profileData);
         _persistentWrites++;
         debugPrint('[UserCacheService] Profile cache updated: ${user.name}');
@@ -304,31 +303,11 @@ class UserCacheService {
 
   Future<void> invalidate(String pubkeyHex) async {
     _memoryCache.remove(pubkeyHex);
-
-    if (_isIsarInitialized) {
-      await _isarService.deleteUserProfile(pubkeyHex);
-    }
-  }
-
-  Future<void> batchInvalidate(List<String> pubkeyHexList) async {
-    for (final pubkeyHex in pubkeyHexList) {
-      _memoryCache.remove(pubkeyHex);
-    }
-
-    if (_isIsarInitialized) {
-      for (final pubkeyHex in pubkeyHexList) {
-        await _isarService.deleteUserProfile(pubkeyHex);
-      }
-    }
   }
 
   Future<void> clear() async {
     _memoryCache.clear();
     _pendingRequests.clear();
-
-    if (_isIsarInitialized) {
-      await _isarService.clearAllUserProfiles();
-    }
 
     _resetStats();
   }
@@ -364,14 +343,6 @@ class UserCacheService {
 
     if (keysToRemove.isNotEmpty) {
       debugPrint('[UserCacheService] Cleaned up ${keysToRemove.length} expired L1 entries');
-    }
-
-    if (_isIsarInitialized) {
-      _isarService.cleanupExpiredProfiles(ttl: persistentTTL).then((count) {
-        if (count > 0) {
-          debugPrint('[UserCacheService] Cleaned up $count expired L2 entries');
-        }
-      });
     }
   }
 

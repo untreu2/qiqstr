@@ -138,18 +138,6 @@ class IsarDatabaseService {
     }
   }
 
-  Future<void> deleteUserProfile(String pubkeyHex) async {
-    try {
-      final db = await isar;
-      await db.writeTxn(() async {
-        await db.userModelIsars.deleteByPubkeyHex(pubkeyHex);
-      });
-      debugPrint('[IsarDatabaseService] ️ Deleted profile: $pubkeyHex');
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error deleting user profile: $e');
-    }
-  }
-
   Future<List<UserModelIsar>> getAllUserProfiles() async {
     try {
       final db = await isar;
@@ -223,43 +211,6 @@ class IsarDatabaseService {
     } catch (e) {
       debugPrint('[IsarDatabaseService] Error getting profile count: $e');
       return 0;
-    }
-  }
-
-  Future<int> cleanupExpiredProfiles({Duration ttl = const Duration(days: 7)}) async {
-    try {
-      final db = await isar;
-      final cutoffDate = DateTime.now().subtract(ttl);
-
-      final expiredProfiles = await db.userModelIsars.filter().cachedAtLessThan(cutoffDate).findAll();
-
-      if (expiredProfiles.isEmpty) {
-        return 0;
-      }
-
-      await db.writeTxn(() async {
-        for (final profile in expiredProfiles) {
-          await db.userModelIsars.delete(profile.id);
-        }
-      });
-
-      debugPrint('[IsarDatabaseService]  Cleaned up ${expiredProfiles.length} expired profiles');
-      return expiredProfiles.length;
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error cleaning up expired profiles: $e');
-      return 0;
-    }
-  }
-
-  Future<void> clearAllUserProfiles() async {
-    try {
-      final db = await isar;
-      await db.writeTxn(() async {
-        await db.userModelIsars.clear();
-      });
-      debugPrint('[IsarDatabaseService] ️ Cleared all user profiles');
-    } catch (e) {
-      debugPrint('[IsarDatabaseService] Error clearing profiles: $e');
     }
   }
 
