@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'dart:convert';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:nostr/nostr.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -36,7 +37,7 @@ Future<bool> _payZapWithWallet(
     }
 
     if (context.mounted) {
-      AppSnackbar.info(context, 'Processing payment...', duration: const Duration(seconds: 30));
+      AppSnackbar.info(context, 'Processing payment...', duration: const Duration(seconds: 5));
     }
 
     final privateKey = await secureStorage.read(key: 'privateKey');
@@ -147,11 +148,11 @@ Future<bool> _payZapWithWallet(
     // Payment successful! Show success immediately
     if (context.mounted) {
       AppSnackbar.hide(context);
-      AppSnackbar.success(context, 'Zapped $sats sats to ${user.name} on their note!');
+      AppSnackbar.success(context, 'Zapped $sats sats to ${user.name}!', duration: const Duration(seconds: 2));
     }
 
     // Publish Nostr events in the background without affecting success status
-    _publishZapEventsAsync(zapRequest, invoice, recipientPubkeyHex, note, comment, privateKey, sats, paymentResult);
+    unawaited(_publishZapEventsAsync(zapRequest, invoice, recipientPubkeyHex, note, comment, privateKey, sats, paymentResult));
 
     return true;
   } catch (e) {
@@ -163,7 +164,7 @@ Future<bool> _payZapWithWallet(
   }
 }
 
-void _publishZapEventsAsync(
+Future<void> _publishZapEventsAsync(
   Event zapRequest,
   String invoice,
   String recipientPubkeyHex,
@@ -314,7 +315,7 @@ Future<Map<String, dynamic>> showZapDialog({
                     'amount': sats,
                   });
 
-                  _processZapPayment(context, note, sats, noteController.text.trim());
+                  unawaited(_processZapPayment(context, note, sats, noteController.text.trim()));
                 },
                 child: Container(
                   width: double.infinity,
