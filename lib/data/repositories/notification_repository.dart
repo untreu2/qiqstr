@@ -19,8 +19,10 @@ class NotificationRepository {
   final Map<String, UserModel> _userProfilesCache = {};
   final List<NotificationModel> _notifications = [];
   int _unreadCount = 0;
+  String? _currentUserHex;
 
   StreamSubscription<List<NotificationModel>>? _notificationStreamSubscription;
+  Timer? _debounceTimer;
 
   NotificationRepository({
     required AuthService authService,
@@ -37,45 +39,73 @@ class NotificationRepository {
 
   void _setupRealTimeNotifications() {
     debugPrint('[NotificationRepository] Setting up real-time notification updates');
+    _initializeCurrentUser();
 
     _notificationStreamSubscription = _nostrDataService.notificationsStream.listen((newNotifications) async {
-      debugPrint('[NotificationRepository] Stream received ${newNotifications.length} notifications');
-
-      final userResult = await _authService.getCurrentUserPublicKeyHex();
-      if (userResult.isError || userResult.data == null) {
-        debugPrint('[NotificationRepository] Could not get current user, skipping filtering');
-        return;
-      }
-
-      final userHexPubkey = userResult.data!;
-
-      final filteredNotifications = newNotifications.where((notification) {
-        return notification.author != userHexPubkey;
-      }).toList();
-
-      int addedCount = 0;
-      for (final notification in filteredNotifications) {
-        if (!_notifications.any((n) => n.id == notification.id)) {
-          _notifications.add(notification);
-          addedCount++;
-          _unreadCount++;
-        }
-      }
-
-      if (addedCount > 0) {
-        debugPrint(
-            '[NotificationRepository] Added $addedCount new notifications (filtered from ${newNotifications.length}), total: ${_notifications.length}');
-
-        _notifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
-        _notificationsController.add(_notifications);
-        _unreadCountController.add(_unreadCount);
-
-        debugPrint('[NotificationRepository] Emitted update to subscribers');
-      }
+      _debouncedProcessNotifications(newNotifications);
     });
 
     debugPrint('[NotificationRepository] Real-time notification stream is now active');
+  }
+
+  Future<void> _initializeCurrentUser() async {
+    if (_currentUserHex == null) {
+      final userResult = await _authService.getCurrentUserPublicKeyHex();
+      if (userResult.isSuccess && userResult.data != null) {
+        _currentUserHex = userResult.data;
+      }
+    }
+  }
+
+  void _debouncedProcessNotifications(List<NotificationModel> newNotifications) {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () async {
+      await _processNotifications(newNotifications);
+    });
+  }
+
+  Future<void> _processNotifications(List<NotificationModel> newNotifications) async {
+    debugPrint('[NotificationRepository] Processing ${newNotifications.length} notifications');
+
+    if (_currentUserHex == null) {
+      await _initializeCurrentUser();
+      if (_currentUserHex == null) {
+        debugPrint('[NotificationRepository] Could not get current user, skipping filtering');
+        return;
+      }
+    }
+
+    final filteredNotifications = _filterSelfNotifications(newNotifications);
+    final addedNotifications = _addNewNotifications(filteredNotifications);
+
+    if (addedNotifications.isNotEmpty) {
+      _sortAndEmitNotifications(addedNotifications.length);
+    }
+  }
+
+  List<NotificationModel> _filterSelfNotifications(List<NotificationModel> notifications) {
+    return notifications.where((notification) => notification.author != _currentUserHex).toList();
+  }
+
+  List<NotificationModel> _addNewNotifications(List<NotificationModel> filteredNotifications) {
+    final existingIds = _notifications.map((n) => n.id).toSet();
+    final newNotifications = filteredNotifications.where((notification) => !existingIds.contains(notification.id)).toList();
+
+    _notifications.addAll(newNotifications);
+    _unreadCount += newNotifications.length;
+
+    return newNotifications;
+  }
+
+  void _sortAndEmitNotifications(int addedCount) {
+    debugPrint('[NotificationRepository] Added $addedCount new notifications, total: ${_notifications.length}');
+
+    _notifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+    _notificationsController.add(List.unmodifiable(_notifications));
+    _unreadCountController.add(_unreadCount);
+
+    debugPrint('[NotificationRepository] Emitted update to subscribers');
   }
 
   Future<Result<List<NotificationModel>>> getNotifications({
@@ -85,15 +115,11 @@ class NotificationRepository {
     try {
       debugPrint('[NotificationRepository] getNotifications called with limit: $limit');
 
-      final userResult = await _authService.getCurrentUserPublicKeyHex();
-
-      if (userResult.isError) {
-        return Result.error(userResult.error!);
-      }
-
-      final userHexPubkey = userResult.data;
-      if (userHexPubkey == null || userHexPubkey.isEmpty) {
-        return const Result.error('No authenticated user hex pubkey');
+      if (_currentUserHex == null) {
+        await _initializeCurrentUser();
+        if (_currentUserHex == null) {
+          return const Result.error('No authenticated user hex pubkey');
+        }
       }
 
       final result = await _nostrDataService.fetchNotifications(
@@ -102,19 +128,18 @@ class NotificationRepository {
       );
 
       if (result.isSuccess && result.data != null) {
-        final filteredNotifications = result.data!.where((notification) {
-          return notification.author != userHexPubkey;
-        }).toList();
+        final filteredNotifications = _filterSelfNotifications(result.data!);
 
         _notifications.clear();
         _notifications.addAll(filteredNotifications);
-
         _unreadCount = filteredNotifications.length;
 
         debugPrint('[NotificationRepository] Loaded ${_notifications.length} notifications (filtered from ${result.data!.length})');
 
-        _notificationsController.add(_notifications);
+        _notificationsController.add(List.unmodifiable(_notifications));
         _unreadCountController.add(_unreadCount);
+
+        return Result.success(filteredNotifications);
       }
 
       return result;
@@ -217,6 +242,7 @@ class NotificationRepository {
 
   void dispose() {
     debugPrint('[NotificationRepository] Disposing notification repository');
+    _debounceTimer?.cancel();
     _notificationStreamSubscription?.cancel();
     _notificationsController.close();
     _unreadCountController.close();

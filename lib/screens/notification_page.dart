@@ -48,7 +48,6 @@ class _NotificationPageState extends State<NotificationPage> {
     if (_currentUserNpub == null) return false;
 
     if (item is NotificationGroup) {
-      // Check if any notification in the group is from the current user
       return item.notifications.any((notification) => notification.author == _currentUserNpub);
     } else if (item is NotificationModel) {
       return item.author == _currentUserNpub;
@@ -79,21 +78,20 @@ class _NotificationPageState extends State<NotificationPage> {
 
         return Scaffold(
           backgroundColor: context.colors.background,
-          body: Consumer<NotificationViewModel>(
-            builder: (context, vm, child) {
-              return UIStateBuilder<List<dynamic>>(
-                state: vm.notificationsState,
-                builder: (context, notifications) {
-                  // Filter out self-notifications
-                  final filteredNotifications = _filterSelfNotifications(notifications);
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeader(context, viewModel, 0),
+              Expanded(
+                child: Consumer<NotificationViewModel>(
+                  builder: (context, vm, child) {
+                    return UIStateBuilder<List<dynamic>>(
+                      state: vm.notificationsState,
+                      builder: (context, notifications) {
+                        final filteredNotifications = _filterSelfNotifications(notifications);
 
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildHeader(context, vm, filteredNotifications.length),
-                      Expanded(
-                        child: filteredNotifications.isEmpty
-                            ? _buildEmptyState(context)
+                        return filteredNotifications.isEmpty
+                            ? _buildEmptyContent(context)
                             : RefreshIndicator(
                                 onRefresh: () => vm.refreshNotificationsCommand.execute(),
                                 color: context.colors.textPrimary,
@@ -118,16 +116,16 @@ class _NotificationPageState extends State<NotificationPage> {
                                     ),
                                   ),
                                 ),
-                              ),
-                      ),
-                    ],
-                  );
-                },
-                loading: () => _buildLoadingState(context),
-                error: (message) => _buildErrorState(context, message, viewModel),
-                empty: (message) => _buildEmptyState(context),
-              );
-            },
+                              );
+                      },
+                      loading: () => _buildLoadingContent(context),
+                      error: (message) => _buildErrorContent(context, message, vm),
+                      empty: (message) => _buildEmptyContent(context),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -362,7 +360,6 @@ class _NotificationPageState extends State<NotificationPage> {
         ),
       );
     } else if (item is NotificationModel) {
-      // Handle other single notification types (reaction, mention, repost)
       final profile = viewModel.userProfiles[item.author];
       final image = profile?.profileImage ?? '';
 
@@ -527,140 +524,116 @@ class _NotificationPageState extends State<NotificationPage> {
     }
   }
 
-  Widget _buildLoadingState(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildHeader(context, context.read<NotificationViewModel>(), 0),
-        Expanded(
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(
-                  color: context.colors.textPrimary,
-                  strokeWidth: 2,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Loading notifications...',
-                  style: TextStyle(
-                    color: context.colors.textSecondary,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
+  Widget _buildLoadingContent(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(
+            color: context.colors.textPrimary,
+            strokeWidth: 2,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Loading notifications...',
+            style: TextStyle(
+              color: context.colors.textSecondary,
+              fontSize: 14,
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildErrorState(BuildContext context, String message, NotificationViewModel viewModel) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildHeader(context, viewModel, 0),
-        Expanded(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.error_outline,
-                    size: 64,
-                    color: context.colors.error.withOpacity(0.7),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'Failed to load notifications',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: context.colors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    message,
-                    style: TextStyle(
-                      color: context.colors.textSecondary,
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 32),
-                  ElevatedButton(
-                    onPressed: () => viewModel.loadNotificationsCommand.execute(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: context.colors.textPrimary,
-                      foregroundColor: context.colors.background,
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text(
-                      'Retry',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
+  Widget _buildErrorContent(BuildContext context, String message, NotificationViewModel viewModel) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: context.colors.error.withOpacity(0.7),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'Failed to load notifications',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: context.colors.textPrimary,
               ),
             ),
-          ),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              style: TextStyle(
+                color: context.colors.textSecondary,
+                fontSize: 14,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton(
+              onPressed: () => viewModel.loadNotificationsCommand.execute(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: context.colors.textPrimary,
+                foregroundColor: context.colors.background,
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'Retry',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildEmptyState(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildHeader(context, context.read<NotificationViewModel>(), 0),
-        Expanded(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.notifications_none,
-                    size: 80,
-                    color: context.colors.textSecondary.withOpacity(0.5),
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    'No notifications yet',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: context.colors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'When someone interacts with your posts,\nyou\'ll see it here',
-                    style: TextStyle(
-                      color: context.colors.textSecondary,
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+  Widget _buildEmptyContent(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.notifications_none,
+              size: 80,
+              color: context.colors.textSecondary.withOpacity(0.5),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'No notifications yet',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+                color: context.colors.textPrimary,
               ),
             ),
-          ),
+            const SizedBox(height: 12),
+            Text(
+              'When someone interacts with your posts,\nyou\'ll see it here',
+              style: TextStyle(
+                color: context.colors.textSecondary,
+                fontSize: 14,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -22,21 +23,231 @@ class _UserSearchPageState extends State<UserSearchPage> {
   List<UserModel> _randomUsers = [];
   bool _isSearching = false;
   bool _isLoadingRandom = false;
+  bool _isExpandingNetwork = false;
   String? _error;
 
   late final UserRepository _userRepository;
+  bool _hasLoadedFollowing = false;
+  bool _hasTriedNetworkExpansion = false;
 
   @override
   void initState() {
     super.initState();
     _userRepository = AppDI.get<UserRepository>();
     _searchController.addListener(_onSearchChanged);
+    _loadCurrentUserFollowing();
     _loadRandomUsers();
+
+    _startImmediateNetworkExpansion();
+  }
+
+  void _startImmediateNetworkExpansion() {
+    unawaited(Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted && !_hasTriedNetworkExpansion) {
+        debugPrint('[UserSearchPage] Starting immediate network expansion on page load...');
+        _expandUserNetwork();
+      }
+    }));
   }
 
   void _onSearchChanged() {
     final query = _searchController.text.trim();
+    _hasTriedNetworkExpansion = false;
     _searchUsers(query);
+  }
+
+  Future<void> _loadCurrentUserFollowing() async {
+    if (_hasLoadedFollowing) return;
+
+    unawaited(_loadFollowingInBackground());
+  }
+
+  Future<void> _loadFollowingInBackground() async {
+    try {
+      debugPrint('[UserSearchPage] Loading current user following list in background...');
+
+      final followingResult = await _userRepository.getFollowingList();
+      if (followingResult.isSuccess && followingResult.data != null) {
+        final followingUsers = followingResult.data!;
+        debugPrint('[UserSearchPage] Found ${followingUsers.length} users in following list');
+
+        _cacheUsersInParallel(followingUsers);
+
+        _hasLoadedFollowing = true;
+        debugPrint('[UserSearchPage] Background loading started for ${followingUsers.length} following users');
+      }
+    } catch (e) {
+      debugPrint('[UserSearchPage] Error loading current user following: $e');
+    }
+  }
+
+  void _cacheUsersInParallel(List<UserModel> users) {
+    unawaited(Future.microtask(() async {
+      try {
+        const batchSize = 250;
+        final List<String> userNpubs = users.map((u) => u.pubkeyHex).toList();
+
+        final uncachedUsers = <String>[];
+        for (final npub in userNpubs) {
+          final cached = await _userRepository.getCachedUser(npub);
+          if (cached == null) {
+            uncachedUsers.add(npub);
+          }
+        }
+
+        if (uncachedUsers.isEmpty) {
+          debugPrint('[UserSearchPage] All ${userNpubs.length} users already cached');
+          return;
+        }
+
+        debugPrint('[UserSearchPage] Caching ${uncachedUsers.length} new users out of ${userNpubs.length} total');
+
+        final futures = <Future>[];
+        for (int i = 0; i < uncachedUsers.length; i += batchSize) {
+          final batch = uncachedUsers.skip(i).take(batchSize).toList();
+          futures.add(_processBatch(batch));
+        }
+
+        await Future.wait(futures);
+        debugPrint('[UserSearchPage] Background caching completed for ${uncachedUsers.length} new users');
+      } catch (e) {
+        debugPrint('[UserSearchPage] Error in background caching: $e');
+      }
+    }));
+  }
+
+  Future<void> _processBatch(List<String> batch) async {
+    try {
+      final profileResults = await _userRepository.getUserProfiles(batch);
+
+      final cacheFutures = <Future>[];
+      for (final entry in profileResults.entries) {
+        if (entry.value.isSuccess) {
+          cacheFutures.add(_userRepository.cacheUser(entry.value.data!));
+        }
+      }
+
+      await Future.wait(cacheFutures);
+    } catch (e) {
+      debugPrint('[UserSearchPage] Error processing batch: $e');
+    }
+  }
+
+  Future<void> _expandUserNetwork() async {
+    if (_isExpandingNetwork || _hasTriedNetworkExpansion) return;
+
+    setState(() {
+      _isExpandingNetwork = true;
+    });
+
+    unawaited(_runNetworkExpansion());
+  }
+
+  Future<void> _runNetworkExpansion() async {
+    try {
+      debugPrint('[UserSearchPage] Starting fast parallel network expansion...');
+
+      final followingResult = await _userRepository.getFollowingList();
+      if (followingResult.isError || followingResult.data == null) {
+        if (mounted) {
+          setState(() {
+            _isExpandingNetwork = false;
+          });
+        }
+        return;
+      }
+
+      final currentUserFollowing = followingResult.data!;
+      debugPrint('[UserSearchPage] Expanding network for ${currentUserFollowing.length} users');
+
+      const chunkSize = 5;
+      final chunks = <List<UserModel>>[];
+
+      for (int i = 0; i < currentUserFollowing.length; i += chunkSize) {
+        chunks.add(currentUserFollowing.skip(i).take(chunkSize).toList());
+      }
+
+      final allFriendsFutures = chunks.take(10).map((chunk) => _processFollowingChunk(chunk));
+      final results = await Future.wait(allFriendsFutures);
+
+      final allFriendsOfFriends = <String>{};
+      for (final friends in results) {
+        allFriendsOfFriends.addAll(friends);
+      }
+
+      debugPrint('[UserSearchPage] Found ${allFriendsOfFriends.length} total friends-of-friends');
+
+      if (allFriendsOfFriends.isNotEmpty) {
+        _cacheDiscoveredUsers(allFriendsOfFriends.toList());
+      }
+
+      _hasTriedNetworkExpansion = true;
+    } catch (e) {
+      debugPrint('[UserSearchPage] Error in network expansion: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isExpandingNetwork = false;
+        });
+      }
+    }
+  }
+
+  Future<Set<String>> _processFollowingChunk(List<UserModel> chunk) async {
+    final friends = <String>{};
+
+    final futures = chunk.map((user) async {
+      try {
+        final userFollowingResult = await _userRepository.getFollowingListForUser(user.pubkeyHex);
+        if (userFollowingResult.isSuccess && userFollowingResult.data != null) {
+          return userFollowingResult.data!.map((u) => u.pubkeyHex).toSet();
+        }
+      } catch (e) {
+        debugPrint('[UserSearchPage] Error processing ${user.name}: $e');
+      }
+      return <String>{};
+    });
+
+    final results = await Future.wait(futures);
+    for (final userFriends in results) {
+      friends.addAll(userFriends);
+    }
+
+    return friends;
+  }
+
+  void _cacheDiscoveredUsers(List<String> userIds) {
+    unawaited(Future.microtask(() async {
+      try {
+        final uncachedUsers = <String>[];
+        for (final userId in userIds) {
+          final cached = await _userRepository.getCachedUser(userId);
+          if (cached == null) {
+            uncachedUsers.add(userId);
+          }
+        }
+
+        if (uncachedUsers.isEmpty) {
+          debugPrint('[UserSearchPage] All ${userIds.length} discovered users already cached');
+          return;
+        }
+
+        debugPrint('[UserSearchPage] Found ${uncachedUsers.length} new users to cache out of ${userIds.length} discovered');
+
+        const batchSize = 250;
+        final futures = <Future>[];
+
+        for (int i = 0; i < uncachedUsers.length; i += batchSize) {
+          final batch = uncachedUsers.skip(i).take(batchSize).toList();
+          futures.add(_processBatch(batch));
+        }
+
+        await Future.wait(futures);
+        debugPrint('[UserSearchPage] Cached ${uncachedUsers.length} new discovered users');
+      } catch (e) {
+        debugPrint('[UserSearchPage] Error caching discovered users: $e');
+      }
+    }));
   }
 
   Future<void> _loadRandomUsers() async {
@@ -78,26 +289,62 @@ class _UserSearchPageState extends State<UserSearchPage> {
   }
 
   Future<void> _searchUsers(String query) async {
+    if (query.trim().isEmpty) {
+      setState(() {
+        _filteredUsers = [];
+        _isSearching = false;
+        _error = null;
+      });
+      return;
+    }
+
     setState(() {
       _isSearching = true;
       _error = null;
     });
 
     try {
-      final result = await _userRepository.searchUsers(query);
+      final searchFuture = _userRepository.searchUsers(query);
+      final result = await searchFuture.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => throw TimeoutException('Search timed out', const Duration(seconds: 5)),
+      );
 
-      if (mounted) {
-        result.fold(
-          (users) => setState(() {
+      if (!mounted) return;
+
+      result.fold(
+        (users) {
+          setState(() {
             _filteredUsers = users;
             _isSearching = false;
-          }),
-          (error) => setState(() {
-            _error = error;
+          });
+
+          if (users.isEmpty && query.isNotEmpty) {
+            debugPrint('[UserSearchPage] No results for "$query", will retry after network expansion...');
+
+            Timer(const Duration(seconds: 1), () {
+              if (mounted && query == _searchController.text.trim()) {
+                _retrySearchAfterExpansion(query);
+              }
+            });
+          }
+        },
+        (error) {
+          debugPrint('[UserSearchPage] Search error: $error');
+          setState(() {
+            _error = 'Search failed. Please try again.';
             _isSearching = false;
             _filteredUsers = [];
-          }),
-        );
+          });
+        },
+      );
+    } on TimeoutException {
+      if (mounted) {
+        setState(() {
+          _error = 'Search timed out. Please try again.';
+          _isSearching = false;
+          _filteredUsers = [];
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -108,6 +355,24 @@ class _UserSearchPageState extends State<UserSearchPage> {
         });
       }
     }
+  }
+
+  void _retrySearchAfterExpansion(String originalQuery) {
+    _userRepository.searchUsers(originalQuery).then((result) {
+      if (mounted && originalQuery == _searchController.text.trim()) {
+        result.fold(
+          (retryUsers) {
+            if (retryUsers.isNotEmpty) {
+              setState(() {
+                _filteredUsers = retryUsers;
+              });
+              debugPrint('[UserSearchPage] Found ${retryUsers.length} users after network expansion');
+            }
+          },
+          (error) => debugPrint('[UserSearchPage] Retry search failed: $error'),
+        );
+      }
+    });
   }
 
   Widget _buildHeader(BuildContext context) {
@@ -213,7 +478,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
   }
 
   Widget _buildSearchResults(BuildContext context) {
-    if (_isSearching) {
+    if (_isSearching || _isExpandingNetwork) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -221,9 +486,19 @@ class _UserSearchPageState extends State<UserSearchPage> {
             CircularProgressIndicator(color: context.colors.primary),
             const SizedBox(height: 16),
             Text(
-              'Searching for users...',
+              _isExpandingNetwork ? 'Expanding social network...' : 'Searching for users...',
               style: TextStyle(color: context.colors.textSecondary),
             ),
+            if (_isExpandingNetwork) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Looking through friends of friends',
+                style: TextStyle(
+                  color: context.colors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ],
           ],
         ),
       );
@@ -289,9 +564,23 @@ class _UserSearchPageState extends State<UserSearchPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Try searching with a different term.',
+              _hasTriedNetworkExpansion
+                  ? 'User not found in your network.\nTry searching with a different term.'
+                  : 'Try searching with a different term.',
               style: TextStyle(color: context.colors.textSecondary),
+              textAlign: TextAlign.center,
             ),
+            if (_hasTriedNetworkExpansion) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Searched through your social network',
+                style: TextStyle(
+                  color: context.colors.textSecondary,
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
           ],
         ),
       );
