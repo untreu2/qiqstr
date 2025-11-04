@@ -459,18 +459,27 @@ class FeedPageState extends State<FeedPage> {
                   left: 0,
                   right: 0,
                   child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: colors.buttonPrimary,
-                        borderRadius: BorderRadius.circular(40),
-                      ),
-                      child: Text(
-                        '#${widget.hashtag}',
-                        style: TextStyle(
-                          color: colors.buttonText,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                    child: GestureDetector(
+                      onTap: () {
+                        _scrollController.animateTo(
+                          0,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOut,
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: colors.buttonPrimary,
+                          borderRadius: BorderRadius.circular(40),
+                        ),
+                        child: Text(
+                          '#${widget.hashtag}',
+                          style: TextStyle(
+                            color: colors.buttonText,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),

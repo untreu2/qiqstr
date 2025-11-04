@@ -108,46 +108,55 @@ class _ProfilePageState extends State<ProfilePage> {
               child: AnimatedOpacity(
                 opacity: _showUsernameBubble ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 300),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: colors.buttonPrimary,
-                    borderRadius: BorderRadius.circular(40),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: colors.avatarPlaceholder,
-                          image: widget.user.profileImage.isNotEmpty
-                              ? DecorationImage(
-                                  image: NetworkImage(widget.user.profileImage),
-                                  fit: BoxFit.cover,
+                child: GestureDetector(
+                  onTap: () {
+                    _scrollController.animateTo(
+                      0,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: colors.buttonPrimary,
+                      borderRadius: BorderRadius.circular(40),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: colors.avatarPlaceholder,
+                            image: widget.user.profileImage.isNotEmpty
+                                ? DecorationImage(
+                                    image: NetworkImage(widget.user.profileImage),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
+                          ),
+                          child: widget.user.profileImage.isEmpty
+                              ? Icon(
+                                  Icons.person,
+                                  size: 14,
+                                  color: colors.textSecondary,
                                 )
                               : null,
                         ),
-                        child: widget.user.profileImage.isEmpty
-                            ? Icon(
-                                Icons.person,
-                                size: 14,
-                                color: colors.textSecondary,
-                              )
-                            : null,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        widget.user.name.isNotEmpty ? widget.user.name : widget.user.npub.substring(0, 8),
-                        style: TextStyle(
-                          color: colors.buttonText,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                        const SizedBox(width: 8),
+                        Text(
+                          widget.user.name.isNotEmpty ? widget.user.name : widget.user.npub.substring(0, 8),
+                          style: TextStyle(
+                            color: colors.buttonText,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
