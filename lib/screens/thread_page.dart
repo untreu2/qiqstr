@@ -220,7 +220,7 @@ class _ThreadPageState extends State<ThreadPage> {
 
     return Container(
       key: widget.focusedNoteId != null ? _focusedNoteKey : null,
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 6),
       child: FocusedNoteWidget(
         note: note,
         currentUserNpub: _currentUserNpub,
@@ -242,7 +242,7 @@ class _ThreadPageState extends State<ThreadPage> {
             color: context.colors.background,
             borderRadius: BorderRadius.circular(40),
             border: Border.all(
-              color: context.colors.primary.withValues(alpha: 0.2),
+              color: context.colors.textPrimary,
               width: 1,
             ),
           ),

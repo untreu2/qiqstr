@@ -747,7 +747,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         child: Text(
           isFollowing ? 'Following' : 'Follow',
           style: TextStyle(
-            color: isFollowing ? context.colors.textPrimary : context.colors.background,
+            color: context.colors.textPrimary,
             fontSize: 13,
             fontWeight: FontWeight.w600,
           ),
