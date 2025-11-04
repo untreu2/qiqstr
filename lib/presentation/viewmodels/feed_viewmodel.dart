@@ -111,7 +111,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           if (npub != null && npub.isNotEmpty) {
             _currentUserNpub = npub;
             _currentUserState = LoadedState(npub);
-            _loadFeed();
+            _loadFeedWithFollowListWait();
             _subscribeToRealTimeUpdates();
           } else {
             _currentUserState = const ErrorState('User not authenticated');
@@ -124,7 +124,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     }, showLoading: false);
   }
 
-  Future<void> _loadFeed() async {
+  Future<void> _loadFeedWithFollowListWait() async {
     if (_currentUserNpub.isEmpty && !isHashtagMode) {
       return;
     }
@@ -135,13 +135,23 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
     _isLoadingFeed = true;
 
-    if (isHashtagMode) {
-      await _loadHashtagFeed();
-    } else {
-      await _loadUserFeed();
+    try {
+      if (isHashtagMode) {
+        await _loadHashtagFeed();
+      } else {
+        await _loadUserFeed();
+      }
+    } catch (e) {
+      debugPrint('[FeedViewModel] Error in feed loading: $e');
+      _feedState = ErrorState('Failed to load feed: $e');
+      safeNotifyListeners();
+    } finally {
+      _isLoadingFeed = false;
     }
+  }
 
-    _isLoadingFeed = false;
+  Future<void> _loadFeed() async {
+    await _loadFeedWithFollowListWait();
   }
 
   Future<void> _loadUserFeed() async {
@@ -211,7 +221,8 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   }
 
   Future<void> refreshFeed() async {
-    await _loadFeed();
+    _isLoadingFeed = false;
+    await _loadFeedWithFollowListWait();
   }
 
   Future<void> loadMoreNotes() async {

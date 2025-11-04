@@ -78,8 +78,7 @@ class NostrDataService {
 
   AuthService get authService => _authService;
 
-  // Context for current operation - determines filtering behavior
-  String _currentContext = 'feed'; // 'feed', 'thread', 'profile', 'hashtag'
+  String _currentContext = 'feed';
 
   void setContext(String context) {
     _currentContext = context;
@@ -87,9 +86,7 @@ class NostrDataService {
   }
 
   bool _shouldIncludeNoteInFeed(String authorHexPubkey, bool isRepost) {
-    // In thread, profile, or hashtag context, accept all notes
     if (_currentContext != 'feed') {
-      debugPrint('[NostrDataService] $_currentContext mode: accepting all notes from $authorHexPubkey');
       return true;
     }
 
@@ -100,12 +97,9 @@ class NostrDataService {
 
     final cachedFollowing = _followCacheService.getSync(currentUserHex ?? _currentUserNpub);
     if (cachedFollowing != null) {
-      final isFollowed = cachedFollowing.contains(authorHexPubkey);
-      debugPrint('[NostrDataService] FEED mode: Author $authorHexPubkey ${isFollowed ? 'IS' : 'NOT'} in follow list (cached)');
-      return isFollowed;
+      return cachedFollowing.contains(authorHexPubkey);
     }
 
-    debugPrint('[NostrDataService] FEED mode: No valid follow cache - REJECTING note from: $authorHexPubkey');
     _refreshFollowCacheInBackground();
     return false;
   }
@@ -113,15 +107,13 @@ class NostrDataService {
   void _refreshFollowCacheInBackground() async {
     if (_currentUserNpub.isNotEmpty) {
       try {
-        debugPrint('[NostrDataService]  Refreshing follow cache in background...');
         final currentUserHex = _authService.npubToHex(_currentUserNpub) ?? _currentUserNpub;
         await _followCacheService.getOrFetch(currentUserHex, () async {
           final result = await getFollowingList(_currentUserNpub);
           return result.isSuccess ? result.data : null;
         });
-        debugPrint('[NostrDataService] Follow cache refreshed via FollowCacheService');
       } catch (e) {
-        debugPrint('[NostrDataService]  Error refreshing follow cache: $e');
+        debugPrint('[NostrDataService] Error refreshing follow cache: $e');
       }
     }
   }
@@ -1354,7 +1346,6 @@ class NostrDataService {
     DateTime? since,
   }) async {
     try {
-      // Set context to profile mode to bypass follow filtering
       setContext('profile');
       debugPrint('[NostrDataService] PROFILE MODE: Fetching notes for $userNpub (bypassing ALL feed filters)');
 
@@ -1662,7 +1653,6 @@ class NostrDataService {
     DateTime? since,
   }) async {
     try {
-      // Set context to hashtag mode to bypass follow filtering
       setContext('hashtag');
       debugPrint('[NostrDataService] HASHTAG MODE: Fetching GLOBAL notes for #$hashtag with server-side filtering');
 
