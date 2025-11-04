@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as provider;
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'colors.dart';
 import 'theme/theme_manager.dart' as theme;
 import 'screens/home_navigator.dart';
@@ -14,10 +15,12 @@ import 'core/di/app_di.dart';
 import 'data/services/nostr_data_service.dart';
 import 'data/services/auth_service.dart';
 import 'data/repositories/notification_repository.dart';
+import 'data/repositories/note_repository.dart';
 
 void main() {
   runZonedGuarded(() async {
-    WidgetsFlutterBinding.ensureInitialized();
+    WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+    FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
     await AppDI.initialize();
 
@@ -51,7 +54,7 @@ void main() {
       logError('Could not set platform error handler', 'Main', e);
     }
 
-    final initialHome = await _determineInitialHome();
+    final initialHome = await _determineInitialHomeWithPreloading();
 
     runApp(
       provider.MultiProvider(
@@ -72,7 +75,7 @@ void main() {
   });
 }
 
-Future<Widget> _determineInitialHome() async {
+Future<Widget> _determineInitialHomeWithPreloading() async {
   try {
     final authService = AppDI.get<AuthService>();
 
@@ -82,69 +85,111 @@ Future<Widget> _determineInitialHome() async {
       final npubResult = await authService.getCurrentUserNpub();
 
       if (npubResult.isSuccess && npubResult.data != null && npubResult.data!.isNotEmpty) {
-        debugPrint(' [Main] Found stored credentials, navigating directly to HomeNavigator');
+        unawaited(_initializeNotifications());
 
-        await _initializeNotifications();
+        unawaited(_loadInitialContent(npubResult.data!));
+
+        FlutterNativeSplash.remove();
 
         return HomeNavigator(npub: npubResult.data!);
       }
     }
 
-    debugPrint(' [Main] No valid credentials found, showing LoginPage');
+    FlutterNativeSplash.remove();
     return const LoginPage();
   } catch (e) {
-    debugPrint(' [Main] Error checking authentication: $e, defaulting to LoginPage');
+    FlutterNativeSplash.remove();
     return const LoginPage();
   }
 }
 
+Future<void> _loadInitialContent(String npub) async {
+  try {
+    final noteRepository = AppDI.get<NoteRepository>();
+    final nostrDataService = AppDI.get<NostrDataService>();
+
+    nostrDataService.setContext('feed');
+
+    unawaited(noteRepository.startRealTimeFeed([npub]));
+
+    try {
+      final cachedNotes = noteRepository.currentNotes;
+      if (cachedNotes.isNotEmpty) {
+        return;
+      }
+    } catch (e) {}
+
+    try {
+      await _loadRecentNotes(noteRepository, npub);
+    } catch (e) {
+      try {
+        await _attemptProfileLoad(noteRepository, npub);
+      } catch (e) {}
+    }
+  } catch (e) {}
+}
+
+Future<bool> _loadRecentNotes(NoteRepository noteRepository, String npub) async {
+  try {
+    final result = await noteRepository.getFeedNotesFromFollowList(
+      currentUserNpub: npub,
+      limit: 20,
+      since: DateTime.now().subtract(const Duration(hours: 6)),
+    );
+
+    final success = result.isSuccess && result.data != null && result.data!.isNotEmpty;
+    return success;
+  } catch (e) {
+    return false;
+  }
+}
+
+Future<bool> _attemptProfileLoad(NoteRepository noteRepository, String npub) async {
+  try {
+    final result = await noteRepository.getProfileNotes(
+      authorNpub: npub,
+      limit: 10,
+      since: DateTime.now().subtract(const Duration(hours: 12)),
+    );
+
+    final success = result.isSuccess && result.data != null && result.data!.isNotEmpty;
+    return success;
+  } catch (e) {
+    return false;
+  }
+}
+
+void unawaited(Future<void> future) {
+  future.catchError((error) {});
+}
+
 Future<void> _initializeNotifications() async {
   try {
-    debugPrint(' [Main] Initializing notifications...');
-
     final notificationRepository = AppDI.get<NotificationRepository>();
 
     final result = await notificationRepository.getNotifications(limit: 50);
 
     if (result.isSuccess) {
-      debugPrint(' [Main] Notifications initialized successfully: ${result.data?.length ?? 0} notifications');
-
       _startBackgroundNotificationListening();
-    } else {
-      debugPrint(' [Main] Failed to initialize notifications: ${result.error}');
     }
-  } catch (e) {
-    debugPrint(' [Main] Error initializing notifications: $e');
-  }
+  } catch (e) {}
 }
 
 void _startBackgroundNotificationListening() {
   try {
-    debugPrint(' [Main] Starting background notification listening...');
-
     final notificationRepository = AppDI.get<NotificationRepository>();
 
     notificationRepository.notificationsStream.listen(
-      (notifications) {
-        debugPrint(' [Main] Background notification update: ${notifications.length} notifications');
-      },
-      onError: (error) {
-        debugPrint(' [Main] Background notification error: $error');
-      },
+      (notifications) {},
+      onError: (error) {},
     );
 
     Timer.periodic(const Duration(seconds: 30), (timer) async {
       try {
         await notificationRepository.refreshNotifications();
-      } catch (e) {
-        debugPrint(' [Main] Error in periodic notification refresh: $e');
-      }
+      } catch (e) {}
     });
-
-    debugPrint(' [Main] Background notification listening started successfully');
-  } catch (e) {
-    debugPrint(' [Main] Error starting background notification listening: $e');
-  }
+  } catch (e) {}
 }
 
 class QiqstrApp extends ConsumerWidget {
