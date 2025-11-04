@@ -1233,49 +1233,39 @@ class NostrDataService {
       bool isFeedMode = false;
 
       if (authorHexKeys.isEmpty) {
-        debugPrint('[NostrDataService] Fetching global timeline');
         setContext('global');
         targetAuthors = [];
       } else if (authorHexKeys.length == 1 && authorHexKeys.first == _authService.npubToHex(_currentUserNpub)) {
-        debugPrint('[NostrDataService] Feed mode - fetching follow list first (NIP-02)');
         setContext('feed');
         isFeedMode = true;
 
         final currentUserHex = _authService.npubToHex(_currentUserNpub);
         if (currentUserHex == null) {
-          debugPrint(' [NostrDataService] Cannot convert current user npub to hex: $_currentUserNpub');
           return const Result.error('Invalid current user npub format');
         }
 
-        debugPrint('[NostrDataService] Current user hex: $currentUserHex');
+        final cachedFollowing = _followCacheService.getSync(currentUserHex);
+        List<String>? followingList;
 
-        debugPrint('[NostrDataService]  Getting follow list for: $_currentUserNpub (hex: $currentUserHex)');
-        final followingResult = await getFollowingList(_currentUserNpub);
-
-        debugPrint(
-            '[NostrDataService]  Follow list result: success=${followingResult.isSuccess}, data=${followingResult.data?.length ?? 0}');
-
-        if (followingResult.isSuccess && followingResult.data != null && followingResult.data!.isNotEmpty) {
-          targetAuthors = List<String>.from(followingResult.data!);
-          targetAuthors.add(currentUserHex);
-          debugPrint('[NostrDataService] Following list found: ${targetAuthors.length} hex pubkeys');
-          debugPrint('[NostrDataService]  Target authors (hex): ${targetAuthors.take(5).toList()}... (showing first 5)');
-
-          for (int i = 0; i < targetAuthors.length && i < 10; i++) {
-            final hexPubkey = targetAuthors[i];
-            final npub = _authService.hexToNpub(hexPubkey) ?? 'unknown';
-            debugPrint('[NostrDataService]   - Following[$i]: $hexPubkey -> $npub');
-          }
+        if (cachedFollowing != null) {
+          followingList = cachedFollowing;
         } else {
-          debugPrint('[NostrDataService]  No follow list found - returning empty feed');
-          debugPrint('[NostrDataService] Follow result error: ${followingResult.error}');
+          final followingResult = await getFollowingList(_currentUserNpub);
+          if (followingResult.isSuccess && followingResult.data != null) {
+            followingList = followingResult.data!;
+            await _followCacheService.put(currentUserHex, followingList);
+          }
+        }
+
+        if (followingList != null && followingList.isNotEmpty) {
+          targetAuthors = List<String>.from(followingList);
+          targetAuthors.add(currentUserHex);
+        } else {
           return Result.success([]);
         }
       } else {
         setContext('profile');
         targetAuthors = authorHexKeys;
-        debugPrint('[NostrDataService] Profile mode - fetching notes for: ${authorHexKeys.length} hex pubkeys');
-        debugPrint('[NostrDataService] Profile authors (hex): $targetAuthors');
       }
 
       final filter = NostrService.createNotesFilter(
@@ -1289,49 +1279,16 @@ class NostrDataService {
       final request = NostrService.createRequest(filter);
       await _relayManager.broadcast(NostrService.serializeRequest(request));
 
+      await Future.delayed(const Duration(milliseconds: 1500));
+
       final cachedNotes = _getNotesList();
-      if (cachedNotes.isEmpty) {
-        debugPrint('[NostrDataService] Cache empty, waiting for relay responses...');
-
-        final completer = Completer<List<NoteModel>>();
-        late StreamSubscription subscription;
-
-        subscription = _notesController.stream.listen((notes) {
-          if (notes.isNotEmpty && !completer.isCompleted) {
-            debugPrint('[NostrDataService] Received ${notes.length} notes from relays');
-            completer.complete(notes);
-          }
-        });
-
-        Timer(const Duration(seconds: 3), () {
-          if (!completer.isCompleted) {
-            debugPrint('[NostrDataService] Timeout waiting for relay responses');
-            completer.complete([]);
-          }
-        });
-
-        try {
-          final notes = await completer.future;
-          await subscription.cancel();
-          return Result.success(notes.take(limit).toList());
-        } catch (e) {
-          await subscription.cancel();
-          return Result.success([]);
-        }
-      }
-
-      debugPrint('[NostrDataService] Returning ${cachedNotes.length} cached notes');
 
       List<NoteModel> notesToReturn;
       if (isFeedMode && targetAuthors.isNotEmpty) {
         notesToReturn = _filterNotesByFollowList(cachedNotes, targetAuthors).take(limit).toList();
-        debugPrint('[NostrDataService] Feed mode: Filtered to ${notesToReturn.length} notes from followed authors');
       } else {
         notesToReturn = cachedNotes.take(limit).toList();
-        debugPrint('[NostrDataService] Non-feed mode: Returning ${notesToReturn.length} notes without follow filtering');
       }
-
-      debugPrint('[NostrDataService] Returning ${notesToReturn.length} feed notes without automatic interaction fetch');
 
       return Result.success(notesToReturn);
     } catch (e) {
@@ -1654,111 +1611,35 @@ class NostrDataService {
   }) async {
     try {
       setContext('hashtag');
-      debugPrint('[NostrDataService] HASHTAG MODE: Fetching GLOBAL notes for #$hashtag with server-side filtering');
 
-      final Map<String, NoteModel> hashtagNotesMap = {};
-      final limitedRelays = _relayManager.relayUrls.take(3).toList();
+      final filterMap = {
+        'kinds': [1],
+        '#t': [hashtag.toLowerCase()],
+        'limit': limit,
+      };
 
-      debugPrint('[NostrDataService] HASHTAG: Using ${limitedRelays.length} relays for PARALLEL fetch');
+      if (since != null) {
+        filterMap['since'] = since.millisecondsSinceEpoch ~/ 1000;
+      }
+      if (until != null) {
+        filterMap['until'] = until.millisecondsSinceEpoch ~/ 1000;
+      }
 
-      await Future.wait(
-        limitedRelays.map((relayUrl) async {
-          if (_isClosed) return;
+      final subscriptionId = NostrService.generateUUID();
+      final request = jsonEncode(['REQ', subscriptionId, filterMap]);
+      await _relayManager.broadcast(request);
 
-          WebSocket? ws;
-          StreamSubscription? sub;
-          try {
-            debugPrint('[NostrDataService] HASHTAG: Connecting to $relayUrl');
-            ws = await WebSocket.connect(relayUrl);
-            if (_isClosed) {
-              await ws.close();
-              return;
-            }
+      await Future.delayed(const Duration(milliseconds: 2000));
 
-            final completer = Completer<void>();
-            int eventCount = 0;
-
-            sub = ws.listen((event) {
-              try {
-                final decoded = jsonDecode(event);
-
-                if (decoded[0] == 'EVENT') {
-                  final eventData = decoded[2] as Map<String, dynamic>;
-                  final eventId = eventData['id'] as String;
-                  final eventKind = eventData['kind'] as int;
-
-                  if (eventKind == 1) {
-                    if (!hashtagNotesMap.containsKey(eventId)) {
-                      final note = _processHashtagEventDirectly(eventData);
-                      if (note != null) {
-                        hashtagNotesMap[eventId] = note;
-                        eventCount++;
-                        if (!_noteCache.containsKey(eventId) && !_eventIds.contains(eventId)) {
-                          _noteCache[eventId] = note;
-                          _eventIds.add(eventId);
-                        }
-                      }
-                    }
-                  }
-                } else if (decoded[0] == 'EOSE') {
-                  debugPrint('[NostrDataService] HASHTAG: EOSE from $relayUrl - $eventCount notes');
-                  if (!completer.isCompleted) completer.complete();
-                }
-              } catch (e) {
-                debugPrint('[NostrDataService] HASHTAG: Error processing event: $e');
-              }
-            }, onDone: () {
-              if (!completer.isCompleted) completer.complete();
-            }, onError: (error) {
-              debugPrint('[NostrDataService] HASHTAG: Connection error on $relayUrl: $error');
-              if (!completer.isCompleted) completer.complete();
-            }, cancelOnError: true);
-
-            if (ws.readyState == WebSocket.open) {
-              final subscriptionId = NostrService.generateUUID();
-              final filterMap = {
-                'kinds': [1],
-                '#t': [hashtag.toLowerCase()],
-                'limit': limit,
-              };
-
-              if (since != null) {
-                filterMap['since'] = since.millisecondsSinceEpoch ~/ 1000;
-              }
-              if (until != null) {
-                filterMap['until'] = until.millisecondsSinceEpoch ~/ 1000;
-              }
-
-              final request = jsonEncode(['REQ', subscriptionId, filterMap]);
-              ws.add(request);
-              debugPrint('[NostrDataService] HASHTAG: Query sent to $relayUrl');
-            }
-
-            await completer.future;
-
-            await sub.cancel();
-            await ws.close();
-          } catch (e) {
-            debugPrint('[NostrDataService] HASHTAG: Exception with $relayUrl: $e');
-            await sub?.cancel();
-            await ws?.close();
-          }
-        }),
-      );
-
-      final hashtagNotes = hashtagNotesMap.values.toList();
+      final hashtagNotes = _noteCache.values.where((note) {
+        return note.content.toLowerCase().contains('#${hashtag.toLowerCase()}');
+      }).toList();
 
       hashtagNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
       final limitedNotes = hashtagNotes.take(limit).toList();
-
-      debugPrint('[NostrDataService] HASHTAG: Returning ${limitedNotes.length} notes for #$hashtag (found ${hashtagNotes.length} total)');
-
-      _scheduleUIUpdate();
 
       return Result.success(limitedNotes);
     } catch (e) {
-      debugPrint('[NostrDataService] HASHTAG: Error fetching hashtag notes: $e');
       return Result.error('Failed to fetch hashtag notes: $e');
     }
   }
