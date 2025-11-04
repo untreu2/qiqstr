@@ -44,7 +44,7 @@ class _ThreadPageState extends State<ThreadPage> {
   static const int _repliesPerPage = 5;
   static const int _maxInitialReplies = 20;
   static const int _maxNestedReplies = 3;
-  
+
   Timer? _refreshDebounceTimer;
   bool _isRefreshing = false;
 
@@ -71,8 +71,7 @@ class _ThreadPageState extends State<ThreadPage> {
         setState(() {
           _currentUserNpub = result.data!;
         });
-        
-        
+
         final userResult = await _userRepository.getCurrentUser();
         if (userResult.isSuccess && userResult.data != null) {
           setState(() {
@@ -80,9 +79,7 @@ class _ThreadPageState extends State<ThreadPage> {
           });
         }
       }
-    } catch (e) {
-      debugPrint('[ThreadPage] Error loading current user: $e');
-    }
+    } catch (e) {}
   }
 
   @override
@@ -251,7 +248,6 @@ class _ThreadPageState extends State<ThreadPage> {
           ),
           child: Row(
             children: [
-              
               Container(
                 width: 40,
                 height: 40,
@@ -280,7 +276,6 @@ class _ThreadPageState extends State<ThreadPage> {
                 ),
               ),
               const SizedBox(width: 12),
-              
               Expanded(
                 child: Text(
                   'Add a reply...',
@@ -309,17 +304,12 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Widget _buildThreadRepliesSliver(BuildContext context, ThreadViewModel viewModel, NoteModel displayNote) {
-    debugPrint(' [ThreadPage] Building thread replies sliver for display note: ${displayNote.id}');
-
     return UIStateBuilder<List<NoteModel>>(
       state: viewModel.repliesState,
       builder: (context, replies) {
-        debugPrint(' [ThreadPage] Replies state loaded with ${replies.length} replies');
-
         final threadStructureState = viewModel.threadStructureState;
 
         if (threadStructureState.isLoading) {
-          debugPrint('[ThreadPage] Thread structure still loading, showing loader');
           return SliverToBoxAdapter(
             child: Container(
               padding: const EdgeInsets.all(32),
@@ -341,20 +331,15 @@ class _ThreadPageState extends State<ThreadPage> {
 
         final threadStructure = threadStructureState.data;
         if (threadStructure == null) {
-          debugPrint('[ThreadPage] Thread structure is null, showing empty widget');
           return const SliverToBoxAdapter(child: SizedBox.shrink());
         }
 
-        debugPrint(' [ThreadPage] Thread structure ready, getting children for: ${displayNote.id}');
         final allDirectReplies = threadStructure.getChildren(displayNote.id);
 
         final directReplies = allDirectReplies.where((reply) => !reply.isRepost).toList()
           ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-        debugPrint(' [ThreadPage] Found ${directReplies.length} direct replies (filtered and sorted) for ${displayNote.id}');
-
         if (directReplies.isEmpty) {
-          debugPrint(' [ThreadPage] No direct replies found, showing "No replies yet"');
           return SliverToBoxAdapter(
             child: Center(
               child: Padding(
@@ -371,18 +356,15 @@ class _ThreadPageState extends State<ThreadPage> {
           );
         }
 
-        
         final maxVisible = math.min(_visibleRepliesCount, _maxInitialReplies);
         final visibleReplies = directReplies.take(maxVisible).toList();
         final hasMoreReplies = directReplies.length > maxVisible;
 
-        debugPrint(' [ThreadPage] Building ${visibleReplies.length} reply widgets out of ${directReplies.length} total');
         return SliverList(
           delegate: SliverChildBuilderDelegate(
             (context, index) {
               if (index < visibleReplies.length) {
                 final reply = visibleReplies[index];
-                debugPrint(' [ThreadPage] Creating widget for reply [$index]: ${reply.id}');
                 return RepaintBoundary(
                   key: ValueKey('reply_list_${reply.id}'),
                   child: AnimatedContainer(
@@ -752,15 +734,15 @@ class _ThreadPageState extends State<ThreadPage> {
 
   Future<void> _debouncedRefresh(ThreadViewModel viewModel) async {
     if (_isRefreshing) return;
-    
+
     _refreshDebounceTimer?.cancel();
     _refreshDebounceTimer = Timer(const Duration(milliseconds: 300), () async {
       if (!mounted) return;
-      
+
       setState(() {
         _isRefreshing = true;
       });
-      
+
       try {
         await viewModel.refreshThreadCommand.execute();
       } finally {

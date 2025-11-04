@@ -97,17 +97,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
         if (hasImmediateData) {
           safeNotifyListeners();
-
-          final allThreadNotes = [
-            if (cachedRootResult.isSuccess && cachedRootResult.data != null) cachedRootResult.data!,
-            if (cachedRepliesResult.isSuccess && cachedRepliesResult.data != null) ...cachedRepliesResult.data!,
-          ];
-
-          if (allThreadNotes.isNotEmpty) {
-            final allNoteIds = allThreadNotes.map((n) => n.id).toList();
-            _fetchInteractionsAndUpdateNotes(allNoteIds);
-            _loadUserProfiles(allThreadNotes);
-          }
         } else {
           _rootNoteState = const LoadingState();
           safeNotifyListeners();
@@ -140,33 +129,17 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         if (repliesResult.isSuccess) {
           final replies = repliesResult.data!;
 
-          // Only update if we have fresh data different from cache
           final shouldUpdate = !hasImmediateData || _hasDataChanged(rootNote, replies);
           if (shouldUpdate) {
-            final allThreadNotes = [rootNote, ...replies];
-            final allNoteIds = allThreadNotes.map((n) => n.id).toList();
+            _rootNoteState = LoadedState(rootNote);
+            _repliesState = LoadedState(replies);
 
-            final updatedNotes = await _calculateInitialInteractionCounts(allThreadNotes);
-            final updatedRootNote = updatedNotes.firstWhere((n) => n.id == rootNote.id);
-            final updatedReplies = updatedNotes.where((n) => n.id != rootNote.id).toList();
-
-            _rootNoteState = LoadedState(updatedRootNote);
-            _repliesState = LoadedState(updatedReplies);
-
-            final structure = _buildThreadStructure(updatedRootNote, updatedReplies);
+            final structure = _buildThreadStructure(rootNote, replies);
             _threadStructureState = LoadedState(structure);
 
-            if (!isDisposed) {
-              _fetchInteractionsAndUpdateNotes(allNoteIds);
-            }
-
+            final allThreadNotes = [rootNote, ...replies];
             _loadUserProfiles(allThreadNotes);
             safeNotifyListeners();
-          }
-
-          // Setup periodic refresh only once after successful load
-          if (!isDisposed) {
-            _setupPeriodicInteractionRefresh();
           }
         } else {
           _repliesState = ErrorState(repliesResult.error!);
@@ -178,123 +151,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         safeNotifyListeners();
       }
     });
-  }
-
-  Future<List<NoteModel>> _calculateInitialInteractionCounts(List<NoteModel> threadNotes) async {
-    try {
-      final updatedNotes = <NoteModel>[];
-
-      for (final note in threadNotes) {
-        final replyCount =
-            threadNotes.where((n) => n.isReply && (n.parentId == note.id || (n.rootId == note.id && n.parentId != note.id))).length;
-
-        final cachedNotes = _nostrDataService.cachedNotes;
-        final repostCount = cachedNotes.where((n) => n.isRepost && n.rootId == note.id).length;
-
-        final updatedNote = NoteModel(
-          id: note.id,
-          content: note.content,
-          author: note.author,
-          timestamp: note.timestamp,
-          isRepost: note.isRepost,
-          repostedBy: note.repostedBy,
-          repostTimestamp: note.repostTimestamp,
-          repostCount: repostCount,
-          rawWs: note.rawWs,
-          reactionCount: note.reactionCount,
-          replyCount: replyCount,
-          hasMedia: note.hasMedia,
-          estimatedHeight: note.estimatedHeight,
-          isVideo: note.isVideo,
-          videoUrl: note.videoUrl,
-          zapAmount: note.zapAmount,
-          isReply: note.isReply,
-          parentId: note.parentId,
-          rootId: note.rootId,
-          replyIds: note.replyIds,
-          eTags: note.eTags,
-          pTags: note.pTags,
-          replyMarker: note.replyMarker,
-        );
-
-        _persistentReplyCounts[note.id] = replyCount;
-        _persistentRepostCounts[note.id] = repostCount;
-
-        updatedNotes.add(updatedNote);
-      }
-
-      return updatedNotes;
-    } catch (e) {
-      return threadNotes;
-    }
-  }
-
-  Future<void> _fetchInteractionsAndUpdateNotes(List<String> noteIds) async {
-    try {
-      final allInteractionIds = <String>[];
-      allInteractionIds.addAll(noteIds);
-
-      await _addOriginalNoteIdsForReposts(allInteractionIds);
-
-      await _nostrDataService.fetchInteractionsForNotes(allInteractionIds, forceLoad: true);
-
-      await _performEnhancedNoteUpdates(allInteractionIds);
-
-      _triggerThreadUIUpdates();
-    } catch (e) {}
-  }
-
-  Future<void> _performEnhancedNoteUpdates(List<String> noteIds) async {
-    try {
-      final latestNotes = _nostrDataService.cachedNotes;
-
-      await _calculateAndUpdateInteractionCounts(noteIds, latestNotes);
-
-      if (_rootNoteState.isLoaded) {
-        final rootNote = _rootNoteState.data!;
-        final updatedRootNote = await _getUpdatedNoteWithCounts(rootNote, latestNotes);
-
-        await _noteRepository.updateNote(updatedRootNote);
-        _rootNoteState = LoadedState(updatedRootNote);
-      }
-
-      if (_repliesState.isLoaded) {
-        final replies = _repliesState.data!;
-        final updatedReplies = <NoteModel>[];
-
-        for (final reply in replies) {
-          final updatedReply = await _getUpdatedNoteWithCounts(reply, latestNotes);
-
-          await _noteRepository.updateNote(updatedReply);
-          updatedReplies.add(updatedReply);
-        }
-
-        _repliesState = LoadedState(updatedReplies);
-
-        if (_rootNoteState.isLoaded) {
-          final structure = _buildThreadStructure(_rootNoteState.data!, updatedReplies);
-          _threadStructureState = LoadedState(structure);
-        }
-      }
-    } catch (e) {}
-  }
-
-  Future<void> _calculateAndUpdateInteractionCounts(List<String> noteIds, List<NoteModel> cachedNotes) async {
-    try {
-      final replyCounts = <String, int>{};
-      final repostCounts = <String, int>{};
-
-      for (final noteId in noteIds) {
-        final directReplies = cachedNotes.where((note) => note.isReply && (note.parentId == noteId || note.rootId == noteId)).length;
-        replyCounts[noteId] = directReplies;
-
-        final reposts = cachedNotes.where((note) => note.isRepost && note.rootId == noteId).length;
-        repostCounts[noteId] = reposts;
-      }
-
-      _tempReplyCounts = replyCounts;
-      _tempRepostCounts = repostCounts;
-    } catch (e) {}
   }
 
   final Map<String, int> _persistentReplyCounts = {};
@@ -350,34 +206,10 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     safeNotifyListeners();
   }
 
-  Future<void> _addOriginalNoteIdsForReposts(List<String> interactionIds) async {
-    try {
-      final currentNotes = <NoteModel>[];
-
-      if (_rootNoteState.isLoaded && _rootNoteState.data != null) {
-        currentNotes.add(_rootNoteState.data!);
-      }
-      if (_repliesState.isLoaded && _repliesState.data != null) {
-        currentNotes.addAll(_repliesState.data!);
-      }
-
-      for (final note in currentNotes) {
-        if (note.isRepost && note.rootId != null && note.rootId!.isNotEmpty) {
-          if (!interactionIds.contains(note.rootId!)) {
-            interactionIds.add(note.rootId!);
-          }
-        }
-      }
-    } catch (e) {}
-  }
-
   bool _hasDataChanged(NoteModel? newRootNote, List<NoteModel> newReplies) {
     if (_rootNoteState.isLoaded && newRootNote != null) {
       final currentRoot = _rootNoteState.data!;
-      if (currentRoot.id != newRootNote.id ||
-          currentRoot.reactionCount != newRootNote.reactionCount ||
-          currentRoot.replyCount != newRootNote.replyCount ||
-          currentRoot.repostCount != newRootNote.repostCount) {
+      if (currentRoot.id != newRootNote.id) {
         return true;
       }
     }
@@ -387,83 +219,14 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
       if (currentReplies.length != newReplies.length) {
         return true;
       }
-
-      final currentIds = currentReplies.map((r) => r.id).toSet();
-      final newIds = newReplies.map((r) => r.id).toSet();
-      if (!currentIds.containsAll(newIds) || !newIds.containsAll(currentIds)) {
-        return true;
-      }
     }
 
     return false;
   }
 
-  void _setupPeriodicInteractionRefresh() {
-    addSubscription(Stream.periodic(const Duration(seconds: 2)).listen((_) async {
-      if (!isDisposed && (_rootNoteState.isLoaded || _repliesState.isLoaded)) {
-        final allNoteIds = <String>[];
+  void _setupInitialInteractionFetch() {}
 
-        if (_rootNoteState.isLoaded && _rootNoteState.data != null) {
-          allNoteIds.add(_rootNoteState.data!.id);
-        }
-
-        if (_repliesState.isLoaded && _repliesState.data != null) {
-          allNoteIds.addAll(_repliesState.data!.map((r) => r.id));
-        }
-
-        if (allNoteIds.isNotEmpty) {
-          await _fetchInteractionsAndUpdateNotes(allNoteIds);
-        }
-      }
-    }));
-
-    addSubscription(_noteRepository.notesStream.listen((updatedNotes) {
-      if (!isDisposed && updatedNotes.isNotEmpty) {
-        _handleRealTimeNoteUpdates(updatedNotes);
-      }
-    }));
-  }
-
-  void _handleRealTimeNoteUpdates(List<NoteModel> updatedNotes) {
-    try {
-      bool hasRelevantUpdates = false;
-
-      final threadNoteIds = <String>[];
-
-      if (_rootNoteState.isLoaded && _rootNoteState.data != null) {
-        threadNoteIds.add(_rootNoteState.data!.id);
-      }
-
-      if (_repliesState.isLoaded && _repliesState.data != null) {
-        threadNoteIds.addAll(_repliesState.data!.map((r) => r.id));
-      }
-
-      final relevantUpdates = updatedNotes.where((note) => threadNoteIds.contains(note.id)).toList();
-
-      if (relevantUpdates.isNotEmpty) {
-        for (final updatedNote in relevantUpdates) {
-          if (_rootNoteState.isLoaded && _rootNoteState.data!.id == updatedNote.id) {
-            _rootNoteState = LoadedState(updatedNote);
-            hasRelevantUpdates = true;
-          }
-
-          if (_repliesState.isLoaded && _repliesState.data != null) {
-            final replies = _repliesState.data!;
-            final index = replies.indexWhere((r) => r.id == updatedNote.id);
-            if (index != -1) {
-              replies[index] = updatedNote;
-              _repliesState = LoadedState(List.from(replies));
-              hasRelevantUpdates = true;
-            }
-          }
-        }
-
-        if (hasRelevantUpdates) {
-          _triggerThreadUIUpdates();
-        }
-      }
-    } catch (e) {}
-  }
+  void _handleRealTimeNoteUpdates(List<NoteModel> updatedNotes) {}
 
   Future<void> refreshThread() async {
     await loadThread();
@@ -503,15 +266,9 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
       final Set<String> authorIds = {};
       for (final note in notes) {
         authorIds.add(note.author);
-        if (note.repostedBy != null) {
-          authorIds.add(note.repostedBy!);
-        }
       }
 
-      final missingAuthorIds = authorIds.where((id) {
-        final cachedProfile = _userProfiles[id];
-        return cachedProfile == null || cachedProfile.profileImage.isEmpty;
-      }).toList();
+      final missingAuthorIds = authorIds.where((id) => !_userProfiles.containsKey(id)).take(10).toList();
 
       if (missingAuthorIds.isEmpty) {
         return;
@@ -519,7 +276,7 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
       final results = await _userRepository.getUserProfiles(
         missingAuthorIds,
-        priority: FetchPriority.high,
+        priority: FetchPriority.low,
       );
 
       for (final entry in results.entries) {
@@ -528,25 +285,21 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
             _userProfiles[entry.key] = user;
           },
           (error) {
-            if (!_userProfiles.containsKey(entry.key)) {
-              _userProfiles[entry.key] = UserModel(
-                pubkeyHex: entry.key,
-                name: entry.key.length > 8 ? entry.key.substring(0, 8) : entry.key,
-                about: '',
-                profileImage: '',
-                banner: '',
-                website: '',
-                nip05: '',
-                lud16: '',
-                updatedAt: DateTime.now(),
-                nip05Verified: false,
-              );
-            }
+            _userProfiles[entry.key] = UserModel(
+              pubkeyHex: entry.key,
+              name: entry.key.length > 8 ? entry.key.substring(0, 8) : entry.key,
+              about: '',
+              profileImage: '',
+              banner: '',
+              website: '',
+              nip05: '',
+              lud16: '',
+              updatedAt: DateTime.now(),
+              nip05Verified: false,
+            );
           },
         );
       }
-
-      safeNotifyListeners();
     } catch (e) {}
   }
 
@@ -578,33 +331,26 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
   }
 
   void _subscribeToThreadUpdates() {
-    addSubscription(
-      _noteRepository.realTimeNotesStream.listen((notes) {
-        if (!isDisposed && _rootNoteState.isLoaded) {
-          final rootNote = _rootNoteState.data!;
-          final newThreadNotes = notes
-              .where((note) =>
-                  note.id == _rootNoteId ||
-                  note.rootId == _rootNoteId ||
-                  note.parentId == _rootNoteId ||
-                  (note.isReply && (note.rootId == rootNote.rootId || note.parentId == rootNote.id)))
-              .toList();
+    if (_focusedNoteId != null) {
+      addSubscription(
+        _noteRepository.realTimeNotesStream.listen((notes) {
+          if (!isDisposed && _rootNoteState.isLoaded) {
+            final newFocusedNotes = notes.where((note) => note.id == _focusedNoteId).toList();
 
-          if (newThreadNotes.isNotEmpty) {
-            loadThread();
+            if (newFocusedNotes.isNotEmpty) {
+              loadThread();
+            }
           }
-        }
-      }),
-    );
+        }),
+      );
+    }
   }
 
   Future<void> reactToNote(String noteId, String reaction) async {
     try {
       final result = await _noteRepository.reactToNote(noteId, reaction);
       result.fold(
-        (_) {
-          loadThread();
-        },
+        (_) {},
         (error) {
           setError(NetworkError(message: 'Failed to react: $error'));
         },
@@ -618,9 +364,7 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     try {
       final result = await _noteRepository.repostNote(noteId);
       result.fold(
-        (_) {
-          loadThread();
-        },
+        (_) {},
         (error) {
           setError(NetworkError(message: 'Failed to repost: $error'));
         },
@@ -660,22 +404,7 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     super.dispose();
   }
 
-  Future<void> _persistCalculatedCountsOnDispose() async {
-    try {
-      if (_rootNoteState.isLoaded && _rootNoteState.data != null) {
-        final rootNote = _rootNoteState.data!;
-        final persistedRootNote = await _createNoteWithPersistedCounts(rootNote);
-        await _noteRepository.updateNote(persistedRootNote);
-      }
-
-      if (_repliesState.isLoaded && _repliesState.data != null) {
-        for (final reply in _repliesState.data!) {
-          final persistedReply = await _createNoteWithPersistedCounts(reply);
-          await _noteRepository.updateNote(persistedReply);
-        }
-      }
-    } catch (e) {}
-  }
+  Future<void> _persistCalculatedCountsOnDispose() async {}
 
   Future<NoteModel> _createNoteWithPersistedCounts(NoteModel note) async {
     final persistedReplyCount = _persistentReplyCounts[note.id] ?? note.replyCount;
