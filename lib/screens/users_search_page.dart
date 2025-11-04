@@ -645,7 +645,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
                 bottom: 0,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: context.colors.background,
+                    color: context.colors.surface,
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.1),

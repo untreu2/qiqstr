@@ -280,7 +280,7 @@ class AppThemeColors {
       grey800: AppColors.grey800,
       grey900: AppColors.grey900,
       red400: AppColors.red400,
-      blue200: AppColors.blue200,
+      blue200: AppColors.blue400,
       green400: AppColors.green400,
     );
   }
