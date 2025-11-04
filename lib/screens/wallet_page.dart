@@ -156,28 +156,14 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
   Widget _buildHeader(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 60, 16, 8),
-      child: Row(
-        children: [
-          SvgPicture.asset(
-            'assets/wallet_icon.svg',
-            width: 18,
-            height: 18,
-            colorFilter: ColorFilter.mode(
-              context.colors.textPrimary,
-              BlendMode.srcIn,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            'Wallet',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
-              color: context.colors.textPrimary,
-              letterSpacing: -0.5,
-            ),
-          ),
-        ],
+      child: Text(
+        'Wallet',
+        style: TextStyle(
+          fontSize: 28,
+          fontWeight: FontWeight.w700,
+          color: context.colors.textPrimary,
+          letterSpacing: -0.5,
+        ),
       ),
     );
   }

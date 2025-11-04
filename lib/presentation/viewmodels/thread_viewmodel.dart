@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import '../../core/base/base_view_model.dart';
 import '../../core/base/ui_state.dart';
@@ -153,59 +152,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     });
   }
 
-  final Map<String, int> _persistentReplyCounts = {};
-  final Map<String, int> _persistentRepostCounts = {};
-
-  Map<String, int> _tempReplyCounts = {};
-  Map<String, int> _tempRepostCounts = {};
-
-  Future<NoteModel> _getUpdatedNoteWithCounts(NoteModel originalNote, List<NoteModel> cachedNotes) async {
-    final latestNote = cachedNotes.where((n) => n.id == originalNote.id).firstOrNull ?? originalNote;
-
-    final replyCount = _persistentReplyCounts[originalNote.id] ?? _tempReplyCounts[originalNote.id] ?? originalNote.replyCount;
-    final repostCount = _persistentRepostCounts[originalNote.id] ?? _tempRepostCounts[originalNote.id] ?? originalNote.repostCount;
-
-    if (replyCount > 0 || originalNote.replyCount > 0) {
-      _persistentReplyCounts[originalNote.id] = math.max(replyCount, originalNote.replyCount);
-    }
-    if (repostCount > 0 || originalNote.repostCount > 0) {
-      _persistentRepostCounts[originalNote.id] = math.max(repostCount, originalNote.repostCount);
-    }
-
-    final finalReplyCount = _persistentReplyCounts[originalNote.id] ?? replyCount;
-    final finalRepostCount = _persistentRepostCounts[originalNote.id] ?? repostCount;
-
-    return NoteModel(
-      id: latestNote.id,
-      content: latestNote.content,
-      author: latestNote.author,
-      timestamp: latestNote.timestamp,
-      isRepost: latestNote.isRepost,
-      repostedBy: latestNote.repostedBy,
-      repostTimestamp: latestNote.repostTimestamp,
-      repostCount: finalRepostCount,
-      rawWs: latestNote.rawWs,
-      reactionCount: latestNote.reactionCount,
-      replyCount: finalReplyCount,
-      hasMedia: latestNote.hasMedia,
-      estimatedHeight: latestNote.estimatedHeight,
-      isVideo: latestNote.isVideo,
-      videoUrl: latestNote.videoUrl,
-      zapAmount: latestNote.zapAmount,
-      isReply: latestNote.isReply,
-      parentId: latestNote.parentId,
-      rootId: latestNote.rootId,
-      replyIds: latestNote.replyIds,
-      eTags: latestNote.eTags,
-      pTags: latestNote.pTags,
-      replyMarker: latestNote.replyMarker,
-    );
-  }
-
-  void _triggerThreadUIUpdates() {
-    safeNotifyListeners();
-  }
-
   bool _hasDataChanged(NoteModel? newRootNote, List<NoteModel> newReplies) {
     if (_rootNoteState.isLoaded && newRootNote != null) {
       final currentRoot = _rootNoteState.data!;
@@ -223,10 +169,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
     return false;
   }
-
-  void _setupInitialInteractionFetch() {}
-
-  void _handleRealTimeNoteUpdates(List<NoteModel> updatedNotes) {}
 
   Future<void> refreshThread() async {
     await loadThread();
@@ -405,37 +347,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
   }
 
   Future<void> _persistCalculatedCountsOnDispose() async {}
-
-  Future<NoteModel> _createNoteWithPersistedCounts(NoteModel note) async {
-    final persistedReplyCount = _persistentReplyCounts[note.id] ?? note.replyCount;
-    final persistedRepostCount = _persistentRepostCounts[note.id] ?? note.repostCount;
-
-    return NoteModel(
-      id: note.id,
-      content: note.content,
-      author: note.author,
-      timestamp: note.timestamp,
-      isRepost: note.isRepost,
-      repostedBy: note.repostedBy,
-      repostTimestamp: note.repostTimestamp,
-      repostCount: persistedRepostCount,
-      rawWs: note.rawWs,
-      reactionCount: note.reactionCount,
-      replyCount: persistedReplyCount,
-      hasMedia: note.hasMedia,
-      estimatedHeight: note.estimatedHeight,
-      isVideo: note.isVideo,
-      videoUrl: note.videoUrl,
-      zapAmount: note.zapAmount,
-      isReply: note.isReply,
-      parentId: note.parentId,
-      rootId: note.rootId,
-      replyIds: note.replyIds,
-      eTags: note.eTags,
-      pTags: note.pTags,
-      replyMarker: note.replyMarker,
-    );
-  }
 
   @override
   void onRetry() {

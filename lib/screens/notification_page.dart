@@ -135,48 +135,29 @@ class _NotificationPageState extends State<NotificationPage> {
   Widget _buildHeader(BuildContext context, NotificationViewModel viewModel, int notificationCount) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 60, 16, 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  SvgPicture.asset(
-                    'assets/notification_button.svg',
-                    width: 21,
-                    height: 21,
-                    colorFilter: ColorFilter.mode(
-                      context.colors.textPrimary,
-                      BlendMode.srcIn,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Notifications',
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      color: context.colors.textPrimary,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                ],
-              ),
-              if (notificationCount > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4, left: 33),
-                  child: Text(
-                    '$notificationCount notification${notificationCount != 1 ? 's' : ''}',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: context.colors.textSecondary,
-                    ),
-                  ),
-                ),
-            ],
+          Text(
+            'Notifications',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: context.colors.textPrimary,
+              letterSpacing: -0.5,
+            ),
           ),
+          if (notificationCount > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                '$notificationCount notification${notificationCount != 1 ? 's' : ''}',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: context.colors.textSecondary,
+                ),
+              ),
+            ),
         ],
       ),
     );

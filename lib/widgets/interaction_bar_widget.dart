@@ -366,6 +366,8 @@ class _InteractionBarState extends State<InteractionBar> {
     required VoidCallback onTap,
     bool isStatsButton = false,
     IconData? carbonIcon,
+    IconData? activeCarbonIcon,
+    String buttonType = '',
   }) {
     final effectiveColor = isActive ? activeColor : inactiveColor;
     final iconSize = widget.isBigSize ? 17.0 : 15.5;
@@ -373,23 +375,58 @@ class _InteractionBarState extends State<InteractionBar> {
     final fontSize = widget.isBigSize ? 16.0 : 15.0;
     final spacing = widget.isBigSize ? 7.0 : 6.5;
 
+    Widget buildIcon() {
+      if (isStatsButton) {
+        return Icon(Icons.bar_chart, size: statsIconSize, color: effectiveColor);
+      } else if (carbonIcon != null && buttonType == 'repost') {
+        // Repost button always uses carbon icon
+        return Icon(carbonIcon, size: iconSize + 2.0, color: effectiveColor);
+      } else if (activeCarbonIcon != null && buttonType != 'repost') {
+        // Other buttons with active states use AnimatedSwitcher
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          transitionBuilder: (Widget child, Animation<double> animation) {
+            return FadeTransition(
+              opacity: animation,
+              child: Transform.scale(
+                scale: isActive ? 1.0 + (animation.value * 0.05) : 1.0,
+                child: child,
+              ),
+            );
+          },
+          child: isActive
+              ? Icon(
+                  activeCarbonIcon,
+                  key: ValueKey('carbon_$buttonType'),
+                  size: (buttonType == 'reaction' || buttonType == 'zap') ? iconSize + 3.0 : iconSize + 1.0,
+                  color: activeColor,
+                )
+              : SvgPicture.asset(
+                  iconPath!,
+                  key: ValueKey('svg_$buttonType'),
+                  width: iconSize,
+                  height: iconSize,
+                  colorFilter: ColorFilter.mode(inactiveColor, BlendMode.srcIn),
+                ),
+        );
+      } else if (iconPath != null) {
+        return SvgPicture.asset(
+          iconPath,
+          width: iconSize,
+          height: iconSize,
+          colorFilter: ColorFilter.mode(effectiveColor, BlendMode.srcIn),
+        );
+      }
+      return const SizedBox.shrink();
+    }
+
     return GestureDetector(
       onTap: onTap,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (isStatsButton)
-            Icon(Icons.bar_chart, size: statsIconSize, color: effectiveColor)
-          else if (carbonIcon != null)
-            Icon(carbonIcon, size: carbonIcon == CarbonIcons.renew ? iconSize + 2.0 : iconSize, color: effectiveColor)
-          else if (iconPath != null)
-            SvgPicture.asset(
-              iconPath,
-              width: iconSize,
-              height: iconSize,
-              colorFilter: ColorFilter.mode(effectiveColor, BlendMode.srcIn),
-            ),
+          buildIcon(),
           if (count > 0 && !isStatsButton) ...[
             SizedBox(width: spacing),
             AnimatedSwitcher(
@@ -436,6 +473,7 @@ class _InteractionBarState extends State<InteractionBar> {
             activeColor: colors.reply,
             inactiveColor: colors.secondary,
             onTap: _handleReplyTap,
+            buttonType: 'reply',
           ),
           _buildButton(
             iconPath: null,
@@ -445,6 +483,7 @@ class _InteractionBarState extends State<InteractionBar> {
             activeColor: colors.repost,
             inactiveColor: colors.secondary,
             onTap: _handleRepostTap,
+            buttonType: 'repost',
           ),
           _buildButton(
             iconPath: 'assets/reaction_button.svg',
@@ -453,6 +492,8 @@ class _InteractionBarState extends State<InteractionBar> {
             activeColor: colors.reaction,
             inactiveColor: colors.secondary,
             onTap: _handleReactionTap,
+            activeCarbonIcon: CarbonIcons.favorite_filled,
+            buttonType: 'reaction',
           ),
           _buildButton(
             iconPath: 'assets/zap_button.svg',
@@ -461,6 +502,8 @@ class _InteractionBarState extends State<InteractionBar> {
             activeColor: colors.zap,
             inactiveColor: colors.secondary,
             onTap: _handleZapTap,
+            activeCarbonIcon: CarbonIcons.flash_filled,
+            buttonType: 'zap',
           ),
           _buildButton(
             iconPath: null,
