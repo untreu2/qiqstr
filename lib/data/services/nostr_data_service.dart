@@ -47,15 +47,15 @@ class NostrDataService {
 
   final List<Map<String, dynamic>> _eventQueue = [];
   Timer? _batchProcessingTimer;
-  static const int _maxBatchSize = 25;
-  static const Duration _batchTimeout = Duration(milliseconds: 100);
+  static const int _maxBatchSize = 100;
+  static const Duration _batchTimeout = Duration(milliseconds: 50);
 
   bool _isClosed = false;
   String _currentUserNpub = '';
 
   Timer? _uiUpdateThrottleTimer;
   bool _uiUpdatePending = false;
-  static const Duration _uiUpdateThrottle = Duration(milliseconds: 200);
+  static const Duration _uiUpdateThrottle = Duration(milliseconds: 300);
 
   final Map<String, DateTime> _lastInteractionFetch = {};
   final Duration _interactionFetchCooldown = Duration(seconds: 5);
@@ -82,7 +82,6 @@ class NostrDataService {
 
   void setContext(String context) {
     _currentContext = context;
-    debugPrint('[NostrDataService] Context set to: $_currentContext');
   }
 
   bool _shouldIncludeNoteInFeed(String authorHexPubkey, bool isRepost) {
@@ -90,18 +89,16 @@ class NostrDataService {
       return true;
     }
 
+    if (!_isFollowingListReady || _cachedFollowingList == null) {
+      return false;
+    }
+
     final currentUserHex = _authService.npubToHex(_currentUserNpub);
     if (currentUserHex == authorHexPubkey) {
       return true;
     }
 
-    final cachedFollowing = _followCacheService.getSync(currentUserHex ?? _currentUserNpub);
-    if (cachedFollowing != null) {
-      return cachedFollowing.contains(authorHexPubkey);
-    }
-
-    _refreshFollowCacheInBackground();
-    return false;
+    return _cachedFollowingList!.contains(authorHexPubkey);
   }
 
   void _refreshFollowCacheInBackground() async {
@@ -113,7 +110,7 @@ class NostrDataService {
           return result.isSuccess ? result.data : null;
         });
       } catch (e) {
-        debugPrint('[NostrDataService] Error refreshing follow cache: $e');
+        // Handle silently
       }
     }
   }
@@ -131,45 +128,30 @@ class NostrDataService {
     });
   }
 
+  bool _isFollowingListReady = false;
+  List<String>? _cachedFollowingList;
+
   Future<void> _initializeFollowListCache() async {
     try {
       final currentUser = await _authService.getCurrentUserNpub();
       if (currentUser.isSuccess && currentUser.data != null) {
         _currentUserNpub = currentUser.data!;
-        debugPrint('[NostrDataService] Initializing follow list cache for: $_currentUserNpub');
 
         final currentUserHex = _authService.npubToHex(_currentUserNpub) ?? _currentUserNpub;
-        await _followCacheService.getOrFetch(currentUserHex, () async {
+        final followingList = await _followCacheService.getOrFetch(currentUserHex, () async {
           final result = await getFollowingList(_currentUserNpub);
           return result.isSuccess ? result.data : null;
         });
-        debugPrint('[NostrDataService] Follow list cache initialized via FollowCacheService');
+
+        if (followingList != null && followingList.isNotEmpty) {
+          _cachedFollowingList = followingList;
+          _isFollowingListReady = true;
+        } else {
+          _isFollowingListReady = false;
+        }
       }
-
-      _fetchInitialGlobalContent();
     } catch (e) {
-      debugPrint('[NostrDataService]  Error initializing follow list cache: $e');
-      _fetchInitialGlobalContent();
-    }
-  }
-
-  Future<void> _fetchInitialGlobalContent() async {
-    try {
-      debugPrint('[NostrDataService] Fetching initial global content...');
-
-      final filter = NostrService.createNotesFilter(
-        authors: null,
-        kinds: [1],
-        limit: 30,
-        since: (DateTime.now().subtract(const Duration(hours: 24))).millisecondsSinceEpoch ~/ 1000,
-      );
-
-      final request = NostrService.createRequest(filter);
-      await _relayManager.broadcast(NostrService.serializeRequest(request));
-
-      debugPrint('[NostrDataService] Initial content request sent to relays');
-    } catch (e) {
-      debugPrint('[NostrDataService] Error fetching initial content: $e');
+      _isFollowingListReady = false;
     }
   }
 
@@ -209,73 +191,318 @@ class NostrDataService {
     final batch = List<Map<String, dynamic>>.from(_eventQueue);
     _eventQueue.clear();
 
-    for (final eventData in batch) {
-      _processNostrEvent(eventData['eventData'] as Map<String, dynamic>).catchError((e) {
-        debugPrint('[NostrDataService] Error in batch event processing: $e');
-      });
-    }
+    _processBatchEvents(batch);
   }
 
-  Future<void> _processNostrEvent(Map<String, dynamic> eventData) async {
+  Future<void> _processBatchEvents(List<Map<String, dynamic>> batch) async {
     try {
-      final kind = eventData['kind'] as int;
-      final eventAuthor = eventData['pubkey'] as String? ?? '';
+      final profileEvents = <Map<String, dynamic>>[];
+      final noteEvents = <Map<String, dynamic>>[];
+      final reactionEvents = <Map<String, dynamic>>[];
+      final repostEvents = <Map<String, dynamic>>[];
+      final followEvents = <Map<String, dynamic>>[];
+      final zapEvents = <Map<String, dynamic>>[];
 
-      if (eventAuthor.isNotEmpty && eventAuthor != _currentUserNpub) {
-        _processNotificationFast(eventData, kind, eventAuthor);
+      for (final eventData in batch) {
+        final event = eventData['eventData'] as Map<String, dynamic>;
+        final kind = event['kind'] as int;
+
+        switch (kind) {
+          case 0:
+            profileEvents.add(event);
+            break;
+          case 1:
+            noteEvents.add(event);
+            break;
+          case 3:
+            followEvents.add(event);
+            break;
+          case 6:
+            repostEvents.add(event);
+            break;
+          case 7:
+            reactionEvents.add(event);
+            break;
+          case 9735:
+            zapEvents.add(event);
+            break;
+        }
       }
 
-      switch (kind) {
-        case 0:
-          _processProfileEvent(eventData);
-          break;
-        case 1:
-          await _processKind1Event(eventData);
-          break;
-        case 3:
-          await _processFollowEvent(eventData);
-          break;
-        case 6:
-          await _processRepostEvent(eventData);
-          break;
-        case 7:
-          _processReactionEvent(eventData);
-          break;
-        case 9735:
-          _processZapEvent(eventData);
-          break;
+      await Future.wait([
+        _processProfileEventsBatch(profileEvents),
+        _processNoteEventsBatch(noteEvents),
+        _processReactionEventsBatch(reactionEvents),
+        _processRepostEventsBatch(repostEvents),
+        _processFollowEventsBatch(followEvents),
+        _processZapEventsBatch(zapEvents),
+      ]);
+
+      if (batch.isNotEmpty) {
+        _scheduleUIUpdate();
       }
     } catch (e) {
-      debugPrint('[NostrDataService] Error processing event: $e');
+      // Handle error silently to avoid spam
     }
   }
 
-  void _processProfileEvent(Map<String, dynamic> eventData) {
-    try {
-      final pubkey = eventData['pubkey'] as String;
-      final content = eventData['content'] as String;
-      final createdAt = eventData['created_at'] as int;
-      final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
+  Future<void> _processProfileEventsBatch(List<Map<String, dynamic>> events) async {
+    if (events.isEmpty) return;
 
-      final cachedProfile = _profileCache[pubkey];
-      if (cachedProfile != null && timestamp.isBefore(cachedProfile.fetchedAt)) {
-        return;
-      }
+    final profileUpdates = <String, Map<String, dynamic>>{};
 
-      if (content.isNotEmpty) {
-        Map<String, dynamic> profileData;
-        try {
-          profileData = jsonDecode(content) as Map<String, dynamic>;
-        } catch (e) {
-          profileData = {};
+    for (final eventData in events) {
+      try {
+        final pubkey = eventData['pubkey'] as String;
+        final content = eventData['content'] as String;
+        final createdAt = eventData['created_at'] as int;
+        final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
+
+        final cachedProfile = _profileCache[pubkey];
+        if (cachedProfile != null && timestamp.isBefore(cachedProfile.fetchedAt)) {
+          continue;
         }
 
-        final nip05 = profileData['nip05'] as String? ?? '';
+        if (content.isNotEmpty) {
+          Map<String, dynamic> profileData;
+          try {
+            profileData = jsonDecode(content) as Map<String, dynamic>;
+          } catch (e) {
+            profileData = {};
+          }
 
-        _verifyAndCacheProfile(pubkey, profileData, timestamp, nip05);
+          profileUpdates[pubkey] = {
+            'data': profileData,
+            'timestamp': timestamp,
+            'nip05': profileData['nip05'] as String? ?? '',
+          };
+        }
+      } catch (e) {
+        continue;
       }
-    } catch (e) {
-      debugPrint('[NostrDataService] Error processing profile event: $e');
+    }
+
+    final futures = <Future>[];
+    for (final entry in profileUpdates.entries) {
+      futures.add(_verifyAndCacheProfile(
+        entry.key,
+        entry.value['data'],
+        entry.value['timestamp'],
+        entry.value['nip05'],
+      ));
+    }
+
+    await Future.wait(futures);
+  }
+
+  Future<void> _processNoteEventsBatch(List<Map<String, dynamic>> events) async {
+    if (events.isEmpty) return;
+
+    for (final eventData in events) {
+      try {
+        await _processKind1Event(eventData);
+      } catch (e) {
+        continue;
+      }
+    }
+  }
+
+  Future<void> _processReactionEventsBatch(List<Map<String, dynamic>> events) async {
+    if (events.isEmpty) return;
+
+    final reactionUpdates = <String, List<ReactionModel>>{};
+
+    for (final eventData in events) {
+      try {
+        final id = eventData['id'] as String;
+        final pubkey = eventData['pubkey'] as String;
+        final content = eventData['content'] as String;
+        final createdAt = eventData['created_at'] as int;
+        final tags = eventData['tags'] as List<dynamic>;
+
+        String? targetEventId;
+        for (final tag in tags) {
+          if (tag is List && tag.isNotEmpty && tag[0] == 'e' && tag.length >= 2) {
+            targetEventId = tag[1] as String;
+            break;
+          }
+        }
+
+        if (targetEventId != null && !_pendingOptimisticReactionIds.contains(id)) {
+          final reaction = ReactionModel(
+            id: id,
+            targetEventId: targetEventId,
+            content: content,
+            author: _authService.hexToNpub(pubkey) ?? pubkey,
+            timestamp: DateTime.fromMillisecondsSinceEpoch(createdAt * 1000),
+            fetchedAt: DateTime.now(),
+          );
+
+          reactionUpdates.putIfAbsent(targetEventId, () => []);
+          reactionUpdates[targetEventId]!.add(reaction);
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+
+    for (final entry in reactionUpdates.entries) {
+      final targetEventId = entry.key;
+      final reactions = entry.value;
+
+      _reactionsMap.putIfAbsent(targetEventId, () => []);
+
+      for (final reaction in reactions) {
+        if (!_reactionsMap[targetEventId]!.any((r) => r.id == reaction.id)) {
+          _reactionsMap[targetEventId]!.add(reaction);
+        }
+      }
+
+      final targetNote = _noteCache[targetEventId];
+      if (targetNote != null) {
+        targetNote.reactionCount = _reactionsMap[targetEventId]!.length;
+      }
+    }
+  }
+
+  Future<void> _processRepostEventsBatch(List<Map<String, dynamic>> events) async {
+    if (events.isEmpty) return;
+
+    for (final eventData in events) {
+      try {
+        await _processRepostEvent(eventData);
+      } catch (e) {
+        continue;
+      }
+    }
+  }
+
+  Future<void> _processFollowEventsBatch(List<Map<String, dynamic>> events) async {
+    if (events.isEmpty) return;
+
+    for (final eventData in events) {
+      try {
+        await _processFollowEvent(eventData);
+      } catch (e) {
+        continue;
+      }
+    }
+  }
+
+  Future<void> _processZapEventsBatch(List<Map<String, dynamic>> events) async {
+    if (events.isEmpty) return;
+
+    final zapUpdates = <String, List<ZapModel>>{};
+
+    for (final eventData in events) {
+      try {
+        final id = eventData['id'] as String;
+        final walletPubkey = eventData['pubkey'] as String;
+
+        if (_processedZapIds.contains(id) || _userPublishedZapIds.contains(id)) {
+          continue;
+        }
+
+        final currentUserHex = _authService.npubToHex(_currentUserNpub);
+        if (currentUserHex != null && walletPubkey == currentUserHex) {
+          continue;
+        }
+
+        final content = eventData['content'] as String;
+        final createdAt = eventData['created_at'] as int;
+        final tags = eventData['tags'] as List<dynamic>;
+
+        String? targetEventId;
+        String recipient = '';
+        String bolt11 = '';
+        String description = '';
+        int amount = 0;
+
+        for (final tag in tags) {
+          if (tag is List && tag.isNotEmpty) {
+            if (tag[0] == 'e' && tag.length >= 2) {
+              targetEventId = tag[1] as String;
+            } else if (tag[0] == 'p' && tag.length >= 2) {
+              recipient = tag[1] as String;
+            } else if (tag[0] == 'bolt11' && tag.length >= 2) {
+              bolt11 = tag[1] as String;
+            } else if (tag[0] == 'description' && tag.length >= 2) {
+              description = tag[1] as String;
+            } else if (tag[0] == 'amount' && tag.length >= 2) {
+              try {
+                amount = int.parse(tag[1] as String) ~/ 1000;
+              } catch (e) {
+                amount = 0;
+              }
+            }
+          }
+        }
+
+        String realZapperPubkey = walletPubkey;
+        String? zapComment;
+
+        if (description.isNotEmpty) {
+          try {
+            final zapRequest = jsonDecode(description) as Map<String, dynamic>;
+            if (zapRequest.containsKey('pubkey')) {
+              realZapperPubkey = zapRequest['pubkey'] as String;
+            }
+            if (zapRequest.containsKey('content')) {
+              final requestContent = zapRequest['content'] as String;
+              if (requestContent.isNotEmpty) {
+                zapComment = requestContent;
+              }
+            }
+          } catch (e) {
+            // Use wallet pubkey
+          }
+        }
+
+        if (amount == 0 && bolt11.isNotEmpty) {
+          try {
+            amount = parseAmountFromBolt11(bolt11);
+          } catch (e) {
+            amount = 0;
+          }
+        }
+
+        if (targetEventId != null) {
+          final zap = ZapModel(
+            id: id,
+            sender: _authService.hexToNpub(realZapperPubkey) ?? realZapperPubkey,
+            recipient: _authService.hexToNpub(recipient) ?? recipient,
+            targetEventId: targetEventId,
+            timestamp: DateTime.fromMillisecondsSinceEpoch(createdAt * 1000),
+            bolt11: bolt11,
+            comment: zapComment ?? (content.isNotEmpty ? content : null),
+            amount: amount,
+          );
+
+          zapUpdates.putIfAbsent(targetEventId, () => []);
+          zapUpdates[targetEventId]!.add(zap);
+        }
+      } catch (e) {
+        continue;
+      }
+    }
+
+    for (final entry in zapUpdates.entries) {
+      final targetEventId = entry.key;
+      final zaps = entry.value;
+
+      _zapsMap.putIfAbsent(targetEventId, () => []);
+
+      for (final zap in zaps) {
+        if (!_zapsMap[targetEventId]!.any((z) => z.id == zap.id)) {
+          _zapsMap[targetEventId]!.add(zap);
+          _processedZapIds.add(zap.id);
+        }
+      }
+
+      final targetNote = _noteCache[targetEventId];
+      if (targetNote != null) {
+        targetNote.zapAmount = _zapsMap[targetEventId]!.fold<int>(0, (sum, z) => sum + z.amount);
+      }
     }
   }
 
@@ -563,56 +790,6 @@ class NostrDataService {
     }
   }
 
-  void _processReactionEvent(Map<String, dynamic> eventData) {
-    try {
-      final id = eventData['id'] as String;
-      final pubkey = eventData['pubkey'] as String;
-      final content = eventData['content'] as String;
-      final createdAt = eventData['created_at'] as int;
-      final tags = eventData['tags'] as List<dynamic>;
-
-      String? targetEventId;
-      for (final tag in tags) {
-        if (tag is List && tag.isNotEmpty && tag[0] == 'e' && tag.length >= 2) {
-          targetEventId = tag[1] as String;
-          break;
-        }
-      }
-
-      if (targetEventId != null) {
-        if (_pendingOptimisticReactionIds.contains(id)) {
-          _pendingOptimisticReactionIds.remove(id);
-          return;
-        }
-
-        final reaction = ReactionModel(
-          id: id,
-          targetEventId: targetEventId,
-          content: content,
-          author: _authService.hexToNpub(pubkey) ?? pubkey,
-          timestamp: DateTime.fromMillisecondsSinceEpoch(createdAt * 1000),
-          fetchedAt: DateTime.now(),
-        );
-
-        _reactionsMap.putIfAbsent(targetEventId, () => []);
-
-        if (!_reactionsMap[targetEventId]!.any((r) => r.id == reaction.id)) {
-          _reactionsMap[targetEventId]!.add(reaction);
-
-          final targetNote = _noteCache[targetEventId];
-          if (targetNote != null) {
-            targetNote.reactionCount = _reactionsMap[targetEventId]!.length;
-            _scheduleUIUpdate();
-          }
-
-          _fetchUserProfile(reaction.author);
-        }
-      }
-    } catch (e) {
-      debugPrint('[NostrDataService] Error processing reaction event: $e');
-    }
-  }
-
   Future<void> _processRepostEvent(Map<String, dynamic> eventData) async {
     try {
       final id = eventData['id'] as String;
@@ -881,216 +1058,22 @@ class NostrDataService {
 
       try {
         await _followCacheService.put(pubkey, newFollowing);
-        debugPrint('[NostrDataService]  Updated follow cache for $pubkey: ${newFollowing.length} following');
-      } catch (e) {
-        debugPrint('[NostrDataService] Error updating follow cache: $e');
-      }
 
-      debugPrint('[NostrDataService] Follow event processed: ${newFollowing.length} following');
+        final currentUserHex = _authService.npubToHex(_currentUserNpub) ?? _currentUserNpub;
+        if (pubkey == currentUserHex) {
+          _cachedFollowingList = newFollowing;
+          _isFollowingListReady = true;
+        }
+      } catch (e) {
+        // Handle silently
+      }
     } catch (e) {
-      debugPrint('[NostrDataService] Error processing follow event: $e');
+      // Handle silently
     }
   }
 
   void markZapAsUserPublished(String zapEventId) {
     _userPublishedZapIds.add(zapEventId);
-  }
-
-  void _processZapEvent(Map<String, dynamic> eventData) {
-    try {
-      final id = eventData['id'] as String;
-      final walletPubkey = eventData['pubkey'] as String;
-
-      if (_processedZapIds.contains(id)) {
-        return;
-      }
-
-      if (_userPublishedZapIds.contains(id)) {
-        return;
-      }
-
-      final currentUserHex = _authService.npubToHex(_currentUserNpub);
-      if (currentUserHex != null && walletPubkey == currentUserHex) {
-        return;
-      }
-      final content = eventData['content'] as String;
-      final createdAt = eventData['created_at'] as int;
-      final tags = eventData['tags'] as List<dynamic>;
-
-      String? targetEventId;
-      String recipient = '';
-      String bolt11 = '';
-      String description = '';
-      int amount = 0;
-
-      for (final tag in tags) {
-        if (tag is List && tag.isNotEmpty) {
-          if (tag[0] == 'e' && tag.length >= 2) {
-            targetEventId = tag[1] as String;
-          } else if (tag[0] == 'p' && tag.length >= 2) {
-            recipient = tag[1] as String;
-          } else if (tag[0] == 'bolt11' && tag.length >= 2) {
-            bolt11 = tag[1] as String;
-          } else if (tag[0] == 'description' && tag.length >= 2) {
-            description = tag[1] as String;
-          } else if (tag[0] == 'amount' && tag.length >= 2) {
-            try {
-              amount = int.parse(tag[1] as String) ~/ 1000;
-            } catch (e) {
-              amount = 0;
-            }
-          }
-        }
-      }
-
-      String realZapperPubkey = walletPubkey;
-      String? zapComment;
-
-      if (description.isNotEmpty) {
-        try {
-          final zapRequest = jsonDecode(description) as Map<String, dynamic>;
-
-          if (zapRequest.containsKey('pubkey')) {
-            realZapperPubkey = zapRequest['pubkey'] as String;
-            debugPrint('[NostrDataService] Extracted real zapper from description: $realZapperPubkey');
-          }
-
-          if (zapRequest.containsKey('content')) {
-            final requestContent = zapRequest['content'] as String;
-            if (requestContent.isNotEmpty) {
-              zapComment = requestContent;
-              debugPrint('[NostrDataService] Extracted zap comment: $zapComment');
-            }
-          }
-        } catch (e) {
-          debugPrint('[NostrDataService]  Failed to parse zap description, using wallet pubkey: $e');
-        }
-      } else {
-        debugPrint('[NostrDataService]  No description tag found in zap receipt, using wallet pubkey');
-      }
-
-      if (amount == 0 && bolt11.isNotEmpty) {
-        try {
-          amount = parseAmountFromBolt11(bolt11);
-        } catch (e) {
-          amount = 0;
-        }
-      }
-
-      if (targetEventId != null) {
-        final zap = ZapModel(
-          id: id,
-          sender: _authService.hexToNpub(realZapperPubkey) ?? realZapperPubkey,
-          recipient: _authService.hexToNpub(recipient) ?? recipient,
-          targetEventId: targetEventId,
-          timestamp: DateTime.fromMillisecondsSinceEpoch(createdAt * 1000),
-          bolt11: bolt11,
-          comment: zapComment ?? (content.isNotEmpty ? content : null),
-          amount: amount,
-        );
-
-        _zapsMap.putIfAbsent(targetEventId, () => []);
-
-        if (!_zapsMap[targetEventId]!.any((z) => z.id == zap.id)) {
-          _zapsMap[targetEventId]!.add(zap);
-
-          _processedZapIds.add(id);
-
-          final targetNote = _noteCache[targetEventId];
-          if (targetNote != null) {
-            targetNote.zapAmount = _zapsMap[targetEventId]!.fold<int>(0, (sum, z) => sum + z.amount);
-            _scheduleUIUpdate();
-          }
-
-          _fetchUserProfile(zap.sender);
-
-          debugPrint('[NostrDataService] Zap processed: ${zap.amount} sats from ${zap.sender} to ${zap.recipient}');
-        }
-      }
-    } catch (e) {
-      debugPrint('[NostrDataService] Error processing zap event: $e');
-    }
-  }
-
-  void _processNotificationFast(Map<String, dynamic> eventData, int kind, String eventAuthor) {
-    if (![1, 6, 7, 9735].contains(kind)) return;
-    if (_currentUserNpub.isEmpty) return;
-
-    final currentUserHex = _authService.npubToHex(_currentUserNpub);
-    if (currentUserHex == null) return;
-
-    final List<dynamic> eventTags = List<dynamic>.from(eventData['tags'] ?? []);
-    bool isUserMentioned = false;
-
-    debugPrint('[NostrDataService]  Processing potential notification: kind $kind from $eventAuthor');
-    debugPrint('[NostrDataService]  Looking for mentions of user hex: $currentUserHex');
-
-    for (var tag in eventTags) {
-      if (tag is List && tag.length >= 2 && tag[0] == 'p') {
-        final mentionedUserHex = tag[1] as String;
-        debugPrint('[NostrDataService]  Found p tag mentioning: $mentionedUserHex');
-
-        if (mentionedUserHex == currentUserHex) {
-          isUserMentioned = true;
-          debugPrint('[NostrDataService] User mentioned! Creating notification');
-          break;
-        }
-      }
-    }
-
-    if (!isUserMentioned) {
-      debugPrint('[NostrDataService]  User not mentioned in this event');
-      return;
-    }
-
-    String notificationType;
-    switch (kind) {
-      case 1:
-        notificationType = "mention";
-        break;
-      case 6:
-        notificationType = "repost";
-        break;
-      case 7:
-        notificationType = "reaction";
-        break;
-      case 9735:
-        notificationType = "zap";
-        break;
-      default:
-        return;
-    }
-
-    try {
-      final notification = NotificationModel.fromEvent(eventData, notificationType);
-
-      final authorNpub = _authService.hexToNpub(notification.author) ?? notification.author;
-      final updatedNotification = NotificationModel(
-        id: notification.id,
-        targetEventId: notification.targetEventId,
-        author: authorNpub,
-        type: notification.type,
-        content: notification.content,
-        timestamp: notification.timestamp,
-        fetchedAt: notification.fetchedAt,
-        isRead: notification.isRead,
-        amount: notification.amount,
-      );
-
-      _notificationCache.putIfAbsent(_currentUserNpub, () => []);
-      if (!_notificationCache[_currentUserNpub]!.any((n) => n.id == updatedNotification.id)) {
-        _notificationCache[_currentUserNpub]!.add(updatedNotification);
-        _notificationCache[_currentUserNpub]!.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-        _notificationsController.add(_notificationCache[_currentUserNpub]!);
-
-        debugPrint('[NostrDataService]  Notification added: $notificationType from ${updatedNotification.author}');
-        debugPrint('[NostrDataService]  Total notifications: ${_notificationCache[_currentUserNpub]!.length}');
-      } else {
-        debugPrint('[NostrDataService]  Duplicate notification ignored: ${updatedNotification.id}');
-      }
-    } catch (e) {
-      debugPrint('[NostrDataService]  Error creating notification: $e');
-    }
   }
 
   void _handleRelayDisconnection(String relayUrl) {
@@ -2815,8 +2798,6 @@ class NostrDataService {
     required String privateKey,
   }) async {
     try {
-      debugPrint('[NostrDataService] Publishing kind 3 follow event with ${followingHexList.length} following');
-
       final currentUserResult = await _authService.getCurrentUserNpub();
       if (currentUserResult.isError || currentUserResult.data == null) {
         return const Result.error('Current user not found');
@@ -2826,7 +2807,6 @@ class NostrDataService {
 
       try {
         if (_relayManager.activeSockets.isEmpty) {
-          debugPrint('[NostrDataService] No active relay connections, attempting to connect...');
           await _relayManager.connectRelays(
             [],
             onEvent: _handleRelayEvent,
@@ -2835,7 +2815,7 @@ class NostrDataService {
           );
         }
       } catch (e) {
-        debugPrint('[NostrDataService] Relay connection failed: $e, continuing anyway');
+        // Continue anyway
       }
 
       final event = NostrService.createFollowEvent(
@@ -2846,14 +2826,12 @@ class NostrDataService {
       final serializedEvent = NostrService.serializeEvent(event);
       final activeSockets = _relayManager.activeSockets;
 
-      debugPrint('[NostrDataService] Broadcasting follow event to ${activeSockets.length} active sockets...');
       for (final ws in activeSockets) {
         if (ws.readyState == WebSocket.open) {
           try {
             ws.add(serializedEvent);
-            debugPrint('[NostrDataService] Follow event sent to relay via WebSocket');
           } catch (e) {
-            debugPrint('[NostrDataService] Error sending follow event to WebSocket: $e');
+            // Continue to next socket
           }
         }
       }
@@ -2861,15 +2839,15 @@ class NostrDataService {
       try {
         final currentUserHex = _authService.npubToHex(currentUserNpub) ?? currentUserNpub;
         await _followCacheService.put(currentUserHex, followingHexList);
-        debugPrint('[NostrDataService] Follow event broadcasted DIRECTLY and cached locally');
-        debugPrint('[NostrDataService] Updated follow cache for $currentUserNpub: ${followingHexList.length} following');
+
+        _cachedFollowingList = followingHexList;
+        _isFollowingListReady = true;
       } catch (e) {
-        debugPrint('[NostrDataService] Error caching follow list: $e');
+        // Handle silently
       }
 
       return const Result.success(null);
     } catch (e) {
-      debugPrint('[NostrDataService] Failed to publish follow event: $e');
       return Result.error('Failed to publish follow event: $e');
     }
   }

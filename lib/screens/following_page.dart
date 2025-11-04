@@ -6,6 +6,7 @@ import '../models/user_model.dart';
 import '../screens/profile_page.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/user_repository.dart';
+import '../data/services/user_batch_fetcher.dart';
 import '../widgets/back_button_widget.dart';
 
 class FollowingPage extends StatefulWidget {
@@ -29,12 +30,31 @@ class _FollowingPageState extends State<FollowingPage> {
   final Map<String, bool> _loadingStates = {};
 
   late final UserRepository _userRepository;
+  late final ScrollController _scrollController;
+
+  static const int _pageSize = 20;
+  int _currentPage = 0;
+  bool _hasMorePages = true;
+  bool _isLoadingProfiles = false;
 
   @override
   void initState() {
     super.initState();
     _userRepository = AppDI.get<UserRepository>();
+    _scrollController = ScrollController()..addListener(_onScroll);
     _loadFollowingUsers();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      _loadNextPages();
+    }
   }
 
   Future<void> _loadFollowingUsers() async {
@@ -44,23 +64,21 @@ class _FollowingPageState extends State<FollowingPage> {
         _error = null;
       });
 
-      debugPrint('[FollowingPage] Loading following users for: ${widget.user.npub}');
-
       final result = await _userRepository.getFollowingListForUser(widget.user.npub);
 
       if (mounted) {
         result.fold(
           (users) {
-            debugPrint('[FollowingPage] Successfully loaded ${users.length} basic following users');
             setState(() {
               _followingUsers = users;
               _isLoading = false;
+              _currentPage = 0;
+              _hasMorePages = users.length > _pageSize;
             });
 
-            _preloadUserProfiles();
+            _loadNextPages();
           },
           (error) {
-            debugPrint('[FollowingPage] Error loading following users: $error');
             setState(() {
               _error = error;
               _isLoading = false;
@@ -70,7 +88,6 @@ class _FollowingPageState extends State<FollowingPage> {
         );
       }
     } catch (e) {
-      debugPrint('[FollowingPage] Exception: $e');
       if (mounted) {
         setState(() {
           _error = e.toString();
@@ -80,40 +97,71 @@ class _FollowingPageState extends State<FollowingPage> {
     }
   }
 
-  void _preloadUserProfiles() {
-    for (final user in _followingUsers) {
-      _loadUserProfile(user.npub);
-    }
+  void _loadNextPages() {
+    if (_isLoadingProfiles || !_hasMorePages || _followingUsers.isEmpty) return;
+
+    final startIndex = _currentPage * _pageSize;
+    final endIndex = (startIndex + _pageSize).clamp(0, _followingUsers.length);
+
+    if (startIndex >= _followingUsers.length) return;
+
+    _isLoadingProfiles = true;
+
+    final usersToLoad = _followingUsers.sublist(startIndex, endIndex);
+
+    Future.microtask(() async {
+      try {
+        await _loadUserProfilesBatch(usersToLoad);
+
+        if (mounted) {
+          setState(() {
+            _currentPage++;
+            _hasMorePages = endIndex < _followingUsers.length;
+            _isLoadingProfiles = false;
+          });
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _isLoadingProfiles = false;
+          });
+        }
+      }
+    });
   }
 
-  Future<void> _loadUserProfile(String npub) async {
-    if (_loadingStates[npub] == true || _loadedUsers.containsKey(npub)) {
-      return;
+  Future<void> _loadUserProfilesBatch(List<UserModel> users) async {
+    final npubsToLoad = users
+        .where((user) => !_loadingStates.containsKey(user.npub) && !_loadedUsers.containsKey(user.npub))
+        .map((user) => user.npub)
+        .toList();
+
+    if (npubsToLoad.isEmpty) return;
+
+    for (final npub in npubsToLoad) {
+      _loadingStates[npub] = true;
     }
 
-    _loadingStates[npub] = true;
-
     try {
-      debugPrint('[FollowingPage] Loading profile for: $npub');
-      final userResult = await _userRepository.getUserProfile(npub);
+      final results = await _userRepository.getUserProfiles(npubsToLoad, priority: FetchPriority.normal);
 
       if (mounted) {
-        userResult.fold(
-          (user) {
-            debugPrint('[FollowingPage] Loaded profile for: ${user.name}');
-            setState(() {
+        final updatedUsers = <UserModel>[];
+
+        for (final entry in results.entries) {
+          final npub = entry.key;
+          entry.value.fold(
+            (user) {
               _loadedUsers[npub] = user;
               _loadingStates[npub] = false;
 
               final index = _followingUsers.indexWhere((u) => u.npub == npub);
               if (index != -1) {
                 _followingUsers[index] = user;
+                updatedUsers.add(user);
               }
-            });
-          },
-          (error) {
-            debugPrint('[FollowingPage] Error loading profile for $npub: $error');
-            setState(() {
+            },
+            (error) {
               _loadedUsers[npub] = UserModel(
                 pubkeyHex: npub,
                 name: npub.length > 8 ? npub.substring(0, 8) : npub,
@@ -127,16 +175,19 @@ class _FollowingPageState extends State<FollowingPage> {
                 nip05Verified: false,
               );
               _loadingStates[npub] = false;
-            });
-          },
-        );
+            },
+          );
+        }
+
+        if (updatedUsers.isNotEmpty) {
+          setState(() {});
+        }
       }
     } catch (e) {
-      debugPrint('[FollowingPage] Exception loading profile for $npub: $e');
       if (mounted) {
-        setState(() {
+        for (final npub in npubsToLoad) {
           _loadingStates[npub] = false;
-        });
+        }
       }
     }
   }
@@ -355,6 +406,7 @@ class _FollowingPageState extends State<FollowingPage> {
     return RefreshIndicator(
       onRefresh: _loadFollowingUsers,
       child: CustomScrollView(
+        controller: _scrollController,
         slivers: [
           SliverToBoxAdapter(
             child: _buildHeader(context),
@@ -379,11 +431,33 @@ class _FollowingPageState extends State<FollowingPage> {
             SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
-                  return _buildUserTile(context, _followingUsers[index]);
+                  if (index < _followingUsers.length) {
+                    return _buildUserTile(context, _followingUsers[index]);
+                  }
+                  return null;
                 },
                 childCount: _followingUsers.length,
+                addAutomaticKeepAlives: false,
+                addRepaintBoundaries: true,
               ),
             ),
+            if (_isLoadingProfiles && _hasMorePages) ...[
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Center(
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: context.colors.textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
           const SliverToBoxAdapter(
             child: SizedBox(height: 24),

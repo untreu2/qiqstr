@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart' as widgets;
 import 'package:qiqstr/widgets/sidebar_widget.dart';
+import 'package:qiqstr/widgets/back_button_widget.dart';
 import '../theme/theme_manager.dart';
 import '../models/note_model.dart';
 import '../models/user_model.dart';
@@ -231,55 +232,52 @@ class FeedPageState extends State<FeedPage> {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: isHashtagMode
-                      ? GestureDetector(
-                          onTap: () => Navigator.of(context).pop(),
-                          child: Icon(
-                            Icons.arrow_back,
-                            size: 24,
-                            color: colors.textPrimary,
-                          ),
-                        )
-                      : GestureDetector(
-                          onTap: () => Scaffold.of(context).openDrawer(),
-                          child: _currentUser != null
-                              ? Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: colors.avatarPlaceholder,
-                                    image: _currentUser!.profileImage.isNotEmpty == true
-                                        ? DecorationImage(
-                                            image: NetworkImage(_currentUser!.profileImage),
-                                            fit: BoxFit.cover,
-                                          )
-                                        : null,
-                                  ),
-                                  child: _currentUser!.profileImage.isEmpty != false
-                                      ? Icon(
-                                          Icons.person,
-                                          size: 20,
-                                          color: colors.textSecondary,
-                                        )
-                                      : null,
-                                )
-                              : Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: colors.avatarPlaceholder,
-                                  ),
-                                  child: CircularProgressIndicator(
-                                    color: colors.accent,
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                        ),
-                ),
+                if (!isHashtagMode)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: GestureDetector(
+                      onTap: () => Scaffold.of(context).openDrawer(),
+                      child: _currentUser != null
+                          ? Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: colors.avatarPlaceholder,
+                                image: _currentUser!.profileImage.isNotEmpty == true
+                                    ? DecorationImage(
+                                        image: NetworkImage(_currentUser!.profileImage),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
+                              ),
+                              child: _currentUser!.profileImage.isEmpty != false
+                                  ? Icon(
+                                      Icons.person,
+                                      size: 20,
+                                      color: colors.textSecondary,
+                                    )
+                                  : null,
+                            )
+                          : Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: colors.avatarPlaceholder,
+                              ),
+                              child: CircularProgressIndicator(
+                                color: colors.accent,
+                                strokeWidth: 2,
+                              ),
+                            ),
+                    ),
+                  ),
+                if (isHashtagMode)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: BackButtonWidget.floating(),
+                  ),
                 Center(
                   child: GestureDetector(
                     onTap: () {
@@ -358,6 +356,7 @@ class FeedPageState extends State<FeedPage> {
     final double topPadding = MediaQuery.of(context).padding.top;
     final double headerHeight = topPadding + 55;
     final colors = context.colors;
+    final isHashtagMode = widget.hashtag != null;
 
     return ViewModelBuilder<FeedViewModel>(
       create: () => AppDI.get<FeedViewModel>(),
@@ -369,7 +368,7 @@ class FeedPageState extends State<FeedPage> {
       builder: (context, viewModel) {
         return Scaffold(
           backgroundColor: colors.background,
-          drawer: widget.hashtag == null ? const SidebarWidget() : null,
+          drawer: !isHashtagMode ? const SidebarWidget() : null,
           body: Stack(
             children: [
               UIStateBuilder<List<NoteModel>>(
@@ -383,19 +382,20 @@ class FeedPageState extends State<FeedPage> {
                       physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
                       cacheExtent: 1500,
                       slivers: [
-                        SliverPersistentHeader(
-                          floating: true,
-                          delegate: _PinnedHeaderDelegate(
-                            height: headerHeight,
-                            child: AnimatedOpacity(
-                              opacity: _showAppBar ? 1.0 : 0.0,
-                              duration: const Duration(milliseconds: 300),
-                              child: _buildHeader(context, topPadding, viewModel),
+                        if (!isHashtagMode)
+                          SliverPersistentHeader(
+                            floating: true,
+                            delegate: _PinnedHeaderDelegate(
+                              height: headerHeight,
+                              child: AnimatedOpacity(
+                                opacity: _showAppBar ? 1.0 : 0.0,
+                                duration: const Duration(milliseconds: 300),
+                                child: _buildHeader(context, topPadding, viewModel),
+                              ),
                             ),
                           ),
-                        ),
-                        const SliverToBoxAdapter(
-                          child: SizedBox(height: 8),
+                        SliverToBoxAdapter(
+                          child: SizedBox(height: isHashtagMode ? topPadding + 85 : 8),
                         ),
                         Builder(
                           builder: (context) {
@@ -452,6 +452,31 @@ class FeedPageState extends State<FeedPage> {
                   ),
                 ),
               ),
+              if (isHashtagMode) ...[
+                BackButtonWidget.floating(),
+                Positioned(
+                  top: topPadding + 10,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: colors.buttonPrimary,
+                        borderRadius: BorderRadius.circular(40),
+                      ),
+                      child: Text(
+                        '#${widget.hashtag}',
+                        style: TextStyle(
+                          color: colors.buttonText,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         );

@@ -27,11 +27,12 @@ class _ProfilePageState extends State<ProfilePage> {
   final ValueNotifier<List<NoteModel>> _notesNotifier = ValueNotifier([]);
   final Map<String, UserModel> _profiles = {};
   String? _currentUserNpub;
+  bool _showUsernameBubble = false;
 
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController();
+    _scrollController = ScrollController()..addListener(_scrollListener);
 
     _profileViewModel = AppDI.get<ProfileViewModel>();
     _authRepository = AppDI.get<AuthRepository>();
@@ -41,6 +42,17 @@ class _ProfilePageState extends State<ProfilePage> {
 
     _loadCurrentUser();
     _profileViewModel.initializeWithUser(widget.user.npub);
+  }
+
+  void _scrollListener() {
+    if (_scrollController.hasClients) {
+      final shouldShow = _scrollController.offset > 200;
+      if (_showUsernameBubble != shouldShow) {
+        setState(() {
+          _showUsernameBubble = shouldShow;
+        });
+      }
+    }
   }
 
   void _loadCurrentUser() async {
@@ -77,13 +89,69 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    final double topPadding = MediaQuery.of(context).padding.top;
+    final colors = context.colors;
+
     return Scaffold(
-      backgroundColor: context.colors.background,
+      backgroundColor: colors.background,
       body: Stack(
         children: [
           _buildContent(context),
           const BackButtonWidget.floating(
             topOffset: 6,
+          ),
+          Positioned(
+            top: topPadding + 6,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: AnimatedOpacity(
+                opacity: _showUsernameBubble ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: colors.buttonPrimary,
+                    borderRadius: BorderRadius.circular(40),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 24,
+                        height: 24,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: colors.avatarPlaceholder,
+                          image: widget.user.profileImage.isNotEmpty
+                              ? DecorationImage(
+                                  image: NetworkImage(widget.user.profileImage),
+                                  fit: BoxFit.cover,
+                                )
+                              : null,
+                        ),
+                        child: widget.user.profileImage.isEmpty
+                            ? Icon(
+                                Icons.person,
+                                size: 14,
+                                color: colors.textSecondary,
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        widget.user.name.isNotEmpty ? widget.user.name : widget.user.npub.substring(0, 8),
+                        style: TextStyle(
+                          color: colors.buttonText,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),

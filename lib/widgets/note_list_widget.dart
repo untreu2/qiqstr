@@ -37,8 +37,12 @@ class NoteListWidget extends StatefulWidget {
   State<NoteListWidget> createState() => _NoteListWidgetState();
 }
 
-class _NoteListWidgetState extends State<NoteListWidget> {
+class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAliveClientMixin {
   late final NoteRepository _noteRepository;
+  final Set<String> _loadedInteractionIds = {};
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -47,25 +51,32 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       _noteRepository = AppDI.get<NoteRepository>();
       _loadInteractionsForVisibleNotes();
     } catch (e) {
-      debugPrint('[NoteListWidget] InitState error: $e');
+      // Handle silently
     }
   }
 
   void _loadInteractionsForVisibleNotes() {
     if (widget.notes.isEmpty) return;
 
-    final noteIds = widget.notes.take(10).map((note) {
-      if (note.isRepost && note.rootId != null && note.rootId!.isNotEmpty) {
-        return note.rootId!;
-      }
-      return note.id;
-    }).toList();
+    final noteIds = widget.notes
+        .take(15)
+        .map((note) {
+          final id = note.isRepost && note.rootId != null && note.rootId!.isNotEmpty ? note.rootId! : note.id;
+          return id;
+        })
+        .where((id) => !_loadedInteractionIds.contains(id))
+        .toList();
+
+    if (noteIds.isEmpty) return;
+
+    _loadedInteractionIds.addAll(noteIds);
 
     Future.microtask(() {
       try {
         _noteRepository.fetchInteractionsForNotes(noteIds);
       } catch (e) {
-        debugPrint('[NoteListWidget] Error loading interactions: $e');
+        // Remove failed IDs so they can be retried
+        _loadedInteractionIds.removeAll(noteIds);
       }
     });
   }
@@ -74,13 +85,16 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   void didUpdateWidget(NoteListWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    if (oldWidget.notes != widget.notes) {
+    if (oldWidget.notes.length != widget.notes.length ||
+        (widget.notes.isNotEmpty && oldWidget.notes.isNotEmpty && widget.notes.first.id != oldWidget.notes.first.id)) {
       _loadInteractionsForVisibleNotes();
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
+
     if (widget.errorMessage != null) {
       return SliverToBoxAdapter(
         child: _ErrorState(
@@ -122,28 +136,58 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
           return RepaintBoundary(
             key: ValueKey('note_${note.id}'),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                NoteWidget(
-                  note: note,
-                  currentUserNpub: widget.currentUserNpub ?? '',
-                  notesNotifier: widget.notesNotifier,
-                  profiles: widget.profiles,
-                  containerColor: null,
-                  isSmallView: true,
-                  scrollController: null,
-                  notesListProvider: widget.notesListProvider,
-                ),
-                if (index < widget.notes.length - 1) const _NoteSeparator(),
-              ],
+            child: _NoteItemWidget(
+              note: note,
+              currentUserNpub: widget.currentUserNpub ?? '',
+              notesNotifier: widget.notesNotifier,
+              profiles: widget.profiles,
+              notesListProvider: widget.notesListProvider,
+              showSeparator: index < widget.notes.length - 1,
             ),
           );
         },
         childCount: widget.notes.length + (widget.canLoadMore || widget.isLoading ? 1 : 0),
-        addAutomaticKeepAlives: true,
-        addRepaintBoundaries: true,
+        addAutomaticKeepAlives: false,
+        addRepaintBoundaries: false,
       ),
+    );
+  }
+}
+
+class _NoteItemWidget extends StatelessWidget {
+  final NoteModel note;
+  final String currentUserNpub;
+  final ValueNotifier<List<NoteModel>> notesNotifier;
+  final Map<String, UserModel> profiles;
+  final dynamic notesListProvider;
+  final bool showSeparator;
+
+  const _NoteItemWidget({
+    required this.note,
+    required this.currentUserNpub,
+    required this.notesNotifier,
+    required this.profiles,
+    this.notesListProvider,
+    required this.showSeparator,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        NoteWidget(
+          note: note,
+          currentUserNpub: currentUserNpub,
+          notesNotifier: notesNotifier,
+          profiles: profiles,
+          containerColor: null,
+          isSmallView: true,
+          scrollController: null,
+          notesListProvider: notesListProvider,
+        ),
+        if (showSeparator) const _NoteSeparator(),
+      ],
     );
   }
 }

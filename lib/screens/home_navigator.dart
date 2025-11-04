@@ -27,7 +27,6 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
   int _currentIndex = 0;
   final GlobalKey<FeedPageState> _feedPageKey = GlobalKey<FeedPageState>();
   late AnimationController _iconAnimationController;
-  late Animation<double> _iconAnimation;
 
   late final List<Widget> _pages = [
     FeedPage(key: _feedPageKey, npub: widget.npub),
@@ -42,10 +41,6 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
     _iconAnimationController = AnimationController(
       duration: const Duration(milliseconds: 200),
       vsync: this,
-    );
-    _iconAnimation = CurvedAnimation(
-      parent: _iconAnimationController,
-      curve: Curves.easeInOut,
     );
   }
 
