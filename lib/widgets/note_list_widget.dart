@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/note_model.dart';
 import '../models/user_model.dart';
@@ -40,6 +41,9 @@ class NoteListWidget extends StatefulWidget {
 class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAliveClientMixin {
   late final NoteRepository _noteRepository;
   final Set<String> _loadedInteractionIds = {};
+  final Set<String> _visibleNoteIds = {};
+  StreamSubscription<List<NoteModel>>? _notesStreamSubscription;
+  Timer? _visibilityCheckTimer;
 
   @override
   bool get wantKeepAlive => true;
@@ -49,34 +53,160 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
     super.initState();
     try {
       _noteRepository = AppDI.get<NoteRepository>();
-      _loadInteractionsForVisibleNotes();
+      _setupVisibleNotesSubscription();
+      
+      if (widget.scrollController != null) {
+        widget.scrollController!.addListener(_onScrollChanged);
+        _visibilityCheckTimer = Timer.periodic(const Duration(milliseconds: 500), (_) => _updateVisibleNotes());
+        
+        // Initial visibility check after first frame
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _updateVisibleNotes();
+          // Also check after a short delay to ensure scroll controller is ready
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted) {
+              _updateVisibleNotes();
+            }
+          });
+        });
+      } else {
+        // If no scroll controller, consider first 15 notes as visible
+        if (widget.notes.isNotEmpty) {
+          final newVisibleIds = <String>{};
+          for (final note in widget.notes.take(15)) {
+            final noteId = _getInteractionNoteId(note);
+            newVisibleIds.add(noteId);
+          }
+          _visibleNoteIds.addAll(newVisibleIds);
+          _loadInteractionsForVisibleNotes();
+        }
+      }
     } catch (e) {
       // Handle silently
     }
   }
 
+  @override
+  void dispose() {
+    _notesStreamSubscription?.cancel();
+    _visibilityCheckTimer?.cancel();
+    widget.scrollController?.removeListener(_onScrollChanged);
+    super.dispose();
+  }
+
+  void _setupVisibleNotesSubscription() {
+    _notesStreamSubscription = _noteRepository.notesStream.listen((updatedNotes) {
+      if (updatedNotes.isEmpty || !mounted || _visibleNoteIds.isEmpty) return;
+
+      // Only process updates for visible notes - trigger rebuild for visible notes only
+      bool hasVisibleUpdates = false;
+      for (final updatedNote in updatedNotes) {
+        final noteId = _getInteractionNoteId(updatedNote);
+        
+        if (_visibleNoteIds.contains(noteId)) {
+          hasVisibleUpdates = true;
+          break;
+        }
+      }
+
+      // Trigger rebuild only if there are updates for visible notes
+      // The NoteWidget will read the updated counts from the updated note in the stream
+      if (hasVisibleUpdates && mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  void _onScrollChanged() {
+    _updateVisibleNotes();
+  }
+
+  void _updateVisibleNotes() {
+    if (widget.scrollController == null || !widget.scrollController!.hasClients) {
+      // If scroll controller not available, consider first 15 notes as visible
+      if (widget.notes.isNotEmpty) {
+        final newVisibleIds = <String>{};
+        for (final note in widget.notes.take(15)) {
+          final noteId = _getInteractionNoteId(note);
+          newVisibleIds.add(noteId);
+        }
+        if (newVisibleIds.length != _visibleNoteIds.length || 
+            !newVisibleIds.every((id) => _visibleNoteIds.contains(id))) {
+          _visibleNoteIds.clear();
+          _visibleNoteIds.addAll(newVisibleIds);
+          _loadInteractionsForVisibleNotes();
+        }
+      }
+      return;
+    }
+
+    final scrollPosition = widget.scrollController!.position;
+    final viewportTop = scrollPosition.pixels;
+    final viewportBottom = viewportTop + scrollPosition.viewportDimension;
+
+    final newVisibleIds = <String>{};
+    final itemHeight = 200.0; // Approximate height per note
+    final buffer = 500.0; // Buffer for preloading
+
+    // Always include first 15 notes when at top
+    if (viewportTop <= 100) {
+      for (final note in widget.notes.take(15)) {
+        final noteId = _getInteractionNoteId(note);
+        newVisibleIds.add(noteId);
+      }
+    }
+
+    // Calculate which items are in viewport
+    final startIndex = ((viewportTop - buffer) / itemHeight).floor().clamp(0, widget.notes.length);
+    final endIndex = ((viewportBottom + buffer) / itemHeight).ceil().clamp(0, widget.notes.length);
+
+    for (int i = startIndex; i < endIndex; i++) {
+      if (i >= widget.notes.length) break;
+      final note = widget.notes[i];
+      final noteId = _getInteractionNoteId(note);
+      newVisibleIds.add(noteId);
+    }
+
+    if (newVisibleIds.length != _visibleNoteIds.length || 
+        !newVisibleIds.every((id) => _visibleNoteIds.contains(id))) {
+      _visibleNoteIds.clear();
+      _visibleNoteIds.addAll(newVisibleIds);
+      _loadInteractionsForVisibleNotes();
+    }
+  }
+
+  String _getInteractionNoteId(NoteModel note) {
+    // For reposts, always use rootId
+    if (note.isRepost && note.rootId != null && note.rootId!.isNotEmpty) {
+      return note.rootId!;
+    }
+    return note.id;
+  }
+
   void _loadInteractionsForVisibleNotes() {
-    if (widget.notes.isEmpty) return;
+    if (widget.notes.isEmpty || _visibleNoteIds.isEmpty) return;
 
-    final noteIds = widget.notes
-        .take(15)
-        .map((note) {
-          final id = note.isRepost && note.rootId != null && note.rootId!.isNotEmpty ? note.rootId! : note.id;
-          return id;
-        })
-        .where((id) => !_loadedInteractionIds.contains(id))
-        .toList();
+    final noteIdsToLoad = <String>[];
+    
+    for (final note in widget.notes) {
+      final noteId = _getInteractionNoteId(note);
+      
+      if (_visibleNoteIds.contains(noteId) && !_loadedInteractionIds.contains(noteId)) {
+        noteIdsToLoad.add(noteId);
+      }
+    }
 
-    if (noteIds.isEmpty) return;
+    if (noteIdsToLoad.isEmpty) return;
 
-    _loadedInteractionIds.addAll(noteIds);
+    _loadedInteractionIds.addAll(noteIdsToLoad);
 
     Future.microtask(() {
       try {
-        _noteRepository.fetchInteractionsForNotes(noteIds);
+        _noteRepository.fetchInteractionsForNotes(noteIdsToLoad);
+        debugPrint('[NoteListWidget] Fetching interactions for ${noteIdsToLoad.length} visible notes (including reposts)');
       } catch (e) {
-        // Remove failed IDs so they can be retried
-        _loadedInteractionIds.removeAll(noteIds);
+        debugPrint('[NoteListWidget] Error fetching interactions: $e');
+        _loadedInteractionIds.removeAll(noteIdsToLoad);
       }
     });
   }
@@ -85,8 +215,16 @@ class _NoteListWidgetState extends State<NoteListWidget> with AutomaticKeepAlive
   void didUpdateWidget(NoteListWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    if (oldWidget.scrollController != widget.scrollController) {
+      oldWidget.scrollController?.removeListener(_onScrollChanged);
+      widget.scrollController?.addListener(_onScrollChanged);
+    }
+
     if (oldWidget.notes.length != widget.notes.length ||
         (widget.notes.isNotEmpty && oldWidget.notes.isNotEmpty && widget.notes.first.id != oldWidget.notes.first.id)) {
+      _visibleNoteIds.clear();
+      _loadedInteractionIds.clear();
+      _updateVisibleNotes();
       _loadInteractionsForVisibleNotes();
     }
   }

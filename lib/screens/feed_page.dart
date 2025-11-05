@@ -38,6 +38,8 @@ class FeedPageState extends State<FeedPage> {
   UserModel? _currentUser;
   StreamSubscription<UserModel>? _userStreamSubscription;
   StreamSubscription<Map<String, UserModel>>? _profilesStreamSubscription;
+  Timer? _profileUpdateThrottleTimer;
+  bool _profileUpdatePending = false;
   late UserRepository _userRepository;
 
   @override
@@ -52,17 +54,35 @@ class FeedPageState extends State<FeedPage> {
     });
   }
 
+  Timer? _userUpdateThrottleTimer;
+  bool _userUpdatePending = false;
+  UserModel? _pendingUser;
+
   void _setupUserStreamListener() {
     _userStreamSubscription = _userRepository.currentUserStream.listen(
       (updatedUser) {
-        debugPrint('[FeedPage] Received updated user data from stream: ${updatedUser.name}');
-        if (mounted) {
-          setState(() {
-            _currentUser = updatedUser;
-            _profiles[updatedUser.npub] = updatedUser;
-            debugPrint('[FeedPage] Profile updated in UI: ${updatedUser.name} (image: ${updatedUser.profileImage.isNotEmpty ? "✓" : "✗"})');
-          });
-        }
+        if (!mounted) return;
+
+        final hasChanges = _currentUser == null ||
+            _currentUser!.npub != updatedUser.npub ||
+            _currentUser!.profileImage != updatedUser.profileImage ||
+            _currentUser!.name != updatedUser.name;
+
+        if (!hasChanges) return;
+
+        _pendingUser = updatedUser;
+        _userUpdatePending = true;
+        _userUpdateThrottleTimer?.cancel();
+        _userUpdateThrottleTimer = Timer(const Duration(seconds: 1), () {
+          if (mounted && _userUpdatePending && _pendingUser != null) {
+            _userUpdatePending = false;
+            setState(() {
+              _currentUser = _pendingUser;
+              _profiles[_pendingUser!.npub] = _pendingUser!;
+            });
+            _pendingUser = null;
+          }
+        });
       },
       onError: (error) {
         debugPrint('[FeedPage] Error in user stream: $error');
@@ -133,6 +153,8 @@ class FeedPageState extends State<FeedPage> {
   void dispose() {
     _userStreamSubscription?.cancel();
     _profilesStreamSubscription?.cancel();
+    _profileUpdateThrottleTimer?.cancel();
+    _userUpdateThrottleTimer?.cancel();
     _scrollController.dispose();
     _notesNotifier.dispose();
     super.dispose();
@@ -195,21 +217,35 @@ class FeedPageState extends State<FeedPage> {
   void _setupProfilesStreamListener(FeedViewModel viewModel) {
     _profilesStreamSubscription = viewModel.profilesStream.listen(
       (profiles) {
-        debugPrint('[FeedPage] Received profiles update: ${profiles.length} profiles');
-        if (mounted) {
-          setState(() {
-            _profiles.addAll(profiles);
+        if (!mounted || profiles.isEmpty) return;
 
-            if (_currentUser != null && profiles.containsKey(_currentUser!.npub)) {
-              final updatedCurrentUser = profiles[_currentUser!.npub]!;
-              if (updatedCurrentUser.profileImage.isNotEmpty || _currentUser!.profileImage.isEmpty) {
-                _currentUser = updatedCurrentUser;
-                debugPrint(
-                    '[FeedPage]  Updated current user profile from stream: ${updatedCurrentUser.name} (image: ${updatedCurrentUser.profileImage.isNotEmpty ? "✓" : "✗"})');
-              }
-            }
-          });
+        bool hasChanges = false;
+        for (final entry in profiles.entries) {
+          final existing = _profiles[entry.key];
+          if (existing == null || existing.profileImage != entry.value.profileImage || existing.name != entry.value.name) {
+            _profiles[entry.key] = entry.value;
+            hasChanges = true;
+          }
         }
+
+        if (_currentUser != null && profiles.containsKey(_currentUser!.npub)) {
+          final updatedCurrentUser = profiles[_currentUser!.npub]!;
+          if (updatedCurrentUser.profileImage.isNotEmpty || _currentUser!.profileImage.isEmpty) {
+            _currentUser = updatedCurrentUser;
+            hasChanges = true;
+          }
+        }
+
+        if (!hasChanges) return;
+
+        _profileUpdatePending = true;
+        _profileUpdateThrottleTimer?.cancel();
+        _profileUpdateThrottleTimer = Timer(const Duration(seconds: 1), () {
+          if (mounted && _profileUpdatePending) {
+            _profileUpdatePending = false;
+            setState(() {});
+          }
+        });
       },
       onError: (error) {
         debugPrint('[FeedPage] Error in profiles stream: $error');

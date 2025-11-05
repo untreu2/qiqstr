@@ -2,107 +2,83 @@ import 'dart:ui';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
-import 'package:visibility_detector/visibility_detector.dart';
 import '../colors.dart';
 
 class VP extends StatefulWidget {
   final String url;
+  final String? authorProfileImageUrl;
 
-  const VP({super.key, required this.url});
+  const VP({
+    super.key,
+    required this.url,
+    this.authorProfileImageUrl,
+  });
 
   @override
   State<VP> createState() => _VPState();
 }
 
 class _VPState extends State<VP> {
-  VideoPlayerController? _controller;
-  bool _isInitialized = false;
-  bool _hasStartedInit = false;
-
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  void _handleVisibilityChanged(VisibilityInfo info) async {
-    final isNowVisible = info.visibleFraction > 0.5;
-
-    if (isNowVisible && !_hasStartedInit) {
-      _hasStartedInit = true;
-
-      _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
-        ..setLooping(true)
-        ..setVolume(0)
-        ..initialize().then((_) {
-          setState(() => _isInitialized = true);
-          _controller!.play();
-        });
-    }
-
-    if (_controller?.value.isInitialized ?? false) {
-      if (isNowVisible) {
-        _controller?.play();
-      } else {
-        _controller?.pause();
-      }
-    }
-  }
-
   void _openFullScreen() {
-    if (_isInitialized) {
-      Navigator.of(context).push(
-        PageRouteBuilder(
-          transitionDuration: const Duration(milliseconds: 300),
-          reverseTransitionDuration: const Duration(milliseconds: 200),
-          pageBuilder: (_, __, ___) => FullScreenVideoPlayer(url: widget.url),
-          transitionsBuilder: (_, animation, __, child) {
-            final curved = CurvedAnimation(
-              parent: animation,
-              curve: Curves.easeOutCubic,
-            );
-            return FadeTransition(
-              opacity: curved,
-              child: ScaleTransition(
-                scale: Tween<double>(begin: 0.97, end: 1).animate(curved),
-                child: child,
-              ),
-            );
-          },
-        ),
-      );
-    }
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 200),
+        pageBuilder: (_, __, ___) => FullScreenVideoPlayer(url: widget.url),
+        transitionsBuilder: (_, animation, __, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+          );
+          return FadeTransition(
+            opacity: curved,
+            child: ScaleTransition(
+              scale: Tween<double>(begin: 0.97, end: 1).animate(curved),
+              child: child,
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return VisibilityDetector(
-      key: Key(widget.url),
-      onVisibilityChanged: _handleVisibilityChanged,
-      child: GestureDetector(
-        onTap: _openFullScreen,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: AspectRatio(
-            aspectRatio: 1,
-            child: _isInitialized && _controller != null
-                ? FittedBox(
-                    fit: BoxFit.cover,
-                    child: SizedBox(
-                      width: _controller!.value.size.width,
-                      height: _controller!.value.size.height,
-                      child: VideoPlayer(_controller!),
-                    ),
-                  )
-                : Container(
-                    color: Colors.grey.shade800,
-                    child: const Center(
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
+    return GestureDetector(
+      onTap: _openFullScreen,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: Stack(
+            children: [
+              if (widget.authorProfileImageUrl != null && widget.authorProfileImageUrl!.isNotEmpty)
+                Positioned.fill(
+                  child: ImageFiltered(
+                    imageFilter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: Image.network(
+                      widget.authorProfileImageUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(color: Colors.grey.shade800);
+                      },
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Container(color: Colors.grey.shade800);
+                      },
                     ),
                   ),
+                )
+              else
+                Container(color: Colors.grey.shade800),
+              Center(
+                child: Icon(
+                  Icons.play_circle_filled,
+                  size: 64,
+                  color: Colors.white,
+                ),
+              ),
+            ],
           ),
         ),
       ),

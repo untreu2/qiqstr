@@ -305,6 +305,7 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
   }
 
   String _getInteractionNoteId() {
+    // For reposts, always use rootId
     if (_isRepost && widget.note.rootId != null && widget.note.rootId!.isNotEmpty) {
       return widget.note.rootId!;
     }
@@ -355,6 +356,7 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
                     onMentionTap: _navigateToMentionProfile,
                     notesListProvider: widget.notesListProvider,
                     noteId: _noteId,
+                    authorProfileImageUrl: _stateNotifier.value.authorUser?.profileImage,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -604,12 +606,14 @@ class _FocusedContentSection extends StatelessWidget {
   final Function(String) onMentionTap;
   final dynamic notesListProvider;
   final String noteId;
+  final String? authorProfileImageUrl;
 
   const _FocusedContentSection({
     required this.parsedContent,
     required this.onMentionTap,
     this.notesListProvider,
     required this.noteId,
+    this.authorProfileImageUrl,
   });
 
   @override
@@ -620,6 +624,7 @@ class _FocusedContentSection extends StatelessWidget {
         noteId: noteId,
         onNavigateToMentionProfile: onMentionTap,
         size: NoteContentSize.big,
+        authorProfileImageUrl: authorProfileImageUrl,
       );
     } catch (e) {
       debugPrint('[FocusedContentSection] Build error: $e');

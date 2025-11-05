@@ -1172,13 +1172,14 @@ class NostrDataService {
   Future<Result<List<NoteModel>>> preloadInitialFeed({
     required String userNpub,
     int limit = 50,
+    bool forceRefresh = false,
   }) async {
     try {
       _isInitialFeedLoading = true;
       if (!_feedLoadingStateController.isClosed) {
         _feedLoadingStateController.add(true);
       }
-      debugPrint('[NostrDataService] Starting initial feed preload for: $userNpub');
+      debugPrint('[NostrDataService] Starting initial feed preload for: $userNpub, forceRefresh: $forceRefresh');
 
       _currentUserNpub = userNpub;
       setContext('feed');
@@ -1195,6 +1196,7 @@ class NostrDataService {
       final result = await fetchFeedNotes(
         authorNpubs: [userNpub],
         limit: limit,
+        forceRefresh: forceRefresh,
       );
 
       _isInitialFeedLoading = false;
@@ -1219,6 +1221,7 @@ class NostrDataService {
     int limit = 50,
     DateTime? until,
     DateTime? since,
+    bool forceRefresh = false,
   }) async {
     try {
       final currentUser = await _authService.getCurrentUserNpub();
@@ -1289,7 +1292,7 @@ class NostrDataService {
       final request = NostrService.createRequest(filter);
       
       final cachedNotes = _getNotesList();
-      if (cachedNotes.isNotEmpty) {
+      if (cachedNotes.isNotEmpty && !forceRefresh) {
         debugPrint('[NostrDataService] Cache hit: ${cachedNotes.length} notes available');
         
         // Start background refresh while returning cached data
@@ -1306,7 +1309,10 @@ class NostrDataService {
         return Result.success(notesToReturn);
       }
       
-      // Cache empty - broadcast request and wait
+      // Cache empty or force refresh - broadcast request and wait
+      if (forceRefresh) {
+        debugPrint('[NostrDataService] Force refresh: bypassing cache and fetching fresh data');
+      }
       await _relayManager.broadcast(NostrService.serializeRequest(request));
       
       debugPrint('[NostrDataService] Cache empty, waiting for relay responses...');
@@ -1647,6 +1653,7 @@ class NostrDataService {
     int limit = 20,
     DateTime? until,
     DateTime? since,
+    bool forceRefresh = false,
   }) async {
     try {
       setContext('hashtag');
@@ -1668,7 +1675,12 @@ class NostrDataService {
       final request = jsonEncode(['REQ', subscriptionId, filterMap]);
       await _relayManager.broadcast(request);
 
-      await Future.delayed(const Duration(milliseconds: 2000));
+      if (forceRefresh) {
+        debugPrint('[NostrDataService] Force refresh: waiting longer for fresh hashtag notes');
+        await Future.delayed(const Duration(milliseconds: 4000));
+      } else {
+        await Future.delayed(const Duration(milliseconds: 2000));
+      }
 
       final hashtagNotes = _noteCache.values.where((note) {
         return note.content.toLowerCase().contains('#${hashtag.toLowerCase()}');

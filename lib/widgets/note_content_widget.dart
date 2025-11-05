@@ -23,6 +23,7 @@ class NoteContentWidget extends StatefulWidget {
   final void Function(String mentionId)? onNavigateToMentionProfile;
   final void Function(String noteId)? onShowMoreTap;
   final NoteContentSize size;
+  final String? authorProfileImageUrl;
 
   const NoteContentWidget({
     super.key,
@@ -31,6 +32,7 @@ class NoteContentWidget extends StatefulWidget {
     this.onNavigateToMentionProfile,
     this.onShowMoreTap,
     this.size = NoteContentSize.small,
+    this.authorProfileImageUrl,
   });
 
   @override
@@ -331,7 +333,10 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         if (_mediaUrls.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: 8),
-            child: MediaPreviewWidget(mediaUrls: _mediaUrls),
+            child: MediaPreviewWidget(
+              mediaUrls: _mediaUrls,
+              authorProfileImageUrl: widget.authorProfileImageUrl,
+            ),
           ),
         if (_linkUrls.isNotEmpty && _mediaUrls.isEmpty)
           Padding(

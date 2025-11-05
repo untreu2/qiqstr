@@ -6,8 +6,13 @@ import 'video_preview.dart';
 
 class MediaPreviewWidget extends StatefulWidget {
   final List<String> mediaUrls;
+  final String? authorProfileImageUrl;
 
-  const MediaPreviewWidget({super.key, required this.mediaUrls});
+  const MediaPreviewWidget({
+    super.key,
+    required this.mediaUrls,
+    this.authorProfileImageUrl,
+  });
 
   static const double borderRadius = 12.0;
 
@@ -56,7 +61,10 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> with AutomaticK
     if (widget.mediaUrls.isEmpty) return const SizedBox.shrink();
 
     if (_hasVideo) {
-      return VP(url: _videoUrls.first);
+      return VP(
+        url: _videoUrls.first,
+        authorProfileImageUrl: widget.authorProfileImageUrl,
+      );
     }
 
     if (!_hasImages) return const SizedBox.shrink();

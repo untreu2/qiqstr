@@ -32,47 +32,31 @@ class InteractionBar extends StatefulWidget {
 
 class _InteractionBarState extends State<InteractionBar> {
   late final NoteRepository _noteRepository;
-  StreamSubscription? _notesStreamSubscription;
-
+  StreamSubscription<List<NoteModel>>? _notesStreamSubscription;
+  NoteModel? _actualNote;
   bool _hasReacted = false;
   bool _hasReposted = false;
   bool _hasZapped = false;
-  int _reactionCount = 0;
-  int _repostCount = 0;
-  int _replyCount = 0;
-  int _zapAmount = 0;
 
   @override
   void initState() {
     super.initState();
     _noteRepository = AppDI.get<NoteRepository>();
-    _hasReacted = false;
-    _hasReposted = false;
-    _hasZapped = false;
-    _loadInteractionCounts();
-    _subscribeToNoteUpdates();
+    _updateActualNote();
+    _setupNotesStreamSubscription();
+    _updateLocalState();
   }
 
   @override
   void didUpdateWidget(InteractionBar oldWidget) {
     super.didUpdateWidget(oldWidget);
-
-    if (oldWidget.note?.id != widget.note?.id) {
-      setState(() {
-        _hasReacted = false;
-        _hasReposted = false;
-        _hasZapped = false;
-      });
-
-      _loadInteractionCounts();
-    }
-
-    if (oldWidget.note?.id != widget.note?.id ||
-        oldWidget.note?.reactionCount != widget.note?.reactionCount ||
-        oldWidget.note?.repostCount != widget.note?.repostCount ||
-        oldWidget.note?.replyCount != widget.note?.replyCount ||
-        oldWidget.note?.zapAmount != widget.note?.zapAmount) {
-      _loadInteractionCounts();
+    final noteIdChanged = oldWidget.note?.id != widget.note?.id || 
+                         oldWidget.noteId != widget.noteId;
+    if (noteIdChanged) {
+      _updateActualNote();
+      _updateLocalState();
+    } else if (oldWidget.note != widget.note) {
+      _updateActualNote();
     }
   }
 
@@ -82,171 +66,86 @@ class _InteractionBarState extends State<InteractionBar> {
     super.dispose();
   }
 
-  void _subscribeToNoteUpdates() {
+  void _setupNotesStreamSubscription() {
     _notesStreamSubscription = _noteRepository.notesStream.listen((notes) {
-      if (!mounted) return;
-
-      final updatedNote = notes.where((note) => note.id == widget.noteId).firstOrNull;
-      if (updatedNote != null) {
-        final newReactionCount = updatedNote.reactionCount;
-        final newRepostCount = updatedNote.repostCount;
-        final newReplyCount = updatedNote.replyCount;
-        final newZapAmount = updatedNote.zapAmount;
-
-        final userHasReacted = _noteRepository.hasUserReacted(widget.noteId, widget.currentUserNpub);
-        final userHasReposted = _noteRepository.hasUserReposted(widget.noteId, widget.currentUserNpub);
-        final userHasZapped = _noteRepository.hasUserZapped(widget.noteId, widget.currentUserNpub);
-
-        bool shouldUpdate = false;
-        int finalReactionCount = _reactionCount;
-        int finalRepostCount = _repostCount;
-        int finalReplyCount = _replyCount;
-        int finalZapAmount = _zapAmount;
-        bool finalHasReacted = _hasReacted;
-        bool finalHasReposted = _hasReposted;
-        bool finalHasZapped = _hasZapped;
-
-        if (newReactionCount != _reactionCount && newReactionCount >= _reactionCount) {
-          finalReactionCount = newReactionCount;
-          shouldUpdate = true;
+      if (!mounted || notes.isEmpty) return;
+      
+      // widget.noteId is already the rootId for reposts (from NoteWidget._getInteractionNoteId)
+      // Find the actual note by widget.noteId
+      final targetNoteId = widget.noteId;
+      NoteModel? foundNote;
+      
+      for (final note in notes) {
+        if (note.id == targetNoteId) {
+          foundNote = note;
+          break;
         }
-        if (newRepostCount != _repostCount && newRepostCount >= _repostCount) {
-          finalRepostCount = newRepostCount;
-          shouldUpdate = true;
-        }
-        if (newReplyCount != _replyCount && newReplyCount >= _replyCount) {
-          finalReplyCount = newReplyCount;
-          shouldUpdate = true;
-        }
-        if (newZapAmount != _zapAmount && newZapAmount >= _zapAmount) {
-          finalZapAmount = newZapAmount;
-          shouldUpdate = true;
-        }
-
-        if (userHasReacted != _hasReacted) {
-          finalHasReacted = userHasReacted;
-          shouldUpdate = true;
-        }
-        if (userHasReposted != _hasReposted) {
-          finalHasReposted = userHasReposted;
-          shouldUpdate = true;
-        }
-        if (userHasZapped != _hasZapped) {
-          finalHasZapped = userHasZapped;
-          shouldUpdate = true;
-        }
-
-        if (shouldUpdate) {
+      }
+      
+      // Update actual note if found and counts changed
+      if (foundNote != null) {
+        final currentCounts = _actualNote != null 
+            ? '${_actualNote!.reactionCount}_${_actualNote!.repostCount}_${_actualNote!.replyCount}_${_actualNote!.zapAmount}'
+            : '';
+        final newCounts = '${foundNote.reactionCount}_${foundNote.repostCount}_${foundNote.replyCount}_${foundNote.zapAmount}';
+        
+        if (_actualNote == null || currentCounts != newCounts) {
           setState(() {
-            _reactionCount = finalReactionCount;
-            _repostCount = finalRepostCount;
-            _replyCount = finalReplyCount;
-            _zapAmount = finalZapAmount;
-            _hasReacted = finalHasReacted;
-            _hasReposted = finalHasReposted;
-            _hasZapped = finalHasZapped;
+            _actualNote = foundNote;
           });
-        } else {
-          debugPrint('[InteractionBar] No stream updates for ${widget.noteId}');
-          debugPrint('  Current: reactions=$_reactionCount, reposts=$_repostCount, replies=$_replyCount, zaps=$_zapAmount');
-          debugPrint('  Stream:  reactions=$newReactionCount, reposts=$newRepostCount, replies=$newReplyCount, zaps=$newZapAmount');
         }
       }
     });
   }
 
-  void _loadInteractionCounts() async {
-    if (widget.note != null) {
-      final newReactionCount = widget.note!.reactionCount;
-      final newRepostCount = widget.note!.repostCount;
-      final newReplyCount = widget.note!.replyCount;
-      final newZapAmount = widget.note!.zapAmount;
-
-      final userHasReacted = _noteRepository.hasUserReacted(widget.noteId, widget.currentUserNpub);
-      final userHasReposted = _noteRepository.hasUserReposted(widget.noteId, widget.currentUserNpub);
-      final userHasZapped = _noteRepository.hasUserZapped(widget.noteId, widget.currentUserNpub);
-
-      bool shouldUpdate = false;
-      int finalReactionCount = _reactionCount;
-      int finalRepostCount = _repostCount;
-      int finalReplyCount = _replyCount;
-      int finalZapAmount = _zapAmount;
-      bool finalHasReacted = _hasReacted;
-      bool finalHasReposted = _hasReposted;
-      bool finalHasZapped = _hasZapped;
-
-      if (newReactionCount != _reactionCount && (newReactionCount > _reactionCount || _reactionCount == 0)) {
-        finalReactionCount = newReactionCount;
-        shouldUpdate = true;
+  void _updateActualNote() {
+    final note = widget.note;
+    
+    // widget.noteId is already the rootId for reposts (from NoteWidget._getInteractionNoteId)
+    // So we should find the note by widget.noteId, not widget.note.id
+    final targetNoteId = widget.noteId;
+    
+    // Try to find the actual note from repository by noteId (which is rootId for reposts)
+    final allNotes = _noteRepository.currentNotes;
+    for (final n in allNotes) {
+      if (n.id == targetNoteId) {
+        _actualNote = n;
+        return;
       }
-      if (newRepostCount != _repostCount && (newRepostCount > _repostCount || _repostCount == 0)) {
-        finalRepostCount = newRepostCount;
-        shouldUpdate = true;
-      }
-      if (newReplyCount != _replyCount && (newReplyCount > _replyCount || _replyCount == 0)) {
-        finalReplyCount = newReplyCount;
-        shouldUpdate = true;
-      }
-      if (newZapAmount != _zapAmount && (newZapAmount > _zapAmount || _zapAmount == 0)) {
-        finalZapAmount = newZapAmount;
-        shouldUpdate = true;
-      }
-
-      if (userHasReacted != _hasReacted) {
-        finalHasReacted = userHasReacted;
-        shouldUpdate = true;
-      }
-      if (userHasReposted != _hasReposted) {
-        finalHasReposted = userHasReposted;
-        shouldUpdate = true;
-      }
-      if (userHasZapped != _hasZapped) {
-        finalHasZapped = userHasZapped;
-        shouldUpdate = true;
-      }
-
-      if (_reactionCount == 0 && _repostCount == 0 && _replyCount == 0 && _zapAmount == 0) {
-        finalReactionCount = newReactionCount;
-        finalRepostCount = newRepostCount;
-        finalReplyCount = newReplyCount;
-        finalZapAmount = newZapAmount;
-        finalHasReacted = userHasReacted;
-        finalHasReposted = userHasReposted;
-        finalHasZapped = userHasZapped;
-        shouldUpdate = true;
-      }
-
-      if (shouldUpdate) {
-        setState(() {
-          _reactionCount = finalReactionCount;
-          _repostCount = finalRepostCount;
-          _replyCount = finalReplyCount;
-          _zapAmount = finalZapAmount;
-          _hasReacted = finalHasReacted;
-          _hasReposted = finalHasReposted;
-          _hasZapped = finalHasZapped;
-        });
-      } else {
-        debugPrint('[InteractionBar] No count changes for ${widget.noteId}');
-        debugPrint('  Current: reactions=$_reactionCount, reposts=$_repostCount, replies=$_replyCount, zaps=$_zapAmount');
-        debugPrint('  Widget:  reactions=$newReactionCount, reposts=$newRepostCount, replies=$newReplyCount, zaps=$newZapAmount');
-      }
+    }
+    
+    // If not found in repository, use widget.note as fallback
+    // For reposts, this will be the wrapper note with 0 counts, but stream will update it
+    if (note != null) {
+      _actualNote = note;
     } else {
-      if (_reactionCount == 0 && _repostCount == 0 && _replyCount == 0 && _zapAmount == 0) {
+      _actualNote = null;
+    }
+  }
+
+  void _updateLocalState() {
+    final note = _actualNote ?? widget.note;
+    if (note == null) {
+      if (_hasReacted || _hasReposted || _hasZapped) {
         setState(() {
-          _reactionCount = 0;
-          _repostCount = 0;
-          _replyCount = 0;
-          _zapAmount = 0;
           _hasReacted = false;
           _hasReposted = false;
           _hasZapped = false;
         });
-
-        debugPrint('[InteractionBar] No note provided, using default counts');
-      } else {
-        debugPrint('[InteractionBar]  No note provided but keeping existing counts to prevent disappearing');
       }
+      return;
+    }
+
+    final userHasReacted = _noteRepository.hasUserReacted(widget.noteId, widget.currentUserNpub);
+    final userHasReposted = _noteRepository.hasUserReposted(widget.noteId, widget.currentUserNpub);
+    final userHasZapped = _noteRepository.hasUserZapped(widget.noteId, widget.currentUserNpub);
+
+    if (userHasReacted != _hasReacted || userHasReposted != _hasReposted || userHasZapped != _hasZapped) {
+      setState(() {
+        _hasReacted = userHasReacted;
+        _hasReposted = userHasReposted;
+        _hasZapped = userHasZapped;
+      });
     }
   }
 
@@ -271,7 +170,6 @@ class _InteractionBarState extends State<InteractionBar> {
         if (mounted) {
           setState(() {
             _hasReposted = true;
-            _repostCount++;
           });
         }
       },
@@ -279,40 +177,42 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   Future<void> _handleReactionTap() async {
-    if (_hasReacted) return;
+    if (_hasReacted || !mounted) return;
+
+    final prevHasReacted = _hasReacted;
+
+    setState(() {
+      _hasReacted = true;
+    });
 
     try {
-      setState(() {
-        _hasReacted = true;
-        _reactionCount++;
-      });
-
       final result = await _noteRepository.reactToNote(widget.noteId, '+');
+      if (!mounted) return;
+      
       result.fold(
-        (success) => debugPrint('Reaction successful'),
+        (_) {},
         (error) {
-          setState(() {
-            _hasReacted = false;
-            _reactionCount--;
-          });
-          AppSnackbar.error(context, 'Failed to react: $error');
+          if (mounted) {
+            setState(() {
+              _hasReacted = prevHasReacted;
+            });
+            AppSnackbar.error(context, 'Failed to react: $error');
+          }
         },
       );
     } catch (e) {
-      setState(() {
-        _hasReacted = false;
-        _reactionCount--;
-      });
+      if (mounted) {
+        setState(() {
+          _hasReacted = prevHasReacted;
+        });
+      }
     }
   }
 
   void _handleZapTap() async {
-    if (widget.note == null || _hasZapped) return;
+    if (widget.note == null || _hasZapped || !mounted) return;
 
-    debugPrint('[InteractionBar] Starting zap for note: ${widget.noteId}');
-
-    int originalZapAmount = _zapAmount;
-    bool originalHasZapped = _hasZapped;
+    final originalHasZapped = _hasZapped;
 
     setState(() {
       _hasZapped = true;
@@ -323,24 +223,14 @@ class _InteractionBarState extends State<InteractionBar> {
       note: widget.note!,
     );
 
+    if (!mounted) return;
+
     final zapSuccess = zapResult['success'] as bool;
-    final zapAmount = zapResult['amount'] as int;
 
-    debugPrint('[InteractionBar] Zap result: ${zapSuccess ? 'SUCCESS' : 'FAILED'}, amount: $zapAmount');
-
-    if (mounted) {
-      if (zapSuccess) {
-        setState(() {
-          _hasZapped = true;
-          _zapAmount = originalZapAmount + zapAmount;
-        });
-        debugPrint('[InteractionBar] Updated UI - hasZapped: $_hasZapped, zapAmount: $_zapAmount');
-      } else {
-        setState(() {
-          _hasZapped = originalHasZapped;
-          _zapAmount = originalZapAmount;
-        });
-      }
+    if (!zapSuccess) {
+      setState(() {
+        _hasZapped = originalHasZapped;
+      });
     }
   }
 
@@ -379,36 +269,26 @@ class _InteractionBarState extends State<InteractionBar> {
       if (isStatsButton) {
         return Icon(Icons.bar_chart, size: statsIconSize, color: effectiveColor);
       } else if (carbonIcon != null && buttonType == 'repost') {
-        // Repost button always uses carbon icon
         return Icon(carbonIcon, size: iconSize + 2.0, color: effectiveColor);
       } else if (activeCarbonIcon != null && buttonType != 'repost') {
-        // Other buttons with active states use AnimatedSwitcher
-        return AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          transitionBuilder: (Widget child, Animation<double> animation) {
-            return FadeTransition(
-              opacity: animation,
-              child: Transform.scale(
-                scale: isActive ? 1.0 + (animation.value * 0.05) : 1.0,
-                child: child,
-              ),
-            );
-          },
-          child: isActive
-              ? Icon(
-                  activeCarbonIcon,
-                  key: ValueKey('carbon_$buttonType'),
-                  size: (buttonType == 'reaction' || buttonType == 'zap') ? iconSize + 3.0 : iconSize + 1.0,
-                  color: activeColor,
-                )
-              : SvgPicture.asset(
-                  iconPath!,
-                  key: ValueKey('svg_$buttonType'),
-                  width: iconSize,
-                  height: iconSize,
-                  colorFilter: ColorFilter.mode(inactiveColor, BlendMode.srcIn),
-                ),
-        );
+        if (isActive) {
+          return Icon(
+            activeCarbonIcon,
+            size: buttonType == 'reaction' 
+                ? iconSize + 4.0 
+                : buttonType == 'zap' 
+                    ? iconSize + 3.0 
+                    : iconSize + 1.0,
+            color: activeColor,
+          );
+        } else {
+          return SvgPicture.asset(
+            iconPath!,
+            width: iconSize,
+            height: iconSize,
+            colorFilter: ColorFilter.mode(inactiveColor, BlendMode.srcIn),
+          );
+        }
       } else if (iconPath != null) {
         return SvgPicture.asset(
           iconPath,
@@ -420,29 +300,32 @@ class _InteractionBarState extends State<InteractionBar> {
       return const SizedBox.shrink();
     }
 
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          buildIcon(),
-          if (count > 0 && !isStatsButton) ...[
-            SizedBox(width: spacing),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              child: Text(
-                _formatCount(count),
-                key: ValueKey('count_$count'),
-                style: TextStyle(
-                  fontSize: fontSize,
-                  color: isActive ? activeColor : inactiveColor,
-                  fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            buildIcon(),
+            if (count > 0 && !isStatsButton) ...[
+              SizedBox(width: spacing),
+              Transform.translate(
+                offset: const Offset(0, -3),
+                child: Text(
+                  _formatCount(count),
+                  style: TextStyle(
+                    fontSize: fontSize,
+                    color: isActive ? activeColor : inactiveColor,
+                    fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -457,64 +340,76 @@ class _InteractionBarState extends State<InteractionBar> {
 
   @override
   Widget build(BuildContext context) {
+    final note = _actualNote ?? widget.note;
+    if (note == null) {
+      return const SizedBox(height: 32);
+    }
+
     final colors = context.colors;
     final height = widget.isBigSize ? 36.0 : 32.0;
+    // For reposts, use the actual note's counts (which should be fetched by rootId)
+    final reactionCount = note.reactionCount;
+    final repostCount = note.repostCount;
+    final replyCount = note.replyCount;
+    final zapAmount = note.zapAmount;
 
-    return SizedBox(
-      height: height,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          _buildButton(
-            iconPath: 'assets/reply_button_2.svg',
-            count: _replyCount,
-            isActive: false,
-            activeColor: colors.reply,
-            inactiveColor: colors.secondary,
-            onTap: _handleReplyTap,
-            buttonType: 'reply',
-          ),
-          _buildButton(
-            iconPath: null,
-            carbonIcon: CarbonIcons.renew,
-            count: _repostCount,
-            isActive: _hasReposted,
-            activeColor: colors.repost,
-            inactiveColor: colors.secondary,
-            onTap: _handleRepostTap,
-            buttonType: 'repost',
-          ),
-          _buildButton(
-            iconPath: 'assets/reaction_button.svg',
-            count: _reactionCount,
-            isActive: _hasReacted,
-            activeColor: colors.reaction,
-            inactiveColor: colors.secondary,
-            onTap: _handleReactionTap,
-            activeCarbonIcon: CarbonIcons.favorite_filled,
-            buttonType: 'reaction',
-          ),
-          _buildButton(
-            iconPath: 'assets/zap_button.svg',
-            count: _zapAmount,
-            isActive: _hasZapped,
-            activeColor: colors.zap,
-            inactiveColor: colors.secondary,
-            onTap: _handleZapTap,
-            activeCarbonIcon: CarbonIcons.flash_filled,
-            buttonType: 'zap',
-          ),
-          _buildButton(
-            iconPath: null,
-            count: 0,
-            isActive: false,
-            activeColor: colors.secondary,
-            inactiveColor: colors.secondary,
-            onTap: _handleStatsTap,
-            isStatsButton: true,
-          ),
-        ],
+    return RepaintBoundary(
+      child: SizedBox(
+        height: height,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _buildButton(
+              iconPath: 'assets/reply_button_2.svg',
+              count: replyCount,
+              isActive: false,
+              activeColor: colors.reply,
+              inactiveColor: colors.secondary,
+              onTap: _handleReplyTap,
+              buttonType: 'reply',
+            ),
+            _buildButton(
+              iconPath: null,
+              carbonIcon: CarbonIcons.renew,
+              count: repostCount,
+              isActive: _hasReposted,
+              activeColor: colors.repost,
+              inactiveColor: colors.secondary,
+              onTap: _handleRepostTap,
+              buttonType: 'repost',
+            ),
+            _buildButton(
+              iconPath: 'assets/reaction_button.svg',
+              count: reactionCount,
+              isActive: _hasReacted,
+              activeColor: colors.reaction,
+              inactiveColor: colors.secondary,
+              onTap: _handleReactionTap,
+              activeCarbonIcon: CarbonIcons.favorite_filled,
+              buttonType: 'reaction',
+            ),
+            _buildButton(
+              iconPath: 'assets/zap_button.svg',
+              count: zapAmount,
+              isActive: _hasZapped,
+              activeColor: colors.zap,
+              inactiveColor: colors.secondary,
+              onTap: _handleZapTap,
+              activeCarbonIcon: CarbonIcons.flash_filled,
+              buttonType: 'zap',
+            ),
+            _buildButton(
+              iconPath: null,
+              count: 0,
+              isActive: false,
+              activeColor: colors.secondary,
+              inactiveColor: colors.secondary,
+              onTap: _handleStatsTap,
+              isStatsButton: true,
+            ),
+          ],
+        ),
       ),
     );
   }

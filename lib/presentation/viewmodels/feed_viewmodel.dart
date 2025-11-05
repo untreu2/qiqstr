@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../../core/base/base_view_model.dart';
 import '../../core/base/ui_state.dart';
 import '../../core/base/app_error.dart';
+import '../../core/base/result.dart';
 import '../../data/repositories/note_repository.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/user_repository.dart';
@@ -135,83 +136,275 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
     _isLoadingFeed = true;
 
-    if (isHashtagMode) {
-      await _loadHashtagFeed();
-    } else {
-      await _loadUserFeed();
-    }
+    try {
+      // Check for cached notes first to show them immediately
+      if (!isHashtagMode) {
+        try {
+          final cachedNotes = _noteRepository.currentNotes;
+          if (cachedNotes.isNotEmpty) {
+            debugPrint('[FeedViewModel] Found ${cachedNotes.length} cached notes, showing immediately');
+            final sortedNotes = _sortNotes(List.from(cachedNotes));
+            _feedState = LoadedState(sortedNotes);
+            safeNotifyListeners();
+            
+            // Load profiles for cached notes in background
+            _loadUserProfilesForNotes(sortedNotes).catchError((_) {});
+            
+            // Subscribe to updates
+            _subscribeToRealTimeUpdates();
+          }
+        } catch (e) {
+          debugPrint('[FeedViewModel] Error checking cached notes: $e');
+        }
+      }
 
-    _isLoadingFeed = false;
+      if (isHashtagMode) {
+        await _loadHashtagFeed(forceRefresh: false);
+      } else {
+        await _loadUserFeed(forceRefresh: false);
+      }
+    } catch (e) {
+      debugPrint('[FeedViewModel] Error in _loadFeed: $e');
+      // Ensure error state is set if not already set
+      if (_feedState is LoadingState) {
+        _feedState = ErrorState('Failed to load feed: ${e.toString()}');
+        safeNotifyListeners();
+      }
+    } finally {
+      _isLoadingFeed = false;
+    }
   }
 
-  Future<void> _loadUserFeed() async {
+  Future<void> _loadUserFeed({bool forceRefresh = false}) async {
     await executeOperation('loadFeed', () async {
-      _feedState = const LoadingState();
-      safeNotifyListeners();
+      // Only show loading state if we don't have cached notes or force refresh
+      if (forceRefresh || _feedState is! LoadedState<List<NoteModel>> || (_feedState as LoadedState<List<NoteModel>>).data.isEmpty) {
+        _feedState = const LoadingState();
+        safeNotifyListeners();
+      }
 
       _nostrDataService.setContext('feed');
 
-      final result = await _noteRepository.getFeedNotesFromFollowList(
-        currentUserNpub: _currentUserNpub,
-        limit: _currentLimit,
-      );
-
-      await result.fold(
-        (notes) async {
-          if (notes.isEmpty) {
-            _feedState = const LoadedState(<NoteModel>[]);
+      try {
+        Result<List<NoteModel>> result;
+        try {
+          result = await _noteRepository.getFeedNotesFromFollowList(
+            currentUserNpub: _currentUserNpub,
+            limit: _currentLimit,
+            forceRefresh: forceRefresh,
+          ).timeout(
+            const Duration(seconds: 8),
+            onTimeout: () {
+              debugPrint('[FeedViewModel] Feed load timeout after 8s');
+              // Return cached notes if available and not force refresh, otherwise empty
+              if (!forceRefresh) {
+                final cachedNotes = _noteRepository.currentNotes;
+                if (cachedNotes.isNotEmpty) {
+                  return Future.value(Result.success(cachedNotes));
+                }
+              }
+              return Future.value(const Result.success(<NoteModel>[]));
+            },
+          );
+        } on TimeoutException {
+          debugPrint('[FeedViewModel] Feed load timeout after 8s');
+          // Return cached notes if available and not force refresh, otherwise empty
+          if (!forceRefresh) {
+            final cachedNotes = _noteRepository.currentNotes;
+            if (cachedNotes.isNotEmpty) {
+              result = Result.success(cachedNotes);
+            } else {
+              result = const Result.success(<NoteModel>[]);
+            }
           } else {
-            final sortedNotes = _sortNotes(notes);
-            _feedState = LoadedState(sortedNotes);
-
-            await _loadUserProfilesForNotes(sortedNotes);
+            result = const Result.success(<NoteModel>[]);
           }
+        }
 
-          _subscribeToRealTimeUpdates();
-        },
-        (error) async {
-          _feedState = ErrorState(error);
-        },
-      );
+        await result.fold(
+          (notes) async {
+            if (notes.isEmpty) {
+              // Only set empty state if we don't already have cached notes
+              if (_feedState is! LoadedState<List<NoteModel>> || (_feedState as LoadedState<List<NoteModel>>).data.isEmpty) {
+                _feedState = const LoadedState(<NoteModel>[]);
+              }
+            } else {
+              final sortedNotes = _sortNotes(notes);
+              _feedState = LoadedState(sortedNotes);
 
-      safeNotifyListeners();
+              await _loadUserProfilesForNotes(sortedNotes);
+            }
+
+            _subscribeToRealTimeUpdates();
+          },
+          (error) async {
+            // Only set error state if we don't have cached notes to show
+            if (_feedState is! LoadedState<List<NoteModel>> || (_feedState as LoadedState<List<NoteModel>>).data.isEmpty) {
+              _feedState = ErrorState(error);
+            } else {
+              debugPrint('[FeedViewModel] Feed load error but showing cached notes: $error');
+            }
+          },
+        );
+
+        safeNotifyListeners();
+      } catch (e) {
+        debugPrint('[FeedViewModel] Exception in _loadUserFeed: $e');
+        // Only set error state if we don't have cached notes
+        if (_feedState is! LoadedState<List<NoteModel>> || (_feedState as LoadedState<List<NoteModel>>).data.isEmpty) {
+          _feedState = ErrorState('Failed to load feed: ${e.toString()}');
+          safeNotifyListeners();
+        }
+      }
     });
   }
 
-  Future<void> _loadHashtagFeed() async {
+  Future<void> _loadHashtagFeed({bool forceRefresh = false}) async {
     await executeOperation('loadHashtagFeed', () async {
       _feedState = const LoadingState();
       safeNotifyListeners();
 
       _nostrDataService.setContext('hashtag');
 
-      final result = await _noteRepository.getHashtagNotes(
-        hashtag: _hashtag!,
-        limit: _currentLimit,
-      );
+      try {
+        // Add timeout to prevent infinite waiting
+        Result<List<NoteModel>> result;
+        try {
+          result = await _noteRepository.getHashtagNotes(
+            hashtag: _hashtag!,
+            limit: _currentLimit,
+            forceRefresh: forceRefresh,
+          ).timeout(
+            const Duration(seconds: 8),
+            onTimeout: () {
+              debugPrint('[FeedViewModel] Hashtag feed load timeout after 8s');
+              return Future.value(const Result.success(<NoteModel>[]));
+            },
+          );
+        } on TimeoutException {
+          debugPrint('[FeedViewModel] Hashtag feed load timeout after 8s');
+          result = const Result.success(<NoteModel>[]);
+        }
 
-      await result.fold(
-        (notes) async {
-          if (notes.isEmpty) {
-            _feedState = const LoadedState(<NoteModel>[]);
-          } else {
-            final sortedNotes = _sortNotes(notes);
-            _feedState = LoadedState(sortedNotes);
+        await result.fold(
+          (notes) async {
+            if (notes.isEmpty) {
+              _feedState = const LoadedState(<NoteModel>[]);
+            } else {
+              final sortedNotes = _sortNotes(notes);
+              _feedState = LoadedState(sortedNotes);
 
-            await _loadUserProfilesForNotes(sortedNotes);
-          }
-        },
-        (error) async {
-          _feedState = ErrorState(error);
-        },
-      );
+              await _loadUserProfilesForNotes(sortedNotes);
+            }
+          },
+          (error) async {
+            _feedState = ErrorState(error);
+          },
+        );
 
-      safeNotifyListeners();
+        safeNotifyListeners();
+      } catch (e) {
+        debugPrint('[FeedViewModel] Exception in _loadHashtagFeed: $e');
+        _feedState = ErrorState('Failed to load hashtag feed: ${e.toString()}');
+        safeNotifyListeners();
+      }
     });
   }
 
   Future<void> refreshFeed() async {
-    await _loadFeed();
+    _currentLimit = 50;
+    
+    if (_currentUserNpub.isEmpty && !isHashtagMode) {
+      return;
+    }
+
+    if (_isLoadingFeed) {
+      return;
+    }
+
+    _isLoadingFeed = true;
+
+    try {
+      // Keep current notes visible during refresh to avoid showing "no notes found"
+      final currentNotes = _feedState is LoadedState<List<NoteModel>> 
+          ? (_feedState as LoadedState<List<NoteModel>>).data 
+          : <NoteModel>[];
+
+      if (isHashtagMode) {
+        _feedState = const LoadingState();
+        safeNotifyListeners();
+        await _loadHashtagFeed(forceRefresh: true);
+      } else {
+        // Mimic app startup behavior: start real-time feed and preload initial feed
+        debugPrint('[FeedViewModel] Refresh: Starting real-time feed and preloading feed (like app startup)');
+        
+        // Start real-time feed in background immediately (like app startup)
+        _noteRepository.startRealTimeFeed([_currentUserNpub]).then((_) {
+          debugPrint('[FeedViewModel] Real-time feed started successfully');
+        }).catchError((error) {
+          debugPrint('[FeedViewModel] Error starting real-time feed: $error');
+        });
+        
+        // Keep current notes visible if available, otherwise show loading
+        if (currentNotes.isNotEmpty) {
+          // Keep showing current notes while loading new ones
+          _feedState = LoadedState(currentNotes);
+          safeNotifyListeners();
+        } else {
+          _feedState = const LoadingState();
+          safeNotifyListeners();
+        }
+        
+        // Preload initial feed with force refresh (like app startup but bypass cache)
+        final result = await _nostrDataService.preloadInitialFeed(
+          userNpub: _currentUserNpub,
+          limit: _currentLimit,
+          forceRefresh: true,
+        );
+
+        await result.fold(
+          (notes) async {
+            if (notes.isNotEmpty) {
+              final sortedNotes = _sortNotes(notes);
+              _feedState = LoadedState(sortedNotes);
+              await _loadUserProfilesForNotes(sortedNotes);
+            } else if (currentNotes.isEmpty) {
+              // Only show empty if we had no notes before
+              _feedState = const LoadedState(<NoteModel>[]);
+            } else {
+              // Keep current notes if new ones are empty
+              _feedState = LoadedState(currentNotes);
+            }
+            _subscribeToRealTimeUpdates();
+          },
+          (error) async {
+            // On error, keep current notes if available
+            if (currentNotes.isNotEmpty) {
+              _feedState = LoadedState(currentNotes);
+              debugPrint('[FeedViewModel] Refresh error but keeping current notes: $error');
+            } else {
+              _feedState = ErrorState(error);
+            }
+          },
+        );
+
+        safeNotifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[FeedViewModel] Error in refreshFeed: $e');
+      // On error, keep current notes if available
+      final currentNotes = _feedState is LoadedState<List<NoteModel>> 
+          ? (_feedState as LoadedState<List<NoteModel>>).data 
+          : <NoteModel>[];
+      if (currentNotes.isNotEmpty) {
+        _feedState = LoadedState(currentNotes);
+      } else {
+        _feedState = ErrorState('Failed to refresh feed: ${e.toString()}');
+      }
+      safeNotifyListeners();
+    } finally {
+      _isLoadingFeed = false;
+    }
   }
 
   Future<void> loadMoreNotes() async {
@@ -287,6 +480,10 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     return notes;
   }
 
+  Timer? _realtimeUpdateThrottleTimer;
+  bool _realtimeUpdatePending = false;
+  List<NoteModel>? _pendingRealtimeNotes;
+
   void _subscribeToRealTimeUpdates() {
     if (isHashtagMode) {
       return;
@@ -294,8 +491,17 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
     addSubscription(
       _noteRepository.realTimeNotesStream.listen((notes) {
-        if (!isDisposed && _feedState.isLoaded) {
-          if (notes.isNotEmpty) {
+        if (!isDisposed && _feedState.isLoaded && notes.isNotEmpty) {
+          _pendingRealtimeNotes = notes;
+          _realtimeUpdatePending = true;
+          _realtimeUpdateThrottleTimer?.cancel();
+          _realtimeUpdateThrottleTimer = Timer(const Duration(seconds: 1), () {
+            if (isDisposed || !_realtimeUpdatePending || _pendingRealtimeNotes == null) return;
+            
+            final notes = _pendingRealtimeNotes!;
+            _realtimeUpdatePending = false;
+            _pendingRealtimeNotes = null;
+
             final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
 
             if (currentNotes.isEmpty) {
@@ -303,33 +509,51 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
               _loadUserProfilesForNotes(notes);
               safeNotifyListeners();
             } else {
-              final latestCurrentNote = currentNotes.first;
-              final newerNotes = notes.where((note) => note.timestamp.isAfter(latestCurrentNote.timestamp)).toList();
-
-              if (newerNotes.isNotEmpty) {
-                final userNotes = newerNotes.where((note) => note.author == _currentUserNpub).toList();
-                final otherNotes = newerNotes.where((note) => note.author != _currentUserNpub).toList();
-
-                if (userNotes.isNotEmpty) {
-                  final allNotes = [...userNotes, ...currentNotes];
-                  final sortedNotes = _sortNotes(allNotes);
-                  _feedState = LoadedState(sortedNotes);
-                  _loadUserProfilesForNotes(userNotes);
+              final latestTimestamp = currentNotes.first.timestamp;
+              final newerNotes = <NoteModel>[];
+              for (final note in notes) {
+                if (note.timestamp.isAfter(latestTimestamp)) {
+                  newerNotes.add(note);
                 }
-
-                if (otherNotes.isNotEmpty) {
-                  for (final note in otherNotes) {
-                    if (!_pendingNotes.any((n) => n.id == note.id)) {
-                      _pendingNotes.add(note);
-                    }
-                  }
-                  _pendingNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-                }
-
-                safeNotifyListeners();
               }
+
+              if (newerNotes.isEmpty) return;
+
+              final userNotes = <NoteModel>[];
+              final otherNotes = <NoteModel>[];
+              final pendingSet = <String>{};
+
+              for (final note in newerNotes) {
+                if (note.author == _currentUserNpub) {
+                  userNotes.add(note);
+                } else {
+                  otherNotes.add(note);
+                }
+              }
+
+              if (userNotes.isNotEmpty) {
+                final allNotes = [...userNotes, ...currentNotes];
+                final sortedNotes = _sortNotes(allNotes);
+                _feedState = LoadedState(sortedNotes);
+                _loadUserProfilesForNotes(userNotes);
+              }
+
+              if (otherNotes.isNotEmpty) {
+                for (final note in _pendingNotes) {
+                  pendingSet.add(note.id);
+                }
+                for (final note in otherNotes) {
+                  if (!pendingSet.contains(note.id)) {
+                    _pendingNotes.add(note);
+                    pendingSet.add(note.id);
+                  }
+                }
+                _pendingNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+              }
+
+              safeNotifyListeners();
             }
-          }
+          });
         }
       }),
     );
@@ -406,6 +630,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
   @override
   void dispose() {
+    _realtimeUpdateThrottleTimer?.cancel();
     _profilesController.close();
     super.dispose();
   }

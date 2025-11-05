@@ -10,6 +10,9 @@ import '../services/nostr_data_service.dart';
 
 class NoteRepository {
   final NostrDataService _nostrDataService;
+  Timer? _notesUpdateThrottleTimer;
+  bool _notesUpdatePending = false;
+  final Map<String, NoteModel> _notesMap = {};
 
   NoteRepository({
     required NetworkService networkService,
@@ -63,15 +66,17 @@ class NoteRepository {
     int limit = 50,
     DateTime? until,
     DateTime? since,
+    bool forceRefresh = false,
   }) async {
     try {
-      debugPrint('[NoteRepository] getFeedNotesFromFollowList for user: $currentUserNpub');
+      debugPrint('[NoteRepository] getFeedNotesFromFollowList for user: $currentUserNpub, forceRefresh: $forceRefresh');
 
       final result = await _nostrDataService.fetchFeedNotes(
         authorNpubs: [currentUserNpub],
         limit: limit,
         until: until,
         since: since,
+        forceRefresh: forceRefresh,
       );
 
       return result.fold(
@@ -133,15 +138,17 @@ class NoteRepository {
     int limit = 20,
     DateTime? until,
     DateTime? since,
+    bool forceRefresh = false,
   }) async {
     try {
-      debugPrint('[NoteRepository] HASHTAG MODE: Getting notes for #$hashtag');
+      debugPrint('[NoteRepository] HASHTAG MODE: Getting notes for #$hashtag, forceRefresh: $forceRefresh');
 
       final result = await _nostrDataService.fetchHashtagNotes(
         hashtag: hashtag,
         limit: limit,
         until: until,
         since: since,
+        forceRefresh: forceRefresh,
       );
 
       result.fold(
@@ -164,17 +171,24 @@ class NoteRepository {
 
       _nostrDataService.setContext('thread');
 
-      final localNote = _notes.where((n) => n.id == noteId).firstOrNull;
+      final localNote = _notesMap[noteId];
       if (localNote != null) {
         debugPrint('[NoteRepository] Found note in local cache: ${localNote.id}');
         return Result.success(localNote);
       }
 
       final cachedNotes = _nostrDataService.cachedNotes;
-      final cachedNote = cachedNotes.where((n) => n.id == noteId).firstOrNull;
+      NoteModel? cachedNote;
+      for (final note in cachedNotes) {
+        if (note.id == noteId) {
+          cachedNote = note;
+          break;
+        }
+      }
       if (cachedNote != null) {
         debugPrint('[NoteRepository] Found note in NostrDataService cache: ${cachedNote.id}');
-        if (!_notes.any((n) => n.id == cachedNote.id)) {
+        if (!_notesMap.containsKey(cachedNote.id)) {
+          _notesMap[cachedNote.id] = cachedNote;
           _notes.add(cachedNote);
         }
         return Result.success(cachedNote);
@@ -184,9 +198,16 @@ class NoteRepository {
 
       final success = await _fetchNoteDirectly(noteId);
       if (success) {
-        final fetchedNote = _nostrDataService.cachedNotes.where((n) => n.id == noteId).firstOrNull;
+        NoteModel? fetchedNote;
+        for (final note in _nostrDataService.cachedNotes) {
+          if (note.id == noteId) {
+            fetchedNote = note;
+            break;
+          }
+        }
         if (fetchedNote != null) {
           debugPrint('[NoteRepository] Successfully fetched note: ${fetchedNote.id}');
+          _notesMap[fetchedNote.id] = fetchedNote;
           _notes.add(fetchedNote);
           return Result.success(fetchedNote);
         }
@@ -234,9 +255,15 @@ class NoteRepository {
       final cachedNotes = _nostrDataService.cachedNotes;
       debugPrint(' [NoteRepository] NostrDataService cache has ${cachedNotes.length} notes');
 
+      final allNotesSet = <String>{};
+      for (final note in _notes) {
+        allNotesSet.add(note.id);
+      }
       for (final note in cachedNotes) {
-        if (!allNotes.any((n) => n.id == note.id)) {
+        if (!allNotesSet.contains(note.id)) {
+          allNotesSet.add(note.id);
           allNotes.add(note);
+          _notesMap[note.id] = note;
           _notes.add(note);
         }
       }
@@ -274,7 +301,12 @@ class NoteRepository {
 
   Future<Result<List<NoteModel>>> getDirectReplies(String noteId) async {
     try {
-      final directReplies = _notes.where((note) => note.isReply && note.parentId == noteId).toList();
+      final directReplies = <NoteModel>[];
+      for (final note in _notes) {
+        if (note.isReply && note.parentId == noteId) {
+          directReplies.add(note);
+        }
+      }
 
       directReplies.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
@@ -286,11 +318,12 @@ class NoteRepository {
 
   Future<Result<void>> addNote(NoteModel note) async {
     try {
-      final existingNote = _notes.where((n) => n.id == note.id).firstOrNull;
+      final existingNote = _notesMap[note.id];
       if (existingNote != null) {
         return const Result.success(null);
       }
 
+      _notesMap[note.id] = note;
       _notes.add(note);
       _notesController.add(_notes);
 
@@ -338,12 +371,18 @@ class NoteRepository {
     try {
       _reactions.putIfAbsent(noteId, () => []);
 
-      final existingReaction = _reactions[noteId]!.where((r) => r.id == reaction.id).firstOrNull;
+      ReactionModel? existingReaction;
+      for (final r in _reactions[noteId]!) {
+        if (r.id == reaction.id) {
+          existingReaction = r;
+          break;
+        }
+      }
 
       if (existingReaction == null) {
         _reactions[noteId]!.add(reaction);
 
-        final note = _notes.where((n) => n.id == noteId).firstOrNull;
+        final note = _notesMap[noteId];
         if (note != null) {
           note.reactionCount = _reactions[noteId]!.length;
         }
@@ -382,7 +421,12 @@ class NoteRepository {
 
   Map<String, List<NoteModel>> buildThreadHierarchy(String rootNoteId) {
     final Map<String, List<NoteModel>> hierarchy = {};
-    final threadReplies = _notes.where((note) => note.isReply && (note.rootId == rootNoteId || note.parentId == rootNoteId)).toList();
+    final threadReplies = <NoteModel>[];
+    for (final note in _notes) {
+      if (note.isReply && (note.rootId == rootNoteId || note.parentId == rootNoteId)) {
+        threadReplies.add(note);
+      }
+    }
 
     for (final reply in threadReplies) {
       final parentId = reply.parentId ?? rootNoteId;
@@ -515,22 +559,28 @@ class NoteRepository {
       debugPrint(' [NoteRepository] Setting up stream subscription...');
 
       _nostrDataService.notesStream.listen((newNotes) {
-        debugPrint(' [NoteRepository] Stream received ${newNotes.length} notes');
+        if (newNotes.isEmpty) return;
 
-        int addedCount = 0;
+        bool hasChanges = false;
         for (final note in newNotes) {
-          if (!_notes.any((n) => n.id == note.id)) {
+          if (!_notesMap.containsKey(note.id)) {
+            _notesMap[note.id] = note;
             _notes.add(note);
-            addedCount++;
+            hasChanges = true;
           }
         }
 
-        debugPrint(' [NoteRepository] Added $addedCount new notes, total: ${_notes.length}');
+        if (!hasChanges) return;
 
-        _notes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-        _notesController.add(_notes);
-
-        debugPrint(' [NoteRepository] Emitted update to subscribers');
+        _notesUpdatePending = true;
+        _notesUpdateThrottleTimer?.cancel();
+        _notesUpdateThrottleTimer = Timer(const Duration(milliseconds: 150), () {
+          if (_notesUpdatePending) {
+            _notes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+            _notesUpdatePending = false;
+            _notesController.add(List.unmodifiable(_notes));
+          }
+        });
       });
 
       return const Result.success(null);
@@ -542,20 +592,40 @@ class NoteRepository {
 
   void _setupNostrDataServiceForwarding() {
     _nostrDataService.notesStream.listen((updatedNotes) {
-      debugPrint(' [NoteRepository] Forwarding ${updatedNotes.length} updated notes from NostrDataService');
+      if (updatedNotes.isEmpty) return;
 
+      bool hasChanges = false;
       for (final updatedNote in updatedNotes) {
-        final existingIndex = _notes.indexWhere((n) => n.id == updatedNote.id);
-        if (existingIndex != -1) {
-          _notes[existingIndex] = updatedNote;
+        final existingNote = _notesMap[updatedNote.id];
+        if (existingNote != null) {
+          if (existingNote.reactionCount != updatedNote.reactionCount ||
+              existingNote.repostCount != updatedNote.repostCount ||
+              existingNote.replyCount != updatedNote.replyCount ||
+              existingNote.zapAmount != updatedNote.zapAmount) {
+            _notesMap[updatedNote.id] = updatedNote;
+            final index = _notes.indexWhere((n) => n.id == updatedNote.id);
+            if (index != -1) {
+              _notes[index] = updatedNote;
+            }
+            hasChanges = true;
+          }
         } else {
+          _notesMap[updatedNote.id] = updatedNote;
           _notes.add(updatedNote);
+          hasChanges = true;
         }
       }
 
-      _notesController.add(_notes);
+      if (!hasChanges) return;
 
-      debugPrint(' [NoteRepository] Forwarded note updates to InteractionBar listeners');
+      _notesUpdatePending = true;
+      _notesUpdateThrottleTimer?.cancel();
+      _notesUpdateThrottleTimer = Timer(const Duration(seconds: 1), () {
+        if (_notesUpdatePending) {
+          _notesUpdatePending = false;
+          _notesController.add(List.unmodifiable(_notes));
+        }
+      });
     });
   }
 
@@ -585,10 +655,15 @@ class NoteRepository {
 
   void _updateNoteReplyCount(String noteId) {
     try {
-      final note = _notes.where((n) => n.id == noteId).firstOrNull;
+      final note = _notesMap[noteId];
       if (note != null) {
         final cachedNotes = _nostrDataService.cachedNotes;
-        final replyCount = cachedNotes.where((reply) => reply.isReply && (reply.parentId == noteId || reply.rootId == noteId)).length;
+        int replyCount = 0;
+        for (final reply in cachedNotes) {
+          if (reply.isReply && (reply.parentId == noteId || reply.rootId == noteId)) {
+            replyCount++;
+          }
+        }
 
         if (note.replyCount != replyCount) {
           note.replyCount = replyCount;

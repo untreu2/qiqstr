@@ -492,10 +492,8 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
 
   String _getInteractionNoteId() {
     if (_isRepost && widget.note.rootId != null && widget.note.rootId!.isNotEmpty) {
-      debugPrint('[NoteWidget] Using original note ID for repost interactions: ${widget.note.rootId}');
       return widget.note.rootId!;
     }
-
     return _noteId;
   }
 
@@ -576,6 +574,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                               onShowMoreTap: _shouldTruncate ? (_) => _navigateToThreadPage() : null,
                               notesListProvider: widget.notesListProvider,
                               noteId: _noteId,
+                              authorProfileImageUrl: _stateNotifier.value.authorUser?.profileImage,
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -714,6 +713,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                           onShowMoreTap: _shouldTruncate ? (_) => _navigateToThreadPage() : null,
                           notesListProvider: widget.notesListProvider,
                           noteId: _noteId,
+                          authorProfileImageUrl: _stateNotifier.value.authorUser?.profileImage,
                         ),
                       ),
                     ),
@@ -1082,6 +1082,7 @@ class _SafeContentSection extends StatelessWidget {
   final Function(String)? onShowMoreTap;
   final dynamic notesListProvider;
   final String noteId;
+  final String? authorProfileImageUrl;
 
   const _SafeContentSection({
     required this.parsedContent,
@@ -1089,6 +1090,7 @@ class _SafeContentSection extends StatelessWidget {
     required this.onShowMoreTap,
     this.notesListProvider,
     required this.noteId,
+    this.authorProfileImageUrl,
   });
 
   @override
@@ -1099,6 +1101,7 @@ class _SafeContentSection extends StatelessWidget {
         noteId: noteId,
         onNavigateToMentionProfile: onMentionTap,
         onShowMoreTap: onShowMoreTap,
+        authorProfileImageUrl: authorProfileImageUrl,
       );
     } catch (e) {
       debugPrint('[ContentSection] Build error: $e');
