@@ -24,14 +24,34 @@ class NoteStatisticsPage extends StatefulWidget {
 class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
   late final UserRepository _userRepository;
   late final NostrDataService _nostrDataService;
+  late ScrollController _scrollController;
+  bool _showInteractionsBubble = false;
 
   @override
   void initState() {
     super.initState();
     _userRepository = AppDI.get<UserRepository>();
     _nostrDataService = AppDI.get<NostrDataService>();
+    _scrollController = ScrollController()..addListener(_scrollListener);
 
     _fetchInteractionsForNote();
+  }
+
+  void _scrollListener() {
+    if (_scrollController.hasClients) {
+      final shouldShow = _scrollController.offset > 100;
+      if (_showInteractionsBubble != shouldShow) {
+        setState(() {
+          _showInteractionsBubble = shouldShow;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchInteractionsForNote() async {
@@ -99,100 +119,97 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
         final user = snapshot.data;
 
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            children: [
-              GestureDetector(
-                onTap: () => _navigateToProfile(npub),
-                child: CircleAvatar(
-                  radius: 26,
-                  backgroundImage: user?.profileImage.isNotEmpty == true ? CachedNetworkImageProvider(user!.profileImage) : null,
-                  backgroundColor: context.colors.grey800,
-                  child: user?.profileImage.isNotEmpty != true ? Icon(Icons.person, color: context.colors.surface, size: 26) : null,
-                ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: GestureDetector(
+            onTap: () => _navigateToProfile(npub),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+              decoration: BoxDecoration(
+                color: context.colors.overlayLight,
+                borderRadius: BorderRadius.circular(40),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Flexible(
-                      child: GestureDetector(
-                        onTap: () => _navigateToProfile(npub),
-                        child: Text(
-                          user?.name ?? npub.substring(0, 8),
-                          style: TextStyle(
-                            color: context.colors.textPrimary,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundImage: user?.profileImage.isNotEmpty == true ? CachedNetworkImageProvider(user!.profileImage) : null,
+                    backgroundColor: context.colors.grey800,
+                    child: user?.profileImage.isNotEmpty != true ? Icon(Icons.person, color: context.colors.surface, size: 26) : null,
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        if (zapAmount != null)
-                          Text(
-                            ' $zapAmount sats',
-                            style: const TextStyle(
-                              color: Color(0xFFECB200),
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        if (content.isNotEmpty) ...[
-                          if (zapAmount != null) const SizedBox(width: 12),
-                          Flexible(
-                            child: Text(
-                              content,
-                              style: TextStyle(
-                                color: context.colors.textSecondary,
-                                fontSize: 15,
+                        Flexible(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  user?.name ?? npub.substring(0, 8),
+                                  style: TextStyle(
+                                    color: context.colors.textPrimary,
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                              if (user?.nip05.isNotEmpty == true && user?.nip05Verified == true) ...[
+                                const SizedBox(width: 4),
+                                Icon(
+                                  Icons.verified,
+                                  size: 16,
+                                  color: context.colors.accent,
+                                ),
+                              ],
+                            ],
                           ),
-                        ],
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (zapAmount != null)
+                              Text(
+                                ' $zapAmount sats',
+                                style: const TextStyle(
+                                  color: Color(0xFFECB200),
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            if (content.isNotEmpty) ...[
+                              if (zapAmount != null) const SizedBox(width: 12),
+                              Flexible(
+                                child: Text(
+                                  content,
+                                  style: TextStyle(
+                                    color: context.colors.textSecondary,
+                                    fontSize: content.length <= 5 ? 20 : 15,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         );
       },
     );
   }
 
-  Widget _buildList(List<Widget> items, String emptyText) {
-    if (items.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.only(top: 32),
-          child: Text(
-            emptyText,
-            style: TextStyle(color: context.colors.textTertiary),
-          ),
-        ),
-      );
-    }
-
-    return ListView.separated(
-      padding: EdgeInsets.zero,
-      itemCount: items.length,
-      itemBuilder: (_, i) => items[i],
-      separatorBuilder: (_, __) => Divider(color: context.colors.border, height: 1),
-    );
-  }
-
   Widget _buildHeader(BuildContext context) {
-    final double topPadding = MediaQuery.of(context).padding.top;
-
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Text(
         'Interactions',
         style: TextStyle(
@@ -214,64 +231,133 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
     debugPrint(
         '[NoteStatisticsPage] Displaying interactions: ${reactions.length} reactions, ${reposts.length} reposts, ${zaps.length} zaps');
 
-    final reactionWidgets = reactions
-        .map((reaction) => _buildEntry(
-              npub: reaction.author,
-              content: reaction.content,
+    final allInteractions = <Map<String, dynamic>>[];
+    final seenReactions = <String>{};
+
+    for (final reaction in reactions) {
+      final reactionKey = '${reaction.author}:${reaction.content}';
+      if (!seenReactions.contains(reactionKey)) {
+        seenReactions.add(reactionKey);
+        allInteractions.add({
+          'type': 'reaction',
+          'data': reaction,
+          'timestamp': reaction.timestamp,
+          'npub': reaction.author,
+          'content': reaction.content,
+        });
+      }
+    }
+
+    final seenReposts = <String>{};
+    for (final repost in reposts) {
+      if (!seenReposts.contains(repost.author)) {
+        seenReposts.add(repost.author);
+        allInteractions.add({
+          'type': 'repost',
+          'data': repost,
+          'timestamp': repost.timestamp,
+          'npub': repost.author,
+          'content': 'Reposted',
+        });
+      }
+    }
+
+    final seenZaps = <String>{};
+    for (final zap in zaps) {
+      if (!seenZaps.contains(zap.sender)) {
+        seenZaps.add(zap.sender);
+        allInteractions.add({
+          'type': 'zap',
+          'data': zap,
+          'timestamp': zap.timestamp,
+          'npub': zap.sender,
+          'content': zap.comment ?? '',
+          'zapAmount': zap.amount,
+        });
+      }
+    }
+
+    allInteractions.sort((a, b) => (b['timestamp'] as DateTime).compareTo(a['timestamp'] as DateTime));
+
+    final interactionWidgets = allInteractions
+        .map((interaction) => _buildEntry(
+              npub: interaction['npub'],
+              content: interaction['content'],
+              zapAmount: interaction['zapAmount'],
             ))
         .toList();
 
-    final repostWidgets = reposts
-        .map((repost) => _buildEntry(
-              npub: repost.author, // ReactionModel has author field
-              content: 'Reposted',
-            ))
-        .toList();
-
-    final zapWidgets = zaps
-        .map((zap) => _buildEntry(
-              npub: zap.sender,
-              content: zap.comment ?? '',
-              zapAmount: zap.amount,
-            ))
-        .toList();
-
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        backgroundColor: context.colors.background,
-        body: Stack(
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(context),
-                TabBar(
-                  indicatorColor: context.colors.textPrimary,
-                  labelColor: context.colors.textPrimary,
-                  unselectedLabelColor: context.colors.textTertiary,
-                  indicatorWeight: 1.5,
-                  labelPadding: const EdgeInsets.symmetric(vertical: 12),
-                  tabs: [
-                    Tab(text: 'Reactions (${reactions.length})'),
-                    Tab(text: 'Reposts (${reposts.length})'),
-                    Tab(text: 'Zaps (${zaps.length})'),
-                  ],
+    return Scaffold(
+      backgroundColor: context.colors.background,
+      body: Stack(
+        children: [
+          CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              SliverToBoxAdapter(
+                child: SizedBox(height: MediaQuery.of(context).padding.top + 60),
+              ),
+              SliverToBoxAdapter(
+                child: _buildHeader(context),
+              ),
+              SliverToBoxAdapter(
+                child: interactionWidgets.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 32),
+                          child: Text(
+                            'No interactions yet.',
+                            style: TextStyle(color: context.colors.textTertiary),
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) => interactionWidgets[index],
+                  childCount: interactionWidgets.length,
                 ),
-                Expanded(
-                  child: TabBarView(
-                    children: [
-                      _buildList(reactionWidgets, 'No reactions yet.'),
-                      _buildList(repostWidgets, 'No reposts yet.'),
-                      _buildList(zapWidgets, 'No zaps yet.'),
-                    ],
+              ),
+            ],
+          ),
+          const BackButtonWidget.floating(),
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: AnimatedOpacity(
+                opacity: _showInteractionsBubble ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 300),
+                child: GestureDetector(
+                  onTap: () {
+                    _scrollController.animateTo(
+                      0,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: context.colors.buttonPrimary,
+                      borderRadius: BorderRadius.circular(40),
+                    ),
+                    child: Text(
+                      'Interactions',
+                      style: TextStyle(
+                        color: context.colors.buttonText,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
-              ],
+              ),
             ),
-            const BackButtonWidget.floating(),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

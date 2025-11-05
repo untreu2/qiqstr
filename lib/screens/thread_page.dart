@@ -39,6 +39,7 @@ class _ThreadPageState extends State<ThreadPage> {
   late final UserRepository _userRepository;
   String _currentUserNpub = '';
   UserModel? _currentUser;
+  bool _showThreadBubble = false;
 
   int _visibleRepliesCount = 5;
   static const int _repliesPerPage = 5;
@@ -51,7 +52,7 @@ class _ThreadPageState extends State<ThreadPage> {
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController();
+    _scrollController = ScrollController()..addListener(_scrollListener);
     _notesNotifier = ValueNotifier<List<NoteModel>>([]);
     _authRepository = AppDI.get<AuthRepository>();
     _userRepository = AppDI.get<UserRepository>();
@@ -61,6 +62,17 @@ class _ThreadPageState extends State<ThreadPage> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _scheduleScrollToFocusedNote();
       });
+    }
+  }
+
+  void _scrollListener() {
+    if (_scrollController.hasClients) {
+      final shouldShow = _scrollController.offset > 100;
+      if (_showThreadBubble != shouldShow) {
+        setState(() {
+          _showThreadBubble = shouldShow;
+        });
+      }
     }
   }
 
@@ -109,6 +121,41 @@ class _ThreadPageState extends State<ThreadPage> {
                 children: [
                   _buildContent(context, vm),
                   const BackButtonWidget.floating(),
+                  Positioned(
+                    top: MediaQuery.of(context).padding.top + 8,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: AnimatedOpacity(
+                        opacity: _showThreadBubble ? 1.0 : 0.0,
+                        duration: const Duration(milliseconds: 300),
+                        child: GestureDetector(
+                          onTap: () {
+                            _scrollController.animateTo(
+                              0,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeOut,
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: context.colors.buttonPrimary,
+                              borderRadius: BorderRadius.circular(40),
+                            ),
+                            child: Text(
+                              'Thread',
+                              style: TextStyle(
+                                color: context.colors.buttonText,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               );
             },
@@ -140,6 +187,9 @@ class _ThreadPageState extends State<ThreadPage> {
       child: CustomScrollView(
         controller: _scrollController,
         slivers: [
+          SliverToBoxAdapter(
+            child: SizedBox(height: MediaQuery.of(context).padding.top + 60),
+          ),
           SliverToBoxAdapter(
             child: _buildHeader(context),
           ),
@@ -180,10 +230,8 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    final double topPadding = MediaQuery.of(context).padding.top;
-
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Text(
         'Thread',
         style: TextStyle(
