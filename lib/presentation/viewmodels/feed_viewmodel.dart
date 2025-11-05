@@ -111,7 +111,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           if (npub != null && npub.isNotEmpty) {
             _currentUserNpub = npub;
             _currentUserState = LoadedState(npub);
-            _loadFeedWithFollowListWait();
+            _loadFeed();
             _subscribeToRealTimeUpdates();
           } else {
             _currentUserState = const ErrorState('User not authenticated');
@@ -124,7 +124,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     }, showLoading: false);
   }
 
-  Future<void> _loadFeedWithFollowListWait() async {
+  Future<void> _loadFeed() async {
     if (_currentUserNpub.isEmpty && !isHashtagMode) {
       return;
     }
@@ -135,23 +135,13 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
     _isLoadingFeed = true;
 
-    try {
-      if (isHashtagMode) {
-        await _loadHashtagFeed();
-      } else {
-        await _loadUserFeed();
-      }
-    } catch (e) {
-      debugPrint('[FeedViewModel] Error in feed loading: $e');
-      _feedState = ErrorState('Failed to load feed: $e');
-      safeNotifyListeners();
-    } finally {
-      _isLoadingFeed = false;
+    if (isHashtagMode) {
+      await _loadHashtagFeed();
+    } else {
+      await _loadUserFeed();
     }
-  }
 
-  Future<void> _loadFeed() async {
-    await _loadFeedWithFollowListWait();
+    _isLoadingFeed = false;
   }
 
   Future<void> _loadUserFeed() async {
@@ -221,8 +211,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   }
 
   Future<void> refreshFeed() async {
-    _isLoadingFeed = false;
-    await _loadFeedWithFollowListWait();
+    await _loadFeed();
   }
 
   Future<void> loadMoreNotes() async {
@@ -298,9 +287,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     return notes;
   }
 
-  Timer? _updateDebounceTimer;
-  static const Duration _updateDebounceDelay = Duration(milliseconds: 250);
-
   void _subscribeToRealTimeUpdates() {
     if (isHashtagMode) {
       return;
@@ -308,63 +294,45 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
     addSubscription(
       _noteRepository.realTimeNotesStream.listen((notes) {
-        if (!isDisposed && _feedState.isLoaded && notes.isNotEmpty) {
-          _updateDebounceTimer?.cancel();
-          _updateDebounceTimer = Timer(_updateDebounceDelay, () {
-            _processRealTimeNotes(notes);
-          });
+        if (!isDisposed && _feedState.isLoaded) {
+          if (notes.isNotEmpty) {
+            final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
+
+            if (currentNotes.isEmpty) {
+              _feedState = LoadedState(notes);
+              _loadUserProfilesForNotes(notes);
+              safeNotifyListeners();
+            } else {
+              final latestCurrentNote = currentNotes.first;
+              final newerNotes = notes.where((note) => note.timestamp.isAfter(latestCurrentNote.timestamp)).toList();
+
+              if (newerNotes.isNotEmpty) {
+                final userNotes = newerNotes.where((note) => note.author == _currentUserNpub).toList();
+                final otherNotes = newerNotes.where((note) => note.author != _currentUserNpub).toList();
+
+                if (userNotes.isNotEmpty) {
+                  final allNotes = [...userNotes, ...currentNotes];
+                  final sortedNotes = _sortNotes(allNotes);
+                  _feedState = LoadedState(sortedNotes);
+                  _loadUserProfilesForNotes(userNotes);
+                }
+
+                if (otherNotes.isNotEmpty) {
+                  for (final note in otherNotes) {
+                    if (!_pendingNotes.any((n) => n.id == note.id)) {
+                      _pendingNotes.add(note);
+                    }
+                  }
+                  _pendingNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+                }
+
+                safeNotifyListeners();
+              }
+            }
+          }
         }
       }),
     );
-  }
-
-  void _processRealTimeNotes(List<NoteModel> notes) {
-    if (isDisposed) return;
-
-    final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
-
-    if (currentNotes.isEmpty) {
-      _feedState = LoadedState(notes);
-      _loadUserProfilesForNotes(notes);
-      safeNotifyListeners();
-      return;
-    }
-
-    final latestCurrentNote = currentNotes.first;
-    final newerNotes = notes
-        .where((note) => note.timestamp.isAfter(latestCurrentNote.timestamp) && !currentNotes.any((existing) => existing.id == note.id))
-        .toList();
-
-    if (newerNotes.isEmpty) return;
-
-    final userNotes = newerNotes.where((note) => note.author == _currentUserNpub).toList();
-    final otherNotes = newerNotes.where((note) => note.author != _currentUserNpub).toList();
-
-    bool shouldUpdate = false;
-
-    if (userNotes.isNotEmpty) {
-      final allNotes = [...userNotes, ...currentNotes];
-      final sortedNotes = _sortNotes(allNotes);
-      _feedState = LoadedState(sortedNotes);
-      _loadUserProfilesForNotes(userNotes);
-      shouldUpdate = true;
-    }
-
-    if (otherNotes.isNotEmpty) {
-      final newPendingNotes = otherNotes.where((note) => !_pendingNotes.any((n) => n.id == note.id)).toList();
-
-      if (newPendingNotes.isNotEmpty) {
-        _pendingNotes.addAll(newPendingNotes);
-        _pendingNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-        if (_pendingNotes.length > 50) {
-          _pendingNotes.removeRange(50, _pendingNotes.length);
-        }
-      }
-    }
-
-    if (shouldUpdate) {
-      safeNotifyListeners();
-    }
   }
 
   List<NoteModel> get currentNotes {
@@ -380,8 +348,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   String? get errorMessage => _feedState.error;
 
   Future<void> _loadUserProfilesForNotes(List<NoteModel> notes) async {
-    if (notes.isEmpty) return;
-
     try {
       final Set<String> authorIds = {};
       for (final note in notes) {
@@ -400,59 +366,37 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
         return;
       }
 
-      const int batchSize = 15;
-      final profileUpdates = <String, UserModel>{};
-      bool hasUpdates = false;
+      final results = await _userRepository.getUserProfiles(
+        missingAuthorIds,
+        priority: FetchPriority.high,
+      );
 
-      for (int i = 0; i < missingAuthorIds.length; i += batchSize) {
-        final batch = missingAuthorIds.skip(i).take(batchSize).toList();
-
-        try {
-          final results = await _userRepository.getUserProfiles(
-            batch,
-            priority: FetchPriority.high,
-          );
-
-          for (final entry in results.entries) {
-            entry.value.fold(
-              (user) {
-                if (!_profiles.containsKey(entry.key) || _profiles[entry.key]!.profileImage.isEmpty) {
-                  profileUpdates[entry.key] = user;
-                  hasUpdates = true;
-                }
-              },
-              (error) {
-                if (!_profiles.containsKey(entry.key)) {
-                  profileUpdates[entry.key] = UserModel(
-                    pubkeyHex: entry.key,
-                    name: entry.key.length > 8 ? entry.key.substring(0, 8) : entry.key,
-                    about: '',
-                    profileImage: '',
-                    banner: '',
-                    website: '',
-                    nip05: '',
-                    lud16: '',
-                    updatedAt: DateTime.now(),
-                    nip05Verified: false,
-                  );
-                }
-              },
-            );
-          }
-        } catch (e) {
-          continue;
-        }
-
-        await Future.delayed(const Duration(milliseconds: 50));
+      for (final entry in results.entries) {
+        entry.value.fold(
+          (user) {
+            _profiles[entry.key] = user;
+          },
+          (error) {
+            if (!_profiles.containsKey(entry.key)) {
+              _profiles[entry.key] = UserModel(
+                pubkeyHex: entry.key,
+                name: entry.key.length > 8 ? entry.key.substring(0, 8) : entry.key,
+                about: '',
+                profileImage: '',
+                banner: '',
+                website: '',
+                nip05: '',
+                lud16: '',
+                updatedAt: DateTime.now(),
+                nip05Verified: false,
+              );
+            }
+          },
+        );
       }
 
-      if (hasUpdates) {
-        _profiles.addAll(profileUpdates);
-        _profilesController.add(Map.from(_profiles));
-      }
-    } catch (e) {
-      // Handle silently
-    }
+      _profilesController.add(Map.from(_profiles));
+    } catch (e) {}
   }
 
   @override
@@ -462,7 +406,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
   @override
   void dispose() {
-    _updateDebounceTimer?.cancel();
     _profilesController.close();
     super.dispose();
   }

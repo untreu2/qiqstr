@@ -85,13 +85,18 @@ Future<Widget> _determineInitialHomeWithPreloading() async {
       final npubResult = await authService.getCurrentUserNpub();
 
       if (npubResult.isSuccess && npubResult.data != null && npubResult.data!.isNotEmpty) {
+        final npub = npubResult.data!;
+        
+        // Initialize notifications in background
         unawaited(_initializeNotifications());
 
-        unawaited(_loadInitialContent(npubResult.data!));
+        // Load feed while splash screen is showing
+        await _loadInitialFeedWithSplash(npub);
 
+        // Remove splash screen after feed is loaded or timeout
         FlutterNativeSplash.remove();
 
-        return HomeNavigator(npub: npubResult.data!);
+        return HomeNavigator(npub: npub);
       }
     }
 
@@ -103,61 +108,74 @@ Future<Widget> _determineInitialHomeWithPreloading() async {
   }
 }
 
-Future<void> _loadInitialContent(String npub) async {
+Future<bool> _loadInitialFeedWithSplash(String npub) async {
   try {
-    final noteRepository = AppDI.get<NoteRepository>();
     final nostrDataService = AppDI.get<NostrDataService>();
+    final noteRepository = AppDI.get<NoteRepository>();
 
-    nostrDataService.setContext('feed');
-
+    // Start real-time feed in background immediately
     unawaited(noteRepository.startRealTimeFeed([npub]));
 
+    // Check if we have cached notes in service cache
     try {
-      final cachedNotes = noteRepository.currentNotes;
-      if (cachedNotes.isNotEmpty) {
-        return;
+      final serviceCachedNotes = nostrDataService.cachedNotes;
+      if (serviceCachedNotes.isNotEmpty) {
+        debugPrint('[Main] Found ${serviceCachedNotes.length} cached notes in service, skipping preload');
+        return true;
       }
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('[Main] Error checking service cached notes: $e');
+    }
+
+    // Check repository cache
+    try {
+      final repoCachedNotes = noteRepository.currentNotes;
+      if (repoCachedNotes.isNotEmpty) {
+        debugPrint('[Main] Found ${repoCachedNotes.length} cached notes in repository, skipping preload');
+        return true;
+      }
+    } catch (e) {
+      debugPrint('[Main] Error checking repository cached notes: $e');
+    }
+
+    // Preload initial feed with adaptive timeout
+    final completer = Completer<bool>();
+    Timer(const Duration(seconds: 4), () {
+      if (!completer.isCompleted) {
+        debugPrint('[Main] Feed preload timeout (4s), continuing anyway');
+        completer.complete(false);
+      }
+    });
 
     try {
-      await _loadRecentNotes(noteRepository, npub);
+      // Preload feed - this will use cache if available
+      final result = await nostrDataService.preloadInitialFeed(
+        userNpub: npub,
+        limit: 30,
+      );
+
+      if (!completer.isCompleted) {
+        final success = result.isSuccess && result.data != null && result.data!.isNotEmpty;
+        completer.complete(success);
+        if (success) {
+          debugPrint('[Main] Feed preload successful: ${result.data!.length} notes');
+        }
+      }
+
+      return await completer.future;
     } catch (e) {
-      try {
-        await _attemptProfileLoad(noteRepository, npub);
-      } catch (e) {}
+      debugPrint('[Main] Error preloading feed: $e');
+      if (!completer.isCompleted) {
+        completer.complete(false);
+      }
+      return await completer.future;
     }
-  } catch (e) {}
-}
-
-Future<bool> _loadRecentNotes(NoteRepository noteRepository, String npub) async {
-  try {
-    final result = await noteRepository.getFeedNotesFromFollowList(
-      currentUserNpub: npub,
-      limit: 20,
-      since: DateTime.now().subtract(const Duration(hours: 6)),
-    );
-
-    final success = result.isSuccess && result.data != null && result.data!.isNotEmpty;
-    return success;
   } catch (e) {
+    debugPrint('[Main] Error in _loadInitialFeedWithSplash: $e');
     return false;
   }
 }
 
-Future<bool> _attemptProfileLoad(NoteRepository noteRepository, String npub) async {
-  try {
-    final result = await noteRepository.getProfileNotes(
-      authorNpub: npub,
-      limit: 10,
-      since: DateTime.now().subtract(const Duration(hours: 12)),
-    );
-
-    final success = result.isSuccess && result.data != null && result.data!.isNotEmpty;
-    return success;
-  } catch (e) {
-    return false;
-  }
-}
 
 void unawaited(Future<void> future) {
   future.catchError((error) {});
