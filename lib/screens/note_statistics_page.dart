@@ -1,7 +1,5 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:bounce/bounce.dart';
 import '../models/note_model.dart';
 import '../models/user_model.dart';
 import '../theme/theme_manager.dart';
@@ -9,6 +7,7 @@ import '../core/di/app_di.dart';
 import '../data/repositories/user_repository.dart';
 import '../data/services/nostr_data_service.dart';
 import '../screens/profile_page.dart';
+import '../widgets/back_button_widget.dart';
 
 class NoteStatisticsPage extends StatefulWidget {
   final NoteModel note;
@@ -189,38 +188,18 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
     );
   }
 
-  Widget _buildFloatingBackButton(BuildContext context) {
+  Widget _buildHeader(BuildContext context) {
     final double topPadding = MediaQuery.of(context).padding.top;
 
-    return Positioned(
-      top: topPadding + 8,
-      left: 16,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(25.0),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: context.colors.backgroundTransparent,
-              border: Border.all(
-                color: context.colors.borderLight,
-                width: 1.5,
-              ),
-              borderRadius: BorderRadius.circular(25.0),
-            ),
-            child: Bounce(
-              scaleFactor: 0.85,
-              onTap: () => Navigator.pop(context),
-              behavior: HitTestBehavior.opaque,
-              child: Icon(
-                Icons.arrow_back,
-                color: context.colors.textSecondary,
-                size: 20,
-              ),
-            ),
-          ),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 0),
+      child: Text(
+        'Interactions',
+        style: TextStyle(
+          fontSize: 28,
+          fontWeight: FontWeight.w700,
+          color: context.colors.textPrimary,
+          letterSpacing: -0.5,
         ),
       ),
     );
@@ -266,7 +245,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                SizedBox(height: MediaQuery.of(context).padding.top + 60),
+                _buildHeader(context),
                 TabBar(
                   indicatorColor: context.colors.textPrimary,
                   labelColor: context.colors.textPrimary,
@@ -290,7 +269,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                 ),
               ],
             ),
-            _buildFloatingBackButton(context),
+            const BackButtonWidget.floating(),
           ],
         ),
       ),
