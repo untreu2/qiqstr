@@ -34,10 +34,9 @@ class FollowCacheService {
     _startCacheCleanup();
   }
 
-  static const int maxCacheSize = 1000;
-  static const Duration defaultTTL = Duration(minutes: 15);
-  static const Duration persistentTTL = Duration(days: 3);
-  static const Duration cleanupInterval = Duration(minutes: 10);
+  static const int maxCacheSize = 2000;
+  static const Duration defaultTTL = Duration(days: 1);
+  static const Duration cleanupInterval = Duration(hours: 6);
 
   final LinkedHashMap<String, CachedFollowEntry> _memoryCache = LinkedHashMap();
 
@@ -298,7 +297,7 @@ class FollowCacheService {
     }
 
     if (_isIsarInitialized) {
-      _isarService.cleanupExpiredFollowingLists(ttl: persistentTTL);
+      _isarService.cleanupExpiredFollowingLists(ttl: defaultTTL);
     }
   }
 

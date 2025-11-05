@@ -101,7 +101,7 @@ class _ProfilePageState extends State<ProfilePage> {
             topOffset: 6,
           ),
           Positioned(
-            top: topPadding + 6,
+            top: topPadding + 2,
             left: 0,
             right: 0,
             child: Center(

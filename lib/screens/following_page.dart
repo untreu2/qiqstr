@@ -30,31 +30,12 @@ class _FollowingPageState extends State<FollowingPage> {
   final Map<String, bool> _loadingStates = {};
 
   late final UserRepository _userRepository;
-  late final ScrollController _scrollController;
-
-  static const int _pageSize = 20;
-  int _currentPage = 0;
-  bool _hasMorePages = true;
-  bool _isLoadingProfiles = false;
 
   @override
   void initState() {
     super.initState();
     _userRepository = AppDI.get<UserRepository>();
-    _scrollController = ScrollController()..addListener(_onScroll);
     _loadFollowingUsers();
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
-      _loadNextPages();
-    }
   }
 
   Future<void> _loadFollowingUsers() async {
@@ -68,15 +49,18 @@ class _FollowingPageState extends State<FollowingPage> {
 
       if (mounted) {
         result.fold(
-          (users) {
+          (users) async {
             setState(() {
               _followingUsers = users;
-              _isLoading = false;
-              _currentPage = 0;
-              _hasMorePages = users.length > _pageSize;
             });
 
-            _loadNextPages();
+            await _loadUserProfilesBatch(users);
+
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+              });
+            }
           },
           (error) {
             setState(() {
@@ -97,39 +81,6 @@ class _FollowingPageState extends State<FollowingPage> {
     }
   }
 
-  void _loadNextPages() {
-    if (_isLoadingProfiles || !_hasMorePages || _followingUsers.isEmpty) return;
-
-    final startIndex = _currentPage * _pageSize;
-    final endIndex = (startIndex + _pageSize).clamp(0, _followingUsers.length);
-
-    if (startIndex >= _followingUsers.length) return;
-
-    _isLoadingProfiles = true;
-
-    final usersToLoad = _followingUsers.sublist(startIndex, endIndex);
-
-    Future.microtask(() async {
-      try {
-        await _loadUserProfilesBatch(usersToLoad);
-
-        if (mounted) {
-          setState(() {
-            _currentPage++;
-            _hasMorePages = endIndex < _followingUsers.length;
-            _isLoadingProfiles = false;
-          });
-        }
-      } catch (e) {
-        if (mounted) {
-          setState(() {
-            _isLoadingProfiles = false;
-          });
-        }
-      }
-    });
-  }
-
   Future<void> _loadUserProfilesBatch(List<UserModel> users) async {
     final npubsToLoad = users
         .where((user) => !_loadingStates.containsKey(user.npub) && !_loadedUsers.containsKey(user.npub))
@@ -143,22 +94,18 @@ class _FollowingPageState extends State<FollowingPage> {
     }
 
     try {
-      final results = await _userRepository.getUserProfiles(npubsToLoad, priority: FetchPriority.normal);
+      final results = await _userRepository.getUserProfiles(npubsToLoad, priority: FetchPriority.high);
 
       if (mounted) {
-        final updatedUsers = <UserModel>[];
-
         for (final entry in results.entries) {
           final npub = entry.key;
           entry.value.fold(
             (user) {
               _loadedUsers[npub] = user;
               _loadingStates[npub] = false;
-
               final index = _followingUsers.indexWhere((u) => u.npub == npub);
               if (index != -1) {
                 _followingUsers[index] = user;
-                updatedUsers.add(user);
               }
             },
             (error) {
@@ -178,10 +125,7 @@ class _FollowingPageState extends State<FollowingPage> {
             },
           );
         }
-
-        if (updatedUsers.isNotEmpty) {
-          setState(() {});
-        }
+        setState(() {});
       }
     } catch (e) {
       if (mounted) {
@@ -406,7 +350,6 @@ class _FollowingPageState extends State<FollowingPage> {
     return RefreshIndicator(
       onRefresh: _loadFollowingUsers,
       child: CustomScrollView(
-        controller: _scrollController,
         slivers: [
           SliverToBoxAdapter(
             child: _buildHeader(context),
@@ -441,23 +384,6 @@ class _FollowingPageState extends State<FollowingPage> {
                 addRepaintBoundaries: true,
               ),
             ),
-            if (_isLoadingProfiles && _hasMorePages) ...[
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Center(
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: context.colors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ],
           const SliverToBoxAdapter(
             child: SizedBox(height: 24),
