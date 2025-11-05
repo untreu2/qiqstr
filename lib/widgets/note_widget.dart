@@ -497,6 +497,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     return _noteId;
   }
 
+
   @override
   Widget build(BuildContext context) {
     super.build(context);

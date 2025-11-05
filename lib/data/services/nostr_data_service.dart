@@ -282,6 +282,9 @@ class NostrDataService {
         case 3:
           await _processFollowEvent(eventData);
           break;
+        case 5:
+          _processDeletionEvent(eventData);
+          break;
         case 6:
           await _processRepostEvent(eventData);
           break;
@@ -373,6 +376,66 @@ class NostrDataService {
       }
     } catch (e) {
       debugPrint('[NostrDataService] Error processing reaction event: $e');
+    }
+  }
+
+  void _processDeletionEvent(Map<String, dynamic> eventData) {
+    try {
+      final deletionPubkey = eventData['pubkey'] as String;
+      final tags = eventData['tags'] as List<dynamic>? ?? [];
+      final content = eventData['content'] as String? ?? '';
+
+      // Extract all event IDs from 'e' tags
+      final eventIdsToDelete = <String>[];
+      for (final tag in tags) {
+        if (tag is List && tag.isNotEmpty && tag[0] == 'e' && tag.length >= 2) {
+          final eventId = tag[1] as String;
+          if (eventId.isNotEmpty) {
+            eventIdsToDelete.add(eventId);
+          }
+        }
+      }
+
+      if (eventIdsToDelete.isEmpty) {
+        return;
+      }
+
+      debugPrint('[NostrDataService] Processing deletion request from ${deletionPubkey.substring(0, 8)}... for ${eventIdsToDelete.length} events');
+
+      // Validate and remove deleted notes
+      final notesRemoved = <String>[];
+      for (final eventId in eventIdsToDelete) {
+        final note = _noteCache[eventId];
+        if (note == null) {
+          continue;
+        }
+
+   
+        final noteAuthorHex = _authService.npubToHex(note.author);
+        if (noteAuthorHex == null || deletionPubkey != noteAuthorHex) {
+          debugPrint('[NostrDataService] Deletion request rejected: pubkey mismatch for event $eventId');
+          continue;
+        }
+
+        // Remove note from cache
+        _noteCache.remove(eventId);
+        _eventIds.remove(eventId);
+
+        // Also remove related data
+        _reactionsMap.remove(eventId);
+        _repostsMap.remove(eventId);
+        _zapsMap.remove(eventId);
+
+        notesRemoved.add(eventId);
+        debugPrint('[NostrDataService] Deleted note $eventId (reason: ${content.isNotEmpty ? content : 'no reason provided'})');
+      }
+
+      if (notesRemoved.isNotEmpty) {
+        _scheduleUIUpdate();
+        debugPrint('[NostrDataService] Removed ${notesRemoved.length} deleted notes from cache');
+      }
+    } catch (e) {
+      debugPrint('[NostrDataService] Error processing deletion event: $e');
     }
   }
 
@@ -1807,6 +1870,57 @@ class NostrDataService {
     }
   }
 
+  Future<Result<void>> deleteNote({
+    required String noteId,
+    String? reason,
+  }) async {
+    try {
+      final privateKeyResult = await _authService.getCurrentUserPrivateKey();
+      if (privateKeyResult.isError) {
+        return Result.error('Private key not found: ${privateKeyResult.error}');
+      }
+
+      final privateKey = privateKeyResult.data;
+      if (privateKey == null || privateKey.isEmpty) {
+        return const Result.error('Private key not found.');
+      }
+
+      final event = NostrService.createDeletionEvent(
+        eventIds: [noteId],
+        privateKey: privateKey,
+        reason: reason,
+      );
+
+      try {
+        if (_relayManager.activeSockets.isEmpty) {
+          await _relayManager.connectRelays(
+            [],
+            onEvent: _handleRelayEvent,
+            onDisconnected: _handleRelayDisconnection,
+            serviceId: 'note_delete',
+          );
+        }
+      } catch (e) {}
+
+      await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
+
+      _noteCache.remove(noteId);
+      _eventIds.remove(noteId);
+      _reactionsMap.remove(noteId);
+      _repostsMap.remove(noteId);
+      _zapsMap.remove(noteId);
+      
+      if (!_isClosed && !_notesController.isClosed) {
+        final notesList = _getFilteredNotesList();
+        _notesController.add(notesList);
+      }
+
+      return const Result.success(null);
+    } catch (e) {
+      return Result.error('Failed to delete note: $e');
+    }
+  }
+
   Future<Result<void>> reactToNote({
     required String noteId,
     required String reaction,
@@ -2192,7 +2306,7 @@ class NostrDataService {
       }
 
       final filter = {
-        'kinds': [1, 6, 7, 9735],
+        'kinds': [1, 5, 6, 7, 9735],
         '#p': [pubkeyHex],
         'since': sinceTimestamp,
         'limit': limit,

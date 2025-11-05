@@ -132,6 +132,35 @@ class NostrService {
     return event;
   }
 
+  static Event createDeletionEvent({
+    required List<String> eventIds,
+    required String privateKey,
+    String? reason,
+  }) {
+    final tags = eventIds.map((id) => ['e', id]).toList();
+    final content = reason ?? '';
+
+    final cacheKey = _generateEventCacheKey(5, content, privateKey, tags);
+
+    if (_eventCache.containsKey(cacheKey)) {
+      _cacheHits++;
+      return _eventCache[cacheKey]!;
+    }
+
+    _cacheMisses++;
+    _eventsCreated++;
+
+    final event = Event.from(
+      kind: 5,
+      tags: tags,
+      content: content,
+      privkey: privateKey,
+    );
+
+    _addToEventCache(cacheKey, event);
+    return event;
+  }
+
   static Event createProfileEvent({
     required Map<String, dynamic> profileContent,
     required String privateKey,

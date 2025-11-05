@@ -544,6 +544,23 @@ class NoteRepository {
     }
   }
 
+  Future<Result<void>> deleteNote(String noteId) async {
+    try {
+      final result = await _nostrDataService.deleteNote(noteId: noteId);
+      result.fold(
+        (_) {
+          _notes.removeWhere((n) => n.id == noteId);
+          _notesMap.remove(noteId);
+          _notesController.add(List.unmodifiable(_notes));
+        },
+        (_) {},
+      );
+      return result;
+    } catch (e) {
+      return Result.error('Failed to delete note: $e');
+    }
+  }
+
   Stream<List<NoteModel>> get realTimeNotesStream => _nostrDataService.notesStream;
 
   Future<Result<void>> startRealTimeFeed(List<String> authorNpubs) async {
@@ -592,9 +609,18 @@ class NoteRepository {
 
   void _setupNostrDataServiceForwarding() {
     _nostrDataService.notesStream.listen((updatedNotes) {
-      if (updatedNotes.isEmpty) return;
+      final updatedNoteIds = updatedNotes.map((n) => n.id).toSet();
+      final currentNoteIds = _notes.map((n) => n.id).toSet();
+      
+      final removedNoteIds = currentNoteIds.difference(updatedNoteIds);
+      if (removedNoteIds.isNotEmpty) {
+        _notes.removeWhere((n) => removedNoteIds.contains(n.id));
+        for (final id in removedNoteIds) {
+          _notesMap.remove(id);
+        }
+      }
 
-      bool hasChanges = false;
+      bool hasChanges = removedNoteIds.isNotEmpty;
       for (final updatedNote in updatedNotes) {
         final existingNote = _notesMap[updatedNote.id];
         if (existingNote != null) {
@@ -618,14 +644,18 @@ class NoteRepository {
 
       if (!hasChanges) return;
 
-      _notesUpdatePending = true;
-      _notesUpdateThrottleTimer?.cancel();
-      _notesUpdateThrottleTimer = Timer(const Duration(seconds: 1), () {
-        if (_notesUpdatePending) {
-          _notesUpdatePending = false;
-          _notesController.add(List.unmodifiable(_notes));
-        }
-      });
+      if (removedNoteIds.isNotEmpty) {
+        _notesController.add(List.unmodifiable(_notes));
+      } else {
+        _notesUpdatePending = true;
+        _notesUpdateThrottleTimer?.cancel();
+        _notesUpdateThrottleTimer = Timer(const Duration(seconds: 1), () {
+          if (_notesUpdatePending) {
+            _notesUpdatePending = false;
+            _notesController.add(List.unmodifiable(_notes));
+          }
+        });
+      }
     });
   }
 

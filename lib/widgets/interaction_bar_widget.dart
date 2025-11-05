@@ -399,18 +399,189 @@ class _InteractionBarState extends State<InteractionBar> {
               activeCarbonIcon: CarbonIcons.flash_filled,
               buttonType: 'zap',
             ),
-            _buildButton(
-              iconPath: null,
-              count: 0,
-              isActive: false,
-              activeColor: colors.secondary,
-              inactiveColor: colors.secondary,
-              onTap: _handleStatsTap,
-              isStatsButton: true,
+            PopupMenuButton<String>(
+              icon: Transform.translate(
+                offset: const Offset(-4, 0),
+                child: Icon(Icons.more_horiz, size: widget.isBigSize ? 20.0 : 18.0, color: colors.secondary),
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(40),
+              ),
+              color: colors.buttonPrimary,
+              elevation: 0,
+              onSelected: (value) {
+                if (value == 'interactions') {
+                  _handleStatsTap();
+                } else if (value == 'delete') {
+                  _showDeleteConfirmationDialog();
+                }
+              },
+              itemBuilder: (context) {
+                final items = <PopupMenuItem<String>>[
+                  PopupMenuItem(
+                    value: 'interactions',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                      child: Row(
+                        children: [
+                          Icon(CarbonIcons.chart_bar, size: 18, color: colors.buttonText),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Interactions',
+                            style: TextStyle(
+                              color: colors.buttonText,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ];
+                
+                if (note.author == widget.currentUserNpub) {
+                  items.add(
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        child: Row(
+                          children: [
+                            Icon(CarbonIcons.delete, size: 18, color: colors.buttonText),
+                            const SizedBox(width: 12),
+                            Text(
+                              'Delete',
+                              style: TextStyle(
+                                color: colors.buttonText,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                
+                return items;
+              },
             ),
           ],
         ),
       ),
     );
+  }
+
+  void _showDeleteConfirmationDialog() {
+    if (widget.note == null || !mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.colors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.zero,
+      ),
+      builder: (modalContext) => Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          bottom: MediaQuery.of(modalContext).viewInsets.bottom + 40,
+          top: 16,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Delete this post?',
+              style: TextStyle(
+                color: context.colors.textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.pop(modalContext);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        color: context.colors.buttonPrimary,
+                        borderRadius: BorderRadius.circular(40),
+                      ),
+                      child: Text(
+                        'Cancel',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: context.colors.buttonText,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.pop(modalContext);
+                      _handleDeleteTap();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        color: context.colors.error.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(40),
+                      ),
+                      child: Text(
+                        'Yes',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: context.colors.error,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleDeleteTap() async {
+    if (widget.note == null || !mounted) return;
+
+    try {
+      final result = await _noteRepository.deleteNote(widget.noteId);
+      if (!mounted) return;
+      
+      result.fold(
+        (_) {},
+        (error) {
+          if (mounted) {
+            AppSnackbar.error(context, 'Failed to delete note: $error');
+          }
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        AppSnackbar.error(context, 'Failed to delete note: $e');
+      }
+    }
   }
 }

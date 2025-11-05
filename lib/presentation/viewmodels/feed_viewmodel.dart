@@ -491,24 +491,69 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
     addSubscription(
       _noteRepository.realTimeNotesStream.listen((notes) {
-        if (!isDisposed && _feedState.isLoaded && notes.isNotEmpty) {
-          _pendingRealtimeNotes = notes;
-          _realtimeUpdatePending = true;
-          _realtimeUpdateThrottleTimer?.cancel();
-          _realtimeUpdateThrottleTimer = Timer(const Duration(seconds: 1), () {
-            if (isDisposed || !_realtimeUpdatePending || _pendingRealtimeNotes == null) return;
-            
-            final notes = _pendingRealtimeNotes!;
-            _realtimeUpdatePending = false;
-            _pendingRealtimeNotes = null;
-
-            final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
-
-            if (currentNotes.isEmpty) {
+        if (!isDisposed && _feedState.isLoaded) {
+          final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
+          
+          if (currentNotes.isEmpty) {
+            if (notes.isNotEmpty) {
               _feedState = LoadedState(notes);
               _loadUserProfilesForNotes(notes);
               safeNotifyListeners();
-            } else {
+            }
+            return;
+          }
+
+          final noteIds = notes.map((n) => n.id).toSet();
+          final currentNoteIds = currentNotes.map((n) => n.id).toSet();
+          
+          final removedNoteIds = currentNoteIds.difference(noteIds);
+          final updatedNotes = notes.where((n) => currentNoteIds.contains(n.id)).toList();
+          final newerNotes = notes.where((n) => !currentNoteIds.contains(n.id)).toList();
+
+          final hasRemovals = removedNoteIds.isNotEmpty;
+          final hasUpdates = updatedNotes.isNotEmpty;
+          final hasNewNotes = newerNotes.isNotEmpty;
+
+          if (hasRemovals) {
+            final filteredNotes = currentNotes.where((n) => !removedNoteIds.contains(n.id)).toList();
+            
+            for (final updatedNote in updatedNotes) {
+              final index = filteredNotes.indexWhere((n) => n.id == updatedNote.id);
+              if (index != -1) {
+                filteredNotes[index] = updatedNote;
+              }
+            }
+
+            if (newerNotes.isNotEmpty) {
+              final latestTimestamp = filteredNotes.isNotEmpty ? filteredNotes.first.timestamp : DateTime.now();
+              final timestampNewerNotes = newerNotes.where((n) => n.timestamp.isAfter(latestTimestamp)).toList();
+              
+              if (timestampNewerNotes.isNotEmpty) {
+                final userNotes = timestampNewerNotes.where((n) => n.author == _currentUserNpub).toList();
+                if (userNotes.isNotEmpty) {
+                  filteredNotes.addAll(userNotes);
+                }
+              }
+            }
+
+            final sortedNotes = _sortNotes(filteredNotes);
+            _feedState = LoadedState(sortedNotes);
+            safeNotifyListeners();
+            return;
+          }
+
+          if (hasUpdates || hasNewNotes) {
+            _pendingRealtimeNotes = notes;
+            _realtimeUpdatePending = true;
+            _realtimeUpdateThrottleTimer?.cancel();
+            _realtimeUpdateThrottleTimer = Timer(const Duration(seconds: 1), () {
+              if (isDisposed || !_realtimeUpdatePending || _pendingRealtimeNotes == null) return;
+              
+              final notes = _pendingRealtimeNotes!;
+              _realtimeUpdatePending = false;
+              _pendingRealtimeNotes = null;
+
+              final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
               final latestTimestamp = currentNotes.first.timestamp;
               final newerNotes = <NoteModel>[];
               for (final note in notes) {
@@ -552,8 +597,8 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
               }
 
               safeNotifyListeners();
-            }
-          });
+            });
+          }
         }
       }),
     );

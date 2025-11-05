@@ -378,7 +378,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 60, 16, 8),
       child: Text(
-        'Search users',
+        'Search',
         style: TextStyle(
           fontSize: 28,
           fontWeight: FontWeight.w700,
