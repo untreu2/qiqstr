@@ -20,9 +20,7 @@ class MediaPreviewWidget extends StatefulWidget {
   State<MediaPreviewWidget> createState() => _MediaPreviewWidgetState();
 }
 
-class _MediaPreviewWidgetState extends State<MediaPreviewWidget> with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
+class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
 
   late final List<String> _videoUrls;
   late final List<String> _imageUrls;
@@ -56,8 +54,6 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> with AutomaticK
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
-
     if (widget.mediaUrls.isEmpty) return const SizedBox.shrink();
 
     if (_hasVideo) {
@@ -69,24 +65,26 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> with AutomaticK
 
     if (!_hasImages) return const SizedBox.shrink();
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(MediaPreviewWidget.borderRadius),
-      child: _buildMediaGrid(context, _imageUrls),
-    );
+    return _buildMediaGrid(context, _imageUrls);
   }
 
   Widget _buildMediaGrid(BuildContext context, List<String> imageUrls) {
     if (imageUrls.length == 1) {
-      return _buildImage(
-        context,
-        imageUrls[0],
-        0,
-        imageUrls,
-        useAspectRatio: false,
-        fit: BoxFit.contain,
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(MediaPreviewWidget.borderRadius),
+        child: _buildImage(
+          context,
+          imageUrls[0],
+          0,
+          imageUrls,
+          useAspectRatio: false,
+          fit: BoxFit.contain,
+        ),
       );
     } else if (imageUrls.length == 2) {
-      return Row(
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(MediaPreviewWidget.borderRadius),
+        child: Row(
         children: [
           Expanded(
             child: _buildImage(
@@ -108,9 +106,12 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> with AutomaticK
             ),
           ),
         ],
+      ),
       );
     } else if (imageUrls.length == 3) {
-      return Row(
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(MediaPreviewWidget.borderRadius),
+        child: Row(
         children: [
           Expanded(
             flex: 2,
@@ -146,11 +147,14 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> with AutomaticK
             ),
           ),
         ],
+      ),
       );
     } else {
       int itemCount = imageUrls.length >= 4 ? 4 : imageUrls.length;
 
-      return GridView.builder(
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(MediaPreviewWidget.borderRadius),
+        child: GridView.builder(
         shrinkWrap: true,
         padding: EdgeInsets.zero,
         physics: const NeverScrollableScrollPhysics(),
@@ -186,6 +190,7 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> with AutomaticK
             ],
           );
         },
+      ),
       );
     }
   }
@@ -200,30 +205,46 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> with AutomaticK
     bool useAspectRatio = true,
   }) {
     Widget image = CachedNetworkImage(
-      key: ValueKey('media_${url}_$index'),
+      key: ValueKey('media_${url.hashCode}_$index'),
       imageUrl: url,
       fit: fit,
       fadeInDuration: Duration.zero,
-      placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
-      errorWidget: (context, url, error) => const Icon(Icons.error),
+      fadeOutDuration: Duration.zero,
+      placeholder: (context, url) => Container(
+        color: context.colors.surfaceTransparent,
+        child: const Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      ),
+      errorWidget: (context, url, error) => Container(
+        color: context.colors.surfaceTransparent,
+        child: Icon(Icons.broken_image, color: context.colors.textSecondary),
+      ),
     );
+    
     if (useAspectRatio && aspectRatio != null) {
       image = AspectRatio(aspectRatio: aspectRatio, child: image);
     }
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => PhotoViewerWidget(
-              imageUrls: allUrls,
-              initialIndex: index,
+    return RepaintBoundary(
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PhotoViewerWidget(
+                imageUrls: allUrls,
+                initialIndex: index,
+              ),
             ),
-          ),
-        );
-      },
-      child: image,
+          );
+        },
+        child: image,
+      ),
     );
   }
 }

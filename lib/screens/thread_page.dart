@@ -625,6 +625,7 @@ class _ThreadPageState extends State<ThreadPage> {
         containerColor: Colors.transparent,
         isSmallView: depth > 1,
         scrollController: _scrollController,
+        isVisible: true,
       ),
     );
   }
@@ -647,6 +648,7 @@ class _ThreadPageState extends State<ThreadPage> {
         containerColor: context.colors.background,
         isSmallView: isSmallView,
         scrollController: _scrollController,
+        isVisible: true,
       ),
     );
   }

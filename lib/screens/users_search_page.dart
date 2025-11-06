@@ -2,12 +2,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/theme_manager.dart';
-import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../models/user_model.dart';
-import '../screens/profile_page.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/user_repository.dart';
+import '../widgets/user_tile_widget.dart';
 
 class UserSearchPage extends StatefulWidget {
   const UserSearchPage({super.key});
@@ -396,72 +394,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
     }
   }
 
-  Widget _buildUserTile(BuildContext context, UserModel user) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: GestureDetector(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ProfilePage(user: user),
-            ),
-          );
-        },
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-          decoration: BoxDecoration(
-            color: context.colors.overlayLight,
-            borderRadius: BorderRadius.circular(40),
-          ),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
-                backgroundColor: Colors.grey.shade800,
-                child: user.profileImage.isEmpty
-                    ? Icon(
-                        Icons.person,
-                        size: 26,
-                        color: context.colors.textSecondary,
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        user.name.length > 25 ? '${user.name.substring(0, 25)}...' : user.name,
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                          color: context.colors.textPrimary,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (user.nip05.isNotEmpty && user.nip05Verified) ...[
-                      const SizedBox(width: 4),
-                      Icon(
-                        Icons.verified,
-                        size: 16,
-                        color: context.colors.accent,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildSearchResults(BuildContext context) {
     if (_isSearching || _isExpandingNetwork) {
       return Center(
@@ -575,7 +507,10 @@ class _UserSearchPageState extends State<UserSearchPage> {
       return ListView.builder(
         padding: EdgeInsets.zero,
         itemCount: _filteredUsers.length,
-        itemBuilder: (context, index) => _buildUserTile(context, _filteredUsers[index]),
+        itemBuilder: (context, index) => UserTile(
+          key: ValueKey(_filteredUsers[index].pubkeyHex),
+          user: _filteredUsers[index],
+        ),
       );
     }
 
@@ -611,7 +546,10 @@ class _UserSearchPageState extends State<UserSearchPage> {
     return ListView.builder(
       padding: EdgeInsets.zero,
       itemCount: _randomUsers.length,
-      itemBuilder: (context, index) => _buildUserTile(context, _randomUsers[index]),
+      itemBuilder: (context, index) => UserTile(
+        key: ValueKey(_randomUsers[index].pubkeyHex),
+        user: _randomUsers[index],
+      ),
     );
   }
 
@@ -623,83 +561,81 @@ class _UserSearchPageState extends State<UserSearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeManager>(
-      builder: (context, themeManager, child) {
-        return Scaffold(
-          backgroundColor: context.colors.background,
-          body: Stack(
+    return Scaffold(
+      backgroundColor: context.colors.background,
+      body: Stack(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(context),
-                  Expanded(
-                    child: _buildSearchResults(context),
-                  ),
-                  SizedBox(height: 80),
-                ],
+              RepaintBoundary(child: _buildHeader(context)),
+              Expanded(
+                child: _buildSearchResults(context),
               ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: context.colors.surface,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
-                        blurRadius: 10,
-                        offset: const Offset(0, -2),
-                      ),
-                    ],
-                  ),
-                  padding: EdgeInsets.only(
-                    left: 16,
-                    right: 16,
-                    top: 12,
-                    bottom: MediaQuery.of(context).padding.bottom + 12,
-                  ),
-                  child: TextField(
-                    controller: _searchController,
-                    style: TextStyle(color: context.colors.buttonText),
-                    decoration: InputDecoration(
-                      hintText: 'Search by name or npub...',
-                      hintStyle: TextStyle(color: context.colors.buttonText.withValues(alpha: 0.6)),
-                      suffixIcon: Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: GestureDetector(
-                          onTap: _pasteFromClipboard,
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: context.colors.background,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.content_paste,
-                              color: context.colors.textPrimary,
-                              size: 20,
-                            ),
+              const SizedBox(height: 80),
+            ],
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: RepaintBoundary(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: context.colors.surface,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 10,
+                      offset: const Offset(0, -2),
+                    ),
+                  ],
+                ),
+                padding: EdgeInsets.only(
+                  left: 16,
+                  right: 16,
+                  top: 12,
+                  bottom: MediaQuery.of(context).padding.bottom + 12,
+                ),
+                child: TextField(
+                  controller: _searchController,
+                  style: TextStyle(color: context.colors.buttonText),
+                  decoration: InputDecoration(
+                    hintText: 'Search by name or npub...',
+                    hintStyle: TextStyle(color: context.colors.buttonText.withValues(alpha: 0.6)),
+                    suffixIcon: Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: GestureDetector(
+                        onTap: _pasteFromClipboard,
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: context.colors.background,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.content_paste,
+                            color: context.colors.textPrimary,
+                            size: 20,
                           ),
                         ),
                       ),
-                      filled: true,
-                      fillColor: context.colors.buttonPrimary,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(40),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
                     ),
+                    filled: true,
+                    fillColor: context.colors.buttonPrimary,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(40),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
                   ),
                 ),
               ),
-            ],
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 }

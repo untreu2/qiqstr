@@ -47,14 +47,28 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
 
   final Map<String, UserModel> _mentionUsers = {};
   final Map<String, bool> _mentionLoadingStates = {};
+  final List<TapGestureRecognizer> _gestureRecognizers = [];
   late final UserRepository _userRepository;
+  
+  List<InlineSpan>? _cachedSpans;
+  int _cachedSpansHash = 0;
 
   @override
   void initState() {
     super.initState();
     _userRepository = AppDI.get<UserRepository>();
     _processParsedContent();
+    _loadMentionUsersSync();
     _preloadMentionUsers();
+  }
+
+  @override
+  void dispose() {
+    for (final recognizer in _gestureRecognizers) {
+      recognizer.dispose();
+    }
+    _gestureRecognizers.clear();
+    super.dispose();
   }
 
   void _processParsedContent() {
@@ -88,6 +102,27 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
       debugPrint('[NoteContentWidget] Error type: ${e.runtimeType}');
     }
     return null;
+  }
+
+  void _loadMentionUsersSync() {
+    final mentionIds = _textParts.where((part) => part['type'] == 'mention').map((part) => part['id'] as String).toSet();
+
+    for (final mentionId in mentionIds) {
+      final actualPubkey = _extractPubkey(mentionId) ?? mentionId;
+      
+      _mentionUsers[actualPubkey] = UserModel(
+        pubkeyHex: actualPubkey,
+        name: actualPubkey.length > 8 ? actualPubkey.substring(0, 8) : actualPubkey,
+        about: '',
+        profileImage: '',
+        banner: '',
+        website: '',
+        nip05: '',
+        lud16: '',
+        updatedAt: DateTime.now(),
+        nip05Verified: false,
+      );
+    }
   }
 
   void _preloadMentionUsers() {
@@ -214,6 +249,23 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
   }
 
   List<InlineSpan> _buildSpans() {
+    final currentHash = Object.hash(
+      _mentionUsers.length,
+      _mentionLoadingStates.length,
+      _textParts.length,
+      context.colors.textPrimary.hashCode,
+      context.colors.accent.hashCode,
+    );
+
+    if (_cachedSpans != null && _cachedSpansHash == currentHash) {
+      return _cachedSpans!;
+    }
+
+    for (final recognizer in _gestureRecognizers) {
+      recognizer.dispose();
+    }
+    _gestureRecognizers.clear();
+
     final parts = _textParts;
     final spans = <InlineSpan>[];
     final colors = context.colors;
@@ -240,6 +292,8 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
           final hashtagMatch = m.group(2);
 
           if (urlMatch != null) {
+            final recognizer = TapGestureRecognizer()..onTap = () => _onOpenLink(LinkableElement(urlMatch, urlMatch));
+            _gestureRecognizers.add(recognizer);
             spans.add(TextSpan(
               text: urlMatch,
               style: TextStyle(
@@ -247,9 +301,11 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
                 color: colors.accent,
                 decoration: TextDecoration.underline,
               ),
-              recognizer: TapGestureRecognizer()..onTap = () => _onOpenLink(LinkableElement(urlMatch, urlMatch)),
+              recognizer: recognizer,
             ));
           } else if (hashtagMatch != null) {
+            final recognizer = TapGestureRecognizer()..onTap = () => _onHashtagTap(hashtagMatch);
+            _gestureRecognizers.add(recognizer);
             spans.add(TextSpan(
               text: hashtagMatch,
               style: TextStyle(
@@ -257,7 +313,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
                 color: colors.accent,
                 fontWeight: FontWeight.w500,
               ),
-              recognizer: TapGestureRecognizer()..onTap = () => _onHashtagTap(hashtagMatch),
+              recognizer: recognizer,
             ));
           }
           last = m.end;
@@ -288,6 +344,13 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
           displayText = '@${id.length > 8 ? id.substring(0, 8) : id}...';
         }
 
+        final recognizer = TapGestureRecognizer()
+          ..onTap = () {
+            final npubForNavigation = encodeBasicBech32(actualPubkey, 'npub');
+            debugPrint('[NoteContentWidget] Navigating to profile with npub: $npubForNavigation');
+            widget.onNavigateToMentionProfile?.call(npubForNavigation);
+          };
+        _gestureRecognizers.add(recognizer);
         spans.add(TextSpan(
           text: displayText,
           style: TextStyle(
@@ -295,14 +358,11 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
             color: colors.accent,
             fontWeight: FontWeight.w500,
           ),
-          recognizer: TapGestureRecognizer()
-            ..onTap = () {
-              final npubForNavigation = encodeBasicBech32(actualPubkey, 'npub');
-              debugPrint('[NoteContentWidget] Navigating to profile with npub: $npubForNavigation');
-              widget.onNavigateToMentionProfile?.call(npubForNavigation);
-            },
+          recognizer: recognizer,
         ));
       } else if (p['type'] == 'show_more') {
+        final recognizer = TapGestureRecognizer()..onTap = () => widget.onShowMoreTap?.call(widget.noteId);
+        _gestureRecognizers.add(recognizer);
         spans.add(TextSpan(
           text: p['text'] as String,
           style: TextStyle(
@@ -310,10 +370,13 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
             color: colors.accent,
             fontWeight: FontWeight.w500,
           ),
-          recognizer: TapGestureRecognizer()..onTap = () => widget.onShowMoreTap?.call(widget.noteId),
+          recognizer: recognizer,
         ));
       }
     }
+    
+    _cachedSpans = spans;
+    _cachedSpansHash = currentHash;
     return spans;
   }
 
@@ -323,19 +386,24 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (_textParts.isNotEmpty)
-          RichText(
-            text: TextSpan(children: _buildSpans()),
-            textHeightBehavior: const TextHeightBehavior(
-              applyHeightToFirstAscent: false,
-              applyHeightToLastDescent: false,
+          RepaintBoundary(
+            child: RichText(
+              text: TextSpan(children: _buildSpans()),
+              textHeightBehavior: const TextHeightBehavior(
+                applyHeightToFirstAscent: false,
+                applyHeightToLastDescent: false,
+              ),
             ),
           ),
         if (_mediaUrls.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: MediaPreviewWidget(
-              mediaUrls: _mediaUrls,
-              authorProfileImageUrl: widget.authorProfileImageUrl,
+          RepaintBoundary(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: MediaPreviewWidget(
+                key: ValueKey('media_${widget.noteId}_${_mediaUrls.length}'),
+                mediaUrls: _mediaUrls,
+                authorProfileImageUrl: widget.authorProfileImageUrl,
+              ),
             ),
           ),
         if (_linkUrls.isNotEmpty && _mediaUrls.isEmpty)

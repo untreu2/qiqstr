@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/note_model.dart';
 import '../models/user_model.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/user_repository.dart';
-import '../data/repositories/note_repository.dart';
 import '../services/time_service.dart';
 import '../theme/theme_manager.dart';
 import '../screens/thread_page.dart';
@@ -22,6 +20,7 @@ class NoteWidget extends StatefulWidget {
   final bool isSmallView;
   final ScrollController? scrollController;
   final dynamic notesListProvider;
+  final bool isVisible;
 
   const NoteWidget({
     super.key,
@@ -33,15 +32,14 @@ class NoteWidget extends StatefulWidget {
     this.isSmallView = true,
     this.scrollController,
     this.notesListProvider,
+    this.isVisible = true,
   });
 
   @override
   State<NoteWidget> createState() => _NoteWidgetState();
 }
 
-class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
+class _NoteWidgetState extends State<NoteWidget> {
 
   late final String _noteId;
   late final String _authorId;
@@ -63,15 +61,15 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   bool _isDisposed = false;
   bool _isInitialized = false;
   late final UserRepository _userRepository;
-  late final NoteRepository _noteRepository;
 
   @override
   void initState() {
     super.initState();
     try {
       _userRepository = AppDI.get<UserRepository>();
-      _noteRepository = AppDI.get<NoteRepository>();
       _precomputeImmutableData();
+      _setupUserListener();
+      _loadInitialUserDataSync();
       _initializeAsync();
     } catch (e) {
       debugPrint('[NoteWidget] InitState error: $e');
@@ -113,13 +111,63 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     _isInitialized = true;
   }
 
+  void _loadInitialUserDataSync() {
+    try {
+      final currentState = _stateNotifier.value;
+
+      UserModel? authorUser = widget.profiles[_authorId];
+      UserModel? reposterUser = _reposterId != null ? widget.profiles[_reposterId] : null;
+
+      authorUser ??= UserModel(
+        pubkeyHex: _authorId,
+        name: _authorId.length > 8 ? _authorId.substring(0, 8) : _authorId,
+        about: '',
+        profileImage: '',
+        banner: '',
+        website: '',
+        nip05: '',
+        lud16: '',
+        updatedAt: DateTime.now(),
+        nip05Verified: false,
+      );
+
+      if (_reposterId != null && reposterUser == null) {
+        final reposterId = _reposterId;
+        reposterUser = UserModel(
+          pubkeyHex: reposterId,
+          name: reposterId.length > 8 ? reposterId.substring(0, 8) : reposterId,
+          about: '',
+          profileImage: '',
+          banner: '',
+          website: '',
+          nip05: '',
+          lud16: '',
+          updatedAt: DateTime.now(),
+          nip05Verified: false,
+        );
+      }
+
+      final replyText = _isReply && _parentId != null ? 'Reply to...' : null;
+
+      final newState = _NoteState(
+        authorUser: authorUser,
+        reposterUser: reposterUser,
+        replyText: replyText,
+      );
+
+      if (currentState != newState) {
+        _stateNotifier.value = newState;
+      }
+    } catch (e) {
+      debugPrint('[NoteWidget] Load initial user data sync error: $e');
+    }
+  }
+
   void _initializeAsync() {
     Future.microtask(() {
       if (_isDisposed || !mounted) return;
 
       try {
-        _setupUserListener();
-        _loadInitialUserData();
         _loadUsersAsync();
         _loadInteractionsAsync();
       } catch (e) {
@@ -139,54 +187,50 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   void _onNotesChange() {
     if (!mounted || _isDisposed) return;
 
-    Future.microtask(() {
-      if (!mounted || _isDisposed) return;
-
-      try {
-        final notes = widget.notesNotifier.value;
-        if (notes.isEmpty) return;
-
-        bool hasRelevantChange = false;
-        for (final note in notes) {
-          if (note.id == _noteId || 
-              (_isRepost && note.id == widget.note.rootId) ||
-              (_isReply && note.id == _parentId)) {
-            hasRelevantChange = true;
-            break;
-          }
-        }
-
-        if (hasRelevantChange) {
-          _updateUserData();
-        }
-      } catch (e) {
-      }
-    });
-  }
-
-  void _loadInitialUserData() {
     try {
-      _updateUserData();
+      final notes = widget.notesNotifier.value;
+      if (notes.isEmpty) return;
+
+      bool hasRelevantChange = notes.any((note) =>
+        note.id == _noteId ||
+        (_isRepost && note.id == widget.note.rootId) ||
+        (_isReply && note.id == _parentId)
+      );
+
+      if (hasRelevantChange) {
+        _updateUserData();
+      }
     } catch (e) {
-      debugPrint('[NoteWidget] Load initial user data error: $e');
     }
   }
 
   void _updateUserData() {
     if (_isDisposed || !mounted) return;
 
-    Future.microtask(() {
-      if (_isDisposed || !mounted) return;
+    try {
+      final currentState = _stateNotifier.value;
 
-      try {
-        final currentState = _stateNotifier.value;
+      UserModel? authorUser = widget.profiles[_authorId];
+      UserModel? reposterUser = _reposterId != null ? widget.profiles[_reposterId] : null;
 
-        UserModel? authorUser = widget.profiles[_authorId];
-        UserModel? reposterUser = _reposterId != null ? widget.profiles[_reposterId] : null;
+      authorUser ??= UserModel(
+        pubkeyHex: _authorId,
+        name: _authorId.length > 8 ? _authorId.substring(0, 8) : _authorId,
+        about: '',
+        profileImage: '',
+        banner: '',
+        website: '',
+        nip05: '',
+        lud16: '',
+        updatedAt: DateTime.now(),
+        nip05Verified: false,
+      );
 
-        authorUser ??= UserModel(
-          pubkeyHex: _authorId,
-          name: _authorId.length > 8 ? _authorId.substring(0, 8) : _authorId,
+      if (_reposterId != null && reposterUser == null) {
+        final reposterId = _reposterId;
+        reposterUser = UserModel(
+          pubkeyHex: reposterId,
+          name: reposterId.length > 8 ? reposterId.substring(0, 8) : reposterId,
           about: '',
           profileImage: '',
           banner: '',
@@ -196,43 +240,23 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
           updatedAt: DateTime.now(),
           nip05Verified: false,
         );
-
-        if (_reposterId != null && reposterUser == null) {
-          final reposterId = _reposterId;
-          reposterUser = UserModel(
-            pubkeyHex: reposterId,
-            name: reposterId.length > 8 ? reposterId.substring(0, 8) : reposterId,
-            about: '',
-            profileImage: '',
-            banner: '',
-            website: '',
-            nip05: '',
-            lud16: '',
-            updatedAt: DateTime.now(),
-            nip05Verified: false,
-          );
-        }
-
-        final replyText = _isReply && _parentId != null ? 'Reply to...' : null;
-
-        final newState = _NoteState(
-          authorUser: authorUser,
-          reposterUser: reposterUser,
-          replyText: replyText,
-        );
-
-        if (currentState.authorUser?.hashCode != newState.authorUser?.hashCode ||
-            currentState.reposterUser?.hashCode != newState.reposterUser?.hashCode ||
-            currentState.replyText != newState.replyText) {
-          SchedulerBinding.instance.addPostFrameCallback((_) {
-            if (mounted && !_isDisposed) {
-              _stateNotifier.value = newState;
-            }
-          });
-        }
-      } catch (e) {
       }
-    });
+
+      final replyText = _isReply && _parentId != null ? 'Reply to...' : null;
+
+      final newState = _NoteState(
+        authorUser: authorUser,
+        reposterUser: reposterUser,
+        replyText: replyText,
+      );
+
+      if (currentState != newState) {
+        if (mounted && !_isDisposed) {
+          _stateNotifier.value = newState;
+        }
+      }
+    } catch (e) {
+    }
   }
 
   Future<void> _loadUsersAsync() async {
@@ -300,16 +324,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
 
   Future<void> _loadInteractionsAsync() async {
     if (_isDisposed || !mounted) return;
-
-    try {
-      Future.delayed(const Duration(milliseconds: 200), () {
-        if (!_isDisposed && mounted) {
-          final interactionNoteId = _getInteractionNoteId();
-          _noteRepository.fetchInteractionsForNote(interactionNoteId);
-        }
-      });
-    } catch (e) {
-    }
   }
 
   String _calculateTimestamp(DateTime timestamp) {
@@ -492,8 +506,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
 
   @override
   Widget build(BuildContext context) {
-    super.build(context);
-
     if (!_isInitialized || _isDisposed || !mounted) {
       return const SizedBox.shrink();
     }
@@ -517,10 +529,9 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   Widget _buildNormalLayout(dynamic colors) {
     return RepaintBoundary(
       key: ValueKey(_widgetKey),
-      child: InkWell(
+      child: GestureDetector(
         onTap: _navigateToThreadPage,
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
+        behavior: HitTestBehavior.opaque,
         child: Container(
           color: widget.containerColor ?? colors.background,
           padding: const EdgeInsets.only(bottom: 2),
@@ -571,7 +582,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                           RepaintBoundary(
                             child: Padding(
                               padding: const EdgeInsets.symmetric(horizontal: 4),
-                              child: widget.currentUserNpub.isNotEmpty
+                              child: widget.currentUserNpub.isNotEmpty && widget.isVisible
                                   ? InteractionBar(
                                       noteId: _getInteractionNoteId(),
                                       currentUserNpub: widget.currentUserNpub,
@@ -596,10 +607,9 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   Widget _buildExpandedLayout(dynamic colors) {
     return RepaintBoundary(
       key: ValueKey(_widgetKey),
-      child: InkWell(
+      child: GestureDetector(
         onTap: _navigateToThreadPage,
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
+        behavior: HitTestBehavior.opaque,
         child: Container(
           color: widget.containerColor ?? colors.background,
           padding: const EdgeInsets.only(bottom: 2),
@@ -710,7 +720,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                       child: RepaintBoundary(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: widget.currentUserNpub.isNotEmpty
+                          child: widget.currentUserNpub.isNotEmpty && widget.isVisible
                               ? InteractionBar(
                                   noteId: _getInteractionNoteId(),
                                   currentUserNpub: widget.currentUserNpub,
@@ -755,12 +765,29 @@ class _NoteState {
       identical(this, other) ||
       other is _NoteState &&
           runtimeType == other.runtimeType &&
-          authorUser?.hashCode == other.authorUser?.hashCode &&
-          reposterUser?.hashCode == other.reposterUser?.hashCode &&
+          authorUser?.pubkeyHex == other.authorUser?.pubkeyHex &&
+          authorUser?.name == other.authorUser?.name &&
+          authorUser?.profileImage == other.authorUser?.profileImage &&
+          authorUser?.nip05 == other.authorUser?.nip05 &&
+          authorUser?.nip05Verified == other.authorUser?.nip05Verified &&
+          reposterUser?.pubkeyHex == other.reposterUser?.pubkeyHex &&
+          reposterUser?.name == other.reposterUser?.name &&
+          reposterUser?.profileImage == other.reposterUser?.profileImage &&
           replyText == other.replyText;
 
   @override
-  int get hashCode => (authorUser?.hashCode ?? 0) ^ (reposterUser?.hashCode ?? 0) ^ (replyText?.hashCode ?? 0);
+  int get hashCode => 
+    Object.hash(
+      authorUser?.pubkeyHex,
+      authorUser?.name,
+      authorUser?.profileImage,
+      authorUser?.nip05,
+      authorUser?.nip05Verified,
+      reposterUser?.pubkeyHex,
+      reposterUser?.name,
+      reposterUser?.profileImage,
+      replyText,
+    );
 }
 
 class _SafeProfileSection extends StatelessWidget {
@@ -773,8 +800,6 @@ class _SafeProfileSection extends StatelessWidget {
   final bool isExpanded;
   final String formattedTimestamp;
 
-  static final Map<String, Widget> _avatarCache = <String, Widget>{};
-
   const _SafeProfileSection({
     required this.stateNotifier,
     required this.isRepost,
@@ -785,60 +810,6 @@ class _SafeProfileSection extends StatelessWidget {
     required this.isExpanded,
     required this.formattedTimestamp,
   });
-
-  Widget _getCachedAvatar(String imageUrl, double radius, String cacheKey) {
-    return _avatarCache.putIfAbsent(cacheKey, () {
-      try {
-        if (imageUrl.isEmpty) {
-          return CircleAvatar(
-            radius: radius,
-            backgroundColor: colors.surfaceTransparent,
-            child: Icon(
-              Icons.person,
-              size: radius,
-              color: colors.textSecondary,
-            ),
-          );
-        }
-
-        return CircleAvatar(
-          radius: radius,
-          backgroundColor: colors.surfaceTransparent,
-          child: ClipOval(
-            child: CachedNetworkImage(
-              imageUrl: imageUrl,
-              width: radius * 2,
-              height: radius * 2,
-              fit: BoxFit.cover,
-              fadeInDuration: Duration.zero,
-              fadeOutDuration: Duration.zero,
-              placeholder: (context, url) => Icon(
-                Icons.person,
-                size: radius,
-                color: colors.textSecondary,
-              ),
-              errorWidget: (context, url, error) => Icon(
-                Icons.person,
-                size: radius,
-                color: colors.textSecondary,
-              ),
-            ),
-          ),
-        );
-      } catch (e) {
-        debugPrint('[ProfileSection] Avatar cache error: $e');
-        return CircleAvatar(
-          radius: radius,
-          backgroundColor: colors.surfaceTransparent,
-          child: Icon(
-            Icons.person,
-            size: radius,
-            color: colors.textSecondary,
-          ),
-        );
-      }
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -860,16 +831,19 @@ class _SafeProfileSection extends StatelessWidget {
   }
 
   Widget _buildNormalProfile(_NoteState state) {
+    final authorImageUrl = state.authorUser?.profileImage ?? '';
+    final reposterImageUrl = state.reposterUser?.profileImage ?? '';
+    
     return Stack(
       children: [
         Padding(
           padding: isRepost ? const EdgeInsets.only(top: 8, left: 10) : const EdgeInsets.only(top: 8),
           child: GestureDetector(
             onTap: onAuthorTap,
-            child: _getCachedAvatar(
-              state.authorUser?.profileImage ?? '',
-              22,
-              '${widgetKey}_author_${state.authorUser?.profileImage.hashCode ?? 0}',
+            child: _ProfileAvatar(
+              imageUrl: authorImageUrl,
+              radius: 22,
+              colors: colors,
             ),
           ),
         ),
@@ -884,10 +858,10 @@ class _SafeProfileSection extends StatelessWidget {
                   shape: BoxShape.circle,
                   color: colors.surface,
                 ),
-                child: _getCachedAvatar(
-                  state.reposterUser?.profileImage ?? '',
-                  12,
-                  '${widgetKey}_reposter_${state.reposterUser?.profileImage.hashCode ?? 0}',
+                child: _ProfileAvatar(
+                  imageUrl: reposterImageUrl,
+                  radius: 12,
+                  colors: colors,
                 ),
               ),
             ),
@@ -897,6 +871,8 @@ class _SafeProfileSection extends StatelessWidget {
   }
 
   Widget _buildExpandedProfile(_NoteState state) {
+    final authorImageUrl = state.authorUser?.profileImage ?? '';
+    
     return GestureDetector(
       onTap: onAuthorTap,
       child: Row(
@@ -904,10 +880,10 @@ class _SafeProfileSection extends StatelessWidget {
         children: [
           GestureDetector(
             onTap: onAuthorTap,
-            child: _getCachedAvatar(
-              state.authorUser?.profileImage ?? '',
-              22,
-              '${widgetKey}_author_${state.authorUser?.profileImage.hashCode ?? 0}',
+            child: _ProfileAvatar(
+              imageUrl: authorImageUrl,
+              radius: 22,
+              colors: colors,
             ),
           ),
           const SizedBox(width: 8),
@@ -962,6 +938,73 @@ class _SafeProfileSection extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ProfileAvatar extends StatelessWidget {
+  final String imageUrl;
+  final double radius;
+  final dynamic colors;
+
+  const _ProfileAvatar({
+    required this.imageUrl,
+    required this.radius,
+    required this.colors,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (imageUrl.isEmpty) {
+      return RepaintBoundary(
+        child: CircleAvatar(
+          radius: radius,
+          backgroundColor: colors.surfaceTransparent,
+          child: Icon(
+            Icons.person,
+            size: radius,
+            color: colors.textSecondary,
+          ),
+        ),
+      );
+    }
+
+    return RepaintBoundary(
+      child: ClipOval(
+        clipBehavior: Clip.antiAlias,
+        child: Container(
+          width: radius * 2,
+          height: radius * 2,
+          color: Colors.transparent,
+          child: CachedNetworkImage(
+            key: ValueKey('avatar_${imageUrl.hashCode}_$radius'),
+            imageUrl: imageUrl,
+            width: radius * 2,
+            height: radius * 2,
+            fit: BoxFit.cover,
+            fadeInDuration: Duration.zero,
+            fadeOutDuration: Duration.zero,
+            memCacheWidth: (radius * 2 * 3).toInt(),
+            memCacheHeight: (radius * 2 * 3).toInt(),
+            placeholder: (context, url) => Container(
+              color: colors.surfaceTransparent,
+              child: Icon(
+                Icons.person,
+                size: radius,
+                color: colors.textSecondary,
+              ),
+            ),
+            errorWidget: (context, url, error) => Container(
+              color: colors.surfaceTransparent,
+              child: Icon(
+                Icons.person,
+                size: radius,
+                color: colors.textSecondary,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

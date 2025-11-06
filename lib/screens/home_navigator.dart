@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:bounce/bounce.dart';
-import 'package:provider/provider.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 
 import 'package:qiqstr/screens/feed_page.dart';
@@ -262,20 +261,18 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeManager>(
-      builder: (context, themeManager, child) {
-        return Scaffold(
-          extendBody: true,
-          body: PageStorage(
-            bucket: PageStorageBucket(),
-            child: IndexedStack(
-              index: _currentIndex,
-              children: _pages,
-            ),
-          ),
-          bottomNavigationBar: _buildCustomBottomBar(),
-        );
-      },
+    return Scaffold(
+      extendBody: true,
+      body: PageStorage(
+        bucket: PageStorageBucket(),
+        child: IndexedStack(
+          index: _currentIndex,
+          children: _pages,
+        ),
+      ),
+      bottomNavigationBar: RepaintBoundary(
+        child: _buildCustomBottomBar(),
+      ),
     );
   }
 }
