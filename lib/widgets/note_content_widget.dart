@@ -104,24 +104,27 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     return null;
   }
 
+  static UserModel _createPlaceholderUser(String pubkey) {
+    return UserModel(
+      pubkeyHex: pubkey,
+      name: pubkey.length > 8 ? pubkey.substring(0, 8) : pubkey,
+      about: '',
+      profileImage: '',
+      banner: '',
+      website: '',
+      nip05: '',
+      lud16: '',
+      updatedAt: DateTime.now(),
+      nip05Verified: false,
+    );
+  }
+
   void _loadMentionUsersSync() {
     final mentionIds = _textParts.where((part) => part['type'] == 'mention').map((part) => part['id'] as String).toSet();
 
     for (final mentionId in mentionIds) {
       final actualPubkey = _extractPubkey(mentionId) ?? mentionId;
-      
-      _mentionUsers[actualPubkey] = UserModel(
-        pubkeyHex: actualPubkey,
-        name: actualPubkey.length > 8 ? actualPubkey.substring(0, 8) : actualPubkey,
-        about: '',
-        profileImage: '',
-        banner: '',
-        website: '',
-        nip05: '',
-        lud16: '',
-        updatedAt: DateTime.now(),
-        nip05Verified: false,
-      );
+      _mentionUsers[actualPubkey] = _createPlaceholderUser(actualPubkey);
     }
   }
 
@@ -164,18 +167,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
           (error) {
             debugPrint('[NoteContentWidget] Failed to load user, creating fallback for: $pubkeyHex, error: $error');
             setState(() {
-              _mentionUsers[pubkeyHex] = UserModel(
-                pubkeyHex: pubkeyHex,
-                name: pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex,
-                about: '',
-                profileImage: '',
-                banner: '',
-                website: '',
-                nip05: '',
-                lud16: '',
-                updatedAt: DateTime.now(),
-                nip05Verified: false,
-              );
+              _mentionUsers[pubkeyHex] = _createPlaceholderUser(pubkeyHex);
               _mentionLoadingStates[pubkeyHex] = false;
             });
           },
@@ -382,56 +374,59 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (_textParts.isNotEmpty)
-          RepaintBoundary(
-            child: RichText(
-              text: TextSpan(children: _buildSpans()),
-              textHeightBehavior: const TextHeightBehavior(
-                applyHeightToFirstAscent: false,
-                applyHeightToLastDescent: false,
+    return RepaintBoundary(
+      key: ValueKey('content_${widget.noteId}'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_textParts.isNotEmpty)
+            RepaintBoundary(
+              child: RichText(
+                text: TextSpan(children: _buildSpans()),
+                textHeightBehavior: const TextHeightBehavior(
+                  applyHeightToFirstAscent: false,
+                  applyHeightToLastDescent: false,
+                ),
               ),
             ),
-          ),
-        if (_mediaUrls.isNotEmpty)
-          RepaintBoundary(
-            child: Padding(
+          if (_mediaUrls.isNotEmpty)
+            RepaintBoundary(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: MediaPreviewWidget(
+                  key: ValueKey('media_${widget.noteId}_${_mediaUrls.length}'),
+                  mediaUrls: _mediaUrls,
+                  authorProfileImageUrl: widget.authorProfileImageUrl,
+                ),
+              ),
+            ),
+          if (_linkUrls.isNotEmpty && _mediaUrls.isEmpty)
+            Padding(
               padding: const EdgeInsets.only(top: 8),
-              child: MediaPreviewWidget(
-                key: ValueKey('media_${widget.noteId}_${_mediaUrls.length}'),
-                mediaUrls: _mediaUrls,
-                authorProfileImageUrl: widget.authorProfileImageUrl,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: _linkUrls.length > 1
+                    ? _linkUrls
+                        .map((url) => Padding(
+                              padding: const EdgeInsets.only(bottom: 8.0),
+                              child: MiniLinkPreviewWidget(url: url),
+                            ))
+                        .toList()
+                    : _linkUrls.map((url) => LinkPreviewWidget(url: url)).toList(),
               ),
             ),
-          ),
-        if (_linkUrls.isNotEmpty && _mediaUrls.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Column(
+          if (_quoteIds.isNotEmpty)
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: _linkUrls.length > 1
-                  ? _linkUrls
-                      .map((url) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8.0),
-                            child: MiniLinkPreviewWidget(url: url),
-                          ))
-                      .toList()
-                  : _linkUrls.map((url) => LinkPreviewWidget(url: url)).toList(),
+              children: _quoteIds
+                  .map((quoteId) => Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: QuoteWidget(bech32: quoteId),
+                      ))
+                  .toList(),
             ),
-          ),
-        if (_quoteIds.isNotEmpty)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: _quoteIds
-                .map((quoteId) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: QuoteWidget(bech32: quoteId),
-                    ))
-                .toList(),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }

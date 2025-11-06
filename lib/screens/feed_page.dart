@@ -42,6 +42,7 @@ class FeedPageState extends State<FeedPage> {
   Timer? _profileUpdateThrottleTimer;
   bool _profileUpdatePending = false;
   late UserRepository _userRepository;
+  int _lastProfileCount = 0;
 
   @override
   void initState() {
@@ -75,7 +76,7 @@ class FeedPageState extends State<FeedPage> {
         _pendingUser = updatedUser;
         _userUpdatePending = true;
         _userUpdateThrottleTimer?.cancel();
-        _userUpdateThrottleTimer = Timer(const Duration(seconds: 3), () {
+        _userUpdateThrottleTimer = Timer(const Duration(milliseconds: 2000), () {
           if (mounted && _userUpdatePending && _pendingUser != null) {
             _userUpdatePending = false;
             setState(() {
@@ -175,7 +176,9 @@ class FeedPageState extends State<FeedPage> {
           }
           await prefs.setBool('feed_page_opened', true);
         }
-      } catch (e) {}
+      } catch (e) {
+        debugPrint('[FeedPage] Error checking first open: $e');
+      }
     });
   }
 
@@ -220,6 +223,7 @@ class FeedPageState extends State<FeedPage> {
     _profilesStreamSubscription = viewModel.profilesStream.listen(
       (profiles) {
         if (!mounted || profiles.isEmpty) return;
+        if (profiles.length == _lastProfileCount) return;
 
         bool hasChanges = false;
         for (final entry in profiles.entries) {
@@ -240,9 +244,10 @@ class FeedPageState extends State<FeedPage> {
 
         if (!hasChanges) return;
 
+        _lastProfileCount = _profiles.length;
         _profileUpdatePending = true;
         _profileUpdateThrottleTimer?.cancel();
-        _profileUpdateThrottleTimer = Timer(const Duration(seconds: 3), () {
+        _profileUpdateThrottleTimer = Timer(const Duration(milliseconds: 2000), () {
           if (mounted && _profileUpdatePending) {
             _profileUpdatePending = false;
             setState(() {});
@@ -459,8 +464,10 @@ class FeedPageState extends State<FeedPage> {
                     ),
                   );
                 },
-                loading: () => const Center(
-                  child: CircularProgressIndicator(),
+                loading: () => Center(
+                  child: CircularProgressIndicator(
+                    color: colors.accent,
+                  ),
                 ),
                 error: (message) => Center(
                   child: Column(
@@ -477,6 +484,10 @@ class FeedPageState extends State<FeedPage> {
                           final viewModel = context.read<FeedViewModel>();
                           viewModel.refreshFeed();
                         },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colors.buttonPrimary,
+                          foregroundColor: colors.buttonText,
+                        ),
                         child: const Text('Retry'),
                       ),
                     ],

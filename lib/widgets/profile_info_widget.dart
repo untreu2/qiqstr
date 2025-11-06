@@ -125,23 +125,8 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _initBasicData();
-      }
-    });
-
-    Future.delayed(const Duration(milliseconds: 50), () {
-      if (mounted) {
         _loadUserProfileAsync();
-      }
-    });
-
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (mounted) {
         _initFollowStatusAsync();
-      }
-    });
-
-    Future.delayed(const Duration(milliseconds: 150), () {
-      if (mounted) {
         _loadFollowerCounts();
       }
     });

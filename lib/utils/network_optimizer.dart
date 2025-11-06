@@ -58,10 +58,6 @@ class NetworkBatchProcessor {
     for (final socket in sockets) {
       for (final message in messages) {
         futures.add(_sendSafeOptimized(socket, message));
-
-        if (futures.length % 10 == 0) {
-          await Future.delayed(Duration.zero);
-        }
       }
     }
 

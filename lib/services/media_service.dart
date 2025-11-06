@@ -94,8 +94,6 @@ class MediaService {
       }
 
       _isInitialized = true;
-
-      _schedulePeriodicCleanup();
     } catch (e) {
       _isInitialized = true;
     }
@@ -134,19 +132,21 @@ class MediaService {
 
       if (newUrls.isEmpty) return;
 
-      newUrls.sort((a, b) {
-        final aInfo = _mediaCache[a];
-        final bInfo = _mediaCache[b];
+      if (newUrls.length > 1) {
+        newUrls.sort((a, b) {
+          final aInfo = _mediaCache[a];
+          final bInfo = _mediaCache[b];
 
-        if (aInfo == null && bInfo != null) return -1;
-        if (aInfo != null && bInfo == null) return 1;
+          if (aInfo == null && bInfo != null) return -1;
+          if (aInfo != null && bInfo == null) return 1;
 
-        if (aInfo != null && bInfo != null) {
-          return bInfo.accessCount.compareTo(aInfo.accessCount);
-        }
+          if (aInfo != null && bInfo != null) {
+            return bInfo.accessCount.compareTo(aInfo.accessCount);
+          }
 
-        return 0;
-      });
+          return 0;
+        });
+      }
 
       final batchSize = priority > 1 ? 8 : 4;
       for (int i = 0; i < newUrls.length; i += batchSize) {
@@ -246,6 +246,7 @@ class MediaService {
       );
     } finally {
       _currentlyLoading.remove(url);
+      _cleanupIfNeeded();
     }
   }
 
@@ -305,16 +306,15 @@ class MediaService {
       }
 
       await prefs.setString('media_cache_v2', jsonEncode(cacheMap));
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('[MediaService] Error saving media cache: $e');
+    }
   }
 
-  void _schedulePeriodicCleanup() {
-    Future.delayed(const Duration(hours: 2), () {
-      if (_isInitialized) {
-        _performIntelligentCleanup();
-        _schedulePeriodicCleanup();
-      }
-    });
+  void _cleanupIfNeeded() {
+    if (_mediaCache.length > 1000) {
+      _performIntelligentCleanup();
+    }
   }
 
   bool _isValidMediaUrl(String url) {

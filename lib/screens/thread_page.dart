@@ -92,7 +92,9 @@ class _ThreadPageState extends State<ThreadPage> {
           });
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('[ThreadPage] Error loading current user: $e');
+    }
   }
 
   @override

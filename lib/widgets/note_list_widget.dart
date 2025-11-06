@@ -50,7 +50,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   final Set<String> _preloadedUserIds = {};
   StreamSubscription<List<NoteModel>>? _notesStreamSubscription;
   Timer? _updateTimer;
-  Timer? _periodicInteractionTimer;
   bool _isScrolling = false;
   DateTime _lastScrollTime = DateTime.now();
   bool _hasPendingUpdate = false;
@@ -73,8 +72,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
             _loadInteractionsForVisibleNotes();
           }
         });
-        
-        _startPeriodicInteractionCheck();
       } else {
         if (widget.notes.isNotEmpty) {
           _visibleNoteIds.addAll(
@@ -144,19 +141,10 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     });
   }
 
-  void _startPeriodicInteractionCheck() {
-    _periodicInteractionTimer?.cancel();
-    _periodicInteractionTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (!mounted || _isScrolling) return;
-      _loadInteractionsForVisibleNotes();
-    });
-  }
-
   @override
   void dispose() {
     _notesStreamSubscription?.cancel();
     _updateTimer?.cancel();
-    _periodicInteractionTimer?.cancel();
     widget.scrollController?.removeListener(_onScrollChanged);
     super.dispose();
   }
@@ -184,7 +172,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     if (_hasPendingUpdate) {
       _hasPendingUpdate = false;
       _updateTimer?.cancel();
-      _updateTimer = Timer(const Duration(milliseconds: 800), () {
+      _updateTimer = Timer(const Duration(milliseconds: 1000), () {
         if (mounted) setState(() {});
       });
     }
@@ -200,11 +188,11 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     }
 
     _updateTimer?.cancel();
-    _updateTimer = Timer(const Duration(milliseconds: 200), () {
+    _updateTimer = Timer(const Duration(milliseconds: 300), () {
       if (!mounted) return;
       
       final timeSinceScroll = DateTime.now().difference(_lastScrollTime);
-      if (timeSinceScroll.inMilliseconds >= 180) {
+      if (timeSinceScroll.inMilliseconds >= 280) {
         _isScrolling = false;
         _updateVisibleNotes();
         _loadInteractionsForVisibleNotes();
@@ -342,24 +330,26 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     return ChangeNotifierProvider(
       create: (_) => NoteVisibilityViewModel(),
       child: SliverList(
-        delegate: SliverChildBuilderDelegate(
-          (context, index) {
-            if (index == widget.notes.length) {
-              if (widget.canLoadMore && widget.onLoadMore != null) {
-                return _LoadMoreButton(onPressed: widget.onLoadMore!);
-              } else if (widget.isLoading) {
-                return const _LoadMoreIndicator();
-              }
-              return const SizedBox.shrink();
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          if (index == widget.notes.length) {
+            if (widget.canLoadMore && widget.onLoadMore != null) {
+              return _LoadMoreButton(onPressed: widget.onLoadMore!);
+            } else if (widget.isLoading) {
+              return const _LoadMoreIndicator();
             }
+            return const SizedBox.shrink();
+          }
 
-            if (index >= widget.notes.length) {
-              return const SizedBox.shrink();
-            }
+          if (index >= widget.notes.length) {
+            return const SizedBox.shrink();
+          }
 
-            final note = widget.notes[index];
+          final note = widget.notes[index];
 
-            return _NoteItemWidget(
+          return RepaintBoundary(
+            key: ValueKey('note_boundary_${note.id}'),
+            child: _NoteItemWidget(
               key: ValueKey('note_item_${note.id}'),
               note: note,
               currentUserNpub: widget.currentUserNpub ?? '',
@@ -367,13 +357,14 @@ class _NoteListWidgetState extends State<NoteListWidget> {
               profiles: widget.profiles,
               notesListProvider: widget.notesListProvider,
               showSeparator: index < widget.notes.length - 1,
-            );
-          },
-          childCount: widget.notes.length + (widget.canLoadMore || widget.isLoading ? 1 : 0),
-          addAutomaticKeepAlives: true,
-          addRepaintBoundaries: true,
-          addSemanticIndexes: false,
-        ),
+            ),
+          );
+        },
+        childCount: widget.notes.length + (widget.canLoadMore || widget.isLoading ? 1 : 0),
+        addAutomaticKeepAlives: true,
+        addRepaintBoundaries: false,
+        addSemanticIndexes: false,
+      ),
       ),
     );
   }

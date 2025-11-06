@@ -5,7 +5,6 @@ import 'dart:math';
 import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:qiqstr/constants/relays.dart';
-import 'time_service.dart';
 
 class RelayConnectionStats {
   int connectAttempts = 0;
@@ -40,16 +39,9 @@ class WebSocketManager {
   bool _isInitialized = false;
 
   final Queue<String> _messageQueue = Queue();
-  Timer? _messageProcessingTimer;
   bool _isProcessingMessages = false;
 
-  Timer? _healthCheckTimer;
-  final Duration healthCheckInterval = const Duration(minutes: 1);
-
   WebSocketManager._internal() {
-    _startMessageProcessing();
-    _startHealthMonitoring();
-    
     _ensureInitialized();
   }
 
@@ -98,60 +90,6 @@ class WebSocketManager {
   void _initializeStats() {
     for (final url in relayUrls) {
       _connectionStats[url] = RelayConnectionStats();
-    }
-  }
-
-  void _startMessageProcessing() {
-    _messageProcessingTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
-      Future.microtask(() => _processMessageQueue());
-    });
-  }
-
-  void _startHealthMonitoring() {
-    _healthCheckTimer = Timer.periodic(const Duration(minutes: 2), (_) {
-      Future.microtask(() => _performHealthCheck());
-    });
-  }
-
-  void _performHealthCheck() {
-    Future.microtask(() async {
-      final now = timeService.now;
-
-      final entries = _connectionStats.entries.toList();
-      const batchSize = 3;
-
-      for (int i = 0; i < entries.length; i += batchSize) {
-        final end = (i + batchSize > entries.length) ? entries.length : i + batchSize;
-        final batch = entries.sublist(i, end);
-
-        for (final entry in batch) {
-          final url = entry.key;
-          final stats = entry.value;
-
-          if (!stats.isHealthy && !_webSockets.containsKey(url)) {
-            unawaited(_attemptReconnection(url));
-          }
-
-          if (_webSockets.containsKey(url) && stats.connectionStartTime != null) {
-            final uptime = now.difference(stats.connectionStartTime!);
-            stats.totalUptime = stats.totalUptime + uptime;
-            stats.connectionStartTime = now;
-          }
-        }
-
-        await Future.delayed(Duration.zero);
-      }
-    });
-  }
-
-  Future<void> _attemptReconnection(String url) async {
-    final stats = _connectionStats[url]!;
-    if (stats.connectAttempts >= maxReconnectAttempts) return;
-
-    try {
-      await _connectSingleRelay(url, null, null);
-    } catch (e) {
-      
     }
   }
 
@@ -331,7 +269,7 @@ class WebSocketManager {
   Future<void> broadcast(String message) async {
     _messageQueue.add(message);
 
-    if (_messageQueue.length >= 5) {
+    if (_messageQueue.length >= 5 || _messageQueue.length == 1) {
       _processMessageQueue();
     }
   }
@@ -374,10 +312,6 @@ class WebSocketManager {
 
         for (int i = 0; i < messagesToSend.length; i++) {
           await _broadcastMessage(messagesToSend[i]);
-
-          if (i % 2 == 0) {
-            await Future.delayed(Duration.zero);
-          }
         }
       } finally {
         _isProcessingMessages = false;
@@ -538,9 +472,6 @@ class WebSocketManager {
     }
     _reconnectTimers.clear();
 
-    _messageProcessingTimer?.cancel();
-    _healthCheckTimer?.cancel();
-
     for (final ws in _webSockets.values) {
       try {
         if (ws.readyState == WebSocket.open || ws.readyState == WebSocket.connecting) {
@@ -621,8 +552,6 @@ class WebSocketManager {
             }
           });
           await Future.wait(closeFutures, eagerError: false);
-
-          await Future.delayed(Duration.zero);
 
           
           _webSockets.clear();
@@ -768,8 +697,6 @@ class PrimalCacheClient {
             expiredKeys.add(entry.key);
           }
         }
-
-        await Future.delayed(Duration.zero);
       }
 
       if (_profileCache.length - expiredKeys.length > _maxCacheSize * 0.8) {
@@ -789,8 +716,6 @@ class PrimalCacheClient {
           _profileCache.remove(key);
           _cacheTimestamps.remove(key);
         }
-
-        await Future.delayed(Duration.zero);
       }
     });
   }

@@ -330,12 +330,18 @@ class PriorityQueue<T> {
 
   PriorityQueue(this._comparator);
 
+  bool _needsSort = false;
+
   void add(T item) {
     _queue.add(item);
-    _queue.sort(_comparator);
+    _needsSort = true;
   }
 
   T removeFirst() {
+    if (_needsSort) {
+      _queue.sort(_comparator);
+      _needsSort = false;
+    }
     return _queue.removeAt(0);
   }
 
@@ -344,5 +350,6 @@ class PriorityQueue<T> {
 
   void clear() {
     _queue.clear();
+    _needsSort = false;
   }
 }

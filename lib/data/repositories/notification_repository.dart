@@ -91,16 +91,32 @@ class NotificationRepository {
     final existingIds = _notifications.map((n) => n.id).toSet();
     final newNotifications = filteredNotifications.where((notification) => !existingIds.contains(notification.id)).toList();
 
-    _notifications.addAll(newNotifications);
+    for (final notification in newNotifications) {
+      _insertSortedNotification(notification);
+    }
     _unreadCount += newNotifications.length;
 
     return newNotifications;
   }
 
+  void _insertSortedNotification(NotificationModel notification) {
+    int left = 0;
+    int right = _notifications.length;
+
+    while (left < right) {
+      final mid = (left + right) ~/ 2;
+      if (_notifications[mid].timestamp.isAfter(notification.timestamp)) {
+        left = mid + 1;
+      } else {
+        right = mid;
+      }
+    }
+
+    _notifications.insert(left, notification);
+  }
+
   void _sortAndEmitNotifications(int addedCount) {
     debugPrint('[NotificationRepository] Added $addedCount new notifications, total: ${_notifications.length}');
-
-    _notifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
     _notificationsController.add(List.unmodifiable(_notifications));
     _unreadCountController.add(_unreadCount);

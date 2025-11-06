@@ -311,6 +311,7 @@ class NostrDataService {
 
     _profileCache.remove(pubkey);
     _profileCache[pubkey] = CachedProfile(dataToCache, timestamp);
+    _cleanupCacheIfNeeded();
 
     final user = UserModel(
       pubkeyHex: pubkey,
@@ -1106,21 +1107,20 @@ class NostrDataService {
   }
 
   void _startCacheCleanup() {
-    Timer.periodic(const Duration(hours: 6), (timer) {
-      if (_isClosed) {
-        timer.cancel();
-        return;
-      }
+  }
 
+  void _cleanupCacheIfNeeded() {
+    if (_profileCache.length > 500) {
       final now = timeService.now;
       final cutoffTime = now.subtract(_profileCacheTTL);
       _profileCache.removeWhere((key, cached) => cached.fetchedAt.isBefore(cutoffTime));
+    }
 
-      if (_lastInteractionFetch.length > 1000) {
-        final interactionCutoff = now.subtract(const Duration(hours: 1));
-        _lastInteractionFetch.removeWhere((key, timestamp) => timestamp.isBefore(interactionCutoff));
-      }
-    });
+    if (_lastInteractionFetch.length > 1000) {
+      final now = timeService.now;
+      final interactionCutoff = now.subtract(const Duration(hours: 1));
+      _lastInteractionFetch.removeWhere((key, timestamp) => timestamp.isBefore(interactionCutoff));
+    }
   }
 
   List<UserModel> _getUsersList() {
@@ -1866,8 +1866,6 @@ class NostrDataService {
 
       await _fetchUserProfile(npub);
 
-      await Future.delayed(const Duration(milliseconds: 500));
-
       final updatedProfile = _profileCache[pubkeyHex];
       if (updatedProfile != null) {
         final user = UserModel.fromCachedProfile(pubkeyHex, updatedProfile.data);
@@ -2335,6 +2333,7 @@ class NostrDataService {
         profileContent.map((key, value) => MapEntry(key, value.toString())),
         updatedAt,
       );
+      _cleanupCacheIfNeeded();
 
       _usersController.add(_getUsersList());
 
@@ -2396,8 +2395,6 @@ class NostrDataService {
 
       await _relayManager.broadcast(jsonEncode(request));
       _notificationSubscriptionActive = true;
-
-      await Future.delayed(const Duration(seconds: 3));
 
       final notifications = _notificationCache[_currentUserNpub] ?? [];
 

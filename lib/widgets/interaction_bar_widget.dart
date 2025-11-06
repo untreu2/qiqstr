@@ -143,7 +143,7 @@ class _InteractionBarState extends State<InteractionBar> {
       if (!hasRelevantUpdate) return;
 
       _debounceTimer?.cancel();
-      _debounceTimer = Timer(const Duration(milliseconds: 150), () {
+      _debounceTimer = Timer(const Duration(milliseconds: 500), () {
         if (mounted) _updateState();
       });
     });
@@ -376,14 +376,15 @@ class _InteractionBarState extends State<InteractionBar> {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<_InteractionState>(
-      valueListenable: _stateNotifier,
-      builder: (context, state, _) {
-        final colors = context.colors;
-        final height = widget.isBigSize ? 36.0 : 32.0;
+    return RepaintBoundary(
+      key: ValueKey('interaction_${widget.noteId}'),
+      child: ValueListenableBuilder<_InteractionState>(
+        valueListenable: _stateNotifier,
+        builder: (context, state, _) {
+          final colors = context.colors;
+          final height = widget.isBigSize ? 36.0 : 32.0;
 
-        return RepaintBoundary(
-          child: SizedBox(
+          return SizedBox(
             height: height,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -433,9 +434,9 @@ class _InteractionBarState extends State<InteractionBar> {
                 _buildPopupMenu(colors),
               ],
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 

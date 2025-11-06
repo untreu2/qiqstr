@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:isolate';
 import 'dart:collection';
+import 'package:flutter/foundation.dart';
 
 class IsolateMessageBatcher {
   static const int _maxBatchSize = 20;
@@ -230,7 +231,9 @@ class _PooledIsolate {
     try {
       receivePort.close();
       isolate.kill();
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('[IsolateOptimizer] Error disposing isolate: $e');
+    }
   }
 }
 

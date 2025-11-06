@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 
 import '../../core/base/base_view_model.dart';
 import '../../core/base/ui_state.dart';
@@ -242,7 +243,9 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
           },
         );
       }
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('[ThreadViewModel] Error loading user profiles: $e');
+    }
   }
 
   ThreadStructure _buildThreadStructure(NoteModel root, List<NoteModel> replies) {

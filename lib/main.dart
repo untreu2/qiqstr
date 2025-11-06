@@ -9,7 +9,6 @@ import 'colors.dart';
 import 'theme/theme_manager.dart' as theme;
 import 'screens/home_navigator.dart';
 import 'screens/login_page.dart';
-import 'services/time_service.dart';
 import 'services/logging_service.dart';
 import 'core/di/app_di.dart';
 import 'data/services/nostr_data_service.dart';
@@ -28,8 +27,6 @@ void main() {
     debugPrintRebuildDirtyWidgets = false;
 
     AppDI.get<NostrDataService>();
-
-    timeService.startPeriodicRefresh();
 
     loggingService.configure(
       level: LogLevel.error,
@@ -96,10 +93,6 @@ Future<Widget> _determineInitialHomeWithPreloading() async {
         
         await _loadInitialFeedWithSplash(npub);
 
-        
-        await Future.delayed(const Duration(seconds: 2));
-
-        
         FlutterNativeSplash.remove();
 
         return HomeNavigator(npub: npub);
@@ -196,7 +189,9 @@ Future<void> _initializeNotifications() async {
     if (result.isSuccess) {
       _startBackgroundNotificationListening();
     }
-  } catch (e) {}
+  } catch (e) {
+    debugPrint('[Main] Error initializing services: $e');
+  }
 }
 
 void _startBackgroundNotificationListening() {
@@ -205,15 +200,13 @@ void _startBackgroundNotificationListening() {
 
     notificationRepository.notificationsStream.listen(
       (notifications) {},
-      onError: (error) {},
+      onError: (error) {
+        debugPrint('[Main] Notification stream error: $error');
+      },
     );
-
-    Timer.periodic(const Duration(seconds: 60), (timer) async {
-      try {
-        await notificationRepository.refreshNotifications();
-      } catch (e) {}
-    });
-  } catch (e) {}
+  } catch (e) {
+    debugPrint('[Main] Error starting notification listener: $e');
+  }
 }
 
 class QiqstrApp extends ConsumerWidget {

@@ -428,6 +428,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   Timer? _realtimeUpdateThrottleTimer;
   bool _realtimeUpdatePending = false;
   List<NoteModel>? _pendingRealtimeNotes;
+  int _lastNoteCount = 0;
 
   void _subscribeToRealTimeUpdates() {
     if (isHashtagMode) {
@@ -437,6 +438,8 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     addSubscription(
       _noteRepository.realTimeNotesStream.listen((notes) {
         if (!isDisposed && _feedState.isLoaded) {
+          if (notes.length == _lastNoteCount) return;
+          
           final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
           
           if (currentNotes.isEmpty) {
@@ -483,6 +486,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
             final sortedNotes = _sortNotes(filteredNotes);
             _feedState = LoadedState(sortedNotes);
+            _lastNoteCount = sortedNotes.length;
             safeNotifyListeners();
             return;
           }
@@ -491,7 +495,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             _pendingRealtimeNotes = notes;
             _realtimeUpdatePending = true;
             _realtimeUpdateThrottleTimer?.cancel();
-            _realtimeUpdateThrottleTimer = Timer(const Duration(seconds: 1), () {
+            _realtimeUpdateThrottleTimer = Timer(const Duration(milliseconds: 2000), () {
               if (isDisposed || !_realtimeUpdatePending || _pendingRealtimeNotes == null) return;
               
               final notes = _pendingRealtimeNotes!;
@@ -525,6 +529,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
                 final allNotes = [...userNotes, ...currentNotes];
                 final sortedNotes = _sortNotes(allNotes);
                 _feedState = LoadedState(sortedNotes);
+                _lastNoteCount = sortedNotes.length;
                 _loadUserProfilesForNotes(userNotes);
               }
 
@@ -610,7 +615,9 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
       }
 
       _profilesController.add(Map.from(_profiles));
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('[FeedViewModel] Error loading user profiles: $e');
+    }
   }
 
   @override

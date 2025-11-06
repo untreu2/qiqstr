@@ -225,7 +225,6 @@ class NoteRepository {
 
       if (success) {
         debugPrint('[NoteRepository] Successfully requested note from relays: $noteId');
-        await Future.delayed(const Duration(seconds: 3));
         return true;
       } else {
         debugPrint('[NoteRepository] Failed to request note from relays: $noteId');
@@ -559,6 +558,22 @@ class NoteRepository {
 
   Stream<List<NoteModel>> get realTimeNotesStream => _nostrDataService.notesStream;
 
+  void _insertSorted(NoteModel note) {
+    int left = 0;
+    int right = _notes.length;
+
+    while (left < right) {
+      final mid = (left + right) ~/ 2;
+      if (_notes[mid].timestamp.isAfter(note.timestamp)) {
+        left = mid + 1;
+      } else {
+        right = mid;
+      }
+    }
+
+    _notes.insert(left, note);
+  }
+
   Future<Result<void>> startRealTimeFeed(List<String> authorNpubs) async {
     try {
       debugPrint(' [NoteRepository] Starting real-time feed for ${authorNpubs.length} authors');
@@ -575,25 +590,29 @@ class NoteRepository {
         if (newNotes.isEmpty) return;
 
         bool hasChanges = false;
+        final newNotesToAdd = <NoteModel>[];
         for (final note in newNotes) {
           if (!_notesMap.containsKey(note.id)) {
             _notesMap[note.id] = note;
-            _notes.add(note);
+            newNotesToAdd.add(note);
             hasChanges = true;
           }
         }
 
-        if (!hasChanges) return;
+      if (!hasChanges) return;
 
-        _notesUpdatePending = true;
-        _notesUpdateThrottleTimer?.cancel();
-        _notesUpdateThrottleTimer = Timer(const Duration(milliseconds: 150), () {
-          if (_notesUpdatePending) {
-            _notes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-            _notesUpdatePending = false;
-            _notesController.add(List.unmodifiable(_notes));
-          }
-        });
+      for (final note in newNotesToAdd) {
+        _insertSorted(note);
+      }
+
+      _notesUpdatePending = true;
+      _notesUpdateThrottleTimer?.cancel();
+      _notesUpdateThrottleTimer = Timer(const Duration(milliseconds: 500), () {
+        if (_notesUpdatePending) {
+          _notesUpdatePending = false;
+          _notesController.add(List.unmodifiable(_notes));
+        }
+      });
       });
 
       return const Result.success(null);
@@ -645,7 +664,7 @@ class NoteRepository {
       } else {
         _notesUpdatePending = true;
         _notesUpdateThrottleTimer?.cancel();
-        _notesUpdateThrottleTimer = Timer(const Duration(seconds: 1), () {
+        _notesUpdateThrottleTimer = Timer(const Duration(milliseconds: 1500), () {
           if (_notesUpdatePending) {
             _notesUpdatePending = false;
             _notesController.add(List.unmodifiable(_notes));

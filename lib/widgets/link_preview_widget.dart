@@ -24,7 +24,9 @@ Future<LinkPreviewModel?> _fetchAndParseLink(String url) async {
 
       return LinkPreviewModel(title: parsedTitle, imageUrl: parsedImage);
     }
-  } catch (e) {}
+  } catch (e) {
+    debugPrint('[LinkPreview] Error fetching link preview: $e');
+  }
   return null;
 }
 
