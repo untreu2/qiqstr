@@ -43,7 +43,6 @@ class ViewModelsModule extends DIModule {
     AppDI.registerFactory<ThreadViewModel>(() => ThreadViewModel(
           noteRepository: AppDI.get<NoteRepository>(),
           userRepository: AppDI.get<UserRepository>(),
-          nostrDataService: AppDI.get<NostrDataService>(),
         ));
 
     AppDI.registerFactory<ComposeViewModel>(() => ComposeViewModel(

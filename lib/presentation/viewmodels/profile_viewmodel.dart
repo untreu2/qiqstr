@@ -7,6 +7,7 @@ import '../../core/base/app_error.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/note_repository.dart';
+import '../../data/repositories/note_repository_compat.dart';
 import '../../models/user_model.dart';
 import '../../models/note_model.dart';
 

@@ -5,6 +5,7 @@ import '../../core/base/result.dart';
 import '../../models/note_model.dart';
 import '../../models/reaction_model.dart';
 import '../../models/zap_model.dart';
+import '../filters/feed_filters.dart';
 import '../services/network_service.dart';
 import '../services/nostr_data_service.dart';
 
@@ -12,7 +13,17 @@ class NoteRepository {
   final NostrDataService _nostrDataService;
   Timer? _notesUpdateThrottleTimer;
   bool _notesUpdatePending = false;
-  final Map<String, NoteModel> _notesMap = {};
+  final Map<String, NoteModel> _notesCache = {};
+  final List<NoteModel> _allNotes = [];
+  
+  NostrDataService get nostrDataService => _nostrDataService;
+  
+  final Map<String, List<ReactionModel>> _reactions = {};
+  final Map<String, List<ZapModel>> _zaps = {};
+
+  final StreamController<List<NoteModel>> _notesController = StreamController<List<NoteModel>>.broadcast();
+  final StreamController<Map<String, List<ReactionModel>>> _reactionsController =
+      StreamController<Map<String, List<ReactionModel>>>.broadcast();
 
   NoteRepository({
     required NetworkService networkService,
@@ -21,153 +32,101 @@ class NoteRepository {
     _setupNostrDataServiceForwarding();
   }
 
-  final List<NoteModel> _notes = [];
-  final Map<String, List<ReactionModel>> _reactions = {};
-  final Map<String, List<ZapModel>> _zaps = {};
+  Future<Result<List<NoteModel>>> getFilteredNotes(BaseFeedFilter filter) async {
+    try {
+      debugPrint('[NoteRepository] Applying filter: ${filter.filterKey}');
+      
+      final allCachedNotes = _getAllCachedNotes();
+      final filtered = filter.apply(allCachedNotes);
+      
+      debugPrint('[NoteRepository] Filter returned ${filtered.length} notes');
+      
+      return Result.success(filtered);
+    } catch (e) {
+      debugPrint('[NoteRepository] Exception in getFilteredNotes: $e');
+      return Result.error('Failed to apply filter: ${e.toString()}');
+    }
+  }
 
-  final StreamController<List<NoteModel>> _notesController = StreamController<List<NoteModel>>.broadcast();
-  final StreamController<Map<String, List<ReactionModel>>> _reactionsController =
-      StreamController<Map<String, List<ReactionModel>>>.broadcast();
-
-  Future<Result<List<NoteModel>>> getFeedNotes({
-    required List<String> authorNpubs,
+  Future<Result<void>> fetchNotesFromRelays({
+    List<String>? authorNpubs,
+    String? hashtag,
     int limit = 50,
     DateTime? until,
     DateTime? since,
+    bool isProfileMode = false,
   }) async {
     try {
-      debugPrint('[NoteRepository] getFeedNotes called with ${authorNpubs.length} authors: $authorNpubs');
-
+      if (authorNpubs != null && authorNpubs.isNotEmpty) {
+        debugPrint('[NoteRepository] Fetching notes for ${authorNpubs.length} authors (profile mode: $isProfileMode)');
+        
+        if (isProfileMode && authorNpubs.length == 1) {
+          final result = await _nostrDataService.fetchProfileNotes(
+            userNpub: authorNpubs.first,
+            limit: limit,
+            until: until,
+            since: since,
+          );
+          return result.isSuccess ? const Result.success(null) : Result.error(result.error!);
+        }
+        
+        final result = await _nostrDataService.fetchFeedNotes(
+          authorNpubs: authorNpubs,
+          limit: limit,
+          until: until,
+          since: since,
+        );
+        return result.isSuccess ? const Result.success(null) : Result.error(result.error!);
+      }
+      
+      if (hashtag != null && hashtag.isNotEmpty) {
+        debugPrint('[NoteRepository] Fetching notes for hashtag: $hashtag');
+        final result = await _nostrDataService.fetchHashtagNotes(
+          hashtag: hashtag,
+          limit: limit,
+          until: until,
+          since: since,
+        );
+        return result.isSuccess ? const Result.success(null) : Result.error(result.error!);
+      }
+      
+      debugPrint('[NoteRepository] Fetching global notes');
       final result = await _nostrDataService.fetchFeedNotes(
-        authorNpubs: authorNpubs,
+        authorNpubs: [],
         limit: limit,
         until: until,
         since: since,
       );
-
-      result.fold(
-        (notes) {
-          debugPrint('[NoteRepository] NostrDataService returned ${notes.length} notes');
-
-          debugPrint('[NoteRepository] Loaded ${notes.length} feed notes without automatic interaction fetch');
-        },
-        (error) => debugPrint('[NoteRepository] NostrDataService error: $error'),
-      );
-
-      return result;
+      return result.isSuccess ? const Result.success(null) : Result.error(result.error!);
     } catch (e) {
-      debugPrint('[NoteRepository] Exception in getFeedNotes: $e');
-      return Result.error('Failed to get feed notes: ${e.toString()}');
+      debugPrint('[NoteRepository] Exception in fetchNotesFromRelays: $e');
+      return Result.error('Failed to fetch notes: ${e.toString()}');
     }
   }
 
-  Future<Result<List<NoteModel>>> getFeedNotesFromFollowList({
-    required String currentUserNpub,
-    int limit = 50,
-    DateTime? until,
-    DateTime? since,
-  }) async {
-    try {
-      debugPrint('[NoteRepository] getFeedNotesFromFollowList for user: $currentUserNpub');
-
-      final result = await _nostrDataService.fetchFeedNotes(
-        authorNpubs: [currentUserNpub],
-        limit: limit,
-        until: until,
-        since: since,
-      );
-
-      return result.fold(
-        (notes) {
-          debugPrint('[NoteRepository] Got ${notes.length} notes from follow list');
-
-          final filteredNotes = _filterNotesByFollowList(notes, currentUserNpub);
-          debugPrint('[NoteRepository] Filtered to ${filteredNotes.length} notes from followed authors');
-
-          return Result.success(filteredNotes);
-        },
-        (error) => Result.error(error),
-      );
-    } catch (e) {
-      debugPrint(' [NoteRepository] Exception in getFeedNotesFromFollowList: $e');
-      return Result.error('Failed to get feed notes from follow list: ${e.toString()}');
+  List<NoteModel> _getAllCachedNotes() {
+    final allNotes = <NoteModel>[];
+    allNotes.addAll(_allNotes);
+    
+    final serviceNotes = _nostrDataService.cachedNotes;
+    final existingIds = _notesCache.keys.toSet();
+    
+    for (final note in serviceNotes) {
+      if (!existingIds.contains(note.id)) {
+        allNotes.add(note);
+        _notesCache[note.id] = note;
+        _allNotes.add(note);
+      }
     }
-  }
-
-  List<NoteModel> _filterNotesByFollowList(List<NoteModel> notes, String currentUserNpub) {
-    debugPrint('[NoteRepository] Feed filtering delegated to NostrDataService, returning ${notes.length} notes');
-    return notes;
-  }
-
-  Future<Result<List<NoteModel>>> getProfileNotes({
-    required String authorNpub,
-    int limit = 50,
-    DateTime? until,
-    DateTime? since,
-  }) async {
-    try {
-      debugPrint('[NoteRepository] PROFILE MODE: Getting notes for $authorNpub (bypassing feed filters)');
-
-      final result = await _nostrDataService.fetchProfileNotes(
-        userNpub: authorNpub,
-        limit: limit,
-        until: until,
-        since: since,
-      );
-
-      result.fold(
-        (notes) {
-          debugPrint('[NoteRepository] PROFILE MODE: Loaded ${notes.length} profile notes');
-          debugPrint(
-              '[NoteRepository] PROFILE MODE: Notes include - Posts: ${notes.where((n) => !n.isReply && !n.isRepost).length}, Replies: ${notes.where((n) => n.isReply && !n.isRepost).length}, Reposts: ${notes.where((n) => n.isRepost).length}');
-        },
-        (error) => debugPrint('[NoteRepository] PROFILE MODE: Profile notes error: $error'),
-      );
-
-      return result;
-    } catch (e) {
-      debugPrint('[NoteRepository] PROFILE MODE: Exception getting profile notes: $e');
-      return Result.error('Failed to get profile notes: ${e.toString()}');
-    }
-  }
-
-  Future<Result<List<NoteModel>>> getHashtagNotes({
-    required String hashtag,
-    int limit = 20,
-    DateTime? until,
-    DateTime? since,
-  }) async {
-    try {
-      debugPrint('[NoteRepository] HASHTAG MODE: Getting notes for #$hashtag');
-
-      final result = await _nostrDataService.fetchHashtagNotes(
-        hashtag: hashtag,
-        limit: limit,
-        until: until,
-        since: since,
-      );
-
-      result.fold(
-        (notes) {
-          debugPrint('[NoteRepository] HASHTAG MODE: Loaded ${notes.length} notes');
-        },
-        (error) => debugPrint('[NoteRepository] HASHTAG MODE: Error: $error'),
-      );
-
-      return result;
-    } catch (e) {
-      debugPrint('[NoteRepository] HASHTAG MODE: Exception: $e');
-      return Result.error('Failed to get hashtag notes: ${e.toString()}');
-    }
+    
+    return allNotes;
   }
 
   Future<Result<NoteModel?>> getNoteById(String noteId) async {
     try {
       debugPrint('[NoteRepository] Looking for note ID: $noteId');
 
-      _nostrDataService.setContext('thread');
-
-      final localNote = _notesMap[noteId];
+      final localNote = _notesCache[noteId];
       if (localNote != null) {
         debugPrint('[NoteRepository] Found note in local cache: ${localNote.id}');
         return Result.success(localNote);
@@ -183,9 +142,9 @@ class NoteRepository {
       }
       if (cachedNote != null) {
         debugPrint('[NoteRepository] Found note in NostrDataService cache: ${cachedNote.id}');
-        if (!_notesMap.containsKey(cachedNote.id)) {
-          _notesMap[cachedNote.id] = cachedNote;
-          _notes.add(cachedNote);
+        if (!_notesCache.containsKey(cachedNote.id)) {
+          _notesCache[cachedNote.id] = cachedNote;
+          _allNotes.add(cachedNote);
         }
         return Result.success(cachedNote);
       }
@@ -203,8 +162,8 @@ class NoteRepository {
         }
         if (fetchedNote != null) {
           debugPrint('[NoteRepository] Successfully fetched note: ${fetchedNote.id}');
-          _notesMap[fetchedNote.id] = fetchedNote;
-          _notes.add(fetchedNote);
+          _notesCache[fetchedNote.id] = fetchedNote;
+          _allNotes.add(fetchedNote);
           return Result.success(fetchedNote);
         }
       }
@@ -240,28 +199,7 @@ class NoteRepository {
     try {
       debugPrint('[NoteRepository] Getting thread replies for root: $rootNoteId');
 
-      _nostrDataService.setContext('thread');
-
-      final allNotes = <NoteModel>[];
-
-      allNotes.addAll(_notes);
-      debugPrint(' [NoteRepository] Local cache has ${_notes.length} notes');
-
-      final cachedNotes = _nostrDataService.cachedNotes;
-      debugPrint(' [NoteRepository] NostrDataService cache has ${cachedNotes.length} notes');
-
-      final allNotesSet = <String>{};
-      for (final note in _notes) {
-        allNotesSet.add(note.id);
-      }
-      for (final note in cachedNotes) {
-        if (!allNotesSet.contains(note.id)) {
-          allNotesSet.add(note.id);
-          allNotes.add(note);
-          _notesMap[note.id] = note;
-          _notes.add(note);
-        }
-      }
+      final allNotes = _getAllCachedNotes();
 
       debugPrint('[NoteRepository] Combined cache has ${allNotes.length} notes total');
 
@@ -271,19 +209,10 @@ class NoteRepository {
         final hasCorrectParent = note.parentId == rootNoteId;
         final isThreadMember = hasCorrectRoot || hasCorrectParent;
 
-        debugPrint(
-            '[NoteRepository] Note ${note.id}: isReply=$isReply, rootId=${note.rootId}, parentId=${note.parentId}, isThreadMember=$isThreadMember');
-
         return isReply && isThreadMember;
       }).toList();
 
-      debugPrint('[NoteRepository] Found ${threadReplies.length} thread replies in combined cache');
-
-      for (final reply in threadReplies) {
-        debugPrint('Reply ${reply.id}: parentId=${reply.parentId}, rootId=${reply.rootId}, author=${reply.author}');
-      }
-
-      debugPrint('[NoteRepository] Found ${threadReplies.length} thread replies without automatic interaction fetch');
+      debugPrint('[NoteRepository] Found ${threadReplies.length} thread replies');
 
       threadReplies.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
@@ -297,7 +226,7 @@ class NoteRepository {
   Future<Result<List<NoteModel>>> getDirectReplies(String noteId) async {
     try {
       final directReplies = <NoteModel>[];
-      for (final note in _notes) {
+      for (final note in _allNotes) {
         if (note.isReply && note.parentId == noteId) {
           directReplies.add(note);
         }
@@ -313,14 +242,14 @@ class NoteRepository {
 
   Future<Result<void>> addNote(NoteModel note) async {
     try {
-      final existingNote = _notesMap[note.id];
+      final existingNote = _notesCache[note.id];
       if (existingNote != null) {
         return const Result.success(null);
       }
 
-      _notesMap[note.id] = note;
-      _notes.add(note);
-      _notesController.add(_notes);
+      _notesCache[note.id] = note;
+      _allNotes.add(note);
+      _notesController.add(_allNotes);
 
       return const Result.success(null);
     } catch (e) {
@@ -330,10 +259,10 @@ class NoteRepository {
 
   Future<Result<void>> updateNote(NoteModel updatedNote) async {
     try {
-      final index = _notes.indexWhere((n) => n.id == updatedNote.id);
+      final index = _allNotes.indexWhere((n) => n.id == updatedNote.id);
       if (index != -1) {
-        _notes[index] = updatedNote;
-        _notesController.add(_notes);
+        _allNotes[index] = updatedNote;
+        _notesController.add(_allNotes);
       }
 
       return const Result.success(null);
@@ -344,8 +273,8 @@ class NoteRepository {
 
   Future<Result<void>> removeNote(String noteId) async {
     try {
-      _notes.removeWhere((n) => n.id == noteId);
-      _notesController.add(_notes);
+      _allNotes.removeWhere((n) => n.id == noteId);
+      _notesController.add(_allNotes);
 
       return const Result.success(null);
     } catch (e) {
@@ -377,7 +306,7 @@ class NoteRepository {
       if (existingReaction == null) {
         _reactions[noteId]!.add(reaction);
 
-        final note = _notesMap[noteId];
+        final note = _notesCache[noteId];
         if (note != null) {
           note.reactionCount = _reactions[noteId]!.length;
         }
@@ -393,11 +322,11 @@ class NoteRepository {
 
   Future<Result<void>> clearCache() async {
     try {
-      _notes.clear();
+      _allNotes.clear();
       _reactions.clear();
       _zaps.clear();
 
-      _notesController.add(_notes);
+      _notesController.add(_allNotes);
       _reactionsController.add(_reactions);
 
       return const Result.success(null);
@@ -410,14 +339,14 @@ class NoteRepository {
 
   Stream<Map<String, List<ReactionModel>>> get reactionsStream => _reactionsController.stream;
 
-  List<NoteModel> get currentNotes => List.unmodifiable(_notes);
+  List<NoteModel> get currentNotes => List.unmodifiable(_allNotes);
 
   Map<String, List<ReactionModel>> get currentReactions => Map.unmodifiable(_reactions);
 
   Map<String, List<NoteModel>> buildThreadHierarchy(String rootNoteId) {
     final Map<String, List<NoteModel>> hierarchy = {};
     final threadReplies = <NoteModel>[];
-    for (final note in _notes) {
+    for (final note in _allNotes) {
       if (note.isReply && (note.rootId == rootNoteId || note.parentId == rootNoteId)) {
         threadReplies.add(note);
       }
@@ -446,7 +375,7 @@ class NoteRepository {
   }
 
   void updateNoteInteractionCounts(String noteId) {
-    final note = _notes.where((n) => n.id == noteId).firstOrNull;
+    final note = _allNotes.where((n) => n.id == noteId).firstOrNull;
     if (note != null) {
       final stats = getNoteStats(noteId);
       note.reactionCount = stats.reactionCount;
@@ -469,7 +398,7 @@ class NoteRepository {
 
   Future<Result<void>> repostNote(String noteId) async {
     try {
-      final note = _notes.where((n) => n.id == noteId).firstOrNull;
+      final note = _allNotes.where((n) => n.id == noteId).firstOrNull;
       if (note == null) {
         return const Result.error('Note not found');
       }
@@ -544,9 +473,9 @@ class NoteRepository {
       final result = await _nostrDataService.deleteNote(noteId: noteId);
       result.fold(
         (_) {
-          _notes.removeWhere((n) => n.id == noteId);
-          _notesMap.remove(noteId);
-          _notesController.add(List.unmodifiable(_notes));
+          _allNotes.removeWhere((n) => n.id == noteId);
+          _notesCache.remove(noteId);
+          _notesController.add(List.unmodifiable(_allNotes));
         },
         (_) {},
       );
@@ -560,31 +489,31 @@ class NoteRepository {
 
   void _insertSorted(NoteModel note) {
     int left = 0;
-    int right = _notes.length;
+    int right = _allNotes.length;
 
     while (left < right) {
       final mid = (left + right) ~/ 2;
-      if (_notes[mid].timestamp.isAfter(note.timestamp)) {
+      if (_allNotes[mid].timestamp.isAfter(note.timestamp)) {
         left = mid + 1;
       } else {
         right = mid;
       }
     }
 
-    _notes.insert(left, note);
+    _allNotes.insert(left, note);
   }
 
   Future<Result<void>> startRealTimeFeed(List<String> authorNpubs) async {
     try {
-      debugPrint(' [NoteRepository] Starting real-time feed for ${authorNpubs.length} authors');
+      debugPrint('[NoteRepository] Starting real-time feed for ${authorNpubs.length} authors');
 
-      final feedResult = await getFeedNotes(authorNpubs: authorNpubs);
-      if (feedResult.isError) {
-        debugPrint(' [NoteRepository] Initial feed fetch failed: ${feedResult.error}');
-        return Result.error(feedResult.error!);
+      final fetchResult = await fetchNotesFromRelays(authorNpubs: authorNpubs);
+      if (fetchResult.isError) {
+        debugPrint('[NoteRepository] Initial feed fetch failed: ${fetchResult.error}');
+        return Result.error(fetchResult.error!);
       }
 
-      debugPrint(' [NoteRepository] Setting up stream subscription...');
+      debugPrint('[NoteRepository] Setting up stream subscription...');
 
       _nostrDataService.notesStream.listen((newNotes) {
         if (newNotes.isEmpty) return;
@@ -592,8 +521,8 @@ class NoteRepository {
         bool hasChanges = false;
         final newNotesToAdd = <NoteModel>[];
         for (final note in newNotes) {
-          if (!_notesMap.containsKey(note.id)) {
-            _notesMap[note.id] = note;
+          if (!_notesCache.containsKey(note.id)) {
+            _notesCache[note.id] = note;
             newNotesToAdd.add(note);
             hasChanges = true;
           }
@@ -610,14 +539,14 @@ class NoteRepository {
       _notesUpdateThrottleTimer = Timer(const Duration(milliseconds: 500), () {
         if (_notesUpdatePending) {
           _notesUpdatePending = false;
-          _notesController.add(List.unmodifiable(_notes));
+          _notesController.add(List.unmodifiable(_allNotes));
         }
       });
       });
 
       return const Result.success(null);
     } catch (e) {
-      debugPrint(' [NoteRepository] Exception in startRealTimeFeed: $e');
+      debugPrint('[NoteRepository] Exception in startRealTimeFeed: $e');
       return Result.error('Failed to start real-time feed: $e');
     }
   }
@@ -625,34 +554,34 @@ class NoteRepository {
   void _setupNostrDataServiceForwarding() {
     _nostrDataService.notesStream.listen((updatedNotes) {
       final updatedNoteIds = updatedNotes.map((n) => n.id).toSet();
-      final currentNoteIds = _notes.map((n) => n.id).toSet();
+      final currentNoteIds = _allNotes.map((n) => n.id).toSet();
       
       final removedNoteIds = currentNoteIds.difference(updatedNoteIds);
       if (removedNoteIds.isNotEmpty) {
-        _notes.removeWhere((n) => removedNoteIds.contains(n.id));
+        _allNotes.removeWhere((n) => removedNoteIds.contains(n.id));
         for (final id in removedNoteIds) {
-          _notesMap.remove(id);
+          _notesCache.remove(id);
         }
       }
 
       bool hasChanges = removedNoteIds.isNotEmpty;
       for (final updatedNote in updatedNotes) {
-        final existingNote = _notesMap[updatedNote.id];
+        final existingNote = _notesCache[updatedNote.id];
         if (existingNote != null) {
           if (existingNote.reactionCount != updatedNote.reactionCount ||
               existingNote.repostCount != updatedNote.repostCount ||
               existingNote.replyCount != updatedNote.replyCount ||
               existingNote.zapAmount != updatedNote.zapAmount) {
-            _notesMap[updatedNote.id] = updatedNote;
-            final index = _notes.indexWhere((n) => n.id == updatedNote.id);
+            _notesCache[updatedNote.id] = updatedNote;
+            final index = _allNotes.indexWhere((n) => n.id == updatedNote.id);
             if (index != -1) {
-              _notes[index] = updatedNote;
+              _allNotes[index] = updatedNote;
             }
             hasChanges = true;
           }
         } else {
-          _notesMap[updatedNote.id] = updatedNote;
-          _notes.add(updatedNote);
+          _notesCache[updatedNote.id] = updatedNote;
+          _allNotes.add(updatedNote);
           hasChanges = true;
         }
       }
@@ -660,14 +589,14 @@ class NoteRepository {
       if (!hasChanges) return;
 
       if (removedNoteIds.isNotEmpty) {
-        _notesController.add(List.unmodifiable(_notes));
+        _notesController.add(List.unmodifiable(_allNotes));
       } else {
         _notesUpdatePending = true;
         _notesUpdateThrottleTimer?.cancel();
         _notesUpdateThrottleTimer = Timer(const Duration(milliseconds: 1500), () {
           if (_notesUpdatePending) {
             _notesUpdatePending = false;
-            _notesController.add(List.unmodifiable(_notes));
+            _notesController.add(List.unmodifiable(_allNotes));
           }
         });
       }
@@ -700,7 +629,7 @@ class NoteRepository {
 
   void _updateNoteReplyCount(String noteId) {
     try {
-      final note = _notesMap[noteId];
+      final note = _notesCache[noteId];
       if (note != null) {
         final cachedNotes = _nostrDataService.cachedNotes;
         int replyCount = 0;
@@ -713,7 +642,7 @@ class NoteRepository {
         if (note.replyCount != replyCount) {
           note.replyCount = replyCount;
 
-          _notesController.add(_notes);
+          _notesController.add(_allNotes);
         }
       }
     } catch (e) {
@@ -721,27 +650,27 @@ class NoteRepository {
     }
   }
 
-  bool hasUserReacted(String noteId, String userNpub) {
+  bool hasUserReacted(String noteId, String userHex) {
     try {
-      return _nostrDataService.hasUserReacted(noteId, userNpub);
+      return _nostrDataService.hasUserReacted(noteId, userHex);
     } catch (e) {
       debugPrint('[NoteRepository] Error checking user reaction: $e');
       return false;
     }
   }
 
-  bool hasUserReposted(String noteId, String userNpub) {
+  bool hasUserReposted(String noteId, String userHex) {
     try {
-      return _nostrDataService.hasUserReposted(noteId, userNpub);
+      return _nostrDataService.hasUserReposted(noteId, userHex);
     } catch (e) {
       debugPrint('[NoteRepository] Error checking user repost: $e');
       return false;
     }
   }
 
-  bool hasUserZapped(String noteId, String userNpub) {
+  bool hasUserZapped(String noteId, String userHex) {
     try {
-      return _nostrDataService.hasUserZapped(noteId, userNpub);
+      return _nostrDataService.hasUserZapped(noteId, userHex);
     } catch (e) {
       debugPrint('[NoteRepository] Error checking user zap: $e');
       return false;

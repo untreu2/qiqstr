@@ -79,52 +79,11 @@ class NostrDataService {
   AuthService get authService => _authService;
 
   
-  String _currentContext = 'feed'; 
-
-  void setContext(String context) {
-    _currentContext = context;
-    debugPrint('[NostrDataService] Context set to: $_currentContext');
-  }
 
   bool _shouldIncludeNoteInFeed(String authorHexPubkey, bool isRepost) {
-    
-    if (_currentContext != 'feed') {
-      debugPrint('[NostrDataService] $_currentContext mode: accepting all notes from $authorHexPubkey');
-      return true;
-    }
-
-    final currentUserHex = _authService.npubToHex(_currentUserNpub);
-    if (currentUserHex == authorHexPubkey) {
-      return true;
-    }
-
-    final cachedFollowing = _followCacheService.getSync(currentUserHex ?? _currentUserNpub);
-    if (cachedFollowing != null) {
-      final isFollowed = cachedFollowing.contains(authorHexPubkey);
-      debugPrint('[NostrDataService] FEED mode: Author $authorHexPubkey ${isFollowed ? 'IS' : 'NOT'} in follow list (cached)');
-      return isFollowed;
-    }
-
-    debugPrint('[NostrDataService] FEED mode: No valid follow cache - REJECTING note from: $authorHexPubkey');
-    _refreshFollowCacheInBackground();
-    return false;
+    return true;
   }
 
-  void _refreshFollowCacheInBackground() async {
-    if (_currentUserNpub.isNotEmpty) {
-      try {
-        debugPrint('[NostrDataService]  Refreshing follow cache in background...');
-        final currentUserHex = _authService.npubToHex(_currentUserNpub) ?? _currentUserNpub;
-        await _followCacheService.getOrFetch(currentUserHex, () async {
-          final result = await getFollowingList(_currentUserNpub);
-          return result.isSuccess ? result.data : null;
-        });
-        debugPrint('[NostrDataService] Follow cache refreshed via FollowCacheService');
-      } catch (e) {
-        debugPrint('[NostrDataService]  Error refreshing follow cache: $e');
-      }
-    }
-  }
 
   void _setupRelayEventHandling() {
     _relayManager.connectRelays(
@@ -471,6 +430,20 @@ class NostrDataService {
 
       debugPrint('[NostrDataService] Note processed without automatic interaction fetch: $id');
 
+      if (isReply && parentId != null) {
+        final parentNote = _noteCache[parentId];
+        if (parentNote != null) {
+          parentNote.addReply(note);
+        }
+      }
+      
+      if (isReply && rootId != null && rootId != parentId) {
+        final rootNote = _noteCache[rootId];
+        if (rootNote != null) {
+          rootNote.addReply(note);
+        }
+      }
+
       _updateAllReplyCountsForNote(id);
 
       _scheduleUIUpdate();
@@ -603,19 +576,18 @@ class NostrDataService {
           fetchedAt: DateTime.now(),
         );
 
+        final targetNote = _noteCache[targetEventId];
+        if (targetNote != null) {
+          targetNote.addReaction(reaction);
+          _scheduleUIUpdate();
+        }
+        
         _reactionsMap.putIfAbsent(targetEventId, () => []);
-
         if (!_reactionsMap[targetEventId]!.any((r) => r.id == reaction.id)) {
           _reactionsMap[targetEventId]!.add(reaction);
-
-          final targetNote = _noteCache[targetEventId];
-          if (targetNote != null) {
-            targetNote.reactionCount = _reactionsMap[targetEventId]!.length;
-            _scheduleUIUpdate();
-          }
-
-          _fetchUserProfile(reaction.author);
         }
+
+        _fetchUserProfile(reaction.author);
       }
     } catch (e) {
       debugPrint('[NostrDataService] Error processing reaction event: $e');
@@ -998,21 +970,17 @@ class NostrDataService {
           amount: amount,
         );
 
+        final targetNote = _noteCache[targetEventId];
+        if (targetNote != null) {
+          targetNote.addZap(zap);
+          _scheduleUIUpdate();
+        }
+        
         _zapsMap.putIfAbsent(targetEventId, () => []);
-
         if (!_zapsMap[targetEventId]!.any((z) => z.id == zap.id)) {
           _zapsMap[targetEventId]!.add(zap);
-
           _processedZapIds.add(id);
-
-          final targetNote = _noteCache[targetEventId];
-          if (targetNote != null) {
-            targetNote.zapAmount = _zapsMap[targetEventId]!.fold<int>(0, (sum, z) => sum + z.amount);
-            _scheduleUIUpdate();
-          }
-
           _fetchUserProfile(zap.sender);
-
           debugPrint('[NostrDataService] Zap processed: ${zap.amount} sats from ${zap.sender} to ${zap.recipient}');
         }
       }
@@ -1161,22 +1129,9 @@ class NostrDataService {
   List<NoteModel> _getFilteredNotesList() {
     final allNotes = _noteCache.values.toList();
 
-    debugPrint('[NostrDataService] FILTERING: Starting with ${allNotes.length} notes');
-
     final filteredNotes = allNotes.where((note) {
-      debugPrint(' Note ${note.id.substring(0, 8)}: isReply=${note.isReply}, isRepost=${note.isRepost}, repostedBy=${note.repostedBy}');
-
-      if (!note.isReply) {
-        debugPrint('    Including: Normal post (not a reply)');
-        return true;
-      }
-
-      if (note.isReply && note.isRepost) {
-        debugPrint('Including: Reposted reply (isReply=true AND isRepost=true)');
-        return true;
-      }
-
-      debugPrint('     Excluding: Standalone reply (isReply=true BUT isRepost=false)');
+      if (!note.isReply) return true;
+      if (note.isReply && note.isRepost) return true;
       return false;
     }).toList();
 
@@ -1188,13 +1143,6 @@ class NostrDataService {
     });
 
     debugPrint('[NostrDataService] FILTERING RESULT: ${allNotes.length} → ${filteredNotes.length} notes');
-    debugPrint('[NostrDataService] Filtered notes breakdown:');
-    final normalPosts = filteredNotes.where((n) => !n.isReply && !n.isRepost).length;
-    final reposts = filteredNotes.where((n) => !n.isReply && n.isRepost).length;
-    final repostedReplies = filteredNotes.where((n) => n.isReply && n.isRepost).length;
-    debugPrint(' Normal posts: $normalPosts');
-    debugPrint('   Reposts (non-replies): $reposts');
-    debugPrint('   Reposted replies: $repostedReplies');
 
     return filteredNotes;
   }
@@ -1242,11 +1190,9 @@ class NostrDataService {
 
       if (authorHexKeys.isEmpty) {
         debugPrint('[NostrDataService] Fetching global timeline');
-        setContext('global');
         targetAuthors = [];
       } else if (authorHexKeys.length == 1 && authorHexKeys.first == _authService.npubToHex(_currentUserNpub)) {
         debugPrint('[NostrDataService] Feed mode - fetching follow list first (NIP-02)');
-        setContext('feed');
         isFeedMode = true;
 
         final currentUserHex = _authService.npubToHex(_currentUserNpub);
@@ -1280,7 +1226,6 @@ class NostrDataService {
           return Result.success([]);
         }
       } else {
-        setContext('profile');
         targetAuthors = authorHexKeys;
         debugPrint('[NostrDataService] Profile mode - fetching notes for: ${authorHexKeys.length} hex pubkeys');
         debugPrint('[NostrDataService] Profile authors (hex): $targetAuthors');
@@ -1354,9 +1299,7 @@ class NostrDataService {
     DateTime? since,
   }) async {
     try {
-      
-      setContext('profile');
-      debugPrint('[NostrDataService] PROFILE MODE: Fetching notes for $userNpub (bypassing ALL feed filters)');
+      debugPrint('[NostrDataService] PROFILE MODE: Fetching fresh notes for $userNpub');
 
       final pubkeyHex = _authService.npubToHex(userNpub);
       if (pubkeyHex == null) {
@@ -1371,16 +1314,16 @@ class NostrDataService {
         until: until != null ? until.millisecondsSinceEpoch ~/ 1000 : null,
       );
 
-      final profileNotes = <NoteModel>[];
-      final limitedRelays = _relayManager.relayUrls.take(3).toList();
+      final fetchedNotes = <String, NoteModel>{};
+      final limitedRelays = _relayManager.relayUrls.take(5).toList();
 
-      debugPrint('[NostrDataService] PROFILE: Using ${limitedRelays.length} relays for direct fetch');
+      debugPrint('[NostrDataService] PROFILE: Fetching from ${limitedRelays.length} relays');
 
       await Future.wait(limitedRelays.map((relayUrl) async {
         WebSocket? ws;
         StreamSubscription? sub;
         try {
-          debugPrint('[NostrDataService] PROFILE: Connecting to $relayUrl');
+          debugPrint('[NostrDataService] PROFILE: Connecting to relay: $relayUrl');
           ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
           if (_isClosed) {
             await ws.close();
@@ -1388,63 +1331,54 @@ class NostrDataService {
           }
 
           final completer = Completer<void>();
-          bool hasReceivedEvents = false;
+          final request = NostrService.createRequest(filter);
+          final subscriptionId = request.subscriptionId;
+          int eventCount = 0;
 
           sub = ws.listen((event) {
             try {
               final decoded = jsonDecode(event);
 
-              if (decoded[0] == 'EVENT') {
-                hasReceivedEvents = true;
+              if (decoded[0] == 'EVENT' && decoded[1] == subscriptionId) {
                 final eventData = decoded[2] as Map<String, dynamic>;
                 final eventId = eventData['id'] as String;
                 final eventAuthor = eventData['pubkey'] as String;
                 final eventKind = eventData['kind'] as int;
 
-                debugPrint('[NostrDataService] PROFILE: Received event $eventId from $relayUrl');
-
                 if (eventAuthor == pubkeyHex && (eventKind == 1 || eventKind == 6)) {
-                  if (!profileNotes.any((n) => n.id == eventId)) {
-                    final note = _processProfileEventDirectly(eventData, userNpub);
-                    if (note != null) {
-                      profileNotes.add(note);
-
-                      if (!_noteCache.containsKey(eventId) && !_eventIds.contains(eventId)) {
-                        _noteCache[eventId] = note;
-                        _eventIds.add(eventId);
-                        debugPrint('[NostrDataService] PROFILE: Also added ${eventId.substring(0, 8)}... to main cache for thread access');
-                      }
-
-                      debugPrint('[NostrDataService] PROFILE: Added note ${eventId.substring(0, 8)}... to profile list');
-                    }
+                  final note = _processProfileEventDirectly(eventData, userNpub);
+                  if (note != null && !fetchedNotes.containsKey(eventId)) {
+                    fetchedNotes[eventId] = note;
+                    eventCount++;
+                    debugPrint('[NostrDataService] PROFILE: ✓ Received note ${eventId.substring(0, 8)}... from $relayUrl (total: $eventCount)');
                   }
                 }
-              } else if (decoded[0] == 'EOSE') {
-                debugPrint('[NostrDataService] PROFILE: EOSE received from $relayUrl');
+              } else if (decoded[0] == 'EOSE' && decoded[1] == subscriptionId) {
+                debugPrint('[NostrDataService] PROFILE: EOSE from $relayUrl (received $eventCount notes)');
                 if (!completer.isCompleted) completer.complete();
               }
             } catch (e) {
               debugPrint('[NostrDataService] PROFILE: Error processing event: $e');
             }
           }, onDone: () {
+            debugPrint('[NostrDataService] PROFILE: Connection closed: $relayUrl');
             if (!completer.isCompleted) completer.complete();
           }, onError: (error) {
-            debugPrint('[NostrDataService] PROFILE: Connection error: $error');
+            debugPrint('[NostrDataService] PROFILE: Connection error: $relayUrl - $error');
             if (!completer.isCompleted) completer.complete();
           }, cancelOnError: true);
 
           if (ws.readyState == WebSocket.open) {
-            ws.add(NostrService.serializeRequest(NostrService.createRequest(filter)));
+            ws.add(NostrService.serializeRequest(request));
+            debugPrint('[NostrDataService] PROFILE: Request sent to $relayUrl');
           }
 
-          await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
-            debugPrint('[NostrDataService] PROFILE: Timeout waiting for notes from $relayUrl');
+          await completer.future.timeout(const Duration(seconds: 4), onTimeout: () {
+            debugPrint('[NostrDataService] PROFILE: Timeout for $relayUrl (received $eventCount notes)');
           });
 
           await sub.cancel();
           await ws.close();
-
-          debugPrint('[NostrDataService] PROFILE: Finished $relayUrl, received ${hasReceivedEvents ? 'events' : 'no events'}');
         } catch (e) {
           debugPrint('[NostrDataService] PROFILE: Exception with relay $relayUrl: $e');
           await sub?.cancel();
@@ -1452,22 +1386,25 @@ class NostrDataService {
         }
       }));
 
-      profileNotes.sort((a, b) {
-        final aTime = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
-        final bTime = b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
-        return bTime.compareTo(aTime);
-      });
+      debugPrint('[NostrDataService] PROFILE: Fetched ${fetchedNotes.length} notes from relays');
 
-      final limitedNotes = profileNotes.take(limit).toList();
+      for (final note in fetchedNotes.values) {
+        if (!_noteCache.containsKey(note.id) && !_eventIds.contains(note.id)) {
+          _noteCache[note.id] = note;
+          _eventIds.add(note.id);
+        }
+      }
 
-      debugPrint('[NostrDataService] PROFILE: Returning ${limitedNotes.length} profile notes for $userNpub');
-      debugPrint(
-          '[NostrDataService] PROFILE: Breakdown - Posts: ${limitedNotes.where((n) => !n.isReply && !n.isRepost).length}, Replies: ${limitedNotes.where((n) => n.isReply && !n.isRepost).length}, Reposts: ${limitedNotes.where((n) => n.isRepost).length}');
-      debugPrint('[NostrDataService] PROFILE: Main cache now has ${_noteCache.length} total notes for thread access');
+      final allProfileNotes = _noteCache.values.where((note) {
+        final noteAuthorHex = _authService.npubToHex(note.author);
+        return noteAuthorHex == pubkeyHex;
+      }).toList();
 
-      _scheduleUIUpdate();
+      debugPrint('[NostrDataService] PROFILE: Total ${allProfileNotes.length} notes in cache for $userNpub');
 
-      return Result.success(limitedNotes);
+      _notesController.add(_getFilteredNotesList());
+
+      return Result.success(allProfileNotes);
     } catch (e) {
       debugPrint('[NostrDataService] PROFILE: Error fetching profile notes: $e');
       return Result.error('Failed to fetch profile notes: $e');
@@ -1662,8 +1599,6 @@ class NostrDataService {
     DateTime? since,
   }) async {
     try {
-      
-      setContext('hashtag');
       debugPrint('[NostrDataService] HASHTAG MODE: Fetching GLOBAL notes for #$hashtag with server-side filtering');
 
       final Map<String, NoteModel> hashtagNotesMap = {};

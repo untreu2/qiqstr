@@ -7,6 +7,7 @@ import '../../core/base/ui_state.dart';
 import '../../core/base/app_error.dart';
 import '../../core/base/result.dart';
 import '../../data/repositories/note_repository.dart';
+import '../../data/repositories/note_repository_compat.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/services/user_batch_fetcher.dart';
@@ -18,7 +19,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   final NoteRepository _noteRepository;
   final AuthRepository _authRepository;
   final UserRepository _userRepository;
-  final NostrDataService _nostrDataService;
 
   FeedViewModel({
     required NoteRepository noteRepository,
@@ -27,8 +27,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     required NostrDataService nostrDataService,
   })  : _noteRepository = noteRepository,
         _authRepository = authRepository,
-        _userRepository = userRepository,
-        _nostrDataService = nostrDataService;
+        _userRepository = userRepository;
 
   UIState<List<NoteModel>> _feedState = const InitialState();
   UIState<List<NoteModel>> get feedState => _feedState;
@@ -183,7 +182,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
         safeNotifyListeners();
       }
 
-      _nostrDataService.setContext('feed');
 
       try {
         Result<List<NoteModel>> result;
@@ -257,7 +255,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
       _feedState = const LoadingState();
       safeNotifyListeners();
 
-      _nostrDataService.setContext('hashtag');
 
       try {
         

@@ -7,7 +7,6 @@ import '../../core/base/app_error.dart';
 import '../../core/base/result.dart';
 import '../../data/repositories/note_repository.dart';
 import '../../data/repositories/user_repository.dart';
-import '../../data/services/nostr_data_service.dart';
 import '../../data/services/user_batch_fetcher.dart';
 import '../../models/note_model.dart';
 import '../../models/user_model.dart';
@@ -15,15 +14,12 @@ import '../../models/user_model.dart';
 class ThreadViewModel extends BaseViewModel with CommandMixin {
   final NoteRepository _noteRepository;
   final UserRepository _userRepository;
-  final NostrDataService _nostrDataService;
 
   ThreadViewModel({
     required NoteRepository noteRepository,
     required UserRepository userRepository,
-    required NostrDataService nostrDataService,
   })  : _noteRepository = noteRepository,
-        _userRepository = userRepository,
-        _nostrDataService = nostrDataService;
+        _userRepository = userRepository;
 
   UIState<NoteModel> _rootNoteState = const InitialState();
   UIState<NoteModel> get rootNoteState => _rootNoteState;
@@ -67,7 +63,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     _rootNoteId = rootNoteId;
     _focusedNoteId = focusedNoteId;
 
-    _nostrDataService.setContext('thread');
 
     _subscribeToThreadUpdates();
     loadThread();
@@ -86,7 +81,10 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
           hasImmediateData = true;
         }
 
-        if (cachedRepliesResult.isSuccess && cachedRepliesResult.data != null) {
+        if (cachedRepliesResult.isSuccess && 
+            cachedRepliesResult.data != null && 
+            cachedRootResult.isSuccess && 
+            cachedRootResult.data != null) {
           _repliesState = LoadedState(cachedRepliesResult.data!);
 
           final structure = _buildThreadStructure(cachedRootResult.data!, cachedRepliesResult.data!);

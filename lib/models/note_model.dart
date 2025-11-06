@@ -1,4 +1,7 @@
+import 'dart:async';
 import '../utils/string_optimizer.dart';
+import 'reaction_model.dart';
+import 'zap_model.dart';
 
 class NoteModel {
   final String id;
@@ -28,6 +31,26 @@ class NoteModel {
   static final Map<String, Map<String, dynamic>> _globalParseCache = {};
   static const int _maxCacheSize = 500;
 
+  final List<NoteModel> _replies = [];
+  final Map<String, List<ReactionModel>> _reactions = {};
+  final List<NoteModel> _boosts = [];
+  final List<ZapModel> _zaps = [];
+  
+  final _repliesController = StreamController<List<NoteModel>>.broadcast();
+  final _reactionsController = StreamController<Map<String, List<ReactionModel>>>.broadcast();
+  final _boostsController = StreamController<List<NoteModel>>.broadcast();
+  final _zapsController = StreamController<List<ZapModel>>.broadcast();
+
+  Stream<List<NoteModel>> get repliesStream => _repliesController.stream;
+  Stream<Map<String, List<ReactionModel>>> get reactionsStream => _reactionsController.stream;
+  Stream<List<NoteModel>> get boostsStream => _boostsController.stream;
+  Stream<List<ZapModel>> get zapsStream => _zapsController.stream;
+
+  List<NoteModel> get replies => List.unmodifiable(_replies);
+  Map<String, List<ReactionModel>> get reactions => Map.unmodifiable(_reactions);
+  List<NoteModel> get boosts => List.unmodifiable(_boosts);
+  List<ZapModel> get zaps => List.unmodifiable(_zaps);
+
   NoteModel({
     required this.id,
     required this.content,
@@ -55,6 +78,114 @@ class NoteModel {
   })  : replyIds = replyIds ?? [],
         eTags = eTags ?? [],
         pTags = pTags ?? [];
+
+  void addReply(NoteModel reply) {
+    if (!_replies.any((r) => r.id == reply.id)) {
+      _replies.add(reply);
+      replyCount = _replies.length;
+      _repliesController.add(List.unmodifiable(_replies));
+    }
+  }
+
+  void removeReply(NoteModel reply) {
+    final initialLength = _replies.length;
+    _replies.removeWhere((r) => r.id == reply.id);
+    if (_replies.length < initialLength) {
+      replyCount = _replies.length;
+      _repliesController.add(List.unmodifiable(_replies));
+    }
+  }
+
+  void addReaction(ReactionModel reaction) {
+    final emoji = reaction.content.isEmpty ? '+' : reaction.content;
+    
+    final reactionList = _reactions.putIfAbsent(emoji, () => []);
+    if (!reactionList.any((r) => r.id == reaction.id)) {
+      reactionList.add(reaction);
+      reactionCount = _reactions.values.fold(0, (sum, list) => sum + list.length);
+      _reactionsController.add(Map.unmodifiable(_reactions));
+    }
+  }
+
+  void removeReaction(ReactionModel reaction) {
+    final emoji = reaction.content.isEmpty ? '+' : reaction.content;
+    
+    if (_reactions.containsKey(emoji)) {
+      final initialLength = _reactions[emoji]!.length;
+      _reactions[emoji]!.removeWhere((r) => r.id == reaction.id);
+      if (_reactions[emoji]!.length < initialLength) {
+        if (_reactions[emoji]!.isEmpty) {
+          _reactions.remove(emoji);
+        }
+        reactionCount = _reactions.values.fold(0, (sum, list) => sum + list.length);
+        _reactionsController.add(Map.unmodifiable(_reactions));
+      }
+    }
+  }
+
+  void addBoost(NoteModel boost) {
+    if (!_boosts.any((b) => b.id == boost.id)) {
+      _boosts.add(boost);
+      repostCount = _boosts.length;
+      _boostsController.add(List.unmodifiable(_boosts));
+    }
+  }
+
+  void removeBoost(NoteModel boost) {
+    final initialLength = _boosts.length;
+    _boosts.removeWhere((b) => b.id == boost.id);
+    if (_boosts.length < initialLength) {
+      repostCount = _boosts.length;
+      _boostsController.add(List.unmodifiable(_boosts));
+    }
+  }
+
+  void addZap(ZapModel zap) {
+    if (!_zaps.any((z) => z.id == zap.id)) {
+      _zaps.add(zap);
+      zapAmount = _zaps.fold(0, (sum, z) => sum + z.amount);
+      _zapsController.add(List.unmodifiable(_zaps));
+    }
+  }
+
+  void removeZap(ZapModel zap) {
+    final initialLength = _zaps.length;
+    _zaps.removeWhere((z) => z.id == zap.id);
+    if (_zaps.length < initialLength) {
+      zapAmount = _zaps.fold(0, (sum, z) => sum + z.amount);
+      _zapsController.add(List.unmodifiable(_zaps));
+    }
+  }
+
+  bool hasReactionBy(String userPubkey) {
+    return _reactions.values.any(
+      (reactionList) => reactionList.any((r) => r.author == userPubkey)
+    );
+  }
+
+  String? getReactionBy(String userPubkey) {
+    for (final entry in _reactions.entries) {
+      if (entry.value.any((r) => r.author == userPubkey)) {
+        return entry.key;
+      }
+    }
+    return null;
+  }
+
+  bool isBoostedBy(String userPubkey) {
+    return _boosts.any((b) => b.repostedBy == userPubkey);
+  }
+
+  bool isZappedBy(String userPubkey) {
+    return _zaps.any((z) => z.sender == userPubkey);
+  }
+
+  void dispose() {
+    _repliesController.close();
+    _reactionsController.close();
+    _boostsController.close();
+    _zapsController.close();
+  }
 
   Map<String, dynamic> get parsedContentLazy {
     if (_globalParseCache.containsKey(id)) {

@@ -320,12 +320,15 @@ class IsarDatabaseService {
       final db = await isar;
       final results = <String, List<String>>{};
 
-      for (final userPubkeyHex in userPubkeyHexList) {
-        final followingModel = await db.followingModelIsars.where().userPubkeyHexEqualTo(userPubkeyHex).findFirst();
+      if (userPubkeyHexList.isEmpty) return results;
 
-        if (followingModel != null) {
-          results[userPubkeyHex] = followingModel.toFollowingList();
-        }
+      final followingModels = await db.followingModelIsars
+          .where()
+          .anyOf(userPubkeyHexList, (q, String userPubkeyHex) => q.userPubkeyHexEqualTo(userPubkeyHex))
+          .findAll();
+
+      for (final model in followingModels) {
+        results[model.userPubkeyHex] = model.toFollowingList();
       }
 
       debugPrint('[IsarDatabaseService] Batch retrieved ${results.length}/${userPubkeyHexList.length} following lists from Isar');
