@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/note_model.dart';
 import '../models/user_model.dart';
@@ -89,10 +90,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     _content = widget.note.content;
     _widgetKey = '${_noteId}_$_authorId';
 
-    debugPrint(' [NoteWidget] Note ${_noteId.substring(0, 8)}: isReply=$_isReply, isRepost=$_isRepost, parentId=$_parentId');
-    if (_isRepost) {
-      debugPrint(' [NoteWidget] Repost by: $_reposterId, rootId: ${widget.note.rootId}');
-    }
 
     _formattedTimestamp = _calculateTimestamp(_timestamp);
 
@@ -142,11 +139,29 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   void _onNotesChange() {
     if (!mounted || _isDisposed) return;
 
-    try {
-      _updateUserData();
-    } catch (e) {
-      debugPrint('[NoteWidget] Notes change error: $e');
-    }
+    Future.microtask(() {
+      if (!mounted || _isDisposed) return;
+
+      try {
+        final notes = widget.notesNotifier.value;
+        if (notes.isEmpty) return;
+
+        bool hasRelevantChange = false;
+        for (final note in notes) {
+          if (note.id == _noteId || 
+              (_isRepost && note.id == widget.note.rootId) ||
+              (_isReply && note.id == _parentId)) {
+            hasRelevantChange = true;
+            break;
+          }
+        }
+
+        if (hasRelevantChange) {
+          _updateUserData();
+        }
+      } catch (e) {
+      }
+    });
   }
 
   void _loadInitialUserData() {
@@ -160,30 +175,18 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   void _updateUserData() {
     if (_isDisposed || !mounted) return;
 
-    try {
-      final currentState = _stateNotifier.value;
+    Future.microtask(() {
+      if (_isDisposed || !mounted) return;
 
-      UserModel? authorUser = widget.profiles[_authorId];
-      UserModel? reposterUser = _reposterId != null ? widget.profiles[_reposterId] : null;
+      try {
+        final currentState = _stateNotifier.value;
 
-      authorUser ??= UserModel(
-        pubkeyHex: _authorId,
-        name: _authorId.length > 8 ? _authorId.substring(0, 8) : _authorId,
-        about: '',
-        profileImage: '',
-        banner: '',
-        website: '',
-        nip05: '',
-        lud16: '',
-        updatedAt: DateTime.now(),
-        nip05Verified: false,
-      );
+        UserModel? authorUser = widget.profiles[_authorId];
+        UserModel? reposterUser = _reposterId != null ? widget.profiles[_reposterId] : null;
 
-      if (_reposterId != null && reposterUser == null) {
-        final reposterId = _reposterId;
-        reposterUser = UserModel(
-          pubkeyHex: reposterId,
-          name: reposterId.length > 8 ? reposterId.substring(0, 8) : reposterId,
+        authorUser ??= UserModel(
+          pubkeyHex: _authorId,
+          name: _authorId.length > 8 ? _authorId.substring(0, 8) : _authorId,
           about: '',
           profileImage: '',
           banner: '',
@@ -193,26 +196,43 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
           updatedAt: DateTime.now(),
           nip05Verified: false,
         );
+
+        if (_reposterId != null && reposterUser == null) {
+          final reposterId = _reposterId;
+          reposterUser = UserModel(
+            pubkeyHex: reposterId,
+            name: reposterId.length > 8 ? reposterId.substring(0, 8) : reposterId,
+            about: '',
+            profileImage: '',
+            banner: '',
+            website: '',
+            nip05: '',
+            lud16: '',
+            updatedAt: DateTime.now(),
+            nip05Verified: false,
+          );
+        }
+
+        final replyText = _isReply && _parentId != null ? 'Reply to...' : null;
+
+        final newState = _NoteState(
+          authorUser: authorUser,
+          reposterUser: reposterUser,
+          replyText: replyText,
+        );
+
+        if (currentState.authorUser?.hashCode != newState.authorUser?.hashCode ||
+            currentState.reposterUser?.hashCode != newState.reposterUser?.hashCode ||
+            currentState.replyText != newState.replyText) {
+          SchedulerBinding.instance.addPostFrameCallback((_) {
+            if (mounted && !_isDisposed) {
+              _stateNotifier.value = newState;
+            }
+          });
+        }
+      } catch (e) {
       }
-
-      final replyText = _isReply && _parentId != null ? 'Reply to...' : null;
-
-      if (_isReply) {
-        debugPrint(' [NoteWidget] Reply detected: parentId=$_parentId, replyText="$replyText"');
-      }
-
-      final newState = _NoteState(
-        authorUser: authorUser,
-        reposterUser: reposterUser,
-        replyText: replyText,
-      );
-
-      if (currentState != newState) {
-        _stateNotifier.value = newState;
-      }
-    } catch (e) {
-      debugPrint('[NoteWidget] Update user data error: $e');
-    }
+    });
   }
 
   Future<void> _loadUsersAsync() async {
@@ -232,16 +252,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
 
       final reposterId = _reposterId;
       if (isProfileComplete(authorUser, _authorId) && (reposterId == null || isProfileComplete(reposterUser, reposterId))) {
-        debugPrint('[NoteWidget] ✓ Using cached profiles with images for ${_noteId.substring(0, 8)}');
         return;
-      }
-
-      debugPrint('[NoteWidget] ️ Loading missing/incomplete profiles for ${_noteId.substring(0, 8)}');
-      if (authorUser != null && authorUser.profileImage.isEmpty) {
-        debugPrint('[NoteWidget]   → Author ${authorUser.name} missing profile image');
-      }
-      if (reposterUser != null && reposterUser.profileImage.isEmpty) {
-        debugPrint('[NoteWidget]   → Reposter ${reposterUser.name} missing profile image');
       }
 
       if (widget.notesListProvider != null) {
@@ -254,17 +265,15 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
       }
 
       if (!isProfileComplete(authorUser, _authorId)) {
-        debugPrint('[NoteWidget] Loading author profile: ${_authorId.substring(0, 8)}...');
         final authorResult = await _userRepository.getUserProfile(_authorId);
         authorResult.fold(
           (user) {
             if (mounted && !_isDisposed) {
               widget.profiles[_authorId] = user;
-              debugPrint('[NoteWidget]  Author profile loaded: ${user.name} (image: ${user.profileImage.isNotEmpty ? "✓" : "✗"})');
               _updateUserData();
             }
           },
-          (error) => debugPrint('[NoteWidget]  Failed to load author: $error'),
+          (_) {},
         );
       }
 
@@ -273,22 +282,19 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
         final currentReposterUser = widget.profiles[reposterId];
 
         if (!isProfileComplete(currentReposterUser, reposterId)) {
-          debugPrint('[NoteWidget] Loading reposter profile: ${reposterId.substring(0, 8)}...');
           final reposterResult = await _userRepository.getUserProfile(reposterId);
           reposterResult.fold(
             (user) {
               if (mounted && !_isDisposed) {
                 widget.profiles[reposterId] = user;
-                debugPrint('[NoteWidget]  Reposter profile loaded: ${user.name} (image: ${user.profileImage.isNotEmpty ? "✓" : "✗"})');
                 _updateUserData();
               }
             },
-            (error) => debugPrint('[NoteWidget]  Failed to load reposter: $error'),
+            (_) {},
           );
         }
       }
     } catch (e) {
-      debugPrint('[NoteWidget] Load users async error: $e');
     }
   }
 
@@ -296,14 +302,13 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
     if (_isDisposed || !mounted) return;
 
     try {
-      Future.delayed(const Duration(milliseconds: 100), () {
+      Future.delayed(const Duration(milliseconds: 200), () {
         if (!_isDisposed && mounted) {
           final interactionNoteId = _getInteractionNoteId();
           _noteRepository.fetchInteractionsForNote(interactionNoteId);
         }
       });
     } catch (e) {
-      debugPrint('[NoteWidget] Load interactions async error: $e');
     }
   }
 
@@ -411,8 +416,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
   void _navigateToProfile(String npub) {
     try {
       if (mounted && !_isDisposed) {
-        debugPrint('[NoteWidget] Attempting to navigate to profile: $npub');
-
         final user = widget.profiles[npub] ??
             UserModel(
               pubkeyHex: npub,
@@ -427,21 +430,14 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
               nip05Verified: false,
             );
 
-        debugPrint('[NoteWidget] Created user for navigation: ${user.name}');
-
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => ProfilePage(user: user),
           ),
-        ).then((_) {
-          debugPrint('[NoteWidget] Navigation completed');
-        }).catchError((error) {
-          debugPrint('[NoteWidget] Navigation error: $error');
-        });
+        );
       }
     } catch (e) {
-      debugPrint('[NoteWidget] Navigate to profile error: $e');
     }
   }
 
@@ -451,7 +447,6 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
         _navigateToProfile(id);
       }
     } catch (e) {
-      debugPrint('[NoteWidget] Navigate to mention profile error: $e');
     }
   }
 
@@ -465,15 +460,12 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
       if (_isRepost && widget.note.rootId != null && widget.note.rootId!.isNotEmpty) {
         rootId = widget.note.rootId!;
         focusedId = null;
-        debugPrint('[NoteWidget] Navigating to repost thread - original note: $rootId');
       } else if (_isReply && widget.note.rootId != null && widget.note.rootId!.isNotEmpty) {
         rootId = widget.note.rootId!;
         focusedId = _noteId;
-        debugPrint('[NoteWidget] Navigating to reply thread - root: $rootId, focused: $focusedId');
       } else {
         rootId = _noteId;
         focusedId = null;
-        debugPrint('[NoteWidget] Navigating to regular note thread: $rootId');
       }
 
       Navigator.push(
@@ -543,10 +535,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                     _SafeProfileSection(
                       stateNotifier: _stateNotifier,
                       isRepost: _isRepost,
-                      onAuthorTap: () {
-                        debugPrint('[NoteWidget] Author avatar tapped for: $_authorId');
-                        _navigateToProfile(_authorId);
-                      },
+                      onAuthorTap: () => _navigateToProfile(_authorId),
                       onReposterTap: _reposterId != null
                           ? () {
                               final reposterId = _reposterId;
@@ -688,10 +677,7 @@ class _NoteWidgetState extends State<NoteWidget> with AutomaticKeepAliveClientMi
                       child: _SafeProfileSection(
                         stateNotifier: _stateNotifier,
                         isRepost: _isRepost,
-                        onAuthorTap: () {
-                          debugPrint('[NoteWidget] Author avatar tapped for: $_authorId');
-                          _navigateToProfile(_authorId);
-                        },
+                        onAuthorTap: () => _navigateToProfile(_authorId),
                         onReposterTap: _reposterId != null
                             ? () {
                                 final reposterId = _reposterId;

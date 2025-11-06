@@ -73,6 +73,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
     registerCommand('loadMoreProfileNotes', loadMoreProfileNotesCommand);
 
     _subscribeToUserUpdates();
+    _subscribeToNotesUpdates();
   }
 
   void initializeWithUser(String npub) {
@@ -314,6 +315,88 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
       _userRepository.currentUserStream.listen((user) {
         if (!isDisposed && user.npub == _currentProfileNpub) {
           _profileState = LoadedState(user);
+          safeNotifyListeners();
+        }
+      }),
+    );
+  }
+
+  void _subscribeToNotesUpdates() {
+    addSubscription(
+      _noteRepository.notesStream.listen((updatedNotes) {
+        if (isDisposed || _profileNotesState is! LoadedState<List<NoteModel>>) return;
+
+        final currentNotes = (_profileNotesState as LoadedState<List<NoteModel>>).data;
+        if (currentNotes.isEmpty) return;
+
+        final updatedNoteIds = updatedNotes.map((n) => n.id).toSet();
+        final currentNoteIds = currentNotes.map((n) => n.id).toSet();
+        
+        final removedNoteIds = currentNoteIds.difference(updatedNoteIds);
+        
+        if (removedNoteIds.isNotEmpty) {
+          final filteredNotes = currentNotes.where((note) => !removedNoteIds.contains(note.id)).toList();
+          
+          for (final updatedNote in updatedNotes) {
+            if (currentNoteIds.contains(updatedNote.id)) {
+              final index = filteredNotes.indexWhere((n) => n.id == updatedNote.id);
+              if (index != -1) {
+                filteredNotes[index] = updatedNote;
+              }
+            }
+          }
+
+          _profileNotesState = filteredNotes.isEmpty 
+              ? const EmptyState('No notes from this user yet') 
+              : LoadedState(filteredNotes);
+          safeNotifyListeners();
+          return;
+        }
+
+        bool hasUpdates = false;
+        for (final updatedNote in updatedNotes) {
+          if (currentNoteIds.contains(updatedNote.id)) {
+            final index = currentNotes.indexWhere((n) => n.id == updatedNote.id);
+            if (index != -1) {
+              final existingNote = currentNotes[index];
+              if (existingNote.reactionCount != updatedNote.reactionCount ||
+                  existingNote.repostCount != updatedNote.repostCount ||
+                  existingNote.replyCount != updatedNote.replyCount ||
+                  existingNote.zapAmount != updatedNote.zapAmount) {
+                hasUpdates = true;
+                break;
+              }
+            }
+          }
+        }
+
+        if (hasUpdates) {
+          final updatedNotesList = List<NoteModel>.from(currentNotes);
+          for (final updatedNote in updatedNotes) {
+            if (currentNoteIds.contains(updatedNote.id)) {
+              final index = updatedNotesList.indexWhere((n) => n.id == updatedNote.id);
+              if (index != -1) {
+                updatedNotesList[index] = updatedNote;
+              }
+            }
+          }
+
+          final filteredNotes = updatedNotesList.where((note) {
+            if (!note.isReply && !note.isRepost) {
+              return true;
+            }
+            if (note.isRepost) {
+              return true;
+            }
+            if (note.isReply && !note.isRepost) {
+              return false;
+            }
+            return true;
+          }).toList();
+
+          _profileNotesState = filteredNotes.isEmpty 
+              ? const EmptyState('No notes from this user yet') 
+              : LoadedState(filteredNotes);
           safeNotifyListeners();
         }
       }),

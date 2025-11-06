@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../theme/theme_manager.dart';
@@ -70,31 +71,38 @@ class _InteractionBarState extends State<InteractionBar> {
     _notesStreamSubscription = _noteRepository.notesStream.listen((notes) {
       if (!mounted || notes.isEmpty) return;
       
-      // widget.noteId is already the rootId for reposts (from NoteWidget._getInteractionNoteId)
-      // Find the actual note by widget.noteId
-      final targetNoteId = widget.noteId;
-      NoteModel? foundNote;
-      
-      for (final note in notes) {
-        if (note.id == targetNoteId) {
-          foundNote = note;
-          break;
-        }
-      }
-      
-      // Update actual note if found and counts changed
-      if (foundNote != null) {
-        final currentCounts = _actualNote != null 
-            ? '${_actualNote!.reactionCount}_${_actualNote!.repostCount}_${_actualNote!.replyCount}_${_actualNote!.zapAmount}'
-            : '';
-        final newCounts = '${foundNote.reactionCount}_${foundNote.repostCount}_${foundNote.replyCount}_${foundNote.zapAmount}';
+      Future.microtask(() {
+        if (!mounted) return;
         
-        if (_actualNote == null || currentCounts != newCounts) {
-          setState(() {
-            _actualNote = foundNote;
-          });
+        final targetNoteId = widget.noteId;
+        NoteModel? foundNote;
+        
+        for (final note in notes) {
+          if (note.id == targetNoteId) {
+            foundNote = note;
+            break;
+          }
         }
-      }
+        
+        if (foundNote != null) {
+          final shouldUpdate = _actualNote == null ||
+              _actualNote!.reactionCount != foundNote.reactionCount ||
+              _actualNote!.repostCount != foundNote.repostCount ||
+              _actualNote!.replyCount != foundNote.replyCount ||
+              _actualNote!.zapAmount != foundNote.zapAmount;
+          
+          if (shouldUpdate) {
+            SchedulerBinding.instance.addPostFrameCallback((_) {
+              if (mounted) {
+                setState(() {
+                  _actualNote = foundNote;
+                });
+                _updateLocalState();
+              }
+            });
+          }
+        }
+      });
     });
   }
 
@@ -124,29 +132,43 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   void _updateLocalState() {
-    final note = _actualNote ?? widget.note;
-    if (note == null) {
-      if (_hasReacted || _hasReposted || _hasZapped) {
-        setState(() {
-          _hasReacted = false;
-          _hasReposted = false;
-          _hasZapped = false;
+    if (!mounted) return;
+
+    Future.microtask(() {
+      if (!mounted) return;
+
+      final note = _actualNote ?? widget.note;
+      if (note == null) {
+        if (_hasReacted || _hasReposted || _hasZapped) {
+          SchedulerBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _hasReacted = false;
+                _hasReposted = false;
+                _hasZapped = false;
+              });
+            }
+          });
+        }
+        return;
+      }
+
+      final userHasReacted = _noteRepository.hasUserReacted(widget.noteId, widget.currentUserNpub);
+      final userHasReposted = _noteRepository.hasUserReposted(widget.noteId, widget.currentUserNpub);
+      final userHasZapped = _noteRepository.hasUserZapped(widget.noteId, widget.currentUserNpub);
+
+      if (userHasReacted != _hasReacted || userHasReposted != _hasReposted || userHasZapped != _hasZapped) {
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _hasReacted = userHasReacted;
+              _hasReposted = userHasReposted;
+              _hasZapped = userHasZapped;
+            });
+          }
         });
       }
-      return;
-    }
-
-    final userHasReacted = _noteRepository.hasUserReacted(widget.noteId, widget.currentUserNpub);
-    final userHasReposted = _noteRepository.hasUserReposted(widget.noteId, widget.currentUserNpub);
-    final userHasZapped = _noteRepository.hasUserZapped(widget.noteId, widget.currentUserNpub);
-
-    if (userHasReacted != _hasReacted || userHasReposted != _hasReposted || userHasZapped != _hasZapped) {
-      setState(() {
-        _hasReacted = userHasReacted;
-        _hasReposted = userHasReposted;
-        _hasZapped = userHasZapped;
-      });
-    }
+    });
   }
 
   void _handleReplyTap() {

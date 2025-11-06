@@ -93,7 +93,10 @@ Future<Widget> _determineInitialHomeWithPreloading() async {
         // Load feed while splash screen is showing
         await _loadInitialFeedWithSplash(npub);
 
-        // Remove splash screen after feed is loaded or timeout
+        // Wait additional 2 seconds after feed is loaded to ensure feed is fully ready
+        await Future.delayed(const Duration(seconds: 2));
+
+        // Remove splash screen after feed is loaded and additional wait
         FlutterNativeSplash.remove();
 
         return HomeNavigator(npub: npub);

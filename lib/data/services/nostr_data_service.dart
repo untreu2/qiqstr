@@ -45,6 +45,10 @@ class NostrDataService {
   final Set<String> _pendingOptimisticReactionIds = {};
   final Duration _profileCacheTTL = const Duration(minutes: 30);
 
+  static const int _maxNoteCacheSize = 5000;
+  static const int _maxEventIdsSize = 10000;
+  static const int _maxProfileCacheSize = 2000;
+
   final List<Map<String, dynamic>> _eventQueue = [];
   Timer? _batchProcessingTimer;
   static const int _maxBatchSize = 25;
@@ -62,6 +66,7 @@ class NostrDataService {
 
   bool _notificationSubscriptionActive = false;
   String? _notificationSubscriptionId;
+  _MemoryWarningObserver? _memoryObserver;
 
   NostrDataService({
     required AuthService authService,
@@ -70,6 +75,7 @@ class NostrDataService {
         _relayManager = relayManager ?? WebSocketManager.instance {
     _setupRelayEventHandling();
     _startCacheCleanup();
+    _setupMemoryWarningHandler();
   }
 
   Stream<List<NoteModel>> get notesStream => _notesController.stream;
@@ -605,8 +611,7 @@ class NostrDataService {
         pTags: pTags,
       );
 
-      _noteCache[id] = note;
-      _eventIds.add(id);
+      _upsertNote(note);
 
       _updateAllReplyCountsForNote(id);
       _scheduleUIUpdate();
@@ -685,8 +690,7 @@ class NostrDataService {
         zapAmount: 0,
       );
 
-      _noteCache[id] = replyNote;
-      _eventIds.add(id);
+      _upsertNote(replyNote);
 
       _updateParentNoteReplyCount(actualParentId ?? parentEventId);
       _scheduleUIUpdate();
@@ -824,8 +828,7 @@ class NostrDataService {
           rawWs: jsonEncode(eventData),
         );
 
-        _noteCache[id] = repostNote;
-        _eventIds.add(id);
+        _upsertNote(repostNote);
 
         final targetNote = _noteCache[originalEventId];
         if (targetNote != null) {
@@ -1124,7 +1127,70 @@ class NostrDataService {
         final interactionCutoff = now.subtract(const Duration(hours: 1));
         _lastInteractionFetch.removeWhere((key, timestamp) => timestamp.isBefore(interactionCutoff));
       }
+
+      _enforceCacheSizeLimits();
     });
+  }
+
+  void _setupMemoryWarningHandler() {
+    _memoryObserver = _MemoryWarningObserver(this);
+    WidgetsBinding.instance.addObserver(_memoryObserver!);
+  }
+
+  void _enforceCacheSizeLimits() {
+    if (_noteCache.length > _maxNoteCacheSize) {
+      final sortedEntries = _noteCache.entries.toList()
+        ..sort((a, b) => a.value.timestamp.compareTo(b.value.timestamp));
+      
+      final toRemove = sortedEntries.length - _maxNoteCacheSize;
+      for (int i = 0; i < toRemove; i++) {
+        _noteCache.remove(sortedEntries[i].key);
+        _eventIds.remove(sortedEntries[i].key);
+      }
+    }
+
+    if (_eventIds.length > _maxEventIdsSize) {
+      final toRemove = _eventIds.length - _maxEventIdsSize;
+      final idsToRemove = _eventIds.take(toRemove).toList();
+      for (final id in idsToRemove) {
+        _eventIds.remove(id);
+      }
+    }
+
+    if (_profileCache.length > _maxProfileCacheSize) {
+      final sortedEntries = _profileCache.entries.toList()
+        ..sort((a, b) => a.value.fetchedAt.compareTo(b.value.fetchedAt));
+      
+      final toRemove = sortedEntries.length - _maxProfileCacheSize;
+      for (int i = 0; i < toRemove; i++) {
+        _profileCache.remove(sortedEntries[i].key);
+      }
+    }
+  }
+
+  void _pruneCache() {
+    _noteCache.clear();
+    _eventIds.clear();
+    _reactionsMap.clear();
+    _zapsMap.clear();
+    _repostsMap.clear();
+    _notificationCache.clear();
+  }
+
+  void _upsertNote(NoteModel note) {
+    if (_noteCache.containsKey(note.id)) {
+      final existing = _noteCache[note.id]!;
+      if (note.timestamp.isAfter(existing.timestamp)) {
+        _noteCache[note.id] = note;
+      }
+    } else {
+      _noteCache[note.id] = note;
+      _eventIds.add(note.id);
+      
+      if (_noteCache.length > _maxNoteCacheSize) {
+        _enforceCacheSizeLimits();
+      }
+    }
   }
 
   List<UserModel> _getUsersList() {
@@ -1478,8 +1544,7 @@ class NostrDataService {
                       profileNotes.add(note);
 
                       if (!_noteCache.containsKey(eventId) && !_eventIds.contains(eventId)) {
-                        _noteCache[eventId] = note;
-                        _eventIds.add(eventId);
+                        _upsertNote(note);
                       }
                     }
                   }
@@ -2469,8 +2534,7 @@ class NostrDataService {
                     final userNpub = _authService.hexToNpub(pubkeyHex) ?? pubkeyHex;
                     final note = _processProfileEventDirectly(eventData, userNpub);
                     if (note != null) {
-                      _noteCache[eventId] = note;
-                      _eventIds.add(eventId);
+                      _upsertNote(note);
                       noteFound = true;
                       debugPrint('[NostrDataService] THREAD: Successfully cached note $eventId');
                     }
@@ -3047,12 +3111,26 @@ class NostrDataService {
     _isClosed = true;
     _batchProcessingTimer?.cancel();
     _uiUpdateThrottleTimer?.cancel();
+    if (_memoryObserver != null) {
+      WidgetsBinding.instance.removeObserver(_memoryObserver!);
+    }
     _relayManager.unregisterService('nostr_data_service');
     _notesController.close();
     _usersController.close();
     _notificationsController.close();
     _feedLoadingStateController.close();
     clearCaches();
+  }
+}
+
+class _MemoryWarningObserver extends WidgetsBindingObserver {
+  final NostrDataService _service;
+
+  _MemoryWarningObserver(this._service);
+
+  @override
+  void didHaveMemoryPressure() {
+    _service._pruneCache();
   }
 }
 
