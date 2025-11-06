@@ -137,7 +137,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     _isLoadingFeed = true;
 
     try {
-      // Check for cached notes first to show them immediately
+      
       if (!isHashtagMode) {
         try {
           final cachedNotes = _noteRepository.currentNotes;
@@ -147,10 +147,10 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             _feedState = LoadedState(sortedNotes);
             safeNotifyListeners();
             
-            // Load profiles for cached notes in background
+            
             _loadUserProfilesForNotes(sortedNotes).catchError((_) {});
             
-            // Subscribe to updates
+            
             _subscribeToRealTimeUpdates();
           }
         } catch (e) {
@@ -159,13 +159,13 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
       }
 
       if (isHashtagMode) {
-        await _loadHashtagFeed(forceRefresh: false);
+        await _loadHashtagFeed();
       } else {
-        await _loadUserFeed(forceRefresh: false);
+        await _loadUserFeed();
       }
     } catch (e) {
       debugPrint('[FeedViewModel] Error in _loadFeed: $e');
-      // Ensure error state is set if not already set
+      
       if (_feedState is LoadingState) {
         _feedState = ErrorState('Failed to load feed: ${e.toString()}');
         safeNotifyListeners();
@@ -175,10 +175,10 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     }
   }
 
-  Future<void> _loadUserFeed({bool forceRefresh = false}) async {
+  Future<void> _loadUserFeed() async {
     await executeOperation('loadFeed', () async {
-      // Only show loading state if we don't have cached notes or force refresh
-      if (forceRefresh || _feedState is! LoadedState<List<NoteModel>> || (_feedState as LoadedState<List<NoteModel>>).data.isEmpty) {
+      
+      if (_feedState is! LoadedState<List<NoteModel>> || (_feedState as LoadedState<List<NoteModel>>).data.isEmpty) {
         _feedState = const LoadingState();
         safeNotifyListeners();
       }
@@ -191,31 +191,24 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           result = await _noteRepository.getFeedNotesFromFollowList(
             currentUserNpub: _currentUserNpub,
             limit: _currentLimit,
-            forceRefresh: forceRefresh,
           ).timeout(
             const Duration(seconds: 8),
             onTimeout: () {
               debugPrint('[FeedViewModel] Feed load timeout after 8s');
-              // Return cached notes if available and not force refresh, otherwise empty
-              if (!forceRefresh) {
-                final cachedNotes = _noteRepository.currentNotes;
-                if (cachedNotes.isNotEmpty) {
-                  return Future.value(Result.success(cachedNotes));
-                }
+              
+              final cachedNotes = _noteRepository.currentNotes;
+              if (cachedNotes.isNotEmpty) {
+                return Future.value(Result.success(cachedNotes));
               }
               return Future.value(const Result.success(<NoteModel>[]));
             },
           );
         } on TimeoutException {
           debugPrint('[FeedViewModel] Feed load timeout after 8s');
-          // Return cached notes if available and not force refresh, otherwise empty
-          if (!forceRefresh) {
-            final cachedNotes = _noteRepository.currentNotes;
-            if (cachedNotes.isNotEmpty) {
-              result = Result.success(cachedNotes);
-            } else {
-              result = const Result.success(<NoteModel>[]);
-            }
+          
+          final cachedNotes = _noteRepository.currentNotes;
+          if (cachedNotes.isNotEmpty) {
+            result = Result.success(cachedNotes);
           } else {
             result = const Result.success(<NoteModel>[]);
           }
@@ -224,7 +217,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
         await result.fold(
           (notes) async {
             if (notes.isEmpty) {
-              // Only set empty state if we don't already have cached notes
+              
               if (_feedState is! LoadedState<List<NoteModel>> || (_feedState as LoadedState<List<NoteModel>>).data.isEmpty) {
                 _feedState = const LoadedState(<NoteModel>[]);
               }
@@ -238,7 +231,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             _subscribeToRealTimeUpdates();
           },
           (error) async {
-            // Only set error state if we don't have cached notes to show
+            
             if (_feedState is! LoadedState<List<NoteModel>> || (_feedState as LoadedState<List<NoteModel>>).data.isEmpty) {
               _feedState = ErrorState(error);
             } else {
@@ -250,7 +243,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
         safeNotifyListeners();
       } catch (e) {
         debugPrint('[FeedViewModel] Exception in _loadUserFeed: $e');
-        // Only set error state if we don't have cached notes
+        
         if (_feedState is! LoadedState<List<NoteModel>> || (_feedState as LoadedState<List<NoteModel>>).data.isEmpty) {
           _feedState = ErrorState('Failed to load feed: ${e.toString()}');
           safeNotifyListeners();
@@ -259,7 +252,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     });
   }
 
-  Future<void> _loadHashtagFeed({bool forceRefresh = false}) async {
+  Future<void> _loadHashtagFeed() async {
     await executeOperation('loadHashtagFeed', () async {
       _feedState = const LoadingState();
       safeNotifyListeners();
@@ -267,13 +260,12 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
       _nostrDataService.setContext('hashtag');
 
       try {
-        // Add timeout to prevent infinite waiting
+        
         Result<List<NoteModel>> result;
         try {
           result = await _noteRepository.getHashtagNotes(
             hashtag: _hashtag!,
             limit: _currentLimit,
-            forceRefresh: forceRefresh,
           ).timeout(
             const Duration(seconds: 8),
             onTimeout: () {
@@ -325,7 +317,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     _isLoadingFeed = true;
 
     try {
-      // Keep current notes visible during refresh to avoid showing "no notes found"
+      
       final currentNotes = _feedState is LoadedState<List<NoteModel>> 
           ? (_feedState as LoadedState<List<NoteModel>>).data 
           : <NoteModel>[];
@@ -333,66 +325,19 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
       if (isHashtagMode) {
         _feedState = const LoadingState();
         safeNotifyListeners();
-        await _loadHashtagFeed(forceRefresh: true);
+        await _loadHashtagFeed();
       } else {
-        // Mimic app startup behavior: start real-time feed and preload initial feed
-        debugPrint('[FeedViewModel] Refresh: Starting real-time feed and preloading feed (like app startup)');
         
-        // Start real-time feed in background immediately (like app startup)
-        _noteRepository.startRealTimeFeed([_currentUserNpub]).then((_) {
-          debugPrint('[FeedViewModel] Real-time feed started successfully');
-        }).catchError((error) {
-          debugPrint('[FeedViewModel] Error starting real-time feed: $error');
-        });
-        
-        // Keep current notes visible if available, otherwise show loading
-        if (currentNotes.isNotEmpty) {
-          // Keep showing current notes while loading new ones
-          _feedState = LoadedState(currentNotes);
-          safeNotifyListeners();
-        } else {
+        if (currentNotes.isEmpty) {
           _feedState = const LoadingState();
           safeNotifyListeners();
         }
         
-        // Preload initial feed with force refresh (like app startup but bypass cache)
-        final result = await _nostrDataService.preloadInitialFeed(
-          userNpub: _currentUserNpub,
-          limit: _currentLimit,
-          forceRefresh: true,
-        );
-
-        await result.fold(
-          (notes) async {
-            if (notes.isNotEmpty) {
-              final sortedNotes = _sortNotes(notes);
-              _feedState = LoadedState(sortedNotes);
-              await _loadUserProfilesForNotes(sortedNotes);
-            } else if (currentNotes.isEmpty) {
-              // Only show empty if we had no notes before
-              _feedState = const LoadedState(<NoteModel>[]);
-            } else {
-              // Keep current notes if new ones are empty
-              _feedState = LoadedState(currentNotes);
-            }
-            _subscribeToRealTimeUpdates();
-          },
-          (error) async {
-            // On error, keep current notes if available
-            if (currentNotes.isNotEmpty) {
-              _feedState = LoadedState(currentNotes);
-              debugPrint('[FeedViewModel] Refresh error but keeping current notes: $error');
-            } else {
-              _feedState = ErrorState(error);
-            }
-          },
-        );
-
-        safeNotifyListeners();
+        await _loadUserFeed();
       }
     } catch (e) {
       debugPrint('[FeedViewModel] Error in refreshFeed: $e');
-      // On error, keep current notes if available
+      
       final currentNotes = _feedState is LoadedState<List<NoteModel>> 
           ? (_feedState as LoadedState<List<NoteModel>>).data 
           : <NoteModel>[];

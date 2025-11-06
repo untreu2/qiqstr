@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/theme_manager.dart';
@@ -47,19 +46,12 @@ class _ProfilePageState extends State<ProfilePage> {
     _profileViewModel.initializeWithUser(widget.user.npub);
   }
 
-  Timer? _scrollThrottleTimer;
-
   void _scrollListener() {
     if (_scrollController.hasClients) {
-      final shouldShow = _scrollController.offset > 200;
+      final shouldShow = _scrollController.offset > 100;
       if (_showUsernameBubble != shouldShow) {
-        _scrollThrottleTimer?.cancel();
-        _scrollThrottleTimer = Timer(const Duration(milliseconds: 100), () {
-          if (mounted && _showUsernameBubble != shouldShow) {
-            setState(() {
-              _showUsernameBubble = shouldShow;
-            });
-          }
+        setState(() {
+          _showUsernameBubble = shouldShow;
         });
       }
     }
@@ -87,7 +79,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   void dispose() {
-    _scrollThrottleTimer?.cancel();
     _scrollController.dispose();
     _notesNotifier.dispose();
     _profileViewModel.dispose();
@@ -112,7 +103,7 @@ class _ProfilePageState extends State<ProfilePage> {
             topOffset: 6,
           ),
           Positioned(
-            top: topPadding + 2,
+            top: topPadding + 8,
             left: 0,
             right: 0,
             child: Center(

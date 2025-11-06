@@ -90,16 +90,16 @@ Future<Widget> _determineInitialHomeWithPreloading() async {
       if (npubResult.isSuccess && npubResult.data != null && npubResult.data!.isNotEmpty) {
         final npub = npubResult.data!;
         
-        // Initialize notifications in background
+        
         unawaited(_initializeNotifications());
 
-        // Load feed while splash screen is showing
+        
         await _loadInitialFeedWithSplash(npub);
 
-        // Wait additional 2 seconds after feed is loaded to ensure feed is fully ready
+        
         await Future.delayed(const Duration(seconds: 2));
 
-        // Remove splash screen after feed is loaded and additional wait
+        
         FlutterNativeSplash.remove();
 
         return HomeNavigator(npub: npub);
@@ -119,10 +119,10 @@ Future<bool> _loadInitialFeedWithSplash(String npub) async {
     final nostrDataService = AppDI.get<NostrDataService>();
     final noteRepository = AppDI.get<NoteRepository>();
 
-    // Start real-time feed in background immediately
+    
     unawaited(noteRepository.startRealTimeFeed([npub]));
 
-    // Check if we have cached notes in service cache
+    
     try {
       final serviceCachedNotes = nostrDataService.cachedNotes;
       if (serviceCachedNotes.isNotEmpty) {
@@ -133,7 +133,7 @@ Future<bool> _loadInitialFeedWithSplash(String npub) async {
       debugPrint('[Main] Error checking service cached notes: $e');
     }
 
-    // Check repository cache
+    
     try {
       final repoCachedNotes = noteRepository.currentNotes;
       if (repoCachedNotes.isNotEmpty) {
@@ -144,7 +144,7 @@ Future<bool> _loadInitialFeedWithSplash(String npub) async {
       debugPrint('[Main] Error checking repository cached notes: $e');
     }
 
-    // Preload initial feed with adaptive timeout
+    
     final completer = Completer<bool>();
     Timer(const Duration(seconds: 4), () {
       if (!completer.isCompleted) {
@@ -154,9 +154,9 @@ Future<bool> _loadInitialFeedWithSplash(String npub) async {
     });
 
     try {
-      // Preload feed - this will use cache if available
-      final result = await nostrDataService.preloadInitialFeed(
-        userNpub: npub,
+      
+      final result = await nostrDataService.fetchFeedNotes(
+        authorNpubs: [npub],
         limit: 30,
       );
 

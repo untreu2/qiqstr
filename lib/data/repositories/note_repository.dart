@@ -66,17 +66,15 @@ class NoteRepository {
     int limit = 50,
     DateTime? until,
     DateTime? since,
-    bool forceRefresh = false,
   }) async {
     try {
-      debugPrint('[NoteRepository] getFeedNotesFromFollowList for user: $currentUserNpub, forceRefresh: $forceRefresh');
+      debugPrint('[NoteRepository] getFeedNotesFromFollowList for user: $currentUserNpub');
 
       final result = await _nostrDataService.fetchFeedNotes(
         authorNpubs: [currentUserNpub],
         limit: limit,
         until: until,
         since: since,
-        forceRefresh: forceRefresh,
       );
 
       return result.fold(
@@ -138,17 +136,15 @@ class NoteRepository {
     int limit = 20,
     DateTime? until,
     DateTime? since,
-    bool forceRefresh = false,
   }) async {
     try {
-      debugPrint('[NoteRepository] HASHTAG MODE: Getting notes for #$hashtag, forceRefresh: $forceRefresh');
+      debugPrint('[NoteRepository] HASHTAG MODE: Getting notes for #$hashtag');
 
       final result = await _nostrDataService.fetchHashtagNotes(
         hashtag: hashtag,
         limit: limit,
         until: until,
         since: since,
-        forceRefresh: forceRefresh,
       );
 
       result.fold(
