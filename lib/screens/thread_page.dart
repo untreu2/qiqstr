@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/widgets/note_widget.dart';
@@ -305,10 +306,16 @@ class _ThreadPageState extends State<ThreadPage> {
                 ),
                 child: ClipOval(
                   child: _currentUser?.profileImage.isNotEmpty == true
-                      ? Image.network(
-                          _currentUser!.profileImage,
+                      ? CachedNetworkImage(
+                          imageUrl: _currentUser!.profileImage,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
+                          fadeInDuration: Duration.zero,
+                          fadeOutDuration: Duration.zero,
+                          maxHeightDiskCache: 80,
+                          maxWidthDiskCache: 80,
+                          memCacheWidth: 80,
+                          memCacheHeight: 80,
+                          errorWidget: (context, url, error) {
                             return Icon(
                               Icons.person,
                               size: 24,

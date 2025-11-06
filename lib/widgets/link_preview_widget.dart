@@ -9,7 +9,10 @@ import '../models/link_preview_model.dart';
 
 Future<LinkPreviewModel?> _fetchAndParseLink(String url) async {
   try {
-    final response = await http.get(Uri.parse(url));
+    final response = await http.get(Uri.parse(url)).timeout(
+      const Duration(seconds: 3),
+      onTimeout: () => http.Response('', 408),
+    );
     if (response.statusCode == 200) {
       final document = html_parser.parse(response.body);
       final metaOgTitle = document.querySelector('meta[property="og:title"]');
@@ -129,6 +132,23 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
                     fit: BoxFit.cover,
                     width: double.infinity,
                     fadeInDuration: Duration.zero,
+                    fadeOutDuration: Duration.zero,
+                    maxHeightDiskCache: 600,
+                    maxWidthDiskCache: 800,
+                    memCacheWidth: 800,
+                    memCacheHeight: 600,
+                    placeholder: (context, url) => AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: Container(
+                        color: context.colors.overlayLight,
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.5,
+                            color: context.colors.accent,
+                          ),
+                        ),
+                      ),
+                    ),
                     errorWidget: (_, __, ___) {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         if (mounted) {

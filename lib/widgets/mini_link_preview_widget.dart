@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/theme_manager.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
@@ -8,7 +9,10 @@ import '../models/link_preview_model.dart';
 
 Future<LinkPreviewModel?> _fetchAndParseMiniLink(String url) async {
   try {
-    final response = await http.get(Uri.parse(url));
+    final response = await http.get(Uri.parse(url)).timeout(
+      const Duration(seconds: 3),
+      onTimeout: () => http.Response('', 408),
+    );
     if (response.statusCode == 200) {
       final document = html_parser.parse(response.body);
       final metaOgTitle = document.querySelector('meta[property="og:title"]');
@@ -120,12 +124,18 @@ class _MiniLinkPreviewWidgetState extends State<MiniLinkPreviewWidget> {
             if (_imageUrl != null)
               ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  _imageUrl!,
+                child: CachedNetworkImage(
+                  imageUrl: _imageUrl!,
                   width: 48,
                   height: 48,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
+                  fadeInDuration: Duration.zero,
+                  fadeOutDuration: Duration.zero,
+                  maxHeightDiskCache: 96,
+                  maxWidthDiskCache: 96,
+                  memCacheWidth: 96,
+                  memCacheHeight: 96,
+                  errorWidget: (_, __, ___) => Container(
                     width: 48,
                     height: 48,
                     color: context.colors.grey800,

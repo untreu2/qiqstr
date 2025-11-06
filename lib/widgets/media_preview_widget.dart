@@ -210,13 +210,20 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
       fit: fit,
       fadeInDuration: Duration.zero,
       fadeOutDuration: Duration.zero,
-      placeholder: (context, url) => Container(
-        color: context.colors.surfaceTransparent,
-        child: const Center(
-          child: SizedBox(
-            width: 24,
-            height: 24,
-            child: CircularProgressIndicator(strokeWidth: 2),
+      maxHeightDiskCache: 800,
+      maxWidthDiskCache: 800,
+      memCacheWidth: 800,
+      memCacheHeight: 800,
+      placeholder: (context, url) => AspectRatio(
+        aspectRatio: aspectRatio ?? 1.0,
+        child: Container(
+          color: context.colors.surfaceTransparent,
+          child: const Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
           ),
         ),
       ),

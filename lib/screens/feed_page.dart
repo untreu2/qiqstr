@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart' as widgets;
 import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/widgets/back_button_widget.dart';
@@ -33,7 +34,7 @@ class FeedPageState extends State<FeedPage> {
   bool isFirstOpen = false;
 
   final ValueNotifier<List<NoteModel>> _notesNotifier = ValueNotifier([]);
-  final Map<String, UserModel> _profiles = {};
+  late final Map<String, UserModel> _profiles;
 
   UserModel? _currentUser;
   StreamSubscription<UserModel>? _userStreamSubscription;
@@ -45,6 +46,7 @@ class FeedPageState extends State<FeedPage> {
   @override
   void initState() {
     super.initState();
+    _profiles = <String, UserModel>{};
     _userRepository = AppDI.get<UserRepository>();
     _scrollController = ScrollController()..addListener(_scrollListener);
     _loadInitialUser();
@@ -73,7 +75,7 @@ class FeedPageState extends State<FeedPage> {
         _pendingUser = updatedUser;
         _userUpdatePending = true;
         _userUpdateThrottleTimer?.cancel();
-        _userUpdateThrottleTimer = Timer(const Duration(seconds: 1), () {
+        _userUpdateThrottleTimer = Timer(const Duration(seconds: 3), () {
           if (mounted && _userUpdatePending && _pendingUser != null) {
             _userUpdatePending = false;
             setState(() {
@@ -138,11 +140,11 @@ class FeedPageState extends State<FeedPage> {
 
   void _scrollListener() {
     final direction = _scrollController.position.userScrollDirection;
-    if (direction == ScrollDirection.reverse) {
+    if (direction == ScrollDirection.reverse && _showAppBar) {
       setState(() {
         _showAppBar = false;
       });
-    } else if (direction == ScrollDirection.forward) {
+    } else if (direction == ScrollDirection.forward && !_showAppBar) {
       setState(() {
         _showAppBar = true;
       });
@@ -240,7 +242,7 @@ class FeedPageState extends State<FeedPage> {
 
         _profileUpdatePending = true;
         _profileUpdateThrottleTimer?.cancel();
-        _profileUpdateThrottleTimer = Timer(const Duration(seconds: 1), () {
+        _profileUpdateThrottleTimer = Timer(const Duration(seconds: 3), () {
           if (mounted && _profileUpdatePending) {
             _profileUpdatePending = false;
             setState(() {});
@@ -282,7 +284,7 @@ class FeedPageState extends State<FeedPage> {
                                 color: colors.avatarPlaceholder,
                                 image: _currentUser!.profileImage.isNotEmpty == true
                                     ? DecorationImage(
-                                        image: NetworkImage(_currentUser!.profileImage),
+                                        image: CachedNetworkImageProvider(_currentUser!.profileImage),
                                         fit: BoxFit.cover,
                                       )
                                     : null,
@@ -416,7 +418,7 @@ class FeedPageState extends State<FeedPage> {
                       key: const PageStorageKey<String>('feed_scroll'),
                       controller: _scrollController,
                       physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                      cacheExtent: 1500,
+                      cacheExtent: 1200,
                       slivers: [
                         if (!isHashtagMode)
                           SliverPersistentHeader(

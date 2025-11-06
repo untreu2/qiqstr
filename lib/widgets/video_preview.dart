@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../colors.dart';
 
 class VP extends StatefulWidget {
@@ -56,14 +57,19 @@ class _VPState extends State<VP> {
                 Positioned.fill(
                   child: ImageFiltered(
                     imageFilter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                    child: Image.network(
-                      widget.authorProfileImageUrl!,
+                    child: CachedNetworkImage(
+                      imageUrl: widget.authorProfileImageUrl!,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
+                      fadeInDuration: Duration.zero,
+                      fadeOutDuration: Duration.zero,
+                      maxHeightDiskCache: 200,
+                      maxWidthDiskCache: 200,
+                      memCacheWidth: 200,
+                      memCacheHeight: 200,
+                      errorWidget: (context, url, error) {
                         return Container(color: Colors.grey.shade800);
                       },
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
+                      placeholder: (context, url) {
                         return Container(color: Colors.grey.shade800);
                       },
                     ),

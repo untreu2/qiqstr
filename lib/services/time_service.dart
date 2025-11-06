@@ -106,9 +106,9 @@ class TimeService {
     _preciseTimer?.cancel();
     _ultraFastTimer?.cancel();
 
-    _cacheTimer = Timer.periodic(const Duration(seconds: 2), (_) => _refreshCache());
-    _preciseTimer = Timer.periodic(const Duration(milliseconds: 750), (_) => _refreshPreciseCache());
-    _ultraFastTimer = Timer.periodic(const Duration(milliseconds: 100), (_) => _refreshUltraFastCache());
+    _cacheTimer = Timer.periodic(const Duration(seconds: 3), (_) => _refreshCache());
+    _preciseTimer = Timer.periodic(const Duration(milliseconds: 1000), (_) => _refreshPreciseCache());
+    _ultraFastTimer = Timer.periodic(const Duration(milliseconds: 300), (_) => _refreshUltraFastCache());
   }
 
   void stopPeriodicRefresh() {

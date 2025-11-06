@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/theme_manager.dart';
 import '../models/user_model.dart';
 import '../models/note_model.dart';
@@ -25,13 +27,14 @@ class _ProfilePageState extends State<ProfilePage> {
   late AuthRepository _authRepository;
 
   final ValueNotifier<List<NoteModel>> _notesNotifier = ValueNotifier([]);
-  final Map<String, UserModel> _profiles = {};
+  late final Map<String, UserModel> _profiles;
   String? _currentUserNpub;
   bool _showUsernameBubble = false;
 
   @override
   void initState() {
     super.initState();
+    _profiles = <String, UserModel>{};
     _scrollController = ScrollController()..addListener(_scrollListener);
 
     _profileViewModel = AppDI.get<ProfileViewModel>();
@@ -44,12 +47,19 @@ class _ProfilePageState extends State<ProfilePage> {
     _profileViewModel.initializeWithUser(widget.user.npub);
   }
 
+  Timer? _scrollThrottleTimer;
+
   void _scrollListener() {
     if (_scrollController.hasClients) {
       final shouldShow = _scrollController.offset > 200;
       if (_showUsernameBubble != shouldShow) {
-        setState(() {
-          _showUsernameBubble = shouldShow;
+        _scrollThrottleTimer?.cancel();
+        _scrollThrottleTimer = Timer(const Duration(milliseconds: 100), () {
+          if (mounted && _showUsernameBubble != shouldShow) {
+            setState(() {
+              _showUsernameBubble = shouldShow;
+            });
+          }
         });
       }
     }
@@ -77,6 +87,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   void dispose() {
+    _scrollThrottleTimer?.cancel();
     _scrollController.dispose();
     _notesNotifier.dispose();
     _profileViewModel.dispose();
@@ -133,7 +144,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             color: colors.avatarPlaceholder,
                             image: widget.user.profileImage.isNotEmpty
                                 ? DecorationImage(
-                                    image: NetworkImage(widget.user.profileImage),
+                                    image: CachedNetworkImageProvider(widget.user.profileImage),
                                     fit: BoxFit.cover,
                                   )
                                 : null,
@@ -175,7 +186,7 @@ class _ProfilePageState extends State<ProfilePage> {
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),
         ),
-        cacheExtent: 1500,
+        cacheExtent: 1200,
         slivers: [
           SliverToBoxAdapter(
             child: ProfileInfoWidget(

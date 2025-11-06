@@ -23,6 +23,9 @@ void main() {
     FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
     await AppDI.initialize();
+    
+    debugProfileBuildsEnabled = false;
+    debugPrintRebuildDirtyWidgets = false;
 
     AppDI.get<NostrDataService>();
 
@@ -205,7 +208,7 @@ void _startBackgroundNotificationListening() {
       onError: (error) {},
     );
 
-    Timer.periodic(const Duration(seconds: 30), (timer) async {
+    Timer.periodic(const Duration(seconds: 60), (timer) async {
       try {
         await notificationRepository.refreshNotifications();
       } catch (e) {}
