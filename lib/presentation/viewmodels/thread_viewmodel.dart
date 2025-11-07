@@ -137,7 +137,10 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
             final allThreadNotes = [rootNote, ...replies];
             _loadUserProfiles(allThreadNotes);
+            _loadInteractionsForThread(allThreadNotes);
             safeNotifyListeners();
+          } else {
+            _loadInteractionsForThread([rootNote, ...replies]);
           }
         } else {
           _repliesState = ErrorState(repliesResult.error!);
@@ -246,6 +249,19 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     }
   }
 
+  Future<void> _loadInteractionsForThread(List<NoteModel> notes) async {
+    try {
+      final noteIds = notes.map((note) => note.id).toList();
+      if (noteIds.isEmpty) return;
+
+      await _noteRepository.fetchInteractionsForNotes(noteIds, useCount: false);
+      
+      safeNotifyListeners();
+    } catch (e) {
+      debugPrint('[ThreadViewModel] Error loading interactions for thread: $e');
+    }
+  }
+
   ThreadStructure _buildThreadStructure(NoteModel root, List<NoteModel> replies) {
     final Map<String, List<NoteModel>> childrenMap = {};
     final Map<String, NoteModel> notesMap = {root.id: root};
@@ -274,19 +290,40 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
   }
 
   void _subscribeToThreadUpdates() {
-    if (_focusedNoteId != null) {
-      addSubscription(
-        _noteRepository.realTimeNotesStream.listen((notes) {
-          if (!isDisposed && _rootNoteState.isLoaded) {
+    addSubscription(
+      _noteRepository.realTimeNotesStream.listen((notes) {
+        if (!isDisposed && _rootNoteState.isLoaded) {
+          if (_focusedNoteId != null) {
             final newFocusedNotes = notes.where((note) => note.id == _focusedNoteId).toList();
-
             if (newFocusedNotes.isNotEmpty) {
               loadThread();
+              return;
             }
           }
-        }),
-      );
-    }
+
+          final currentReplies = _repliesState.data ?? [];
+          final currentReplyIds = currentReplies.map((r) => r.id).toSet();
+          
+          final newReplies = notes.where((note) {
+            if (currentReplyIds.contains(note.id)) return false;
+            if (note.isReply && (note.rootId == _rootNoteId || note.parentId == _rootNoteId)) {
+              return true;
+            }
+            if (note.isReply && currentReplyIds.isNotEmpty) {
+              return note.parentId != null && currentReplyIds.contains(note.parentId);
+            }
+            return false;
+          }).toList();
+
+          if (newReplies.isNotEmpty) {
+            debugPrint('[ThreadViewModel] Detected ${newReplies.length} new replies, loading interactions');
+            _loadInteractionsForThread(newReplies).then((_) {
+              loadThread();
+            });
+          }
+        }
+      }),
+    );
   }
 
   Future<void> reactToNote(String noteId, String reaction) async {

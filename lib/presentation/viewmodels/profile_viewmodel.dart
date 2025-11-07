@@ -231,6 +231,10 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
                 '[ProfileViewModel] PROFILE MODE: Filtered breakdown - Posts: ${filteredNotes.where((n) => !n.isReply && !n.isRepost).length}, Reposts: ${filteredNotes.where((n) => n.isRepost).length}');
 
             _profileNotesState = filteredNotes.isEmpty ? const EmptyState('No notes from this user yet') : LoadedState(filteredNotes);
+            
+            if (filteredNotes.isNotEmpty) {
+              _fetchInteractionCountsForNotes(filteredNotes);
+            }
           },
           (error) {
             debugPrint('[ProfileViewModel] PROFILE MODE: Failed to load profile notes: $error');
@@ -281,6 +285,11 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
             }).toList();
 
             _profileNotesState = filteredNotes.isEmpty ? const EmptyState('No notes from this user yet') : LoadedState(filteredNotes);
+            
+            if (filteredNotes.isNotEmpty) {
+              _fetchInteractionCountsForNotes(filteredNotes);
+            }
+            
             safeNotifyListeners();
           }
         },
@@ -320,6 +329,18 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
         }
       }),
     );
+  }
+
+  Future<void> _fetchInteractionCountsForNotes(List<NoteModel> notes) async {
+    try {
+      final noteIds = notes.map((note) => note.id).toList();
+      if (noteIds.isEmpty) return;
+
+      debugPrint('[ProfileViewModel] Fetching interaction counts for ${noteIds.length} notes');
+      await _noteRepository.fetchInteractionsForNotes(noteIds, useCount: true, forceLoad: true);
+    } catch (e) {
+      debugPrint('[ProfileViewModel] Error fetching interaction counts: $e');
+    }
   }
 
   void _subscribeToNotesUpdates() {
@@ -403,6 +424,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
       }),
     );
   }
+
 
   UserModel? get currentProfile {
     return _profileState.data;

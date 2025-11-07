@@ -41,6 +41,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   bool _isInitialized = false;
 
   int _followingCount = 0;
+  int _followerCount = 0;
   bool _isLoadingCounts = true;
   bool? _doesUserFollowMe;
 
@@ -378,6 +379,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   Future<void> _loadFollowerCounts() async {
     try {
       final nostrDataService = AppDI.get<NostrDataService>();
+      
       final followingResult = await nostrDataService.getFollowingList(_userNotifier.value.pubkeyHex);
 
       followingResult.fold(
@@ -385,7 +387,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           if (mounted) {
             setState(() {
               _followingCount = followingHexList.length;
-              _isLoadingCounts = false;
             });
           }
         },
@@ -394,16 +395,24 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           if (mounted) {
             setState(() {
               _followingCount = 0;
-              _isLoadingCounts = false;
             });
           }
         },
       );
+
+      final followerCount = await nostrDataService.fetchFollowerCount(_userNotifier.value.pubkeyHex);
+      if (mounted) {
+        setState(() {
+          _followerCount = followerCount;
+          _isLoadingCounts = false;
+        });
+      }
     } catch (e) {
-      debugPrint('[ProfileInfoWidget] Error loading following count: $e');
+      debugPrint('[ProfileInfoWidget] Error loading follower counts: $e');
       if (mounted) {
         setState(() {
           _followingCount = 0;
+          _followerCount = 0;
           _isLoadingCounts = false;
         });
       }
@@ -801,6 +810,33 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       padding: const EdgeInsets.only(top: 6.0),
       child: Row(
         children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$_followerCount',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: context.colors.textPrimary,
+                ),
+              ),
+              Text(
+                ' followers',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: context.colors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          Text(
+            ' • ',
+            style: TextStyle(
+              fontSize: 14,
+              color: context.colors.textSecondary,
+            ),
+          ),
           GestureDetector(
             onTap: () {
               Navigator.push(

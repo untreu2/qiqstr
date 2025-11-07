@@ -17,6 +17,8 @@ const List<String> relaySetIndependentFetch = [
 
 const String cachingServerUrl = 'wss://cache2.primal.net/v1';
 
+const String countRelayUrl = 'wss://relay.nostr.band/';
+
 Future<List<String>> getRelaySetMainSockets() async {
   try {
     final prefs = await SharedPreferences.getInstance();

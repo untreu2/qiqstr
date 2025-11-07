@@ -148,6 +148,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             
             
             _loadUserProfilesForNotes(sortedNotes).catchError((_) {});
+            await _fetchInteractionCountsForNotes(sortedNotes).catchError((_) {});
             
             
             _subscribeToRealTimeUpdates();
@@ -224,6 +225,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
               _feedState = LoadedState(sortedNotes);
 
               await _loadUserProfilesForNotes(sortedNotes);
+              await _fetchInteractionCountsForNotes(sortedNotes);
             }
 
             _subscribeToRealTimeUpdates();
@@ -284,6 +286,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
               _feedState = LoadedState(sortedNotes);
 
               await _loadUserProfilesForNotes(sortedNotes);
+              await _fetchInteractionCountsForNotes(sortedNotes);
             }
           },
           (error) async {
@@ -374,6 +377,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             final sortedNotes = _sortNotes(notes);
             _feedState = LoadedState(sortedNotes);
             _loadUserProfilesForNotes(notes);
+            _fetchInteractionCountsForNotes(notes);
             safeNotifyListeners();
           }
         },
@@ -551,6 +555,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     );
   }
 
+
   List<NoteModel> get currentNotes {
     return _feedState.data ?? [];
   }
@@ -562,6 +567,18 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   bool get isFeedLoading => _feedState.isLoading;
 
   String? get errorMessage => _feedState.error;
+
+  Future<void> _fetchInteractionCountsForNotes(List<NoteModel> notes) async {
+    try {
+      final noteIds = notes.map((note) => note.id).toList();
+      if (noteIds.isEmpty) return;
+
+      debugPrint('[FeedViewModel] Fetching interaction counts for ${noteIds.length} notes');
+      await _noteRepository.fetchInteractionsForNotes(noteIds, useCount: true, forceLoad: true);
+    } catch (e) {
+      debugPrint('[FeedViewModel] Error fetching interaction counts: $e');
+    }
+  }
 
   Future<void> _loadUserProfilesForNotes(List<NoteModel> notes) async {
     try {

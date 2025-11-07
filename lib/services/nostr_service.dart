@@ -503,6 +503,37 @@ class NostrService {
 
   static String serializeRequest(Request request) => request.serialize();
 
+  static String serializeCountRequest(String subscriptionId, Filter filter) {
+    final filterMap = <String, dynamic>{};
+    
+    if (filter.ids != null && filter.ids!.isNotEmpty) {
+      filterMap['ids'] = filter.ids;
+    }
+    if (filter.authors != null && filter.authors!.isNotEmpty) {
+      filterMap['authors'] = filter.authors;
+    }
+    if (filter.kinds != null && filter.kinds!.isNotEmpty) {
+      filterMap['kinds'] = filter.kinds;
+    }
+    if (filter.e != null && filter.e!.isNotEmpty) {
+      filterMap['#e'] = filter.e;
+    }
+    if (filter.p != null && filter.p!.isNotEmpty) {
+      filterMap['#p'] = filter.p;
+    }
+    if (filter.since != null) {
+      filterMap['since'] = filter.since;
+    }
+    if (filter.until != null) {
+      filterMap['until'] = filter.until;
+    }
+    if (filter.limit != null) {
+      filterMap['limit'] = filter.limit;
+    }
+    
+    return jsonEncode(['COUNT', subscriptionId, filterMap]);
+  }
+
   static Map<String, dynamic> eventToJson(Event event) => event.toJson();
 
   static List<List<String>> createZapRequestTags({

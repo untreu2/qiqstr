@@ -603,24 +603,28 @@ class NoteRepository {
     });
   }
 
-  Future<void> fetchInteractionsForNote(String noteId) async {
+  Future<void> fetchInteractionsForNote(String noteId, {bool useCount = false}) async {
     try {
-      await _nostrDataService.fetchInteractionsForNotes([noteId], forceLoad: false);
+      await _nostrDataService.fetchInteractionsForNotes([noteId], forceLoad: false, useCount: useCount);
 
-      _updateNoteReplyCount(noteId);
+      if (!useCount) {
+        _updateNoteReplyCount(noteId);
+      }
     } catch (e) {
       debugPrint('[NoteRepository] Error fetching interactions for note $noteId: $e');
     }
   }
 
-  Future<void> fetchInteractionsForNotes(List<String> noteIds) async {
+  Future<void> fetchInteractionsForNotes(List<String> noteIds, {bool useCount = false, bool forceLoad = false}) async {
     try {
       if (noteIds.isEmpty) return;
 
-      await _nostrDataService.fetchInteractionsForNotes(noteIds, forceLoad: false);
+      await _nostrDataService.fetchInteractionsForNotes(noteIds, forceLoad: forceLoad, useCount: useCount);
 
-      for (final noteId in noteIds) {
-        _updateNoteReplyCount(noteId);
+      if (!useCount) {
+        for (final noteId in noteIds) {
+          _updateNoteReplyCount(noteId);
+        }
       }
     } catch (e) {
       debugPrint('[NoteRepository] Error fetching interactions for notes: $e');

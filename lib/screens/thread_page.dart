@@ -15,6 +15,7 @@ import '../presentation/providers/viewmodel_provider.dart';
 import '../presentation/viewmodels/thread_viewmodel.dart';
 import '../data/repositories/auth_repository.dart';
 import '../data/repositories/user_repository.dart';
+import '../data/repositories/note_repository.dart';
 import '../screens/share_note.dart';
 
 class ThreadPage extends StatefulWidget {
@@ -38,6 +39,7 @@ class _ThreadPageState extends State<ThreadPage> {
   final Map<String, UserModel> _profiles = {};
   late final AuthRepository _authRepository;
   late final UserRepository _userRepository;
+  late final NoteRepository _noteRepository;
   String _currentUserNpub = '';
   UserModel? _currentUser;
   bool _showThreadBubble = false;
@@ -49,6 +51,7 @@ class _ThreadPageState extends State<ThreadPage> {
 
   Timer? _refreshDebounceTimer;
   bool _isRefreshing = false;
+  StreamSubscription<List<NoteModel>>? _notesStreamSubscription;
 
   @override
   void initState() {
@@ -57,7 +60,9 @@ class _ThreadPageState extends State<ThreadPage> {
     _notesNotifier = ValueNotifier<List<NoteModel>>([]);
     _authRepository = AppDI.get<AuthRepository>();
     _userRepository = AppDI.get<UserRepository>();
+    _noteRepository = AppDI.get<NoteRepository>();
     _loadCurrentUser();
+    _subscribeToNoteUpdates();
 
     if (widget.focusedNoteId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -100,9 +105,18 @@ class _ThreadPageState extends State<ThreadPage> {
   @override
   void dispose() {
     _refreshDebounceTimer?.cancel();
+    _notesStreamSubscription?.cancel();
     _scrollController.dispose();
     _notesNotifier.dispose();
     super.dispose();
+  }
+
+  void _subscribeToNoteUpdates() {
+    _notesStreamSubscription = _noteRepository.notesStream.listen((notes) {
+      if (mounted) {
+        _notesNotifier.value = notes;
+      }
+    });
   }
 
   @override

@@ -17,6 +17,7 @@ import '../../services/nostr_service.dart';
 import '../../services/relay_service.dart';
 import '../../services/time_service.dart';
 import '../../services/nip05_verification_service.dart';
+import '../../constants/relays.dart';
 import 'auth_service.dart';
 import 'user_cache_service.dart';
 import 'follow_cache_service.dart';
@@ -143,10 +144,10 @@ class NostrDataService {
   void _handleRelayEvent(dynamic rawEvent, String relayUrl) {
     try {
       final eventData = jsonDecode(rawEvent);
-      if (eventData is List && eventData.length >= 3) {
+      if (eventData is List && eventData.isNotEmpty) {
         final messageType = eventData[0];
 
-        if (messageType == 'EVENT') {
+        if (messageType == 'EVENT' && eventData.length >= 3) {
           final event = eventData[2] as Map<String, dynamic>;
 
           _eventQueue.add({
@@ -160,6 +161,10 @@ class NostrDataService {
           } else {
             _batchProcessingTimer ??= Timer(_batchTimeout, _flushEventQueue);
           }
+        } else if (messageType == 'COUNT' && eventData.length >= 3) {
+          _handleCountResponse(eventData);
+        } else if (messageType == 'CLOSED' && eventData.length >= 2) {
+          _handleClosedMessage(eventData);
         }
       }
     } catch (e) {
@@ -428,7 +433,9 @@ class NostrDataService {
 
       debugPrint('Note added to cache. Total cached notes: ${_noteCache.length}');
 
-      debugPrint('[NostrDataService] Note processed without automatic interaction fetch: $id');
+      _fetchInteractionCountsForNotesImmediately([id]);
+
+      debugPrint('[NostrDataService] Note processed and interaction counts requested: $id');
 
       if (isReply && parentId != null) {
         final parentNote = _noteCache[parentId];
@@ -533,7 +540,9 @@ class NostrDataService {
 
       _updateParentNoteReplyCount(actualParentId ?? parentEventId);
 
-      debugPrint('[NostrDataService] Reply processed without automatic interaction fetch: $id');
+      _fetchInteractionCountsForNotesImmediately([id]);
+
+      debugPrint('[NostrDataService] Reply processed and interaction counts requested: $id');
 
       _scheduleUIUpdate();
 
@@ -787,6 +796,8 @@ class NostrDataService {
 
         _noteCache[id] = repostNote;
         _eventIds.add(id);
+
+        _fetchInteractionCountsForNotesImmediately([originalEventId]);
 
         final targetNote = _noteCache[originalEventId];
         if (targetNote != null) {
@@ -2681,18 +2692,360 @@ class NostrDataService {
     }
   }
 
-  Future<void> fetchInteractionsForNotes(List<String> noteIds, {bool forceLoad = false}) async {
+  final Map<String, Map<String, dynamic>> _pendingCountRequests = {};
+
+  Future<void> _fetchInteractionCountsForNotesImmediately(List<String> noteIds) async {
+    if (noteIds.isEmpty) return;
+
+    final totalRequests = noteIds.length * 4;
+    debugPrint('[NostrDataService] Fetching interaction counts IMMEDIATELY using NIP-45 for ${noteIds.length} notes ($totalRequests queries)...');
+
+    try {
+      for (final noteId in noteIds) {
+        _fetchCountForNoteWithRetry(noteId, 7, maxRetries: 3);
+        _fetchCountForNoteWithRetry(noteId, 1, maxRetries: 3);
+        _fetchCountForNoteWithRetry(noteId, 6, maxRetries: 3);
+        _fetchCountForNoteWithRetry(noteId, 9735, maxRetries: 3);
+      }
+
+      debugPrint('[NostrDataService] $totalRequests COUNT requests sent IMMEDIATELY (parallel)');
+    } catch (e) {
+      debugPrint('[NostrDataService] Error fetching interaction counts: $e');
+    }
+  }
+
+  Future<void> _fetchInteractionCountsForNotes(List<String> noteIds) async {
+    if (noteIds.isEmpty) return;
+
+    final totalRequests = noteIds.length * 4;
+    debugPrint('[NostrDataService] Fetching interaction counts using NIP-45 for ${noteIds.length} notes ($totalRequests queries)...');
+
+    try {
+      for (final noteId in noteIds) {
+        _fetchCountForNoteWithRetry(noteId, 7, maxRetries: 3);
+        _fetchCountForNoteWithRetry(noteId, 1, maxRetries: 3);
+        _fetchCountForNoteWithRetry(noteId, 6, maxRetries: 3);
+        _fetchCountForNoteWithRetry(noteId, 9735, maxRetries: 3);
+      }
+
+      debugPrint('[NostrDataService] $totalRequests COUNT requests sent (parallel)');
+    } catch (e) {
+      debugPrint('[NostrDataService] Error fetching interaction counts: $e');
+    }
+  }
+
+  Future<void> _fetchCountForNoteWithRetry(String noteId, int kind, {int maxRetries = 3, int attempt = 1}) async {
+    try {
+      final filterMap = <String, dynamic>{
+        'kinds': [kind],
+        '#e': [noteId],
+      };
+      final subscriptionId = NostrService.generateUUID();
+      
+      final completer = Completer<void>();
+      
+      _pendingCountRequests[subscriptionId] = {
+        'kind': kind,
+        'noteId': noteId,
+        'completer': completer,
+        'attempt': attempt,
+      };
+      
+      final countRequest = jsonEncode(['COUNT', subscriptionId, filterMap]);
+      
+      final ws = _relayManager.webSockets[countRelayUrl];
+      if (ws != null && ws.readyState == WebSocket.open) {
+        ws.add(countRequest);
+        
+        final kindName = _getKindName(kind);
+        if (attempt == 1) {
+          debugPrint('[NostrDataService] COUNT → $noteId ($kindName)');
+        } else {
+          debugPrint('[NostrDataService] COUNT → $noteId ($kindName) - retry $attempt/$maxRetries');
+        }
+        
+        try {
+          await completer.future.timeout(
+            const Duration(seconds: 3),
+            onTimeout: () {
+              _pendingCountRequests.remove(subscriptionId);
+              throw TimeoutException('COUNT timeout');
+            },
+          );
+        } on TimeoutException {
+          if (attempt < maxRetries) {
+            debugPrint('[NostrDataService] TIMEOUT $noteId ($kindName), retrying...');
+            await Future.delayed(Duration(milliseconds: 500 * attempt));
+            return _fetchCountForNoteWithRetry(noteId, kind, maxRetries: maxRetries, attempt: attempt + 1);
+          } else {
+            debugPrint('[NostrDataService] FAILED ✗ $noteId ($kindName) after $maxRetries attempts');
+            _setDefaultCount(noteId, kind);
+          }
+        } catch (e) {
+          if (e.toString().contains('CLOSED')) {
+            debugPrint('[NostrDataService] RELAY REFUSED ✗ $noteId ($kindName) - not retrying');
+            _setDefaultCount(noteId, kind);
+          } else if (attempt < maxRetries) {
+            debugPrint('[NostrDataService] ERROR $noteId ($kindName): $e - retrying...');
+            await Future.delayed(Duration(milliseconds: 500 * attempt));
+            return _fetchCountForNoteWithRetry(noteId, kind, maxRetries: maxRetries, attempt: attempt + 1);
+          } else {
+            debugPrint('[NostrDataService] FAILED ✗ $noteId ($kindName) - $e');
+            _setDefaultCount(noteId, kind);
+          }
+        }
+      } else {
+        _pendingCountRequests.remove(subscriptionId);
+        debugPrint('[NostrDataService] WebSocket not ready for COUNT request');
+        _setDefaultCount(noteId, kind);
+      }
+    } catch (e) {
+      debugPrint('[NostrDataService] Exception in COUNT request for $noteId kind $kind: $e');
+      _setDefaultCount(noteId, kind);
+    }
+  }
+
+  void _setDefaultCount(String noteId, int kind) {
+    final note = _noteCache[noteId];
+    if (note == null) return;
+
+    final kindName = _getKindName(kind);
+    debugPrint('[NostrDataService] Keeping existing count for $noteId ($kindName) - COUNT query failed');
+    
+    _notesController.add(_getNotesList());
+  }
+
+  String _getKindName(int kind) {
+    switch (kind) {
+      case 1:
+        return 'replies';
+      case 6:
+        return 'reposts';
+      case 7:
+        return 'reactions';
+      case 9735:
+        return 'zaps';
+      default:
+        return 'kind-$kind';
+    }
+  }
+
+  void _handleCountResponse(List<dynamic> response) {
+    try {
+      if (response.length < 3) return;
+
+      final subscriptionId = response[1] as String;
+      final countData = response[2] as Map<String, dynamic>;
+      final count = countData['count'] as int;
+
+      if (_pendingCountRequests.containsKey(subscriptionId)) {
+        final requestData = _pendingCountRequests[subscriptionId]!;
+        
+        if (requestData['type'] == 'follower') {
+          final completer = requestData['completer'] as Completer<int>;
+          final pubkey = requestData['pubkey'] as String;
+          debugPrint('[NostrDataService] COUNT ✓ Follower count for $pubkey = $count');
+          if (!completer.isCompleted) {
+            completer.complete(count);
+          }
+          _pendingCountRequests.remove(subscriptionId);
+          return;
+        }
+        
+        final kind = requestData['kind'] as int;
+        final noteId = requestData['noteId'] as String;
+        final kindName = _getKindName(kind);
+        
+        final note = _noteCache[noteId];
+        if (note != null) {
+          switch (kind) {
+            case 7:
+              final oldCount = note.reactionCount;
+              if (count >= oldCount) {
+                note.reactionCount = count;
+                if (count > oldCount) {
+                  debugPrint('[NostrDataService] COUNT ✓ Note $noteId reactions: $oldCount → $count');
+                } else {
+                  debugPrint('[NostrDataService] COUNT ✓ Note $noteId reactions: $count');
+                }
+              } else {
+                debugPrint('[NostrDataService] COUNT ⚠ Note $noteId reactions: kept $oldCount (received $count)');
+              }
+              break;
+            case 1:
+              final oldCount = note.replyCount;
+              if (count >= oldCount) {
+                note.replyCount = count;
+                if (count > oldCount) {
+                  debugPrint('[NostrDataService] COUNT ✓ Note $noteId replies: $oldCount → $count');
+                } else {
+                  debugPrint('[NostrDataService] COUNT ✓ Note $noteId replies: $count');
+                }
+              } else {
+                debugPrint('[NostrDataService] COUNT ⚠ Note $noteId replies: kept $oldCount (received $count)');
+              }
+              break;
+            case 6:
+              final oldCount = note.repostCount;
+              if (count >= oldCount) {
+                note.repostCount = count;
+                if (count > oldCount) {
+                  debugPrint('[NostrDataService] COUNT ✓ Note $noteId reposts: $oldCount → $count');
+                } else {
+                  debugPrint('[NostrDataService] COUNT ✓ Note $noteId reposts: $count');
+                }
+              } else {
+                debugPrint('[NostrDataService] COUNT ⚠ Note $noteId reposts: kept $oldCount (received $count)');
+              }
+              break;
+            case 9735:
+              debugPrint('[NostrDataService] COUNT ✓ Note $noteId zaps = $count');
+              break;
+          }
+          
+          if (requestData.containsKey('completer')) {
+            final completer = requestData['completer'] as Completer<void>;
+            if (!completer.isCompleted) {
+              completer.complete();
+            }
+          }
+          
+          _notesController.add(_getNotesList());
+        } else {
+          debugPrint('[NostrDataService] COUNT response for unknown note: $noteId ($kindName)');
+        }
+
+        _pendingCountRequests.remove(subscriptionId);
+      }
+    } catch (e) {
+      debugPrint('[NostrDataService] Error handling COUNT response: $e');
+    }
+  }
+
+  void _handleClosedMessage(List<dynamic> message) {
+    try {
+      final subscriptionId = message[1] as String;
+      final reason = message.length > 2 ? message[2] as String : 'unknown';
+
+      if (_pendingCountRequests.containsKey(subscriptionId)) {
+        final requestData = _pendingCountRequests[subscriptionId]!;
+        
+        if (requestData['type'] == 'follower') {
+          final completer = requestData['completer'] as Completer<int>;
+          final pubkey = requestData['pubkey'] as String;
+          debugPrint('[NostrDataService] CLOSED ✗ Follower count for $pubkey - reason: $reason');
+          if (!completer.isCompleted) {
+            completer.completeError('CLOSED: $reason');
+          }
+          _pendingCountRequests.remove(subscriptionId);
+          return;
+        }
+        
+        final kind = requestData['kind'] as int;
+        final noteId = requestData['noteId'] as String;
+        final kindName = _getKindName(kind);
+        
+        debugPrint('[NostrDataService] CLOSED ✗ COUNT for $noteId ($kindName) - reason: $reason');
+        
+        if (requestData.containsKey('completer')) {
+          final completer = requestData['completer'] as Completer<void>;
+          if (!completer.isCompleted) {
+            completer.completeError('CLOSED: $reason');
+          }
+        }
+        
+        _pendingCountRequests.remove(subscriptionId);
+      }
+    } catch (e) {
+      debugPrint('[NostrDataService] Error handling CLOSED message: $e');
+    }
+  }
+
+
+  Future<int> fetchFollowerCount(String pubkeyHex, {int maxRetries = 3, int attempt = 1}) async {
+    try {
+      final filterMap = <String, dynamic>{
+        'kinds': [3],
+        '#p': [pubkeyHex],
+      };
+      final subscriptionId = NostrService.generateUUID();
+      
+      final completer = Completer<int>();
+      
+      _pendingCountRequests[subscriptionId] = {
+        'type': 'follower',
+        'pubkey': pubkeyHex,
+        'completer': completer,
+        'attempt': attempt,
+      };
+      
+      final countRequest = jsonEncode(['COUNT', subscriptionId, filterMap]);
+      
+      final ws = _relayManager.webSockets[countRelayUrl];
+      if (ws != null && ws.readyState == WebSocket.open) {
+        ws.add(countRequest);
+        
+        if (attempt == 1) {
+          debugPrint('[NostrDataService] COUNT → follower count for $pubkeyHex');
+        } else {
+          debugPrint('[NostrDataService] COUNT → follower count for $pubkeyHex - retry $attempt/$maxRetries');
+        }
+        
+        try {
+          return await completer.future.timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              _pendingCountRequests.remove(subscriptionId);
+              throw TimeoutException('Follower COUNT timeout');
+            },
+          );
+        } on TimeoutException {
+          if (attempt < maxRetries) {
+            debugPrint('[NostrDataService] TIMEOUT follower count for $pubkeyHex, retrying...');
+            await Future.delayed(Duration(milliseconds: 500 * attempt));
+            return fetchFollowerCount(pubkeyHex, maxRetries: maxRetries, attempt: attempt + 1);
+          } else {
+            debugPrint('[NostrDataService] FAILED ✗ follower count for $pubkeyHex after $maxRetries attempts');
+            return 0;
+          }
+        } catch (e) {
+          if (e.toString().contains('CLOSED')) {
+            debugPrint('[NostrDataService] RELAY REFUSED ✗ follower count for $pubkeyHex');
+            return 0;
+          } else if (attempt < maxRetries) {
+            debugPrint('[NostrDataService] ERROR follower count for $pubkeyHex: $e - retrying...');
+            await Future.delayed(Duration(milliseconds: 500 * attempt));
+            return fetchFollowerCount(pubkeyHex, maxRetries: maxRetries, attempt: attempt + 1);
+          } else {
+            debugPrint('[NostrDataService] FAILED ✗ follower count for $pubkeyHex - $e');
+            return 0;
+          }
+        }
+      } else {
+        _pendingCountRequests.remove(subscriptionId);
+        debugPrint('[NostrDataService] WebSocket not ready for follower COUNT request');
+        return 0;
+      }
+    } catch (e) {
+      debugPrint('[NostrDataService] Exception in follower COUNT request for $pubkeyHex: $e');
+      return 0;
+    }
+  }
+
+  Future<void> fetchInteractionsForNotes(List<String> noteIds, {bool forceLoad = false, bool useCount = false}) async {
     if (_isClosed || noteIds.isEmpty) return;
 
-    debugPrint('[NostrDataService] ${forceLoad ? 'Manual' : 'Automatic'} interaction fetching for ${noteIds.length} notes');
+    debugPrint('[NostrDataService] ${forceLoad ? 'Manual' : 'Automatic'} interaction fetching for ${noteIds.length} notes (useCount: $useCount)');
 
     final now = DateTime.now();
     final noteIdsToFetch = <String>[];
 
     for (final eventId in noteIds) {
+      if (!forceLoad) {
       final lastFetch = _lastInteractionFetch[eventId];
       if (lastFetch != null && now.difference(lastFetch) < _interactionFetchCooldown) {
         continue;
+        }
       }
 
       noteIdsToFetch.add(eventId);
@@ -2700,11 +3053,16 @@ class NostrDataService {
     }
 
     if (noteIdsToFetch.isNotEmpty) {
+      debugPrint('[NostrDataService] Actually fetching for ${noteIdsToFetch.length} notes (after cooldown filter)');
+      if (useCount) {
+        await _fetchInteractionCountsForNotes(noteIdsToFetch);
+      } else {
       await _fetchInteractionsForNotes(noteIdsToFetch);
+      }
 
       for (final eventId in noteIdsToFetch) {
         final note = _noteCache[eventId];
-        if (note != null) {
+        if (note != null && !useCount) {
           note.reactionCount = _reactionsMap[eventId]?.length ?? 0;
           note.replyCount = 0;
           note.repostCount = _repostsMap[eventId]?.length ?? 0;

@@ -152,9 +152,29 @@ class _InteractionBarState extends State<InteractionBar> {
   void _updateState() {
     if (!mounted) return;
     
+    final currentState = _stateNotifier.value;
     final newState = _computeInitialState();
-    if (_stateNotifier.value != newState) {
-      _stateNotifier.value = newState;
+    
+    final safeNewState = _InteractionState(
+      reactionCount: newState.reactionCount >= currentState.reactionCount 
+          ? newState.reactionCount 
+          : currentState.reactionCount,
+      repostCount: newState.repostCount >= currentState.repostCount 
+          ? newState.repostCount 
+          : currentState.repostCount,
+      replyCount: newState.replyCount >= currentState.replyCount 
+          ? newState.replyCount 
+          : currentState.replyCount,
+      zapAmount: newState.zapAmount >= currentState.zapAmount 
+          ? newState.zapAmount 
+          : currentState.zapAmount,
+      hasReacted: newState.hasReacted || currentState.hasReacted,
+      hasReposted: newState.hasReposted || currentState.hasReposted,
+      hasZapped: newState.hasZapped || currentState.hasZapped,
+    );
+    
+    if (currentState != safeNewState) {
+      _stateNotifier.value = safeNewState;
     }
   }
 

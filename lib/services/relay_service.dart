@@ -58,6 +58,9 @@ class WebSocketManager {
       
       if (relayUrls.isEmpty) {
         relayUrls.addAll(customRelays);
+        if (!relayUrls.contains(countRelayUrl)) {
+          relayUrls.add(countRelayUrl);
+        }
         _initializeStats();
         
         if (kDebugMode) {
@@ -94,6 +97,8 @@ class WebSocketManager {
   }
 
   List<WebSocket> get activeSockets => _webSockets.values.where((ws) => ws.readyState == WebSocket.open).toList();
+
+  Map<String, WebSocket> get webSockets => _webSockets;
 
   bool get isConnected => activeSockets.isNotEmpty;
 

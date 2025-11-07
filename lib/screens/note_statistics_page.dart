@@ -56,16 +56,16 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
 
   Future<void> _fetchInteractionsForNote() async {
     try {
-      debugPrint(' [NoteStatisticsPage] Fetching fresh interactions for note: ${widget.note.id}');
-      await _nostrDataService.fetchInteractionsForNotes([widget.note.id]);
+      debugPrint('[NoteStatisticsPage] Fetching fresh interactions for note: ${widget.note.id}');
+      await _nostrDataService.fetchInteractionsForNotes([widget.note.id], useCount: false);
 
       if (mounted) {
         setState(() {});
       }
 
-      debugPrint(' [NoteStatisticsPage] Fresh interactions fetched');
+      debugPrint('[NoteStatisticsPage] Fresh interactions fetched');
     } catch (e) {
-      debugPrint(' [NoteStatisticsPage] Error fetching interactions: $e');
+      debugPrint('[NoteStatisticsPage] Error fetching interactions: $e');
     }
   }
 

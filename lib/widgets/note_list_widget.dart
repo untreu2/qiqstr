@@ -45,8 +45,6 @@ class NoteListWidget extends StatefulWidget {
 class _NoteListWidgetState extends State<NoteListWidget> {
   late final NoteRepository _noteRepository;
   late final UserRepository _userRepository;
-  final Set<String> _loadedInteractionIds = {};
-  final Set<String> _visibleNoteIds = {};
   final Set<String> _preloadedUserIds = {};
   StreamSubscription<List<NoteModel>>? _notesStreamSubscription;
   Timer? _updateTimer;
@@ -65,22 +63,9 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       
       if (widget.scrollController != null) {
         widget.scrollController!.addListener(_onScrollChanged);
-        
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _updateVisibleNotes();
-            _loadInteractionsForVisibleNotes();
-          }
-        });
-      } else {
-        if (widget.notes.isNotEmpty) {
-          _visibleNoteIds.addAll(
-            widget.notes.take(20).map((note) => _getInteractionNoteId(note))
-          );
-          _loadInteractionsForVisibleNotes();
-        }
       }
     } catch (e) {
+      debugPrint('[NoteListWidget] Error in initState: $e');
     }
   }
 
@@ -151,13 +136,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
   void _setupVisibleNotesSubscription() {
     _notesStreamSubscription = _noteRepository.notesStream.listen((updatedNotes) {
-      if (!mounted || _visibleNoteIds.isEmpty || updatedNotes.isEmpty) return;
-
-      bool hasVisibleUpdates = updatedNotes.any(
-        (note) => _visibleNoteIds.contains(_getInteractionNoteId(note))
-      );
-
-      if (!hasVisibleUpdates) return;
+      if (!mounted || updatedNotes.isEmpty) return;
 
       if (_isScrolling) {
         _hasPendingUpdate = true;
@@ -188,87 +167,18 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     }
 
     _updateTimer?.cancel();
+    
     _updateTimer = Timer(const Duration(milliseconds: 300), () {
       if (!mounted) return;
       
       final timeSinceScroll = DateTime.now().difference(_lastScrollTime);
       if (timeSinceScroll.inMilliseconds >= 280) {
         _isScrolling = false;
-        _updateVisibleNotes();
-        _loadInteractionsForVisibleNotes();
         _scheduleUpdate();
       }
     });
   }
 
-  void _updateVisibleNotes() {
-    if (!mounted) return;
-
-    final newVisibleIds = <String>{};
-
-    if (widget.scrollController == null || !widget.scrollController!.hasClients) {
-      if (widget.notes.isNotEmpty) {
-        newVisibleIds.addAll(
-          widget.notes.take(20).map((note) => _getInteractionNoteId(note))
-        );
-      }
-    } else {
-      final scrollPosition = widget.scrollController!.position;
-      final viewportTop = scrollPosition.pixels;
-      final viewportBottom = viewportTop + scrollPosition.viewportDimension;
-      final itemHeight = 180.0;
-      final buffer = 600.0;
-
-      final startIndex = ((viewportTop - buffer) / itemHeight).floor().clamp(0, widget.notes.length);
-      final endIndex = ((viewportBottom + buffer) / itemHeight).ceil().clamp(0, widget.notes.length);
-
-      for (int i = startIndex; i < endIndex && i < widget.notes.length; i++) {
-        newVisibleIds.add(_getInteractionNoteId(widget.notes[i]));
-      }
-
-      if (viewportTop <= 200) {
-        newVisibleIds.addAll(
-          widget.notes.take(20).map((note) => _getInteractionNoteId(note))
-        );
-      }
-    }
-
-    if (newVisibleIds.isNotEmpty && 
-        (newVisibleIds.length != _visibleNoteIds.length || 
-        !newVisibleIds.every(_visibleNoteIds.contains))) {
-      _visibleNoteIds.clear();
-      _visibleNoteIds.addAll(newVisibleIds);
-    }
-  }
-
-  String _getInteractionNoteId(NoteModel note) {
-    if (note.isRepost && note.rootId != null && note.rootId!.isNotEmpty) {
-      return note.rootId!;
-    }
-    return note.id;
-  }
-
-  void _loadInteractionsForVisibleNotes() {
-    if (!mounted || widget.notes.isEmpty || _visibleNoteIds.isEmpty) return;
-
-    final noteIdsToLoad = _visibleNoteIds
-        .where((noteId) => !_loadedInteractionIds.contains(noteId))
-        .take(15)
-        .toList();
-
-    if (noteIdsToLoad.isEmpty) return;
-
-    _loadedInteractionIds.addAll(noteIdsToLoad);
-
-    Future.microtask(() {
-      if (!mounted) return;
-      try {
-        _noteRepository.fetchInteractionsForNotes(noteIdsToLoad);
-      } catch (e) {
-        _loadedInteractionIds.removeAll(noteIdsToLoad);
-      }
-    });
-  }
 
   @override
   void didUpdateWidget(NoteListWidget oldWidget) {
@@ -281,26 +191,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     if (oldWidget.scrollController != widget.scrollController) {
       oldWidget.scrollController?.removeListener(_onScrollChanged);
       widget.scrollController?.addListener(_onScrollChanged);
-    }
-
-    if (oldWidget.notes.length != widget.notes.length ||
-        (widget.notes.isNotEmpty && oldWidget.notes.isNotEmpty && 
-         widget.notes.first.id != oldWidget.notes.first.id)) {
-      _visibleNoteIds.clear();
-      _loadedInteractionIds.clear();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _updateVisibleNotes();
-          _loadInteractionsForVisibleNotes();
-        }
-      });
-    } else if (oldWidget.notes != widget.notes) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _updateVisibleNotes();
-          _loadInteractionsForVisibleNotes();
-        }
-      });
     }
   }
 
