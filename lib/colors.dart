@@ -8,7 +8,7 @@ class AppColors {
 
   static const Color background = Color(0xFF000000);
   static const Color backgroundElevated = Color(0xFF111111);
-  static const Color surface = Color(0xFF0A0A0A);
+  static const Color surface = Color(0xFF000000);
   static const Color surfaceVariant = Color(0xFF141414);
   static const Color surfaceElevated = Color(0xFF1A1A1A);
   static const Color surfaceHighest = Color(0xFF242424);

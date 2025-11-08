@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:bounce/bounce.dart';
 import 'package:carbon_icons/carbon_icons.dart';
+import 'package:provider/provider.dart';
 
 import 'package:qiqstr/screens/feed_page.dart';
 import 'package:qiqstr/screens/users_search_page.dart';
@@ -26,6 +27,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
   int _currentIndex = 0;
   final GlobalKey<FeedPageState> _feedPageKey = GlobalKey<FeedPageState>();
   late AnimationController _iconAnimationController;
+  bool _isFirstBuild = true;
 
   late final List<Widget> _pages = [
     FeedPage(key: _feedPageKey, npub: widget.npub),
@@ -124,9 +126,50 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
     );
   }
 
-  Widget _buildNotificationIcon(String iconPath, bool isSelected) {
+  static const double _iconSizeSelected = 26.0;
+  static const double _iconSizeUnselected = 22.0;
+  static const double _homeIconSizeSelected = 27.0;
+  static const double _homeIconSizeUnselected = 23.0;
+
+  Widget _buildIcon({
+    required String iconPath,
+    required bool isSelected,
+    required IconData carbonIcon,
+    required int index,
+    String? iconType,
+    bool isHome = false,
+  }) {
+    final iconSize = isHome
+        ? (isSelected ? _homeIconSizeSelected : _homeIconSizeUnselected)
+        : (isSelected ? _iconSizeSelected : _iconSizeUnselected);
+    
+    if (_isFirstBuild) {
+      return SizedBox(
+        width: iconSize,
+        height: iconSize,
+        child: isSelected
+            ? Icon(
+                carbonIcon,
+                size: iconSize,
+                color: context.colors.accent,
+              )
+            : SvgPicture.asset(
+                iconPath,
+                width: iconSize,
+                height: iconSize,
+                fit: BoxFit.contain,
+                colorFilter: ColorFilter.mode(
+                  context.colors.textPrimary,
+                  BlendMode.srcIn,
+                ),
+              ),
+      );
+    }
+    
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),
+      switchInCurve: Curves.easeInOut,
+      switchOutCurve: Curves.easeInOut,
       transitionBuilder: (Widget child, Animation<double> animation) {
         return FadeTransition(
           opacity: animation,
@@ -136,55 +179,47 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
           ),
         );
       },
-      child: isSelected
-          ? Icon(
-              CarbonIcons.notification,
-              key: const ValueKey('carbon_notification'),
-              size: 24,
-              color: context.colors.accent,
-            )
-          : SvgPicture.asset(
-              iconPath,
-              key: const ValueKey('svg_notification'),
-              width: 21,
-              height: 21,
-              colorFilter: ColorFilter.mode(
-                context.colors.textPrimary,
-                BlendMode.srcIn,
+      child: SizedBox(
+        key: ValueKey('${isSelected ? 'carbon' : 'svg'}_${iconType ?? index}'),
+        width: iconSize,
+        height: iconSize,
+        child: isSelected
+            ? Icon(
+                carbonIcon,
+                size: iconSize,
+                color: context.colors.accent,
+              )
+            : SvgPicture.asset(
+                iconPath,
+                width: iconSize,
+                height: iconSize,
+                fit: BoxFit.contain,
+                colorFilter: ColorFilter.mode(
+                  context.colors.textPrimary,
+                  BlendMode.srcIn,
+                ),
               ),
-            ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationIcon(String iconPath, bool isSelected) {
+    return _buildIcon(
+      iconPath: iconPath,
+      isSelected: isSelected,
+      carbonIcon: CarbonIcons.notification,
+      index: 3,
+      iconType: 'notification',
     );
   }
 
   Widget _buildWalletIcon(String iconPath, bool isSelected) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 300),
-      transitionBuilder: (Widget child, Animation<double> animation) {
-        return FadeTransition(
-          opacity: animation,
-          child: Transform.scale(
-            scale: isSelected ? 1.0 + (animation.value * 0.1) : 1.0,
-            child: child,
-          ),
-        );
-      },
-      child: isSelected
-          ? Icon(
-              CarbonIcons.wallet,
-              key: const ValueKey('carbon_wallet'),
-              size: 22,
-              color: context.colors.accent,
-            )
-          : SvgPicture.asset(
-              iconPath,
-              key: const ValueKey('svg_wallet'),
-              width: 18,
-              height: 18,
-              colorFilter: ColorFilter.mode(
-                context.colors.textPrimary,
-                BlendMode.srcIn,
-              ),
-            ),
+    return _buildIcon(
+      iconPath: iconPath,
+      isSelected: isSelected,
+      carbonIcon: CarbonIcons.wallet,
+      index: 2,
+      iconType: 'wallet',
     );
   }
 
@@ -192,44 +227,21 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
     final String iconPath = item['icon'] as String;
     final int index = item['index'] as int;
 
-    // Use carbon icons for selected state
     IconData carbonIcon;
     if (index == 0) {
-      carbonIcon = CarbonIcons.home; // Home icon
+      carbonIcon = CarbonIcons.home;
     } else if (index == 1) {
-      carbonIcon = CarbonIcons.search; // Search icon
+      carbonIcon = CarbonIcons.search;
     } else {
-      carbonIcon = CarbonIcons.home; // Fallback
+      carbonIcon = CarbonIcons.home;
     }
 
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 300),
-      transitionBuilder: (Widget child, Animation<double> animation) {
-        return FadeTransition(
-          opacity: animation,
-          child: Transform.scale(
-            scale: isSelected ? 1.0 + (animation.value * 0.1) : 1.0,
-            child: child,
-          ),
-        );
-      },
-      child: isSelected
-          ? Icon(
-              carbonIcon,
-              key: ValueKey('carbon_$index'),
-              size: 24,
-              color: context.colors.accent,
-            )
-          : SvgPicture.asset(
-              iconPath,
-              key: ValueKey('svg_$index'),
-              width: 20,
-              height: 20,
-              colorFilter: ColorFilter.mode(
-                context.colors.textPrimary,
-                BlendMode.srcIn,
-              ),
-            ),
+    return _buildIcon(
+      iconPath: iconPath,
+      isSelected: isSelected,
+      carbonIcon: carbonIcon,
+      index: index,
+      isHome: index == 0,
     );
   }
 
@@ -261,18 +273,32 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBody: true,
-      body: PageStorage(
-        bucket: PageStorageBucket(),
-        child: IndexedStack(
-          index: _currentIndex,
-          children: _pages,
-        ),
-      ),
-      bottomNavigationBar: RepaintBoundary(
-        child: _buildCustomBottomBar(),
-      ),
+    if (_isFirstBuild) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _isFirstBuild = false;
+          });
+        }
+      });
+    }
+    
+    return Consumer<ThemeManager>(
+      builder: (context, themeManager, child) {
+        return Scaffold(
+          extendBody: true,
+          body: PageStorage(
+            bucket: PageStorageBucket(),
+            child: IndexedStack(
+              index: _currentIndex,
+              children: _pages,
+            ),
+          ),
+          bottomNavigationBar: RepaintBoundary(
+            child: _buildCustomBottomBar(),
+          ),
+        );
+      },
     );
   }
 }
