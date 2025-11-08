@@ -52,6 +52,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   DateTime _lastScrollTime = DateTime.now();
   DateTime _lastInteractionFetchTime = DateTime.now();
   bool _hasPendingUpdate = false;
+  final Set<String> _fetchedInteractionNoteIds = {};
 
   @override
   void initState() {
@@ -163,8 +164,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
     final now = DateTime.now();
     final timeSinceLastFetch = now.difference(_lastInteractionFetchTime);
-    if (timeSinceLastFetch.inMilliseconds < 800) {
-      debugPrint('[NoteListWidget] Skipping fetch - too soon (${timeSinceLastFetch.inMilliseconds}ms)');
+    if (timeSinceLastFetch.inMilliseconds < 100) {
       return;
     }
 
@@ -177,37 +177,52 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       final startIndex = (scrollOffset / estimatedItemHeight).floor().clamp(0, widget.notes.length - 1);
       final endIndex = ((scrollOffset + viewportHeight) / estimatedItemHeight).ceil().clamp(0, widget.notes.length);
       
-      final buffer = 1;
+      final buffer = 5;
       final bufferedStartIndex = (startIndex - buffer).clamp(0, widget.notes.length - 1);
       final bufferedEndIndex = (endIndex + buffer).clamp(0, widget.notes.length);
       
-      final maxVisibleNotes = 8;
+      final maxVisibleNotes = 20;
       final actualEndIndex = bufferedEndIndex > bufferedStartIndex + maxVisibleNotes 
           ? bufferedStartIndex + maxVisibleNotes 
           : bufferedEndIndex;
       
-      final visibleNotes = widget.notes.sublist(bufferedStartIndex, actualEndIndex);
+      if (bufferedStartIndex >= actualEndIndex || bufferedStartIndex >= widget.notes.length) {
+        return;
+      }
+      
+      final visibleNotes = widget.notes.sublist(bufferedStartIndex, actualEndIndex.clamp(0, widget.notes.length));
       
       if (visibleNotes.isEmpty) return;
       
       final noteIdsToFetch = <String>{};
       for (final note in visibleNotes) {
-        if (note.isRepost && note.rootId != null) {
-          noteIdsToFetch.add(note.rootId!);
-        } else {
-          noteIdsToFetch.add(note.id);
+        final noteId = note.isRepost && note.rootId != null ? note.rootId! : note.id;
+        if (!_fetchedInteractionNoteIds.contains(noteId)) {
+          noteIdsToFetch.add(noteId);
+          _fetchedInteractionNoteIds.add(noteId);
         }
       }
       
-      _lastInteractionFetchTime = now;
+      if (noteIdsToFetch.isEmpty) return;
       
-      debugPrint('[NoteListWidget] Fetching interactions for ${noteIdsToFetch.length} visible notes (${visibleNotes.length} notes, indices: $bufferedStartIndex-$actualEndIndex, total: ${widget.notes.length})');
+      _lastInteractionFetchTime = now;
       
       _noteRepository.fetchInteractionsForNotes(
         noteIdsToFetch.toList(),
         useCount: false,
         forceLoad: true,
       );
+      
+      if (_fetchedInteractionNoteIds.length > 200) {
+        final cutoff = bufferedStartIndex - 20;
+        if (cutoff > 0) {
+          for (int i = 0; i < cutoff && i < widget.notes.length; i++) {
+            final note = widget.notes[i];
+            final noteId = note.isRepost && note.rootId != null ? note.rootId! : note.id;
+            _fetchedInteractionNoteIds.remove(noteId);
+          }
+        }
+      }
     } catch (e) {
       debugPrint('[NoteListWidget] Error fetching interactions for visible notes: $e');
     }
@@ -227,7 +242,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     if (!widget.scrollController!.hasClients || !mounted) return;
 
     final now = DateTime.now();
-    if (_lastScrollTime.difference(now).inMilliseconds.abs() < 100) {
+    final timeSinceLastScroll = now.difference(_lastScrollTime).inMilliseconds.abs();
+    if (timeSinceLastScroll < 50) {
       return;
     }
     
@@ -235,8 +251,14 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     
     if (!_isScrolling) {
       _isScrolling = true;
-      _startScrollDebounce();
     }
+    
+    final timeSinceLastFetch = now.difference(_lastInteractionFetchTime).inMilliseconds;
+    if (timeSinceLastFetch >= 100) {
+      _fetchInteractionsForVisibleNotes();
+    }
+    
+    _startScrollDebounce();
   }
   
   void _startScrollDebounce() {
@@ -244,11 +266,11 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     _lastScrollTime = scrollTime;
     
     Future.microtask(() async {
-      await Future.delayed(const Duration(milliseconds: 800));
+      await Future.delayed(const Duration(milliseconds: 300));
       if (!mounted) return;
       
       final timeSinceScroll = DateTime.now().difference(_lastScrollTime);
-      if (timeSinceScroll.inMilliseconds >= 780) {
+      if (timeSinceScroll.inMilliseconds >= 280) {
         _onScrollStopped();
       } else {
         _startScrollDebounce();
@@ -264,6 +286,23 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     }
     
     _fetchInteractionsForVisibleNotes();
+  }
+
+  void _onNoteBecameVisible(String noteId) {
+    if (!mounted) return;
+    
+    try {
+      final note = widget.notes.firstWhere(
+        (n) => (n.isRepost && n.rootId == noteId) || n.id == noteId,
+        orElse: () => widget.notes.firstWhere((n) => n.id == noteId),
+      );
+      final interactionNoteId = note.isRepost && note.rootId != null ? note.rootId! : note.id;
+      if (!_fetchedInteractionNoteIds.contains(interactionNoteId)) {
+        _fetchedInteractionNoteIds.add(interactionNoteId);
+        _noteRepository.fetchInteractionsForNotes([interactionNoteId], useCount: false, forceLoad: true);
+      }
+    } catch (e) {
+    }
   }
 
 
@@ -312,42 +351,90 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
     return ChangeNotifierProvider(
       create: (_) => NoteVisibilityViewModel(),
-      child: SliverList(
+      child: Consumer<NoteVisibilityViewModel>(
+        builder: (context, visibilityViewModel, _) {
+          return _NoteListWithVisibility(
+            notes: widget.notes,
+            currentUserNpub: widget.currentUserNpub ?? '',
+            notesNotifier: widget.notesNotifier,
+            profiles: widget.profiles,
+            notesListProvider: widget.notesListProvider,
+            canLoadMore: widget.canLoadMore,
+            isLoading: widget.isLoading,
+            onLoadMore: widget.onLoadMore,
+            visibilityViewModel: visibilityViewModel,
+            onNoteVisible: _onNoteBecameVisible,
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _NoteListWithVisibility extends StatelessWidget {
+  final List<NoteModel> notes;
+  final String currentUserNpub;
+  final ValueNotifier<List<NoteModel>> notesNotifier;
+  final Map<String, UserModel> profiles;
+  final dynamic notesListProvider;
+  final bool canLoadMore;
+  final bool isLoading;
+  final VoidCallback? onLoadMore;
+  final NoteVisibilityViewModel visibilityViewModel;
+  final Function(String) onNoteVisible;
+
+  const _NoteListWithVisibility({
+    required this.notes,
+    required this.currentUserNpub,
+    required this.notesNotifier,
+    required this.profiles,
+    this.notesListProvider,
+    required this.canLoadMore,
+    required this.isLoading,
+    this.onLoadMore,
+    required this.visibilityViewModel,
+    required this.onNoteVisible,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
-          if (index == widget.notes.length) {
-            if (widget.canLoadMore && widget.onLoadMore != null) {
-              return _LoadMoreButton(onPressed: widget.onLoadMore!);
-            } else if (widget.isLoading) {
+          if (index == notes.length) {
+            if (canLoadMore && onLoadMore != null) {
+              return _LoadMoreButton(onPressed: onLoadMore!);
+            } else if (isLoading) {
               return const _LoadMoreIndicator();
             }
             return const SizedBox.shrink();
           }
 
-          if (index >= widget.notes.length) {
+          if (index >= notes.length) {
             return const SizedBox.shrink();
           }
 
-          final note = widget.notes[index];
+          final note = notes[index];
 
           return RepaintBoundary(
             key: ValueKey('note_boundary_${note.id}'),
             child: _NoteItemWidget(
               key: ValueKey('note_item_${note.id}'),
               note: note,
-              currentUserNpub: widget.currentUserNpub ?? '',
-              notesNotifier: widget.notesNotifier,
-              profiles: widget.profiles,
-              notesListProvider: widget.notesListProvider,
-              showSeparator: index < widget.notes.length - 1,
+              currentUserNpub: currentUserNpub,
+              notesNotifier: notesNotifier,
+              profiles: profiles,
+              notesListProvider: notesListProvider,
+              showSeparator: index < notes.length - 1,
+              visibilityViewModel: visibilityViewModel,
+              onNoteVisible: onNoteVisible,
             ),
           );
         },
-        childCount: widget.notes.length + (widget.canLoadMore || widget.isLoading ? 1 : 0),
+        childCount: notes.length + (canLoadMore || isLoading ? 1 : 0),
         addAutomaticKeepAlives: true,
         addRepaintBoundaries: false,
         addSemanticIndexes: false,
-      ),
       ),
     );
   }
@@ -360,6 +447,8 @@ class _NoteItemWidget extends StatefulWidget {
   final Map<String, UserModel> profiles;
   final dynamic notesListProvider;
   final bool showSeparator;
+  final NoteVisibilityViewModel visibilityViewModel;
+  final Function(String) onNoteVisible;
 
   const _NoteItemWidget({
     super.key,
@@ -369,6 +458,8 @@ class _NoteItemWidget extends StatefulWidget {
     required this.profiles,
     this.notesListProvider,
     required this.showSeparator,
+    required this.visibilityViewModel,
+    required this.onNoteVisible,
   });
 
   @override
@@ -376,28 +467,99 @@ class _NoteItemWidget extends StatefulWidget {
 }
 
 class _NoteItemWidgetState extends State<_NoteItemWidget> with AutomaticKeepAliveClientMixin {
+  final GlobalKey _widgetKey = GlobalKey();
+  bool _hasReportedVisibility = false;
+  DateTime _lastVisibilityCheck = DateTime(1970);
+  static const _visibilityCheckThrottle = Duration(milliseconds: 100);
+
   @override
   bool get wantKeepAlive => true;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkVisibility();
+    });
+  }
+
+  void _checkVisibility() {
+    if (!mounted) return;
+    
+    final now = DateTime.now();
+    final timeSinceLastCheck = now.difference(_lastVisibilityCheck);
+    if (timeSinceLastCheck < _visibilityCheckThrottle && _hasReportedVisibility) {
+      return;
+    }
+    
+    _lastVisibilityCheck = now;
+    
+    final renderObject = _widgetKey.currentContext?.findRenderObject();
+    if (renderObject is RenderBox && renderObject.attached) {
+      final position = renderObject.localToGlobal(Offset.zero);
+      final size = renderObject.size;
+      final screenHeight = MediaQuery.of(context).size.height;
+      final screenWidth = MediaQuery.of(context).size.width;
+      
+      final isVisible = position.dy < screenHeight && 
+                       position.dy + size.height > 0 &&
+                       position.dx < screenWidth &&
+                       position.dx + size.width > 0;
+      
+      if (isVisible && !_hasReportedVisibility) {
+        _hasReportedVisibility = true;
+        final noteId = widget.note.isRepost && widget.note.rootId != null 
+            ? widget.note.rootId! 
+            : widget.note.id;
+        widget.visibilityViewModel.updateVisibility(noteId, true);
+        widget.onNoteVisible(noteId);
+      } else if (!isVisible && _hasReportedVisibility) {
+        _hasReportedVisibility = false;
+        final noteId = widget.note.isRepost && widget.note.rootId != null 
+            ? widget.note.rootId! 
+            : widget.note.id;
+        widget.visibilityViewModel.updateVisibility(noteId, false);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        NoteWidget(
-          note: widget.note,
-          currentUserNpub: widget.currentUserNpub,
-          notesNotifier: widget.notesNotifier,
-          profiles: widget.profiles,
-          containerColor: null,
-          isSmallView: true,
-          scrollController: null,
-          notesListProvider: widget.notesListProvider,
-          isVisible: true,
-        ),
-        if (widget.showSeparator) const _NoteSeparator(),
-      ],
+    
+    if (!_hasReportedVisibility) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkVisibility();
+      });
+    }
+    
+    return NotificationListener<ScrollNotification>(
+      onNotification: (notification) {
+        if (notification is ScrollUpdateNotification && !_hasReportedVisibility) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _checkVisibility();
+          });
+        }
+        return false;
+      },
+      child: Column(
+        key: _widgetKey,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          NoteWidget(
+            note: widget.note,
+            currentUserNpub: widget.currentUserNpub,
+            notesNotifier: widget.notesNotifier,
+            profiles: widget.profiles,
+            containerColor: null,
+            isSmallView: true,
+            scrollController: null,
+            notesListProvider: widget.notesListProvider,
+            isVisible: true,
+          ),
+          if (widget.showSeparator) const _NoteSeparator(),
+        ],
+      ),
     );
   }
 }
