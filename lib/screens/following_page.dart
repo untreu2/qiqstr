@@ -8,6 +8,7 @@ import '../core/di/app_di.dart';
 import '../data/repositories/user_repository.dart';
 import '../data/services/user_batch_fetcher.dart';
 import '../widgets/back_button_widget.dart';
+import '../widgets/common_buttons.dart';
 
 class FollowingPage extends StatefulWidget {
   final UserModel user;
@@ -294,13 +295,11 @@ class _FollowingPageState extends State<FollowingPage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  ElevatedButton(
+                  PrimaryButton(
+                    label: 'Retry',
                     onPressed: _loadFollowingUsers,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: context.colors.accent,
-                      foregroundColor: context.colors.background,
-                    ),
-                    child: const Text('Retry'),
+                    backgroundColor: context.colors.accent,
+                    foregroundColor: context.colors.background,
                   ),
                 ],
               ),

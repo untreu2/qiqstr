@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../theme/theme_manager.dart';
+import '../widgets/common_buttons.dart';
 import '../screens/share_note.dart';
 import '../screens/note_statistics_page.dart';
 import '../models/note_model.dart';
@@ -354,49 +355,21 @@ class _InteractionBarState extends State<InteractionBar> {
             Row(
               children: [
                 Expanded(
-                  child: GestureDetector(
-                    onTap: () => Navigator.pop(modalContext),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(
-                        color: context.colors.buttonPrimary,
-                        borderRadius: BorderRadius.circular(40),
-                      ),
-                      child: Text(
-                        'Cancel',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: context.colors.buttonText,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
+                  child: PrimaryButton(
+                    label: 'Cancel',
+                    onPressed: () => Navigator.pop(modalContext),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: GestureDetector(
-                    onTap: () {
+                  child: SecondaryButton(
+                    label: 'Yes',
+                    onPressed: () {
                       Navigator.pop(modalContext);
                       _confirmDelete();
                     },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(
-                        color: context.colors.error.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(40),
-                      ),
-                      child: Text(
-                        'Yes',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: context.colors.error,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
+                    backgroundColor: context.colors.error.withValues(alpha: 0.1),
+                    foregroundColor: context.colors.error,
                   ),
                 ),
               ],

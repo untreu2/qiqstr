@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/user_model.dart';
 import '../screens/home_navigator.dart';
 import '../theme/theme_manager.dart';
+import '../widgets/common_buttons.dart';
 import '../core/ui/ui_state_builder.dart';
 import '../core/di/app_di.dart';
 import '../presentation/viewmodels/suggested_follows_viewmodel.dart';
@@ -63,9 +64,9 @@ class SuggestedFollowsPage extends StatelessWidget {
                     style: TextStyle(color: context.colors.textSecondary),
                   ),
                   const SizedBox(height: 16),
-                  ElevatedButton(
+                  PrimaryButton(
+                    label: 'Retry',
                     onPressed: () => viewModel.loadSuggestedUsers(),
-                    child: const Text('Retry'),
                   ),
                 ],
               ),
@@ -219,62 +220,26 @@ class SuggestedFollowsPage extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          GestureDetector(
-            onTap: viewModel.isProcessing
-                ? null
-                : () async {
-                    await _skipToHome(context, viewModel);
-                  },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: context.colors.overlayLight,
-                borderRadius: BorderRadius.circular(40),
-              ),
-              child: Text(
-                'Skip',
-                style: TextStyle(
-                  color: context.colors.textPrimary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+          SizedBox(
+            width: double.infinity,
+            child: SecondaryButton(
+              label: 'Skip',
+              onPressed: viewModel.isProcessing ? null : () async {
+                await _skipToHome(context, viewModel);
+              },
+              backgroundColor: context.colors.overlayLight,
+              foregroundColor: context.colors.textPrimary,
             ),
           ),
           const SizedBox(height: 12),
-          GestureDetector(
-            onTap: viewModel.isProcessing
-                ? null
-                : () async {
-                    await _continueToHome(context, viewModel);
-                  },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: context.colors.buttonPrimary,
-                borderRadius: BorderRadius.circular(40),
-              ),
-              child: viewModel.isProcessing
-                  ? SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
-                      ),
-                    )
-                  : Text(
-                      'Continue',
-                      style: TextStyle(
-                        color: context.colors.buttonText,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+          SizedBox(
+            width: double.infinity,
+            child: PrimaryButton(
+              label: 'Continue',
+              onPressed: viewModel.isProcessing ? null : () async {
+                await _continueToHome(context, viewModel);
+              },
+              isLoading: viewModel.isProcessing,
             ),
           ),
         ],

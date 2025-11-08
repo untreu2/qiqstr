@@ -8,6 +8,7 @@ import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/widgets/note_widget.dart';
 import 'package:qiqstr/widgets/focused_note_widget.dart';
 import '../widgets/back_button_widget.dart';
+import '../widgets/common_buttons.dart';
 import '../theme/theme_manager.dart';
 import '../core/ui/ui_state_builder.dart';
 import '../core/di/app_di.dart';
@@ -515,7 +516,8 @@ class _ThreadPageState extends State<ThreadPage> {
     return Center(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16.0),
-        child: OutlinedButton(
+        child: SecondaryButton(
+          label: 'Load more (${totalReplies - _visibleRepliesCount} remaining)',
           onPressed: () {
             setState(() {
               _visibleRepliesCount = math.min(
@@ -524,22 +526,6 @@ class _ThreadPageState extends State<ThreadPage> {
               );
             });
           },
-          style: OutlinedButton.styleFrom(
-            side: BorderSide(color: context.colors.primary.withValues(alpha: 0.3)),
-            backgroundColor: context.colors.primary.withValues(alpha: 0.05),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(40),
-            ),
-          ),
-          child: Text(
-            'Load more (${totalReplies - _visibleRepliesCount} remaining)',
-            style: TextStyle(
-              color: context.colors.primary,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
         ),
       ),
     );
@@ -712,13 +698,11 @@ class _ThreadPageState extends State<ThreadPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                ElevatedButton(
+                PrimaryButton(
+                  label: 'Retry',
                   onPressed: () => viewModel.loadThreadCommand.execute(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: context.colors.accent,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('Retry'),
+                  backgroundColor: context.colors.accent,
+                  foregroundColor: Colors.white,
                 ),
               ],
             ),
@@ -765,13 +749,11 @@ class _ThreadPageState extends State<ThreadPage> {
                   ),
                 ),
                 const SizedBox(height: 24),
-                ElevatedButton(
+                PrimaryButton(
+                  label: 'Retry',
                   onPressed: () => viewModel.loadThreadCommand.execute(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: context.colors.accent,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('Retry'),
+                  backgroundColor: context.colors.accent,
+                  foregroundColor: Colors.white,
                 ),
               ],
             ),

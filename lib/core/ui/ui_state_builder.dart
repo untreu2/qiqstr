@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../base/ui_state.dart';
+import '../../widgets/common_buttons.dart';
 
 class UIStateBuilder<T> extends StatelessWidget {
   const UIStateBuilder({
@@ -95,10 +96,10 @@ class UIStateBuilder<T> extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            ElevatedButton.icon(
+            PrimaryButton(
+              label: 'Try Again',
+              icon: Icons.refresh,
               onPressed: () {},
-              icon: const Icon(Icons.refresh),
-              label: const Text('Try Again'),
             ),
           ],
         ),

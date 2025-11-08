@@ -9,6 +9,7 @@ import '../data/repositories/auth_repository.dart';
 import '../services/nostr_service.dart';
 import '../services/relay_service.dart';
 import '../widgets/back_button_widget.dart';
+import '../widgets/common_buttons.dart';
 import '../widgets/snackbar_widget.dart';
 import 'dart:convert';
 import 'dart:io';
@@ -607,61 +608,23 @@ class _RelayPageState extends State<RelayPage> {
               ),
             ),
             const SizedBox(height: 20),
-            GestureDetector(
-              onTap: _isAddingRelay ? null : () => _addRelay(true),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: _isAddingRelay ? context.colors.overlayLight.withValues(alpha: 0.5) : context.colors.buttonPrimary,
-                  borderRadius: BorderRadius.circular(40),
-                ),
-                child: _isAddingRelay
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
-                        ),
-                      )
-                    : Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.add, color: context.colors.buttonText, size: 20),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Add Relay',
-                            style: TextStyle(
-                              color: context.colors.buttonText,
-                              fontSize: 17,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
+            SizedBox(
+              width: double.infinity,
+              child: PrimaryButton(
+                label: 'Add Relay',
+                icon: Icons.add,
+                onPressed: _isAddingRelay ? null : () => _addRelay(true),
+                isLoading: _isAddingRelay,
               ),
             ),
             const SizedBox(height: 12),
-            GestureDetector(
-              onTap: () => Navigator.pop(modalContext),
-              child: Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: context.colors.overlayLight,
-                  borderRadius: BorderRadius.circular(40),
-                ),
-                child: Text(
-                  'Cancel',
-                  style: TextStyle(
-                    color: context.colors.textPrimary,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+            SizedBox(
+              width: double.infinity,
+              child: SecondaryButton(
+                label: 'Cancel',
+                onPressed: () => Navigator.pop(modalContext),
+                backgroundColor: context.colors.overlayLight,
+                foregroundColor: context.colors.textPrimary,
               ),
             ),
           ],
@@ -709,78 +672,24 @@ class _RelayPageState extends State<RelayPage> {
           Row(
             children: [
               Expanded(
-                child: GestureDetector(
-                  onTap: _isFetchingUserRelays ? null : _fetchUserRelays,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: _isFetchingUserRelays ? context.colors.surface.withValues(alpha: 0.5) : context.colors.overlayLight,
-                      borderRadius: BorderRadius.circular(40),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _isFetchingUserRelays
-                            ? SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
-                                ),
-                              )
-                            : Icon(Icons.download, size: 18, color: context.colors.textPrimary),
-                        const SizedBox(width: 8),
-                        Text(
-                          _isFetchingUserRelays ? 'Fetching...' : 'Fetch',
-                          style: TextStyle(
-                            color: context.colors.textPrimary,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                child: SecondaryButton(
+                  label: _isFetchingUserRelays ? 'Fetching...' : 'Fetch',
+                  icon: Icons.download,
+                  onPressed: _isFetchingUserRelays ? null : _fetchUserRelays,
+                  isLoading: _isFetchingUserRelays,
+                  backgroundColor: context.colors.overlayLight,
+                  foregroundColor: context.colors.textPrimary,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: GestureDetector(
-                  onTap: _isPublishingRelays ? null : _publishRelays,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: _isPublishingRelays ? context.colors.surface.withValues(alpha: 0.5) : context.colors.overlayLight,
-                      borderRadius: BorderRadius.circular(40),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _isPublishingRelays
-                            ? SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
-                                ),
-                              )
-                            : Icon(Icons.upload, size: 18, color: context.colors.textPrimary),
-                        const SizedBox(width: 8),
-                        Text(
-                          _isPublishingRelays ? 'Publishing...' : 'Publish',
-                          style: TextStyle(
-                            color: context.colors.textPrimary,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                child: SecondaryButton(
+                  label: _isPublishingRelays ? 'Publishing...' : 'Publish',
+                  icon: Icons.upload,
+                  onPressed: _isPublishingRelays ? null : _publishRelays,
+                  isLoading: _isPublishingRelays,
+                  backgroundColor: context.colors.overlayLight,
+                  foregroundColor: context.colors.textPrimary,
                 ),
               ),
             ],
@@ -789,59 +698,19 @@ class _RelayPageState extends State<RelayPage> {
           Row(
             children: [
               Expanded(
-                child: GestureDetector(
-                  onTap: _showAddRelayDialog,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: context.colors.buttonPrimary,
-                      borderRadius: BorderRadius.circular(40),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.add, size: 18, color: context.colors.buttonText),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Add Relay',
-                          style: TextStyle(
-                            color: context.colors.buttonText,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                child: PrimaryButton(
+                  label: 'Add Relay',
+                  icon: Icons.add,
+                  onPressed: _showAddRelayDialog,
                 ),
               ),
               const SizedBox(width: 12),
-              GestureDetector(
-                onTap: _resetToDefaults,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: context.colors.overlayLight,
-                    borderRadius: BorderRadius.circular(40),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.refresh, size: 18, color: context.colors.textPrimary),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Reset',
-                        style: TextStyle(
-                          color: context.colors.textPrimary,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              SecondaryButton(
+                label: 'Reset',
+                icon: Icons.refresh,
+                onPressed: _resetToDefaults,
+                backgroundColor: context.colors.overlayLight,
+                foregroundColor: context.colors.textPrimary,
               ),
             ],
           ),

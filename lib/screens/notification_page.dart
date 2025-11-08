@@ -11,6 +11,7 @@ import '../data/repositories/notification_repository.dart';
 import '../models/notification_model.dart';
 import '../widgets/note_content_widget.dart';
 import '../widgets/quote_widget.dart';
+import '../widgets/common_buttons.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/user_repository.dart';
 import '../data/services/auth_service.dart';
@@ -567,23 +568,11 @@ class _NotificationPageState extends State<NotificationPage> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
-            ElevatedButton(
+            PrimaryButton(
+              label: 'Retry',
               onPressed: () => viewModel.loadNotificationsCommand.execute(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: context.colors.textPrimary,
-                foregroundColor: context.colors.background,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: const Text(
-                'Retry',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              backgroundColor: context.colors.textPrimary,
+              foregroundColor: context.colors.background,
             ),
           ],
         ),

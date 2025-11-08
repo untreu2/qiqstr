@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/theme_manager.dart';
+import '../widgets/common_buttons.dart';
 
 enum SnackbarType {
   success,
@@ -53,21 +54,11 @@ class AppSnackbar {
               ),
               if (action != null) ...[
                 const SizedBox(width: 12),
-                TextButton(
+                TextActionButton(
+                  label: action.label,
                   onPressed: action.onPressed,
-                  style: TextButton.styleFrom(
-                    foregroundColor: colors.accent,
-                    minimumSize: Size.zero,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: Text(
-                    action.label,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  size: ButtonSize.small,
+                  foregroundColor: colors.accent,
                 ),
               ],
             ],

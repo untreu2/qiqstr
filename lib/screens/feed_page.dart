@@ -9,6 +9,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart' as widgets;
 import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/widgets/back_button_widget.dart';
+import '../widgets/common_buttons.dart';
 import '../theme/theme_manager.dart';
 import '../utils/stream_debouncer.dart';
 import '../models/note_model.dart';
@@ -474,16 +475,12 @@ class FeedPageState extends State<FeedPage> {
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 16),
-                      ElevatedButton(
+                      PrimaryButton(
+                        label: 'Retry',
                         onPressed: () {
                           final viewModel = context.read<FeedViewModel>();
                           viewModel.refreshFeed();
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: colors.buttonPrimary,
-                          foregroundColor: colors.buttonText,
-                        ),
-                        child: const Text('Retry'),
                       ),
                     ],
                   ),

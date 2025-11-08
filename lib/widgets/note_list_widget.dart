@@ -9,6 +9,7 @@ import '../data/repositories/user_repository.dart';
 import '../data/services/user_batch_fetcher.dart';
 import '../presentation/viewmodels/note_visibility_viewmodel.dart';
 import 'note_widget.dart';
+import 'common_buttons.dart';
 
 class NoteListWidget extends StatefulWidget {
   final List<NoteModel> notes;
@@ -414,20 +415,11 @@ class _LoadMoreButton extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 20.0),
       child: Column(
         children: [
-          ElevatedButton(
+          PrimaryButton(
+            label: 'Load more notes',
             onPressed: onPressed,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: theme.colorScheme.surface,
-              foregroundColor: theme.colorScheme.onSurface,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(25.0),
-              ),
-            ),
-            child: const Text(
-              'Load more notes',
-              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-            ),
+            backgroundColor: theme.colorScheme.surface,
+            foregroundColor: theme.colorScheme.onSurface,
           ),
           const SizedBox(height: 200),
         ],
@@ -566,9 +558,9 @@ class _ErrorState extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-            ElevatedButton(
+            PrimaryButton(
+              label: 'Retry',
               onPressed: onRetry,
-              child: const Text('Retry'),
             ),
           ],
         ),

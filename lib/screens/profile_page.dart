@@ -5,6 +5,7 @@ import '../models/user_model.dart';
 import '../models/note_model.dart';
 import '../widgets/profile_info_widget.dart';
 import '../widgets/back_button_widget.dart';
+import '../widgets/common_buttons.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart' as widgets;
 import '../core/di/app_di.dart';
 import '../presentation/viewmodels/profile_viewmodel.dart';
@@ -264,9 +265,9 @@ class _ProfilePageState extends State<ProfilePage> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 16),
-                  ElevatedButton(
+                  PrimaryButton(
+                    label: 'Retry',
                     onPressed: _onRetry,
-                    child: const Text('Retry'),
                   ),
                 ],
               ),

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/theme_manager.dart';
+import '../widgets/common_buttons.dart';
 import '../models/user_model.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/user_repository.dart';
@@ -201,13 +202,11 @@ class _UserSearchPageState extends State<UserSearchPage> {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
-            ElevatedButton(
+            PrimaryButton(
+              label: 'Retry',
               onPressed: () => _searchUsers(_searchController.text.trim()),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: context.colors.accent,
-                foregroundColor: context.colors.background,
-              ),
-              child: const Text('Retry'),
+              backgroundColor: context.colors.accent,
+              foregroundColor: context.colors.background,
             ),
           ],
         ),
