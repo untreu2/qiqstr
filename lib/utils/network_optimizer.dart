@@ -9,7 +9,7 @@ class NetworkBatchProcessor {
 
   final Queue<String> _messageQueue = Queue<String>();
   final List<WebSocket> _targetSockets;
-  Timer? _batchTimer;
+  DateTime? _lastBatchSchedule;
   bool _isProcessing = false;
 
   NetworkBatchProcessor(this._targetSockets);
@@ -20,10 +20,13 @@ class NetworkBatchProcessor {
   }
 
   void _scheduleBatchProcess() {
-    if (_batchTimer?.isActive == true) return;
+    if (_lastBatchSchedule != null) return;
 
-    _batchTimer = Timer(_batchDelay, () {
-      if (!_isProcessing && _messageQueue.isNotEmpty) {
+    final scheduleTime = DateTime.now();
+    _lastBatchSchedule = scheduleTime;
+    
+    Future.delayed(_batchDelay, () {
+      if (_lastBatchSchedule == scheduleTime && !_isProcessing && _messageQueue.isNotEmpty) {
         _processBatch();
       }
     });
@@ -33,6 +36,8 @@ class NetworkBatchProcessor {
     if (_isProcessing || _messageQueue.isEmpty) return;
 
     _isProcessing = true;
+    _lastBatchSchedule = null;
+    
     final batch = <String>[];
 
     while (_messageQueue.isNotEmpty && batch.length < _maxBatchSize) {
@@ -75,7 +80,7 @@ class NetworkBatchProcessor {
   }
 
   void dispose() {
-    _batchTimer?.cancel();
+    _lastBatchSchedule = null;
     _messageQueue.clear();
   }
 }
@@ -86,7 +91,7 @@ class OptimizedConnectionPool {
 
   final Map<String, _PooledConnection> _connections = {};
   final Queue<String> _connectionQueue = Queue<String>();
-  Timer? _cleanupTimer;
+  bool _isCleanupRunning = false;
 
   OptimizedConnectionPool() {
     _startCleanupTimer();
@@ -134,9 +139,16 @@ class OptimizedConnectionPool {
   }
 
   void _startCleanupTimer() {
-    _cleanupTimer = Timer.periodic(Duration(minutes: 2), (_) {
+    _isCleanupRunning = true;
+    _runCleanupLoop();
+  }
+  
+  Future<void> _runCleanupLoop() async {
+    while (_isCleanupRunning) {
+      await Future.delayed(const Duration(minutes: 2));
+      if (!_isCleanupRunning) break;
       _performCleanup();
-    });
+    }
   }
 
   void _performCleanup() {
@@ -157,7 +169,7 @@ class OptimizedConnectionPool {
   }
 
   void dispose() {
-    _cleanupTimer?.cancel();
+    _isCleanupRunning = false;
     for (final connection in _connections.values) {
       connection.dispose();
     }

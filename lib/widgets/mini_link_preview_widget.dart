@@ -133,10 +133,9 @@ class _MiniLinkPreviewWidgetState extends State<MiniLinkPreviewWidget> {
                   fit: BoxFit.cover,
                   fadeInDuration: Duration.zero,
                   fadeOutDuration: Duration.zero,
-                  maxHeightDiskCache: 96,
-                  maxWidthDiskCache: 96,
-                  memCacheWidth: 96,
-                  memCacheHeight: 96,
+                  maxHeightDiskCache: 120,
+                  maxWidthDiskCache: 120,
+                  memCacheWidth: 120,
                   errorWidget: (_, __, ___) => Container(
                     width: 48,
                     height: 48,

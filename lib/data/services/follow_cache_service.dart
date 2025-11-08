@@ -44,7 +44,7 @@ class FollowCacheService {
 
   final Map<String, Completer<List<String>?>> _pendingRequests = {};
 
-  Timer? _cleanupTimer;
+  bool _isCleanupRunning = false;
   bool _isIsarInitialized = false;
 
   IsarDatabaseService get isarService => _isarService;
@@ -277,10 +277,16 @@ class FollowCacheService {
   }
 
   void _startCacheCleanup() {
-    _cleanupTimer?.cancel();
-    _cleanupTimer = Timer.periodic(cleanupInterval, (_) {
+    _isCleanupRunning = true;
+    _runCleanupLoop();
+  }
+  
+  Future<void> _runCleanupLoop() async {
+    while (_isCleanupRunning) {
+      await Future.delayed(cleanupInterval);
+      if (!_isCleanupRunning) break;
       _cleanupExpiredEntries();
-    });
+    }
   }
 
   void _cleanupExpiredEntries() {
@@ -302,7 +308,7 @@ class FollowCacheService {
   }
 
   Future<void> dispose() async {
-    _cleanupTimer?.cancel();
+    _isCleanupRunning = false;
     _memoryCache.clear();
     _pendingRequests.clear();
 

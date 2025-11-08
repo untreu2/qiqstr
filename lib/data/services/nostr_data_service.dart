@@ -16,7 +16,6 @@ import '../../models/zap_model.dart';
 import '../../services/nostr_service.dart';
 import '../../services/relay_service.dart';
 import '../../services/time_service.dart';
-import '../../services/nip05_verification_service.dart';
 import '../../constants/relays.dart';
 import 'auth_service.dart';
 import 'user_cache_service.dart';
@@ -25,7 +24,6 @@ import 'follow_cache_service.dart';
 class NostrDataService {
   final AuthService _authService;
   final WebSocketManager _relayManager;
-  final Nip05VerificationService _nip05Service = Nip05VerificationService.instance;
   final UserCacheService _userCacheService = UserCacheService.instance;
   final FollowCacheService _followCacheService = FollowCacheService.instance;
 
@@ -172,6 +170,7 @@ class NostrDataService {
     }
   }
 
+
   void _flushEventQueue() {
     if (_eventQueue.isEmpty) return;
 
@@ -252,16 +251,6 @@ class NostrDataService {
   }
 
   Future<void> _verifyAndCacheProfile(String pubkey, Map<String, dynamic> profileData, DateTime timestamp, String nip05) async {
-    bool nip05Verified = false;
-
-    if (nip05.isNotEmpty) {
-      try {
-        nip05Verified = await _nip05Service.verifyNip05(nip05, pubkey);
-      } catch (e) {
-        nip05Verified = false;
-      }
-    }
-
     final dataToCache = {
       'name': profileData['name'] as String? ?? 'Anonymous',
       'profileImage': profileData['picture'] as String? ?? '',
@@ -270,7 +259,7 @@ class NostrDataService {
       'banner': profileData['banner'] as String? ?? '',
       'lud16': profileData['lud16'] as String? ?? '',
       'website': profileData['website'] as String? ?? '',
-      'nip05Verified': nip05Verified.toString(),
+      'nip05Verified': 'false',
     };
 
     _profileCache.remove(pubkey);
@@ -287,7 +276,7 @@ class NostrDataService {
       nip05: dataToCache['nip05']!,
       lud16: dataToCache['lud16']!,
       updatedAt: timestamp,
-      nip05Verified: nip05Verified,
+      nip05Verified: false,
     );
 
     try {
@@ -299,7 +288,7 @@ class NostrDataService {
     }
 
     _usersController.add(_getUsersList());
-    debugPrint('[NostrDataService] Profile updated and cache invalidated: ${user.name} (NIP-05: $nip05Verified)');
+    debugPrint('[NostrDataService] Profile updated and cache invalidated: ${user.name}');
   }
 
   Future<void> _processKind1Event(Map<String, dynamic> eventData) async {
@@ -360,6 +349,8 @@ class NostrDataService {
 
       final authorNpub = _authService.hexToNpub(pubkey) ?? pubkey;
       final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
+
+      _ensureProfileExists(pubkey, authorNpub);
 
       debugPrint('[NostrDataService] Processing note from followed author: $authorNpub');
 
@@ -455,8 +446,6 @@ class NostrDataService {
 
       _scheduleUIUpdate();
 
-      _fetchUserProfile(authorNpub);
-
       debugPrint('[NostrDataService] New note processed: ${note.content.substring(0, 30)}...');
     } catch (e) {
       debugPrint('[NostrDataService] Error processing note event: $e');
@@ -538,6 +527,8 @@ class NostrDataService {
       _noteCache[id] = replyNote;
       _eventIds.add(id);
 
+      _ensureProfileExists(pubkey, authorNpub);
+
       _updateParentNoteReplyCount(actualParentId ?? parentEventId);
 
       _fetchInteractionCountsForNotesImmediately([id]);
@@ -545,8 +536,6 @@ class NostrDataService {
       debugPrint('[NostrDataService] Reply processed and interaction counts requested: $id');
 
       _scheduleUIUpdate();
-
-      _fetchUserProfile(authorNpub);
 
       debugPrint('[NostrDataService] Reply processed: ${content.substring(0, 30)}...');
     } catch (e) {
@@ -596,7 +585,7 @@ class NostrDataService {
           _reactionsMap[targetEventId]!.add(reaction);
         }
 
-        _fetchUserProfile(reaction.author);
+        _ensureProfileExists(pubkey, reaction.author);
       }
     } catch (e) {
       debugPrint('[NostrDataService] Error processing reaction event: $e');
@@ -641,6 +630,12 @@ class NostrDataService {
       if (originalEventId != null) {
         final reposterNpub = _authService.hexToNpub(pubkey) ?? pubkey;
         final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
+
+        _ensureProfileExists(pubkey, reposterNpub);
+        if (originalAuthorHex != null) {
+          final originalAuthorNpub = _authService.hexToNpub(originalAuthorHex) ?? originalAuthorHex;
+          _ensureProfileExists(originalAuthorHex, originalAuthorNpub);
+        }
 
         debugPrint(' [NostrDataService] Processing repost $id by $reposterNpub');
         debugPrint(' [NostrDataService] Original event ID: $originalEventId');
@@ -806,7 +801,6 @@ class NostrDataService {
         }
 
         _scheduleUIUpdate();
-        _fetchUserProfile(reposterNpub);
       }
     } catch (e) {
       debugPrint('[NostrDataService] Error processing repost event: $e');
@@ -991,7 +985,8 @@ class NostrDataService {
         if (!_zapsMap[targetEventId]!.any((z) => z.id == zap.id)) {
           _zapsMap[targetEventId]!.add(zap);
           _processedZapIds.add(id);
-          _fetchUserProfile(zap.sender);
+          final senderHex = _authService.npubToHex(zap.sender) ?? zap.sender;
+          _ensureProfileExists(senderHex, zap.sender);
           debugPrint('[NostrDataService] Zap processed: ${zap.amount} sats from ${zap.sender} to ${zap.recipient}');
         }
       }
@@ -1156,6 +1151,32 @@ class NostrDataService {
     debugPrint('[NostrDataService] FILTERING RESULT: ${allNotes.length} → ${filteredNotes.length} notes');
 
     return filteredNotes;
+  }
+
+  void _ensureProfileExists(String pubkeyHex, String npub) {
+    try {
+      if (_profileCache.containsKey(pubkeyHex)) {
+        _fetchUserProfile(npub);
+        return;
+      }
+
+      _profileCache[pubkeyHex] = CachedProfile({
+        'name': npub.substring(0, 16),
+        'about': '',
+        'picture': '',
+        'banner': '',
+        'website': '',
+        'nip05': '',
+        'lud16': '',
+      }, timeService.now);
+
+      final user = UserModel.fromCachedProfile(pubkeyHex, _profileCache[pubkeyHex]!.data);
+      _usersController.add([user]);
+
+      _fetchUserProfile(npub);
+    } catch (e) {
+      debugPrint('[NostrDataService] Error ensuring profile exists: $e');
+    }
   }
 
   Future<void> _fetchUserProfile(String npub) async {
@@ -1399,12 +1420,19 @@ class NostrDataService {
 
       debugPrint('[NostrDataService] PROFILE: Fetched ${fetchedNotes.length} notes from relays');
 
+      int addedCount = 0;
+      int skippedCount = 0;
       for (final note in fetchedNotes.values) {
         if (!_noteCache.containsKey(note.id) && !_eventIds.contains(note.id)) {
           _noteCache[note.id] = note;
           _eventIds.add(note.id);
+          addedCount++;
+        } else {
+          skippedCount++;
         }
       }
+
+      debugPrint('[NostrDataService] PROFILE: Added $addedCount new notes, skipped $skippedCount existing notes');
 
       final allProfileNotes = _noteCache.values.where((note) {
         final noteAuthorHex = _authService.npubToHex(note.author);
@@ -1412,6 +1440,7 @@ class NostrDataService {
       }).toList();
 
       debugPrint('[NostrDataService] PROFILE: Total ${allProfileNotes.length} notes in cache for $userNpub');
+      debugPrint('[NostrDataService] PROFILE: Note IDs: ${allProfileNotes.take(3).map((n) => n.id.substring(0, 8)).join(", ")}${allProfileNotes.length > 3 ? "..." : ""}');
 
       _notesController.add(_getFilteredNotesList());
 
@@ -3035,12 +3064,21 @@ class NostrDataService {
   Future<void> fetchInteractionsForNotes(List<String> noteIds, {bool forceLoad = false, bool useCount = false}) async {
     if (_isClosed || noteIds.isEmpty) return;
 
-    debugPrint('[NostrDataService] ${forceLoad ? 'Manual' : 'Automatic'} interaction fetching for ${noteIds.length} notes (useCount: $useCount)');
+    const maxNotesPerFetch = 15;
+    final cappedNoteIds = noteIds.length > maxNotesPerFetch 
+        ? noteIds.take(maxNotesPerFetch).toList() 
+        : noteIds;
+    
+    if (noteIds.length > maxNotesPerFetch) {
+      debugPrint('[NostrDataService] Capped interaction fetch from ${noteIds.length} to $maxNotesPerFetch notes');
+    }
+
+    debugPrint('[NostrDataService] ${forceLoad ? 'Manual' : 'Automatic'} interaction fetching for ${cappedNoteIds.length} notes (useCount: $useCount)');
 
     final now = DateTime.now();
     final noteIdsToFetch = <String>[];
 
-    for (final eventId in noteIds) {
+    for (final eventId in cappedNoteIds) {
       if (!forceLoad) {
       final lastFetch = _lastInteractionFetch[eventId];
       if (lastFetch != null && now.difference(lastFetch) < _interactionFetchCooldown) {
@@ -3060,15 +3098,35 @@ class NostrDataService {
       await _fetchInteractionsForNotes(noteIdsToFetch);
       }
 
+      int updatedCount = 0;
+      int notFoundCount = 0;
       for (final eventId in noteIdsToFetch) {
         final note = _noteCache[eventId];
         if (note != null && !useCount) {
+          final oldReactionCount = note.reactionCount;
+          final oldZapAmount = note.zapAmount;
+          final oldRepostCount = note.repostCount;
+          
           note.reactionCount = _reactionsMap[eventId]?.length ?? 0;
           note.replyCount = 0;
           note.repostCount = _repostsMap[eventId]?.length ?? 0;
           note.zapAmount = _zapsMap[eventId]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
+          
+          if (oldReactionCount != note.reactionCount || oldZapAmount != note.zapAmount || oldRepostCount != note.repostCount) {
+            updatedCount++;
+            if (updatedCount <= 3) {
+              debugPrint('[NostrDataService] Note ${eventId.substring(0, 8)}: reactions $oldReactionCount→${note.reactionCount}, zaps $oldZapAmount→${note.zapAmount}, reposts $oldRepostCount→${note.repostCount}');
+            }
+          }
+        } else {
+          notFoundCount++;
+          if (notFoundCount <= 3) {
+            debugPrint('[NostrDataService] WARN: Note ${eventId.substring(0, 8)} not found in cache for interaction update');
+          }
         }
       }
+
+      debugPrint('[NostrDataService] Updated interaction counts for $updatedCount/${noteIdsToFetch.length} notes ($notFoundCount not in cache)');
 
       _scheduleUIUpdate();
 
@@ -3083,6 +3141,14 @@ class NostrDataService {
       final cutoffTime = now.subtract(const Duration(hours: 1));
       _lastInteractionFetch.removeWhere((key, timestamp) => timestamp.isBefore(cutoffTime));
     }
+  }
+
+  Map<String, int> getInteractionCounts(String noteId) {
+    return {
+      'reactions': _reactionsMap[noteId]?.length ?? 0,
+      'reposts': _repostsMap[noteId]?.length ?? 0,
+      'zaps': _zapsMap[noteId]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0,
+    };
   }
 
   void _updateParentNoteReplyCount(String parentNoteId) {

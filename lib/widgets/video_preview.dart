@@ -47,25 +47,23 @@ class _VPState extends State<VP> {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: _openFullScreen,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: AspectRatio(
-          aspectRatio: 1,
-          child: Stack(
-            children: [
-              if (widget.authorProfileImageUrl != null && widget.authorProfileImageUrl!.isNotEmpty)
-                Positioned.fill(
-                  child: ImageFiltered(
-                    imageFilter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+      child: RepaintBoundary(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: AspectRatio(
+            aspectRatio: 1,
+            child: Stack(
+              children: [
+                if (widget.authorProfileImageUrl != null && widget.authorProfileImageUrl!.isNotEmpty)
+                  Positioned.fill(
                     child: CachedNetworkImage(
                       imageUrl: widget.authorProfileImageUrl!,
                       fit: BoxFit.cover,
                       fadeInDuration: Duration.zero,
                       fadeOutDuration: Duration.zero,
-                      maxHeightDiskCache: 200,
-                      maxWidthDiskCache: 200,
-                      memCacheWidth: 200,
-                      memCacheHeight: 200,
+                      maxHeightDiskCache: 400,
+                      maxWidthDiskCache: 400,
+                      memCacheWidth: 400,
                       errorWidget: (context, url, error) {
                         return Container(color: Colors.grey.shade800);
                       },
@@ -73,18 +71,18 @@ class _VPState extends State<VP> {
                         return Container(color: Colors.grey.shade800);
                       },
                     ),
+                  )
+                else
+                  Container(color: Colors.grey.shade800),
+                Center(
+                  child: Icon(
+                    Icons.play_circle_filled,
+                    size: 64,
+                    color: Colors.white,
                   ),
-                )
-              else
-                Container(color: Colors.grey.shade800),
-              Center(
-                child: Icon(
-                  Icons.play_circle_filled,
-                  size: 64,
-                  color: Colors.white,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -107,7 +105,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
   Duration _position = Duration.zero;
   double _dragOffset = 0;
   bool _showControls = true;
-  Timer? _hideTimer;
+  DateTime? _lastShowTime;
 
   @override
   void initState() {
@@ -122,17 +120,35 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
       });
   }
 
+  DateTime? _lastPositionUpdate;
+  
   void _updatePosition() {
     if (!_controller.value.isInitialized) return;
-    setState(() {
-      _position = _controller.value.position;
-    });
+    
+    final now = DateTime.now();
+    if (_lastPositionUpdate != null && 
+        now.difference(_lastPositionUpdate!).inMilliseconds < 500) {
+      return;
+    }
+    
+    _lastPositionUpdate = now;
+    final newPosition = _controller.value.position;
+    
+    if ((_position - newPosition).inSeconds.abs() >= 1) {
+      if (mounted) {
+        setState(() {
+          _position = newPosition;
+        });
+      }
+    }
   }
 
   void _startHideTimer() {
-    _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(seconds: 2), () {
-      if (mounted) {
+    final showTime = DateTime.now();
+    _lastShowTime = showTime;
+    
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && _lastShowTime == showTime && _showControls) {
         setState(() {
           _showControls = false;
         });
@@ -149,7 +165,6 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
 
   @override
   void dispose() {
-    _hideTimer?.cancel();
     _controller.removeListener(_updatePosition);
     _controller.dispose();
     super.dispose();

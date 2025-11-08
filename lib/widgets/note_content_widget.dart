@@ -7,6 +7,7 @@ import '../theme/theme_manager.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/user_repository.dart';
 import '../data/repositories/auth_repository.dart';
+import '../data/services/user_batch_fetcher.dart';
 import '../models/user_model.dart';
 import '../screens/feed_page.dart';
 import 'link_preview_widget.dart';
@@ -80,26 +81,14 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
 
   String? _extractPubkey(String bech32) {
     try {
-      debugPrint('[NoteContentWidget] Extracting pubkey from: $bech32');
-
       if (bech32.startsWith('npub1')) {
-        final decoded = decodeBasicBech32(bech32, 'npub');
-        debugPrint('[NoteContentWidget] npub1 decoded to: $decoded');
-        return decoded;
+        return decodeBasicBech32(bech32, 'npub');
       } else if (bech32.startsWith('nprofile1')) {
-        debugPrint('[NoteContentWidget] Decoding nprofile1...');
         final result = decodeTlvBech32Full(bech32, 'nprofile');
-        debugPrint('[NoteContentWidget] nprofile1 full result: $result');
-
-        final pubkey = result['type_0_main'];
-        debugPrint('[NoteContentWidget] nprofile1 extracted pubkey: $pubkey');
-        return pubkey;
+        return result['type_0_main'];
       }
-
-      debugPrint('[NoteContentWidget] Unknown bech32 format: $bech32');
     } catch (e) {
       debugPrint('[NoteContentWidget] Bech32 decode error: $e');
-      debugPrint('[NoteContentWidget] Error type: ${e.runtimeType}');
     }
     return null;
   }
@@ -124,62 +113,81 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
 
     for (final mentionId in mentionIds) {
       final actualPubkey = _extractPubkey(mentionId) ?? mentionId;
-      _mentionUsers[actualPubkey] = _createPlaceholderUser(actualPubkey);
+      
+      final npubEncoded = encodeBasicBech32(actualPubkey, 'npub');
+      final cachedUser = _userRepository.getCachedUserSync(npubEncoded);
+      
+      if (cachedUser != null) {
+        _mentionUsers[actualPubkey] = cachedUser;
+      } else {
+        _mentionUsers[actualPubkey] = _createPlaceholderUser(actualPubkey);
+      }
     }
   }
 
   void _preloadMentionUsers() {
     final mentionIds = _textParts.where((part) => part['type'] == 'mention').map((part) => part['id'] as String).toSet();
+    
+    if (mentionIds.isEmpty) return;
 
+    final pubkeyHexToNpubMap = <String, String>{};
+    final npubsToFetch = <String>[];
+    
     for (final mentionId in mentionIds) {
       final actualPubkey = _extractPubkey(mentionId) ?? mentionId;
-      debugPrint('[NoteContentWidget] Preloading mention - original: $mentionId, extracted: $actualPubkey');
-      _loadMentionUser(actualPubkey);
+      
+      if (!_mentionUsers.containsKey(actualPubkey) || _mentionUsers[actualPubkey]!.name == actualPubkey.substring(0, 8)) {
+        final npubEncoded = encodeBasicBech32(actualPubkey, 'npub');
+        pubkeyHexToNpubMap[actualPubkey] = npubEncoded;
+        npubsToFetch.add(npubEncoded);
+      }
     }
+    
+    if (npubsToFetch.isEmpty) return;
+
+    _loadMentionUsersBatch(npubsToFetch, pubkeyHexToNpubMap);
   }
 
-  Future<void> _loadMentionUser(String pubkeyHex) async {
-    debugPrint('[NoteContentWidget] Loading user for pubkey: $pubkeyHex');
-
-    if (_mentionLoadingStates[pubkeyHex] == true || _mentionUsers.containsKey(pubkeyHex)) {
-      debugPrint('[NoteContentWidget] User already loading or loaded for: $pubkeyHex');
-      return; // Already loading or loaded
-    }
-
-    _mentionLoadingStates[pubkeyHex] = true;
+  Future<void> _loadMentionUsersBatch(List<String> npubs, Map<String, String> pubkeyMap) async {
+    if (npubs.isEmpty) return;
 
     try {
-      final npubEncoded = encodeBasicBech32(pubkeyHex, 'npub');
-      debugPrint('[NoteContentWidget] Encoded hex $pubkeyHex to npub: $npubEncoded');
+      final results = await _userRepository.getUserProfiles(npubs, priority: FetchPriority.normal);
+      
+      if (!mounted) return;
 
-      final userResult = await _userRepository.getUserProfile(npubEncoded);
-      debugPrint('[NoteContentWidget] User repository result for $npubEncoded: ${userResult.isSuccess}');
-
-      if (mounted) {
-        userResult.fold(
+      bool hasUpdates = false;
+      for (final entry in results.entries) {
+        final npub = entry.key;
+        final result = entry.value;
+        
+        final pubkeyHex = pubkeyMap.entries
+            .firstWhere((e) => e.value == npub, orElse: () => MapEntry('', ''))
+            .key;
+        
+        if (pubkeyHex.isEmpty) continue;
+        
+        result.fold(
           (user) {
-            debugPrint('[NoteContentWidget] Successfully loaded user: ${user.name} for pubkey: $pubkeyHex');
-            setState(() {
+            if (_mentionUsers[pubkeyHex]?.name != user.name) {
               _mentionUsers[pubkeyHex] = user;
-              _mentionLoadingStates[pubkeyHex] = false;
-            });
+              hasUpdates = true;
+            }
           },
-          (error) {
-            debugPrint('[NoteContentWidget] Failed to load user, creating fallback for: $pubkeyHex, error: $error');
-            setState(() {
+          (_) {
+            if (_mentionUsers[pubkeyHex] == null) {
               _mentionUsers[pubkeyHex] = _createPlaceholderUser(pubkeyHex);
-              _mentionLoadingStates[pubkeyHex] = false;
-            });
+              hasUpdates = true;
+            }
           },
         );
       }
-    } catch (e) {
-      debugPrint('[NoteContentWidget] Exception loading user for $pubkeyHex: $e');
-      if (mounted) {
-        setState(() {
-          _mentionLoadingStates[pubkeyHex] = false;
-        });
+      
+      if (mounted && hasUpdates) {
+        setState(() {});
       }
+    } catch (e) {
+      debugPrint('[NoteContentWidget] Batch load error: $e');
     }
   }
 
@@ -210,8 +218,6 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     try {
       final cleanHashtag = hashtag.startsWith('#') ? hashtag.substring(1) : hashtag;
 
-      debugPrint('[NoteContentWidget] Navigating to hashtag feed: #$cleanHashtag');
-
       final authRepository = AppDI.get<AuthRepository>();
       final npubResult = await authRepository.getCurrentUserNpub();
 
@@ -233,7 +239,6 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         );
       }
     } catch (e) {
-      debugPrint('[NoteContentWidget] Error navigating to hashtag: $e');
       if (mounted) {
         AppSnackbar.error(context, 'Error opening hashtag');
       }
@@ -339,7 +344,6 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         final recognizer = TapGestureRecognizer()
           ..onTap = () {
             final npubForNavigation = encodeBasicBech32(actualPubkey, 'npub');
-            debugPrint('[NoteContentWidget] Navigating to profile with npub: $npubForNavigation');
             widget.onNavigateToMentionProfile?.call(npubForNavigation);
           };
         _gestureRecognizers.add(recognizer);

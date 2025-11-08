@@ -363,6 +363,7 @@ class NostrService {
     );
   }
 
+
   static Filter createFollowingFilter({
     required List<String> authors,
     int? limit,
@@ -502,6 +503,7 @@ class NostrService {
   static String serializeEvent(Event event) => event.serialize();
 
   static String serializeRequest(Request request) => request.serialize();
+
 
   static String serializeCountRequest(String subscriptionId, Filter filter) {
     final filterMap = <String, dynamic>{};

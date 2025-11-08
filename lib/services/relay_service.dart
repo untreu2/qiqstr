@@ -30,7 +30,7 @@ class WebSocketManager {
 
   final List<String> relayUrls = [];
   final Map<String, WebSocket> _webSockets = {};
-  final Map<String, Timer> _reconnectTimers = {};
+  final Map<String, DateTime> _reconnectTimers = {};
   final Map<String, RelayConnectionStats> _connectionStats = {};
   final Duration connectionTimeout = const Duration(seconds: 3);
   final int maxReconnectAttempts = 5;
@@ -372,11 +372,12 @@ class WebSocketManager {
   }) {
     if (_isClosed || attempt > maxReconnectAttempts) return;
 
-    _reconnectTimers[relayUrl]?.cancel();
-
     final delay = _calculateBackoffDelay(attempt);
-    _reconnectTimers[relayUrl] = Timer(Duration(seconds: delay), () async {
-      if (_isClosed) return;
+    final reconnectTime = DateTime.now();
+    _reconnectTimers[relayUrl] = reconnectTime;
+    
+    Future.delayed(Duration(seconds: delay), () async {
+      if (_isClosed || _reconnectTimers[relayUrl] != reconnectTime) return;
 
       final stats = _connectionStats[relayUrl]!;
       stats.connectAttempts++;
@@ -392,7 +393,9 @@ class WebSocketManager {
         }
 
         _webSockets[relayUrl] = ws;
-        _reconnectTimers.remove(relayUrl);
+        if (_reconnectTimers[relayUrl] == reconnectTime) {
+          _reconnectTimers.remove(relayUrl);
+        }
         stats.successfulConnections++;
         stats.lastConnected = DateTime.now();
         stats.connectionStartTime = DateTime.now();
@@ -472,9 +475,6 @@ class WebSocketManager {
   Future<void> forceCloseConnections() async {
     _isClosed = true;
 
-    for (final timer in _reconnectTimers.values) {
-      timer.cancel();
-    }
     _reconnectTimers.clear();
 
     for (final ws in _webSockets.values) {

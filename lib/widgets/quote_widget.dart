@@ -35,6 +35,8 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
   bool _isDisposed = false;
   int _retryCount = 0;
   static const int _maxRetries = 2;
+  DateTime? _lastFetchTime;
+  DateTime? _lastRetryTime;
 
   late final NostrDataService _nostrDataService;
   late final UserRepository _userRepository;
@@ -105,8 +107,11 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
   }
 
   void _startBackgroundFetch() {
-    Timer(const Duration(seconds: 8), () {
-      if (_isDisposed || !mounted || _note != null) return;
+    final fetchTime = DateTime.now();
+    _lastFetchTime = fetchTime;
+    
+    Future.delayed(const Duration(seconds: 8), () {
+      if (_isDisposed || !mounted || _note != null || _lastFetchTime != fetchTime) return;
       _setError();
     });
 
@@ -173,8 +178,11 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
       _retryCount++;
       debugPrint('[QuoteWidget] Retrying fetch (attempt $_retryCount/$_maxRetries)');
 
-      Timer(Duration(seconds: _retryCount * 2), () {
-        if (!_isDisposed && mounted) {
+      final retryTime = DateTime.now();
+      _lastRetryTime = retryTime;
+      
+      Future.delayed(Duration(seconds: _retryCount * 2), () {
+        if (!_isDisposed && mounted && _lastRetryTime == retryTime) {
           _startBackgroundFetch();
         }
       });

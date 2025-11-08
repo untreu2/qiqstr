@@ -26,6 +26,9 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
   late final NostrDataService _nostrDataService;
   late ScrollController _scrollController;
   bool _showInteractionsBubble = false;
+  
+  List<Map<String, dynamic>>? _cachedInteractions;
+  String? _lastNoteId;
 
   @override
   void initState() {
@@ -35,6 +38,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
     _scrollController = ScrollController()..addListener(_scrollListener);
 
     _fetchInteractionsForNote();
+    _buildInteractionsList();
   }
 
   void _scrollListener() {
@@ -222,14 +226,17 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
+  void _buildInteractionsList() {
+    if (_lastNoteId == widget.note.id && _cachedInteractions != null) {
+      return;
+    }
+    
     final reactions = _nostrDataService.getReactionsForNote(widget.note.id);
     final reposts = _nostrDataService.getRepostsForNote(widget.note.id);
     final zaps = _nostrDataService.getZapsForNote(widget.note.id);
 
     debugPrint(
-        '[NoteStatisticsPage] Displaying interactions: ${reactions.length} reactions, ${reposts.length} reposts, ${zaps.length} zaps');
+        '[NoteStatisticsPage] Building interactions: ${reactions.length} reactions, ${reposts.length} reposts, ${zaps.length} zaps');
 
     final allInteractions = <Map<String, dynamic>>[];
     final seenReactions = <String>{};
@@ -278,8 +285,18 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
     }
 
     allInteractions.sort((a, b) => (b['timestamp'] as DateTime).compareTo(a['timestamp'] as DateTime));
+    
+    _cachedInteractions = allInteractions;
+    _lastNoteId = widget.note.id;
+  }
 
-    final interactionWidgets = allInteractions
+  @override
+  Widget build(BuildContext context) {
+    if (_cachedInteractions == null || _lastNoteId != widget.note.id) {
+      _buildInteractionsList();
+    }
+    
+    final interactionWidgets = _cachedInteractions!
         .map((interaction) => _buildEntry(
               npub: interaction['npub'],
               content: interaction['content'],

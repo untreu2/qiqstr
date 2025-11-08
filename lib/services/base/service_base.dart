@@ -14,7 +14,6 @@ abstract class LifecycleService implements ServiceBase {
   bool _isInitialized = false;
   bool _isClosed = false;
   final List<StreamSubscription> _subscriptions = [];
-  final List<Timer> _timers = [];
 
   @override
   bool get isInitialized => _isInitialized;
@@ -43,13 +42,9 @@ abstract class LifecycleService implements ServiceBase {
     try {
       await Future.wait([
         ..._subscriptions.map((sub) => sub.cancel()),
-        Future.wait(_timers.map((timer) async {
-          timer.cancel();
-        })),
       ]);
 
       _subscriptions.clear();
-      _timers.clear();
 
       await onClose();
     } catch (e) {
@@ -79,12 +74,6 @@ abstract class LifecycleService implements ServiceBase {
     }
   }
 
-  void addTimer(Timer timer) {
-    if (!_isClosed) {
-      _timers.add(timer);
-    }
-  }
-
   void ensureInitialized() {
     if (!_isInitialized) {
       throw StateError('Service $runtimeType is not initialized');
@@ -97,7 +86,7 @@ abstract class LifecycleService implements ServiceBase {
 
 mixin BatchProcessingMixin<T> {
   final List<T> _batchQueue = [];
-  Timer? _batchTimer;
+  DateTime? _lastBatchSchedule;
   bool _isProcessing = false;
 
   int get maxBatchSize => 50;
@@ -113,15 +102,21 @@ mixin BatchProcessingMixin<T> {
   }
 
   void _scheduleBatchFlush() {
-    _batchTimer?.cancel();
-    _batchTimer = Timer(batchTimeout, _flushBatch);
+    final scheduleTime = DateTime.now();
+    _lastBatchSchedule = scheduleTime;
+    
+    Future.delayed(batchTimeout, () {
+      if (_lastBatchSchedule == scheduleTime) {
+        _flushBatch();
+      }
+    });
   }
 
   void _flushBatch() {
     if (_isProcessing || _batchQueue.isEmpty) return;
 
     _isProcessing = true;
-    _batchTimer?.cancel();
+    _lastBatchSchedule = null;
 
     final batch = List<T>.from(_batchQueue);
     _batchQueue.clear();
@@ -142,7 +137,7 @@ mixin BatchProcessingMixin<T> {
   Future<void> processBatch(List<T> batch);
 
   void clearBatch() {
-    _batchTimer?.cancel();
+    _lastBatchSchedule = null;
     _batchQueue.clear();
     _isProcessing = false;
   }

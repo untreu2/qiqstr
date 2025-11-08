@@ -19,7 +19,6 @@ abstract class BaseViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
 
   final List<StreamSubscription> _subscriptions = [];
-  final List<Timer> _timers = [];
   final Map<String, int> _retryAttempts = {};
 
   @protected
@@ -109,7 +108,7 @@ abstract class BaseViewModel extends ChangeNotifier {
           milliseconds: delay.inMilliseconds * (currentAttempts + 1),
         );
 
-        Timer(retryDelay, () {
+        Future.delayed(retryDelay, () {
           executeWithRetry(
             operationName,
             operation,
@@ -156,14 +155,6 @@ abstract class BaseViewModel extends ChangeNotifier {
     }
   }
 
-  @protected
-  void addTimer(Timer timer) {
-    if (!_isDisposed) {
-      _timers.add(timer);
-    } else {
-      timer.cancel();
-    }
-  }
 
   void retry() {
     if (_globalError != null && _globalError!.isRetryable) {
@@ -183,11 +174,6 @@ abstract class BaseViewModel extends ChangeNotifier {
       subscription.cancel();
     }
     _subscriptions.clear();
-
-    for (final timer in _timers) {
-      timer.cancel();
-    }
-    _timers.clear();
 
     _retryAttempts.clear();
 

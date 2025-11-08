@@ -15,13 +15,24 @@ import 'data/services/nostr_data_service.dart';
 import 'data/services/auth_service.dart';
 import 'data/repositories/notification_repository.dart';
 import 'data/repositories/note_repository.dart';
+import 'services/memory_trimming_service.dart';
+import 'services/lifecycle_manager.dart';
+import 'services/event_parser_isolate.dart';
 
 void main() {
   runZonedGuarded(() async {
     WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
     FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
+    PaintingBinding.instance.imageCache.maximumSizeBytes = 150 << 20;
+    PaintingBinding.instance.imageCache.maximumSize = 600;
+
     await AppDI.initialize();
+    
+    await EventParserIsolate.instance.initialize();
+    
+    LifecycleManager().initialize();
+    MemoryTrimmingService().startPeriodicTrimming();
     
     debugProfileBuildsEnabled = false;
     debugPrintRebuildDirtyWidgets = false;
@@ -139,7 +150,8 @@ Future<bool> _loadInitialFeedWithSplash(String npub) async {
 
     
     final completer = Completer<bool>();
-    Timer(const Duration(seconds: 4), () {
+    
+    Future.delayed(const Duration(seconds: 4), () {
       if (!completer.isCompleted) {
         debugPrint('[Main] Feed preload timeout (4s), continuing anyway');
         completer.complete(false);

@@ -9,7 +9,7 @@ class IsolateMessageBatcher {
 
   final SendPort _sendPort;
   final Queue<Map<String, dynamic>> _messageQueue = Queue<Map<String, dynamic>>();
-  Timer? _batchTimer;
+  DateTime? _lastBatchSchedule;
   bool _isProcessing = false;
 
   IsolateMessageBatcher(this._sendPort);
@@ -24,10 +24,13 @@ class IsolateMessageBatcher {
   }
 
   void _scheduleBatchSend() {
-    if (_batchTimer?.isActive == true) return;
+    if (_lastBatchSchedule != null) return;
 
-    _batchTimer = Timer(_batchDelay, () {
-      if (!_isProcessing && _messageQueue.isNotEmpty) {
+    final scheduleTime = DateTime.now();
+    _lastBatchSchedule = scheduleTime;
+    
+    Future.delayed(_batchDelay, () {
+      if (_lastBatchSchedule == scheduleTime && !_isProcessing && _messageQueue.isNotEmpty) {
         _processBatch();
       }
     });
@@ -37,6 +40,8 @@ class IsolateMessageBatcher {
     if (_isProcessing || _messageQueue.isEmpty) return;
 
     _isProcessing = true;
+    _lastBatchSchedule = null;
+    
     final batch = <Map<String, dynamic>>[];
 
     while (_messageQueue.isNotEmpty && batch.length < _maxBatchSize) {
@@ -59,7 +64,7 @@ class IsolateMessageBatcher {
   }
 
   void dispose() {
-    _batchTimer?.cancel();
+    _lastBatchSchedule = null;
 
     if (_messageQueue.isNotEmpty) {
       final remaining = _messageQueue.toList();
@@ -120,7 +125,7 @@ class OptimizedIsolatePool {
   final List<_PooledIsolate> _busyIsolates = [];
   final Map<String, _PooledIsolate> _isolatesByType = {};
 
-  Timer? _cleanupTimer;
+  bool _isCleanupRunning = false;
 
   OptimizedIsolatePool() {
     _startCleanupTimer();
@@ -173,9 +178,16 @@ class OptimizedIsolatePool {
   }
 
   void _startCleanupTimer() {
-    _cleanupTimer = Timer.periodic(Duration(minutes: 1), (_) {
+    _isCleanupRunning = true;
+    _runCleanupLoop();
+  }
+  
+  Future<void> _runCleanupLoop() async {
+    while (_isCleanupRunning) {
+      await Future.delayed(const Duration(minutes: 1));
+      if (!_isCleanupRunning) break;
       _performCleanup();
-    });
+    }
   }
 
   void _performCleanup() {
@@ -195,7 +207,7 @@ class OptimizedIsolatePool {
   }
 
   void dispose() {
-    _cleanupTimer?.cancel();
+    _isCleanupRunning = false;
 
     for (final isolate in [..._availableIsolates, ..._busyIsolates]) {
       isolate.dispose();

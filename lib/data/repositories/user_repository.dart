@@ -592,21 +592,21 @@ class UserRepository {
         return Result.success([]);
       }
 
-      final searchResults = <UserModel>[];
+      final results = <UserModel>[];
 
       final npubValidation = _validationService.validateNpub(trimmedQuery);
       if (npubValidation.isSuccess) {
-        debugPrint('[UserRepository]  Searching for user by npub: $trimmedQuery');
+        debugPrint('[UserRepository] Searching for user by npub: $trimmedQuery');
 
         final userProfileResult = await getUserProfile(trimmedQuery);
         if (userProfileResult.isSuccess) {
-          searchResults.add(userProfileResult.data!);
-          debugPrint('[UserRepository]  Found user by npub: ${userProfileResult.data!.name}');
+          results.add(userProfileResult.data!);
+          debugPrint('[UserRepository] Found user by npub: ${userProfileResult.data!.name}');
         } else {
-          debugPrint('[UserRepository] ️ Could not fetch user profile for npub: ${userProfileResult.error}');
+          debugPrint('[UserRepository] Could not fetch user profile for npub: ${userProfileResult.error}');
         }
       } else {
-        debugPrint('[UserRepository]  Searching for users by name/nip05: "$trimmedQuery"');
+        debugPrint('[UserRepository] Searching users in Isar cache: "$trimmedQuery"');
 
         final isarService = _cacheService.isarService;
         if (isarService.isInitialized) {
@@ -618,18 +618,18 @@ class UserRepository {
               isarProfile.pubkeyHex,
               profileData,
             );
-            searchResults.add(userModel);
+            results.add(userModel);
           }
 
-          debugPrint('[UserRepository]  Found ${searchResults.length} users matching "$trimmedQuery"');
+          debugPrint('[UserRepository] Found ${results.length} users from Isar cache');
         } else {
-          debugPrint('[UserRepository] ️ Isar not initialized, cannot search by name');
+          debugPrint('[UserRepository] Isar not initialized');
         }
       }
 
-      return Result.success(searchResults);
+      return Result.success(results);
     } catch (e) {
-      debugPrint('[UserRepository]  Search users error: $e');
+      debugPrint('[UserRepository] Search users error: $e');
       return Result.error('Failed to search users: $e');
     }
   }
@@ -669,6 +669,42 @@ class UserRepository {
     await _cacheService.printStats();
     _batchFetcher.printStats();
     debugPrint('================================\n');
+  }
+
+  int getCachedUserCount() {
+    return _cacheService.memoryCache.length;
+  }
+
+  Map<String, UserModel> getAllCachedUsers() {
+    final cache = _cacheService.memoryCache;
+    final result = <String, UserModel>{};
+    for (final entry in cache.entries) {
+      result[entry.key] = entry.value.user;
+    }
+    return result;
+  }
+
+  Future<void> pruneLeastRecentlyUsed(int maxUsers) async {
+    try {
+      final cache = _cacheService.memoryCache;
+      if (cache.length <= maxUsers) {
+        return;
+      }
+
+      final sortedEntries = cache.entries.toList()
+        ..sort((a, b) => a.value.lastAccessedAt.compareTo(b.value.lastAccessedAt));
+
+      final toRemoveCount = cache.length - maxUsers;
+      final keysToRemove = sortedEntries.take(toRemoveCount).map((e) => e.key).toList();
+
+      for (final key in keysToRemove) {
+        cache.remove(key);
+      }
+
+      debugPrint('[UserRepository] Pruned $toRemoveCount least recently used profiles');
+    } catch (e) {
+      debugPrint('[UserRepository] Error pruning users: $e');
+    }
   }
 
   Future<void> dispose() async {

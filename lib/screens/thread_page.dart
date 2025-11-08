@@ -36,7 +36,6 @@ class _ThreadPageState extends State<ThreadPage> {
   late ScrollController _scrollController;
   final GlobalKey _focusedNoteKey = GlobalKey();
   late ValueNotifier<List<NoteModel>> _notesNotifier;
-  final Map<String, UserModel> _profiles = {};
   late final AuthRepository _authRepository;
   late final UserRepository _userRepository;
   late final NoteRepository _noteRepository;
@@ -44,14 +43,16 @@ class _ThreadPageState extends State<ThreadPage> {
   UserModel? _currentUser;
   bool _showThreadBubble = false;
 
-  int _visibleRepliesCount = 5;
+  int _visibleRepliesCount = 3;
   static const int _repliesPerPage = 5;
-  static const int _maxInitialReplies = 20;
-  static const int _maxNestedReplies = 3;
+  static const int _maxInitialReplies = 10;
+  static const int _maxNestedReplies = 1;
 
-  Timer? _refreshDebounceTimer;
+  DateTime? _lastRefreshTime;
   bool _isRefreshing = false;
   StreamSubscription<List<NoteModel>>? _notesStreamSubscription;
+  StreamSubscription<Map<String, UserModel>>? _profilesStreamSubscription;
+  DateTime? _lastNotesUpdate;
 
   @override
   void initState() {
@@ -104,8 +105,8 @@ class _ThreadPageState extends State<ThreadPage> {
 
   @override
   void dispose() {
-    _refreshDebounceTimer?.cancel();
     _notesStreamSubscription?.cancel();
+    _profilesStreamSubscription?.cancel();
     _scrollController.dispose();
     _notesNotifier.dispose();
     super.dispose();
@@ -113,11 +114,23 @@ class _ThreadPageState extends State<ThreadPage> {
 
   void _subscribeToNoteUpdates() {
     _notesStreamSubscription = _noteRepository.notesStream.listen((notes) {
-      if (mounted) {
-        _notesNotifier.value = notes;
+      if (!mounted) return;
+      
+      _notesNotifier.value = notes;
+      
+      final now = DateTime.now();
+      if (_lastNotesUpdate != null && 
+          now.difference(_lastNotesUpdate!).inMilliseconds < 500) {
+        return;
+      }
+      _lastNotesUpdate = now;
+      
+      if (mounted && notes.isNotEmpty) {
+        setState(() {});
       }
     });
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -128,6 +141,11 @@ class _ThreadPageState extends State<ThreadPage> {
           rootNoteId: widget.rootNoteId,
           focusedNoteId: widget.focusedNoteId,
         );
+        
+        _profilesStreamSubscription = viewModel.profilesStream.listen((profiles) {
+          if (!mounted) return;
+          _notesNotifier.value = List.from(_notesNotifier.value);
+        });
       },
       builder: (context, viewModel) {
         return Scaffold(
@@ -268,7 +286,7 @@ class _ThreadPageState extends State<ThreadPage> {
       if (parentNote != null && !parentNote.isRepost) {
         return Padding(
           padding: const EdgeInsets.fromLTRB(0, 4, 0, 0),
-          child: _buildSimpleNoteWidget(context, parentNote, isSmallView: true),
+          child: _buildSimpleNoteWidget(context, parentNote, viewModel, isSmallView: true),
         );
       }
     }
@@ -281,8 +299,6 @@ class _ThreadPageState extends State<ThreadPage> {
       return const SizedBox.shrink();
     }
 
-    _profiles.addAll(viewModel.userProfiles);
-
     return Container(
       key: widget.focusedNoteId != null ? _focusedNoteKey : null,
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 6),
@@ -290,7 +306,7 @@ class _ThreadPageState extends State<ThreadPage> {
         note: note,
         currentUserNpub: _currentUserNpub,
         notesNotifier: _notesNotifier,
-        profiles: _profiles,
+        profiles: viewModel.userProfiles,
         notesListProvider: null,
       ),
     );
@@ -436,21 +452,15 @@ class _ThreadPageState extends State<ThreadPage> {
             (context, index) {
               if (index < visibleReplies.length) {
                 final reply = visibleReplies[index];
-                return RepaintBoundary(
-                  key: ValueKey('reply_list_${reply.id}'),
-                  child: AnimatedContainer(
-                    key: ValueKey(reply.id),
-                    duration: const Duration(milliseconds: 200),
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 8.0),
-                      child: _buildThreadReply(
-                        context,
-                        viewModel,
-                        reply,
-                        threadStructure,
-                        0,
-                      ),
-                    ),
+                return Padding(
+                  key: ValueKey('reply_${reply.id}'),
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: _buildThreadReply(
+                    context,
+                    viewModel,
+                    reply,
+                    threadStructure,
+                    0,
                   ),
                 );
               } else if (index == visibleReplies.length && hasMoreReplies) {
@@ -463,7 +473,7 @@ class _ThreadPageState extends State<ThreadPage> {
             },
             childCount: visibleReplies.length + (hasMoreReplies ? 1 : 0),
             addAutomaticKeepAlives: false,
-            addRepaintBoundaries: false,
+            addRepaintBoundaries: true,
           ),
         );
       },
@@ -543,7 +553,7 @@ class _ThreadPageState extends State<ThreadPage> {
     int depth,
   ) {
     const double baseIndentWidth = 24.0;
-    const int maxDepth = 2;
+    const int maxDepth = 1;
     final double currentIndent = depth * baseIndentWidth;
 
     final isFocused = reply.id == widget.focusedNoteId;
@@ -551,68 +561,51 @@ class _ThreadPageState extends State<ThreadPage> {
     final nestedReplies = allNestedReplies.where((nestedReply) => !nestedReply.isRepost).toList();
     final hasNestedReplies = nestedReplies.isNotEmpty;
 
-    return RepaintBoundary(
+    return Container(
       key: ValueKey('reply_${reply.id}_$depth'),
-      child: Container(
-        margin: EdgeInsets.only(
-          bottom: depth == 0 ? 12.0 : 6.0,
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (depth > 0) SizedBox(width: currentIndent),
-            Expanded(
-              child: Column(
-                key: isFocused ? _focusedNoteKey : null,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 2),
-                  Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    child: _buildEnhancedNoteWidget(
-                      context,
-                      viewModel,
-                      reply,
-                      depth,
-                    ),
+      margin: EdgeInsets.only(
+        bottom: depth == 0 ? 12.0 : 6.0,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (depth > 0) SizedBox(width: currentIndent),
+          Expanded(
+            child: Column(
+              key: isFocused ? _focusedNoteKey : null,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 2),
+                Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  child: _buildEnhancedNoteWidget(
+                    context,
+                    viewModel,
+                    reply,
+                    depth,
                   ),
+                ),
+                const SizedBox(height: 4),
+                if (depth < maxDepth && hasNestedReplies) ...[
                   const SizedBox(height: 4),
-                  if (depth < maxDepth && hasNestedReplies) ...[
-                    const SizedBox(height: 4),
-                    ...nestedReplies.take(_maxNestedReplies).map(
-                          (nestedReply) => _buildThreadReply(
-                            context,
-                            viewModel,
-                            nestedReply,
-                            threadStructure,
-                            depth + 1,
-                          ),
-                        ),
-                    if (nestedReplies.length > _maxNestedReplies)
-                      Container(
-                        margin: EdgeInsets.only(
-                          left: (depth + 1) * baseIndentWidth + 12,
-                          top: 4,
-                          bottom: 8,
-                        ),
-                        child: Text(
-                          '${nestedReplies.length - _maxNestedReplies} more replies...',
-                          style: TextStyle(
-                            color: context.colors.textSecondary,
-                            fontSize: 12,
-                            fontStyle: FontStyle.italic,
-                          ),
+                  ...nestedReplies.take(_maxNestedReplies).map(
+                        (nestedReply) => _buildThreadReply(
+                          context,
+                          viewModel,
+                          nestedReply,
+                          threadStructure,
+                          depth + 1,
                         ),
                       ),
-                  ] else if (hasNestedReplies) ...[
-                    Container(
-                      margin: EdgeInsets.only(
-                        left: currentIndent + 12,
-                        top: 8,
-                        bottom: 4,
+                  if (nestedReplies.length > _maxNestedReplies)
+                    Padding(
+                      padding: EdgeInsets.only(
+                        left: (depth + 1) * baseIndentWidth + 12,
+                        top: 4,
+                        bottom: 8,
                       ),
                       child: Text(
-                        'More replies... (${nestedReplies.length} nested)',
+                        '${nestedReplies.length - _maxNestedReplies} more replies...',
                         style: TextStyle(
                           color: context.colors.textSecondary,
                           fontSize: 12,
@@ -620,12 +613,27 @@ class _ThreadPageState extends State<ThreadPage> {
                         ),
                       ),
                     ),
-                  ],
+                ] else if (hasNestedReplies) ...[
+                  Padding(
+                    padding: EdgeInsets.only(
+                      left: currentIndent + 12,
+                      top: 8,
+                      bottom: 4,
+                    ),
+                    child: Text(
+                      'More replies... (${nestedReplies.length} nested)',
+                      style: TextStyle(
+                        color: context.colors.textSecondary,
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
                 ],
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -636,17 +644,15 @@ class _ThreadPageState extends State<ThreadPage> {
     NoteModel note,
     int depth,
   ) {
-    _profiles.addAll(viewModel.userProfiles);
-
     return RepaintBoundary(
-      key: ValueKey('note_${note.id}_$depth'),
       child: NoteWidget(
+        key: ValueKey('note_${note.id}'),
         note: note,
         currentUserNpub: _currentUserNpub,
         notesNotifier: _notesNotifier,
-        profiles: _profiles,
+        profiles: viewModel.userProfiles,
         containerColor: Colors.transparent,
-        isSmallView: depth > 1,
+        isSmallView: depth > 0,
         scrollController: _scrollController,
         isVisible: true,
       ),
@@ -655,19 +661,17 @@ class _ThreadPageState extends State<ThreadPage> {
 
   Widget _buildSimpleNoteWidget(
     BuildContext context,
-    NoteModel note, {
+    NoteModel note,
+    ThreadViewModel viewModel, {
     bool isSmallView = false,
   }) {
-    final viewModel = context.read<ThreadViewModel>();
-    _profiles.addAll(viewModel.userProfiles);
-
     return RepaintBoundary(
-      key: ValueKey('simple_note_${note.id}'),
       child: NoteWidget(
+        key: ValueKey('simple_${note.id}'),
         note: note,
         currentUserNpub: _currentUserNpub,
         notesNotifier: _notesNotifier,
-        profiles: _profiles,
+        profiles: viewModel.userProfiles,
         containerColor: context.colors.background,
         isSmallView: isSmallView,
         scrollController: _scrollController,
@@ -808,23 +812,25 @@ class _ThreadPageState extends State<ThreadPage> {
   Future<void> _debouncedRefresh(ThreadViewModel viewModel) async {
     if (_isRefreshing) return;
 
-    _refreshDebounceTimer?.cancel();
-    _refreshDebounceTimer = Timer(const Duration(milliseconds: 300), () async {
-      if (!mounted) return;
+    final refreshTime = DateTime.now();
+    _lastRefreshTime = refreshTime;
+    
+    await Future.delayed(const Duration(milliseconds: 300));
+    
+    if (!mounted || _lastRefreshTime != refreshTime) return;
 
-      setState(() {
-        _isRefreshing = true;
-      });
-
-      try {
-        await viewModel.refreshThreadCommand.execute();
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isRefreshing = false;
-          });
-        }
-      }
+    setState(() {
+      _isRefreshing = true;
     });
+
+    try {
+      await viewModel.refreshThreadCommand.execute();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
+    }
   }
 }

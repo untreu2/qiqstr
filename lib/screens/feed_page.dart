@@ -10,6 +10,7 @@ import 'package:qiqstr/widgets/note_list_widget.dart' as widgets;
 import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/widgets/back_button_widget.dart';
 import '../theme/theme_manager.dart';
+import '../utils/stream_debouncer.dart';
 import '../models/note_model.dart';
 import '../models/user_model.dart';
 import '../core/ui/ui_state_builder.dart';
@@ -39,10 +40,9 @@ class FeedPageState extends State<FeedPage> {
   UserModel? _currentUser;
   StreamSubscription<UserModel>? _userStreamSubscription;
   StreamSubscription<Map<String, UserModel>>? _profilesStreamSubscription;
-  Timer? _profileUpdateThrottleTimer;
-  bool _profileUpdatePending = false;
   late UserRepository _userRepository;
   int _lastProfileCount = 0;
+  StreamSubscription<Map<String, UserModel>>? _debouncedProfileSubscription;
 
   @override
   void initState() {
@@ -57,12 +57,12 @@ class FeedPageState extends State<FeedPage> {
     });
   }
 
-  Timer? _userUpdateThrottleTimer;
-  bool _userUpdatePending = false;
-  UserModel? _pendingUser;
+  StreamSubscription<UserModel>? _debouncedUserSubscription;
 
   void _setupUserStreamListener() {
-    _userStreamSubscription = _userRepository.currentUserStream.listen(
+    _debouncedUserSubscription = _userRepository.currentUserStream
+        .debounceTime(const Duration(milliseconds: 5000))
+        .listen(
       (updatedUser) {
         if (!mounted) return;
 
@@ -71,20 +71,14 @@ class FeedPageState extends State<FeedPage> {
             _currentUser!.profileImage != updatedUser.profileImage ||
             _currentUser!.name != updatedUser.name;
 
-        if (!hasChanges) return;
+        if (!hasChanges) {
+          debugPrint('[FeedPage] User data unchanged, skipping update');
+          return;
+        }
 
-        _pendingUser = updatedUser;
-        _userUpdatePending = true;
-        _userUpdateThrottleTimer?.cancel();
-        _userUpdateThrottleTimer = Timer(const Duration(milliseconds: 2000), () {
-          if (mounted && _userUpdatePending && _pendingUser != null) {
-            _userUpdatePending = false;
-            setState(() {
-              _currentUser = _pendingUser;
-              _profiles[_pendingUser!.npub] = _pendingUser!;
-            });
-            _pendingUser = null;
-          }
+        setState(() {
+          _currentUser = updatedUser;
+          _profiles[updatedUser.npub] = updatedUser;
         });
       },
       onError: (error) {
@@ -156,8 +150,8 @@ class FeedPageState extends State<FeedPage> {
   void dispose() {
     _userStreamSubscription?.cancel();
     _profilesStreamSubscription?.cancel();
-    _profileUpdateThrottleTimer?.cancel();
-    _userUpdateThrottleTimer?.cancel();
+    _debouncedUserSubscription?.cancel();
+    _debouncedProfileSubscription?.cancel();
     _scrollController.dispose();
     _notesNotifier.dispose();
     super.dispose();
@@ -220,10 +214,15 @@ class FeedPageState extends State<FeedPage> {
   }
 
   void _setupProfilesStreamListener(FeedViewModel viewModel) {
-    _profilesStreamSubscription = viewModel.profilesStream.listen(
+    _debouncedProfileSubscription = viewModel.profilesStream
+        .debounceTime(const Duration(milliseconds: 5000))
+        .listen(
       (profiles) {
         if (!mounted || profiles.isEmpty) return;
-        if (profiles.length == _lastProfileCount) return;
+        if (profiles.length == _lastProfileCount) {
+          debugPrint('[FeedPage] Profile count unchanged, skipping');
+          return;
+        }
 
         bool hasChanges = false;
         for (final entry in profiles.entries) {
@@ -242,17 +241,13 @@ class FeedPageState extends State<FeedPage> {
           }
         }
 
-        if (!hasChanges) return;
+        if (!hasChanges) {
+          debugPrint('[FeedPage] No profile data changes, skipping update');
+          return;
+        }
 
         _lastProfileCount = _profiles.length;
-        _profileUpdatePending = true;
-        _profileUpdateThrottleTimer?.cancel();
-        _profileUpdateThrottleTimer = Timer(const Duration(milliseconds: 2000), () {
-          if (mounted && _profileUpdatePending) {
-            _profileUpdatePending = false;
-            setState(() {});
-          }
-        });
+        setState(() {});
       },
       onError: (error) {
         debugPrint('[FeedPage] Error in profiles stream: $error');
@@ -423,7 +418,7 @@ class FeedPageState extends State<FeedPage> {
                       key: const PageStorageKey<String>('feed_scroll'),
                       controller: _scrollController,
                       physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-                      cacheExtent: 1200,
+                      cacheExtent: 600,
                       slivers: [
                         if (!isHashtagMode)
                           SliverPersistentHeader(

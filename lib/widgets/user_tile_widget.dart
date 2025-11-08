@@ -116,8 +116,7 @@ class _UserAvatar extends StatelessWidget {
             fit: BoxFit.cover,
             fadeInDuration: Duration.zero,
             fadeOutDuration: Duration.zero,
-            memCacheWidth: 144,
-            memCacheHeight: 144,
+            memCacheWidth: 180,
             placeholder: (context, url) => Container(
               color: Colors.grey.shade800,
               child: Icon(

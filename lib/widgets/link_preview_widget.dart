@@ -135,10 +135,9 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
                     width: double.infinity,
                     fadeInDuration: Duration.zero,
                     fadeOutDuration: Duration.zero,
-                    maxHeightDiskCache: 600,
+                    maxHeightDiskCache: 800,
                     maxWidthDiskCache: 800,
                     memCacheWidth: 800,
-                    memCacheHeight: 600,
                     placeholder: (context, url) => AspectRatio(
                       aspectRatio: 16 / 9,
                       child: Container(

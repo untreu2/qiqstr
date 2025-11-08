@@ -77,7 +77,7 @@ class _InteractionBarState extends State<InteractionBar> {
   late final NoteRepository _noteRepository;
   late final ValueNotifier<_InteractionState> _stateNotifier;
   StreamSubscription<List<NoteModel>>? _streamSubscription;
-  Timer? _debounceTimer;
+  DateTime? _lastUpdateTime;
 
   @override
   void initState() {
@@ -97,7 +97,6 @@ class _InteractionBarState extends State<InteractionBar> {
 
   @override
   void dispose() {
-    _debounceTimer?.cancel();
     _streamSubscription?.cancel();
     _stateNotifier.dispose();
     super.dispose();
@@ -121,7 +120,27 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   NoteModel? _findNote() {
-    if (widget.note?.id == widget.noteId) {
+    if (widget.note == null) {
+      final allNotes = _noteRepository.currentNotes;
+      for (final n in allNotes) {
+        if (n.id == widget.noteId) {
+          return n;
+        }
+      }
+      return null;
+    }
+    
+    if (widget.note!.id == widget.noteId) {
+      return widget.note;
+    }
+    
+    if (widget.note!.isRepost && widget.note!.rootId == widget.noteId) {
+      final allNotes = _noteRepository.currentNotes;
+      for (final n in allNotes) {
+        if (n.id == widget.noteId) {
+          return n;
+        }
+      }
       return widget.note;
     }
     
@@ -142,9 +161,18 @@ class _InteractionBarState extends State<InteractionBar> {
       final hasRelevantUpdate = notes.any((note) => note.id == widget.noteId);
       if (!hasRelevantUpdate) return;
 
-      _debounceTimer?.cancel();
-      _debounceTimer = Timer(const Duration(milliseconds: 500), () {
-        if (mounted) _updateState();
+      final updateTime = DateTime.now();
+      if (_lastUpdateTime != null && 
+          updateTime.difference(_lastUpdateTime!).inMilliseconds < 1000) {
+        return;
+      }
+      
+      _lastUpdateTime = updateTime;
+      
+      Future.delayed(const Duration(milliseconds: 500), () {
+        if (mounted && _lastUpdateTime == updateTime) {
+          _updateState();
+        }
       });
     });
   }
@@ -191,9 +219,11 @@ class _InteractionBarState extends State<InteractionBar> {
     final currentState = _stateNotifier.value;
     if (currentState.hasReposted || widget.note == null) return;
 
+    final noteToRepost = _findNote() ?? widget.note!;
+
     showRepostDialog(
       context: context,
-      note: widget.note!,
+      note: noteToRepost,
       onRepostSuccess: () {
         if (mounted) {
           _stateNotifier.value = _InteractionState(
@@ -256,6 +286,8 @@ class _InteractionBarState extends State<InteractionBar> {
     final currentState = _stateNotifier.value;
     if (widget.note == null || currentState.hasZapped || !mounted) return;
 
+    final noteToZap = _findNote() ?? widget.note!;
+
     _stateNotifier.value = _InteractionState(
       reactionCount: currentState.reactionCount,
       repostCount: currentState.repostCount,
@@ -268,7 +300,7 @@ class _InteractionBarState extends State<InteractionBar> {
 
     final zapResult = await showZapDialog(
       context: context,
-      note: widget.note!,
+      note: noteToZap,
     );
 
     if (!mounted) return;
@@ -281,10 +313,13 @@ class _InteractionBarState extends State<InteractionBar> {
 
   void _handleStatsTap() {
     if (widget.note == null) return;
+    
+    final noteForStats = _findNote() ?? widget.note!;
+    
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => NoteStatisticsPage(note: widget.note!),
+        builder: (_) => NoteStatisticsPage(note: noteForStats),
       ),
     );
   }
@@ -396,66 +431,80 @@ class _InteractionBarState extends State<InteractionBar> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
+    final height = widget.isBigSize ? 36.0 : 32.0;
+    
     return RepaintBoundary(
       key: ValueKey('interaction_${widget.noteId}'),
-      child: ValueListenableBuilder<_InteractionState>(
-        valueListenable: _stateNotifier,
-        builder: (context, state, _) {
-          final colors = context.colors;
-          final height = widget.isBigSize ? 36.0 : 32.0;
-
-          return SizedBox(
-            height: height,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                _InteractionButton(
-                  iconPath: 'assets/reply_button_2.svg',
-                  count: state.replyCount,
-                  isActive: false,
-                  activeColor: colors.reply,
-                  inactiveColor: colors.secondary,
-                  onTap: _handleReplyTap,
-                  isBigSize: widget.isBigSize,
-                ),
-                _InteractionButton(
-                  carbonIcon: CarbonIcons.renew,
-                  count: state.repostCount,
-                  isActive: state.hasReposted,
-                  activeColor: colors.repost,
-                  inactiveColor: colors.secondary,
-                  onTap: _handleRepostTap,
-                  isBigSize: widget.isBigSize,
-                  buttonType: _ButtonType.repost,
-                ),
-                _InteractionButton(
-                  iconPath: 'assets/reaction_button.svg',
-                  count: state.reactionCount,
-                  isActive: state.hasReacted,
-                  activeColor: colors.reaction,
-                  inactiveColor: colors.secondary,
-                  onTap: _handleReactionTap,
-                  activeCarbonIcon: CarbonIcons.favorite_filled,
-                  isBigSize: widget.isBigSize,
-                  buttonType: _ButtonType.reaction,
-                ),
-                _InteractionButton(
-                  iconPath: 'assets/zap_button.svg',
-                  count: state.zapAmount,
-                  isActive: state.hasZapped,
-                  activeColor: colors.zap,
-                  inactiveColor: colors.secondary,
-                  onTap: _handleZapTap,
-                  activeCarbonIcon: CarbonIcons.flash_filled,
-                  isBigSize: widget.isBigSize,
-                  buttonType: _ButtonType.zap,
-                ),
-                _buildPopupMenu(colors),
-              ],
+      child: SizedBox(
+        height: height,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _SelectiveButton(
+              stateNotifier: _stateNotifier,
+              selector: (state) => state.replyCount,
+              builder: (count, isActive) => _InteractionButton(
+                iconPath: 'assets/reply_button_2.svg',
+                count: count,
+                isActive: false,
+                activeColor: colors.reply,
+                inactiveColor: colors.secondary,
+                onTap: _handleReplyTap,
+                isBigSize: widget.isBigSize,
+              ),
             ),
-          );
-        },
+            _SelectiveButton(
+              stateNotifier: _stateNotifier,
+              selector: (state) => state.repostCount,
+              activeSelector: (state) => state.hasReposted,
+              builder: (count, isActive) => _InteractionButton(
+                carbonIcon: CarbonIcons.renew,
+                count: count,
+                isActive: isActive,
+                activeColor: colors.repost,
+                inactiveColor: colors.secondary,
+                onTap: _handleRepostTap,
+                isBigSize: widget.isBigSize,
+                buttonType: _ButtonType.repost,
+              ),
+            ),
+            _SelectiveButton(
+              stateNotifier: _stateNotifier,
+              selector: (state) => state.reactionCount,
+              activeSelector: (state) => state.hasReacted,
+              builder: (count, isActive) => _InteractionButton(
+                iconPath: 'assets/reaction_button.svg',
+                count: count,
+                isActive: isActive,
+                activeColor: colors.reaction,
+                inactiveColor: colors.secondary,
+                onTap: _handleReactionTap,
+                activeCarbonIcon: CarbonIcons.favorite_filled,
+                isBigSize: widget.isBigSize,
+                buttonType: _ButtonType.reaction,
+              ),
+            ),
+            _SelectiveButton(
+              stateNotifier: _stateNotifier,
+              selector: (state) => state.zapAmount,
+              activeSelector: (state) => state.hasZapped,
+              builder: (count, isActive) => _InteractionButton(
+                iconPath: 'assets/zap_button.svg',
+                count: count,
+                isActive: isActive,
+                activeColor: colors.zap,
+                inactiveColor: colors.secondary,
+                onTap: _handleZapTap,
+                activeCarbonIcon: CarbonIcons.flash_filled,
+                isBigSize: widget.isBigSize,
+                buttonType: _ButtonType.zap,
+              ),
+            ),
+            _buildPopupMenu(colors),
+          ],
+        ),
       ),
     );
   }
@@ -539,6 +588,61 @@ class _InteractionBarState extends State<InteractionBar> {
 
 enum _ButtonType { reply, repost, reaction, zap }
 
+class _SelectiveButton extends StatefulWidget {
+  final ValueNotifier<_InteractionState> stateNotifier;
+  final int Function(_InteractionState) selector;
+  final bool Function(_InteractionState)? activeSelector;
+  final Widget Function(int count, bool isActive) builder;
+
+  const _SelectiveButton({
+    required this.stateNotifier,
+    required this.selector,
+    this.activeSelector,
+    required this.builder,
+  });
+
+  @override
+  State<_SelectiveButton> createState() => _SelectiveButtonState();
+}
+
+class _SelectiveButtonState extends State<_SelectiveButton> {
+  late int _lastCount;
+  late bool _lastActive;
+
+  @override
+  void initState() {
+    super.initState();
+    _lastCount = widget.selector(widget.stateNotifier.value);
+    _lastActive = widget.activeSelector?.call(widget.stateNotifier.value) ?? false;
+    widget.stateNotifier.addListener(_onStateChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.stateNotifier.removeListener(_onStateChanged);
+    super.dispose();
+  }
+
+  void _onStateChanged() {
+    final newCount = widget.selector(widget.stateNotifier.value);
+    final newActive = widget.activeSelector?.call(widget.stateNotifier.value) ?? false;
+    
+    if (_lastCount != newCount || _lastActive != newActive) {
+      if (mounted) {
+        setState(() {
+          _lastCount = newCount;
+          _lastActive = newActive;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.builder(_lastCount, _lastActive);
+  }
+}
+
 class _InteractionButton extends StatelessWidget {
   final String? iconPath;
   final IconData? carbonIcon;
@@ -571,31 +675,33 @@ class _InteractionButton extends StatelessWidget {
     final fontSize = isBigSize ? 16.0 : 15.0;
     final spacing = isBigSize ? 7.0 : 6.5;
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            _buildIcon(iconSize, effectiveColor),
-            if (count > 0) ...[
-              SizedBox(width: spacing),
-              Transform.translate(
-                offset: const Offset(0, -3),
-                child: Text(
-                  _formatCount(count),
-                  style: TextStyle(
-                    fontSize: fontSize,
-                    color: effectiveColor,
-                    fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+    return RepaintBoundary(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _buildIcon(iconSize, effectiveColor),
+              if (count > 0) ...[
+                SizedBox(width: spacing),
+                Transform.translate(
+                  offset: const Offset(0, -3),
+                  child: Text(
+                    _formatCount(count),
+                    style: TextStyle(
+                      fontSize: fontSize,
+                      color: effectiveColor,
+                      fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -625,6 +731,8 @@ class _InteractionButton extends StatelessWidget {
         width: iconSize,
         height: iconSize,
         colorFilter: ColorFilter.mode(effectiveColor, BlendMode.srcIn),
+        allowDrawingOutsideViewBox: false,
+        placeholderBuilder: (_) => SizedBox(width: iconSize, height: iconSize),
       );
     }
 

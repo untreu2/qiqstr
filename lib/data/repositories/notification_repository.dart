@@ -22,7 +22,8 @@ class NotificationRepository {
   String? _currentUserHex;
 
   StreamSubscription<List<NotificationModel>>? _notificationStreamSubscription;
-  Timer? _debounceTimer;
+  DateTime? _lastDebounceTime;
+  static const Duration _debounceDelay = Duration(milliseconds: 2000);
 
   NotificationRepository({
     required AuthService authService,
@@ -58,9 +59,13 @@ class NotificationRepository {
   }
 
   void _debouncedProcessNotifications(List<NotificationModel> newNotifications) {
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 300), () async {
-      await _processNotifications(newNotifications);
+    final debounceTime = DateTime.now();
+    _lastDebounceTime = debounceTime;
+    
+    Future.delayed(_debounceDelay, () async {
+      if (_lastDebounceTime == debounceTime) {
+        await _processNotifications(newNotifications);
+      }
     });
   }
 
@@ -256,9 +261,37 @@ class NotificationRepository {
     _unreadCount = 0;
   }
 
+  Future<Result<int>> pruneOldNotifications(Duration retentionPeriod) async {
+    try {
+      final cutoffTime = DateTime.now().subtract(retentionPeriod);
+      int removedCount = 0;
+
+      _notifications.removeWhere((notification) {
+        if (notification.timestamp.isBefore(cutoffTime)) {
+          if (!notification.isRead) {
+            _unreadCount = (_unreadCount - 1).clamp(0, double.infinity).toInt();
+          }
+          removedCount++;
+          return true;
+        }
+        return false;
+      });
+
+      if (removedCount > 0) {
+        debugPrint('[NotificationRepository] Pruned $removedCount old notifications');
+        _notificationsController.add(List.unmodifiable(_notifications));
+        _unreadCountController.add(_unreadCount);
+      }
+
+      return Result.success(removedCount);
+    } catch (e) {
+      debugPrint('[NotificationRepository] Error pruning notifications: $e');
+      return Result.error('Failed to prune notifications: ${e.toString()}');
+    }
+  }
+
   void dispose() {
     debugPrint('[NotificationRepository] Disposing notification repository');
-    _debounceTimer?.cancel();
     _notificationStreamSubscription?.cancel();
     _notificationsController.close();
     _unreadCountController.close();

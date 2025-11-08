@@ -31,7 +31,10 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
   UIState<ThreadStructure> get threadStructureState => _threadStructureState;
 
   final Map<String, UserModel> _userProfiles = {};
-  Map<String, UserModel> get userProfiles => Map.unmodifiable(_userProfiles);
+  Map<String, UserModel> get userProfiles => _userProfiles;
+
+  final StreamController<Map<String, UserModel>> _profilesController = StreamController<Map<String, UserModel>>.broadcast();
+  Stream<Map<String, UserModel>> get profilesStream => _profilesController.stream;
 
   String _rootNoteId = '';
   String get rootNoteId => _rootNoteId;
@@ -63,9 +66,24 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     _rootNoteId = rootNoteId;
     _focusedNoteId = focusedNoteId;
 
-
+    _loadExistingProfileCache();
     _subscribeToThreadUpdates();
     loadThread();
+  }
+
+  void _loadExistingProfileCache() {
+    try {
+      final cachedUsers = _userRepository.getAllCachedUsers();
+      _userProfiles.addAll(cachedUsers);
+      debugPrint('[ThreadViewModel] Loaded ${cachedUsers.length} cached profiles');
+      
+      if (_userProfiles.isNotEmpty) {
+        _profilesController.add(Map.from(_userProfiles));
+        safeNotifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[ThreadViewModel] Error loading profile cache: $e');
+    }
   }
 
   Future<void> loadThread() async {
@@ -244,6 +262,10 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
           },
         );
       }
+
+      if (_userProfiles.isNotEmpty) {
+        _profilesController.add(Map.from(_userProfiles));
+      }
     } catch (e) {
       debugPrint('[ThreadViewModel] Error loading user profiles: $e');
     }
@@ -251,10 +273,31 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
   Future<void> _loadInteractionsForThread(List<NoteModel> notes) async {
     try {
-      final noteIds = notes.map((note) => note.id).toList();
+      const maxInitialInteractionFetch = 8;
+      final limitedNotes = notes.take(maxInitialInteractionFetch).toList();
+      
+      if (notes.length > maxInitialInteractionFetch) {
+        debugPrint('[ThreadViewModel] Limiting interaction fetch from ${notes.length} to $maxInitialInteractionFetch notes (only visible notes)');
+      }
+      
+      final noteIds = <String>{};
+      for (final note in limitedNotes) {
+        if (note.isRepost && note.rootId != null) {
+          noteIds.add(note.rootId!);
+        } else {
+          noteIds.add(note.id);
+        }
+      }
+      
       if (noteIds.isEmpty) return;
 
-      await _noteRepository.fetchInteractionsForNotes(noteIds, useCount: false);
+      debugPrint('[ThreadViewModel] Fetching interactions for ${noteIds.length} initially visible notes');
+      
+      await _noteRepository.fetchInteractionsForNotes(
+        noteIds.toList(), 
+        useCount: false,
+        forceLoad: true,
+      );
       
       safeNotifyListeners();
     } catch (e) {
@@ -381,6 +424,7 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
   @override
   void dispose() {
     _persistCalculatedCountsOnDispose();
+    _profilesController.close();
     super.dispose();
   }
 

@@ -985,10 +985,9 @@ class _ProfileAvatar extends StatelessWidget {
             fit: BoxFit.cover,
             fadeInDuration: Duration.zero,
             fadeOutDuration: Duration.zero,
-            memCacheWidth: (radius * 2 * 2).toInt(),
-            memCacheHeight: (radius * 2 * 2).toInt(),
-            maxWidthDiskCache: (radius * 2 * 2).toInt(),
-            maxHeightDiskCache: (radius * 2 * 2).toInt(),
+            memCacheWidth: (radius * 5).toInt(),
+            maxWidthDiskCache: (radius * 5).toInt(),
+            maxHeightDiskCache: (radius * 5).toInt(),
             placeholder: (context, url) => Container(
               color: colors.surfaceTransparent,
               child: Icon(

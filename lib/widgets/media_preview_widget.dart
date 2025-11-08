@@ -210,10 +210,9 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
       fit: fit,
       fadeInDuration: Duration.zero,
       fadeOutDuration: Duration.zero,
-      maxHeightDiskCache: 800,
-      maxWidthDiskCache: 800,
-      memCacheWidth: 800,
-      memCacheHeight: 800,
+      maxHeightDiskCache: 900,
+      maxWidthDiskCache: 900,
+      memCacheWidth: 900,
       placeholder: (context, url) => AspectRatio(
         aspectRatio: aspectRatio ?? 1.0,
         child: Container(

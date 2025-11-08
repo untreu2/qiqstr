@@ -512,6 +512,9 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                 fit: BoxFit.cover,
                 fadeInDuration: Duration.zero,
                 fadeOutDuration: Duration.zero,
+                memCacheWidth: (radius * 5).toInt(),
+                maxHeightDiskCache: (radius * 5).toInt(),
+                maxWidthDiskCache: (radius * 5).toInt(),
                 placeholder: (context, url) => Icon(
                   Icons.person,
                   size: radius,

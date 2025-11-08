@@ -48,10 +48,10 @@ class UserBatchFetcher {
 
   final WebSocketManager _relayManager = WebSocketManager.instance;
 
-  static const int maxBatchSize = 50;
-  static const Duration batchTimeout = Duration(milliseconds: 300);
-  static const Duration requestTimeout = Duration(seconds: 5);
-  static const int maxConcurrentBatches = 3;
+  static const int maxBatchSize = 30;
+  static const Duration batchTimeout = Duration(milliseconds: 500);
+  static const Duration requestTimeout = Duration(seconds: 8);
+  static const int maxConcurrentBatches = 2;
 
   final PriorityQueue<UserFetchRequest> _requestQueue = PriorityQueue<UserFetchRequest>(
     (a, b) => b.priorityValue.compareTo(a.priorityValue),
@@ -59,7 +59,7 @@ class UserBatchFetcher {
 
   final Set<String> _queuedPubkeys = {};
 
-  Timer? _batchTimer;
+  bool _isRunning = false;
   int _activeBatches = 0;
   bool _isProcessing = false;
 
@@ -127,16 +127,21 @@ class UserBatchFetcher {
   }
 
   void _startBatchProcessor() {
-    _batchTimer?.cancel();
-    _batchTimer = Timer.periodic(batchTimeout, (_) {
+    if (_isRunning) return;
+    _isRunning = true;
+    _runBatchLoop();
+  }
+
+  Future<void> _runBatchLoop() async {
+    while (_isRunning) {
+      await Future.delayed(batchTimeout);
+      if (!_isRunning) break;
       _processBatch();
-    });
+    }
   }
 
   void _triggerImmediateBatch() {
-    _batchTimer?.cancel();
     _processBatch();
-    _startBatchProcessor();
   }
 
   Future<void> _processBatch() async {
@@ -259,7 +264,7 @@ class UserBatchFetcher {
 
       await _relayManager.broadcast(serializedRequest);
 
-      Timer(requestTimeout, () {
+      Future.delayed(requestTimeout, () {
         if (!completer.isCompleted) {
           debugPrint('[UserBatchFetcher] Batch fetch timeout, returning ${receivedProfiles.length}/${pubkeyHexList.length} profiles');
           completer.complete(receivedProfiles);
@@ -318,7 +323,7 @@ class UserBatchFetcher {
   }
 
   void dispose() {
-    _batchTimer?.cancel();
+    _isRunning = false;
     _requestQueue.clear();
     _queuedPubkeys.clear();
   }

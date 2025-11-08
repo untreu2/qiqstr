@@ -8,11 +8,11 @@ import '../../models/zap_model.dart';
 import '../filters/feed_filters.dart';
 import '../services/network_service.dart';
 import '../services/nostr_data_service.dart';
+import '../../services/lifecycle_manager.dart';
 
 class NoteRepository {
   final NostrDataService _nostrDataService;
-  Timer? _notesUpdateThrottleTimer;
-  bool _notesUpdatePending = false;
+  DateTime? _lastNotesUpdate;
   final Map<String, NoteModel> _notesCache = {};
   final List<NoteModel> _allNotes = [];
   
@@ -25,11 +25,31 @@ class NoteRepository {
   final StreamController<Map<String, List<ReactionModel>>> _reactionsController =
       StreamController<Map<String, List<ReactionModel>>>.broadcast();
 
+  StreamSubscription<List<NoteModel>>? _dataServiceSubscription;
+  bool _isPaused = false;
+
   NoteRepository({
     required NetworkService networkService,
     required NostrDataService nostrDataService,
   }) : _nostrDataService = nostrDataService {
     _setupNostrDataServiceForwarding();
+    _setupLifecycleCallbacks();
+  }
+
+  void _setupLifecycleCallbacks() {
+    LifecycleManager().addOnPauseCallback(_onAppPaused);
+    LifecycleManager().addOnResumeCallback(_onAppResumed);
+  }
+
+  void _onAppPaused() {
+    debugPrint('[NoteRepository] App paused - stopping updates');
+    _isPaused = true;
+  }
+
+  void _onAppResumed() {
+    debugPrint('[NoteRepository] App resumed - restarting updates');
+    _isPaused = false;
+    _notesController.add(List.unmodifiable(_allNotes));
   }
 
   Future<Result<List<NoteModel>>> getFilteredNotes(BaseFeedFilter filter) async {
@@ -323,6 +343,7 @@ class NoteRepository {
   Future<Result<void>> clearCache() async {
     try {
       _allNotes.clear();
+      _notesCache.clear();
       _reactions.clear();
       _zaps.clear();
 
@@ -332,6 +353,63 @@ class NoteRepository {
       return const Result.success(null);
     } catch (e) {
       return Result.error('Failed to clear cache: ${e.toString()}');
+    }
+  }
+
+  Future<Result<int>> pruneOldNotes(Duration retentionPeriod) async {
+    try {
+      final cutoffTime = DateTime.now().subtract(retentionPeriod);
+      int removedCount = 0;
+
+      _allNotes.removeWhere((note) {
+        if (note.timestamp.isBefore(cutoffTime)) {
+          _notesCache.remove(note.id);
+          _reactions.remove(note.id);
+          _zaps.remove(note.id);
+          removedCount++;
+          return true;
+        }
+        return false;
+      });
+
+      if (removedCount > 0) {
+        debugPrint('[NoteRepository] Pruned $removedCount old notes');
+        _notesController.add(List.unmodifiable(_allNotes));
+      }
+
+      return Result.success(removedCount);
+    } catch (e) {
+      debugPrint('[NoteRepository] Error pruning old notes: $e');
+      return Result.error('Failed to prune old notes: ${e.toString()}');
+    }
+  }
+
+  Future<Result<int>> pruneCacheToLimit(int maxNotes) async {
+    try {
+      if (_allNotes.length <= maxNotes) {
+        return Result.success(0);
+      }
+
+      _allNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      
+      final notesToRemove = _allNotes.sublist(maxNotes);
+      final removedCount = notesToRemove.length;
+
+      for (final note in notesToRemove) {
+        _notesCache.remove(note.id);
+        _reactions.remove(note.id);
+        _zaps.remove(note.id);
+      }
+
+      _allNotes.removeRange(maxNotes, _allNotes.length);
+
+      debugPrint('[NoteRepository] Pruned $removedCount notes to keep cache under $maxNotes items');
+      _notesController.add(List.unmodifiable(_allNotes));
+
+      return Result.success(removedCount);
+    } catch (e) {
+      debugPrint('[NoteRepository] Error pruning cache to limit: $e');
+      return Result.error('Failed to prune cache: ${e.toString()}');
     }
   }
 
@@ -534,11 +612,11 @@ class NoteRepository {
         _insertSorted(note);
       }
 
-      _notesUpdatePending = true;
-      _notesUpdateThrottleTimer?.cancel();
-      _notesUpdateThrottleTimer = Timer(const Duration(milliseconds: 500), () {
-        if (_notesUpdatePending) {
-          _notesUpdatePending = false;
+      final updateTime = DateTime.now();
+      _lastNotesUpdate = updateTime;
+      
+      Future.delayed(const Duration(milliseconds: 2000), () {
+        if (_lastNotesUpdate == updateTime && !_isPaused) {
           _notesController.add(List.unmodifiable(_allNotes));
         }
       });
@@ -552,7 +630,12 @@ class NoteRepository {
   }
 
   void _setupNostrDataServiceForwarding() {
-    _nostrDataService.notesStream.listen((updatedNotes) {
+    _dataServiceSubscription = _nostrDataService.notesStream.listen((updatedNotes) {
+      if (_isPaused) {
+        debugPrint('[NoteRepository] Skipping update while paused');
+        return;
+      }
+
       final updatedNoteIds = updatedNotes.map((n) => n.id).toSet();
       final currentNoteIds = _allNotes.map((n) => n.id).toSet();
       
@@ -591,11 +674,11 @@ class NoteRepository {
       if (removedNoteIds.isNotEmpty) {
         _notesController.add(List.unmodifiable(_allNotes));
       } else {
-        _notesUpdatePending = true;
-        _notesUpdateThrottleTimer?.cancel();
-        _notesUpdateThrottleTimer = Timer(const Duration(milliseconds: 1500), () {
-          if (_notesUpdatePending) {
-            _notesUpdatePending = false;
+        final updateTime = DateTime.now();
+        _lastNotesUpdate = updateTime;
+        
+        Future.delayed(const Duration(milliseconds: 3000), () {
+          if (_lastNotesUpdate == updateTime && !_isPaused) {
             _notesController.add(List.unmodifiable(_allNotes));
           }
         });
@@ -682,6 +765,9 @@ class NoteRepository {
   }
 
   void dispose() {
+    LifecycleManager().removeOnPauseCallback(_onAppPaused);
+    LifecycleManager().removeOnResumeCallback(_onAppResumed);
+    _dataServiceSubscription?.cancel();
     _notesController.close();
     _reactionsController.close();
   }

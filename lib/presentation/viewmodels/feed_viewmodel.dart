@@ -148,7 +148,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             
             
             _loadUserProfilesForNotes(sortedNotes).catchError((_) {});
-            await _fetchInteractionCountsForNotes(sortedNotes).catchError((_) {});
             
             
             _subscribeToRealTimeUpdates();
@@ -225,7 +224,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
               _feedState = LoadedState(sortedNotes);
 
               await _loadUserProfilesForNotes(sortedNotes);
-              await _fetchInteractionCountsForNotes(sortedNotes);
             }
 
             _subscribeToRealTimeUpdates();
@@ -286,7 +284,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
               _feedState = LoadedState(sortedNotes);
 
               await _loadUserProfilesForNotes(sortedNotes);
-              await _fetchInteractionCountsForNotes(sortedNotes);
             }
           },
           (error) async {
@@ -377,7 +374,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             final sortedNotes = _sortNotes(notes);
             _feedState = LoadedState(sortedNotes);
             _loadUserProfilesForNotes(notes);
-            _fetchInteractionCountsForNotes(notes);
             safeNotifyListeners();
           }
         },
@@ -426,20 +422,21 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     return notes;
   }
 
-  Timer? _realtimeUpdateThrottleTimer;
-  bool _realtimeUpdatePending = false;
-  List<NoteModel>? _pendingRealtimeNotes;
   int _lastNoteCount = 0;
 
   void _subscribeToRealTimeUpdates() {
-    if (isHashtagMode) {
-      return;
-    }
+    final stream = isHashtagMode 
+        ? _noteRepository.notesStream 
+        : _noteRepository.realTimeNotesStream;
 
     addSubscription(
-      _noteRepository.realTimeNotesStream.listen((notes) {
+      stream.listen((notes) {
         if (!isDisposed && _feedState.isLoaded) {
-          if (notes.length == _lastNoteCount) return;
+          if (notes.length == _lastNoteCount) {
+            debugPrint('[FeedViewModel] Note count unchanged ($_lastNoteCount), skipping update');
+            return;
+          }
+          
           
           final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
           
@@ -493,62 +490,53 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           }
 
           if (hasUpdates || hasNewNotes) {
-            _pendingRealtimeNotes = notes;
-            _realtimeUpdatePending = true;
-            _realtimeUpdateThrottleTimer?.cancel();
-            _realtimeUpdateThrottleTimer = Timer(const Duration(milliseconds: 2000), () {
-              if (isDisposed || !_realtimeUpdatePending || _pendingRealtimeNotes == null) return;
-              
-              final notes = _pendingRealtimeNotes!;
-              _realtimeUpdatePending = false;
-              _pendingRealtimeNotes = null;
+            _lastNoteCount = notes.length;
 
-              final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
-              final latestTimestamp = currentNotes.first.timestamp;
-              final newerNotes = <NoteModel>[];
-              for (final note in notes) {
-                if (note.timestamp.isAfter(latestTimestamp)) {
-                  newerNotes.add(note);
-                }
+            final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
+            final latestTimestamp = currentNotes.first.timestamp;
+            final newerNotes = <NoteModel>[];
+            for (final note in notes) {
+              if (note.timestamp.isAfter(latestTimestamp)) {
+                newerNotes.add(note);
               }
+            }
 
-              if (newerNotes.isEmpty) return;
+            if (newerNotes.isEmpty) return;
 
-              final userNotes = <NoteModel>[];
-              final otherNotes = <NoteModel>[];
-              final pendingSet = <String>{};
+            final userNotes = <NoteModel>[];
+            final otherNotes = <NoteModel>[];
+            final pendingSet = <String>{};
 
-              for (final note in newerNotes) {
-                if (note.author == _currentUserNpub) {
-                  userNotes.add(note);
-                } else {
-                  otherNotes.add(note);
-                }
+            for (final note in newerNotes) {
+              if (note.author == _currentUserNpub) {
+                userNotes.add(note);
+              } else {
+                otherNotes.add(note);
               }
+            }
 
-              if (userNotes.isNotEmpty) {
-                final allNotes = [...userNotes, ...currentNotes];
-                final sortedNotes = _sortNotes(allNotes);
-                _feedState = LoadedState(sortedNotes);
-                _lastNoteCount = sortedNotes.length;
-                _loadUserProfilesForNotes(userNotes);
+            if (userNotes.isNotEmpty) {
+              final allNotes = [...userNotes, ...currentNotes];
+              final sortedNotes = _sortNotes(allNotes);
+              _feedState = LoadedState(sortedNotes);
+              _lastNoteCount = sortedNotes.length;
+              _loadUserProfilesForNotes(userNotes);
+            }
+
+            if (otherNotes.isNotEmpty) {
+              for (final note in _pendingNotes) {
+                pendingSet.add(note.id);
               }
-
-              if (otherNotes.isNotEmpty) {
-                for (final note in _pendingNotes) {
+              for (final note in otherNotes) {
+                if (!pendingSet.contains(note.id)) {
+                  _pendingNotes.add(note);
                   pendingSet.add(note.id);
                 }
-                for (final note in otherNotes) {
-                  if (!pendingSet.contains(note.id)) {
-                    _pendingNotes.add(note);
-                    pendingSet.add(note.id);
-                  }
-                }
-                _pendingNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
               }
+              _pendingNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+            }
 
-              safeNotifyListeners();
-            });
+            safeNotifyListeners();
           }
         }
       }),
@@ -567,18 +555,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   bool get isFeedLoading => _feedState.isLoading;
 
   String? get errorMessage => _feedState.error;
-
-  Future<void> _fetchInteractionCountsForNotes(List<NoteModel> notes) async {
-    try {
-      final noteIds = notes.map((note) => note.id).toList();
-      if (noteIds.isEmpty) return;
-
-      debugPrint('[FeedViewModel] Fetching interaction counts for ${noteIds.length} notes');
-      await _noteRepository.fetchInteractionsForNotes(noteIds, useCount: true, forceLoad: true);
-    } catch (e) {
-      debugPrint('[FeedViewModel] Error fetching interaction counts: $e');
-    }
-  }
 
   Future<void> _loadUserProfilesForNotes(List<NoteModel> notes) async {
     try {
@@ -641,7 +617,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
   @override
   void dispose() {
-    _realtimeUpdateThrottleTimer?.cancel();
     _profilesController.close();
     super.dispose();
   }

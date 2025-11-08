@@ -56,10 +56,11 @@ class UserCacheService {
   int _persistentWrites = 0;
   int _persistentReads = 0;
 
-  Timer? _cleanupTimer;
+  bool _isCleanupRunning = false;
   bool _isIsarInitialized = false;
 
   IsarDatabaseService get isarService => _isarService;
+  LinkedHashMap<String, CachedUserEntry> get memoryCache => _memoryCache;
 
   Future<void> _initializeIsar() async {
     try {
@@ -321,10 +322,17 @@ class UserCacheService {
   }
 
   void _startCacheCleanup() {
-    _cleanupTimer?.cancel();
-    _cleanupTimer = Timer.periodic(cleanupInterval, (_) {
+    if (_isCleanupRunning) return;
+    _isCleanupRunning = true;
+    _runCleanupLoop();
+  }
+
+  Future<void> _runCleanupLoop() async {
+    while (_isCleanupRunning) {
+      await Future.delayed(cleanupInterval);
+      if (!_isCleanupRunning) break;
       _cleanupExpiredEntries();
-    });
+    }
   }
 
   void _cleanupExpiredEntries() {
@@ -412,7 +420,7 @@ class UserCacheService {
   }
 
   Future<void> dispose() async {
-    _cleanupTimer?.cancel();
+    _isCleanupRunning = false;
     _memoryCache.clear();
     _pendingRequests.clear();
 
