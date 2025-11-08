@@ -12,7 +12,7 @@ import '../models/notification_model.dart';
 import '../widgets/note_content_widget.dart';
 import '../widgets/quote_widget.dart';
 import '../core/di/app_di.dart';
-import '../data/services/nostr_data_service.dart';
+import '../data/repositories/user_repository.dart';
 import '../data/services/auth_service.dart';
 import '../screens/profile_page.dart';
 import '../screens/thread_page.dart';
@@ -445,19 +445,29 @@ class _NotificationPageState extends State<NotificationPage> {
 
   void _openUserProfile(BuildContext context, String npub) async {
     try {
-      final nostrDataService = AppDI.get<NostrDataService>();
-      final userResult = await nostrDataService.fetchUserProfile(npub);
+      final userRepository = AppDI.get<UserRepository>();
+      final userResult = await userRepository.getUserProfile(npub);
 
-      if (userResult.isSuccess && userResult.data != null) {
-        if (context.mounted) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ProfilePage(user: userResult.data!),
-            ),
-          );
-        }
-      }
+      userResult.fold(
+        (user) {
+          if (context.mounted) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ProfilePage(user: user),
+              ),
+            );
+          }
+        },
+        (error) {
+          debugPrint('Error navigating to profile: $error');
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to load profile: $error')),
+            );
+          }
+        },
+      );
     } catch (e) {
       debugPrint('Error navigating to profile: $e');
     }

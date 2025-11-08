@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:nostr_nip19/nostr_nip19.dart';
 
 import '../../core/base/result.dart';
 import '../../models/note_model.dart';
@@ -8,10 +9,13 @@ import '../../models/zap_model.dart';
 import '../filters/feed_filters.dart';
 import '../services/network_service.dart';
 import '../services/nostr_data_service.dart';
+import '../services/user_batch_fetcher.dart';
 import '../../services/lifecycle_manager.dart';
+import 'user_repository.dart';
 
 class NoteRepository {
   final NostrDataService _nostrDataService;
+  final UserRepository? _userRepository;
   DateTime? _lastNotesUpdate;
   final Map<String, NoteModel> _notesCache = {};
   final List<NoteModel> _allNotes = [];
@@ -31,7 +35,9 @@ class NoteRepository {
   NoteRepository({
     required NetworkService networkService,
     required NostrDataService nostrDataService,
-  }) : _nostrDataService = nostrDataService {
+    UserRepository? userRepository,
+  }) : _nostrDataService = nostrDataService,
+       _userRepository = userRepository {
     _setupNostrDataServiceForwarding();
     _setupLifecycleCallbacks();
   }
@@ -648,6 +654,8 @@ class NoteRepository {
       }
 
       bool hasChanges = removedNoteIds.isNotEmpty;
+      final List<NoteModel> newNotes = [];
+      
       for (final updatedNote in updatedNotes) {
         final existingNote = _notesCache[updatedNote.id];
         if (existingNote != null) {
@@ -665,8 +673,13 @@ class NoteRepository {
         } else {
           _notesCache[updatedNote.id] = updatedNote;
           _allNotes.add(updatedNote);
+          newNotes.add(updatedNote);
           hasChanges = true;
         }
+      }
+
+      if (newNotes.isNotEmpty) {
+        _preloadMentionsForNotes(newNotes);
       }
 
       if (!hasChanges) return;
@@ -684,6 +697,59 @@ class NoteRepository {
         });
       }
     });
+  }
+
+  void _preloadMentionsForNotes(List<NoteModel> notes) {
+    if (_userRepository == null) return;
+
+    final Set<String> authorIds = {};
+    for (final note in notes) {
+      authorIds.add(note.author);
+      if (note.repostedBy != null) {
+        authorIds.add(note.repostedBy!);
+      }
+
+      try {
+        final parsedContent = note.parsedContentLazy;
+        final textParts = (parsedContent['textParts'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        for (final part in textParts) {
+          if (part['type'] == 'mention') {
+            final mentionId = part['id'] as String?;
+            if (mentionId != null) {
+              final pubkey = _extractPubkeyFromBech32(mentionId);
+              if (pubkey != null) {
+                authorIds.add(pubkey);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('[NoteRepository] Error parsing mentions from note ${note.id}: $e');
+      }
+    }
+
+    if (authorIds.isEmpty) return;
+
+    _userRepository.getUserProfiles(
+      authorIds.toList(),
+      priority: FetchPriority.high,
+    ).then((_) {}).catchError((e) {
+      debugPrint('[NoteRepository] Error preloading mentions: $e');
+    });
+  }
+
+  String? _extractPubkeyFromBech32(String bech32) {
+    try {
+      if (bech32.startsWith('npub1')) {
+        return decodeBasicBech32(bech32, 'npub');
+      } else if (bech32.startsWith('nprofile1')) {
+        final result = decodeTlvBech32Full(bech32, 'nprofile');
+        return result['type_0_main'];
+      }
+    } catch (e) {
+      debugPrint('[NoteRepository] Bech32 decode error: $e');
+    }
+    return null;
   }
 
   Future<void> fetchInteractionsForNote(String noteId, {bool useCount = false}) async {

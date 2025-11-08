@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
@@ -9,7 +8,7 @@ import '../screens/thread_page.dart';
 import '../screens/profile_page.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/user_repository.dart';
-import '../data/services/nostr_data_service.dart';
+import '../data/repositories/note_repository.dart';
 import 'note_content_widget.dart';
 
 class QuoteWidget extends StatefulWidget {
@@ -33,12 +32,8 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
   bool _isLoading = true;
   bool _hasError = false;
   bool _isDisposed = false;
-  int _retryCount = 0;
-  static const int _maxRetries = 2;
-  DateTime? _lastFetchTime;
-  DateTime? _lastRetryTime;
 
-  late final NostrDataService _nostrDataService;
+  late final NoteRepository _noteRepository;
   late final UserRepository _userRepository;
   late final String? _eventId;
 
@@ -55,7 +50,7 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
 
   void _initializeServices() {
     try {
-      _nostrDataService = AppDI.get<NostrDataService>();
+      _noteRepository = AppDI.get<NoteRepository>();
       _userRepository = AppDI.get<UserRepository>();
       _eventId = _extractEventId(widget.bech32);
     } catch (e) {
@@ -90,65 +85,36 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
     return null;
   }
 
-  void _loadQuoteData() {
+  void _loadQuoteData() async {
     if (_eventId == null) {
       _setError();
       return;
     }
 
-    final cachedNote = _nostrDataService.cachedNotes.where((note) => note.id == _eventId).firstOrNull;
-
-    if (cachedNote != null) {
-      _setNote(cachedNote);
-      return;
-    }
-
-    _startBackgroundFetch();
-  }
-
-  void _startBackgroundFetch() {
-    final fetchTime = DateTime.now();
-    _lastFetchTime = fetchTime;
-    
-    Future.delayed(const Duration(seconds: 8), () {
-      if (_isDisposed || !mounted || _note != null || _lastFetchTime != fetchTime) return;
-      _setError();
-    });
-
-    Future.microtask(() async {
+    try {
+      final result = await _noteRepository.getNoteById(_eventId);
+      
       if (_isDisposed || !mounted) return;
 
-      try {
-        debugPrint('[QuoteWidget] Starting background fetch for event: $_eventId');
-        final success = await _nostrDataService.fetchSpecificNote(_eventId!);
-
-        if (_isDisposed || !mounted) return;
-
-        if (success) {
-          final fetchedNote = _nostrDataService.cachedNotes.where((note) => note.id == _eventId).firstOrNull;
-          if (fetchedNote != null) {
-            debugPrint('[QuoteWidget] Successfully fetched note: $_eventId');
-            _setNote(fetchedNote);
-            return;
+      result.fold(
+        (note) {
+          if (note != null) {
+            debugPrint('[QuoteWidget] Found note: $_eventId');
+            _setNote(note);
+          } else {
+            debugPrint('[QuoteWidget] Note not found: $_eventId');
+            _setError();
           }
-        }
-
-        debugPrint('[QuoteWidget] Note not found via fetchSpecificNote, checking all cached notes...');
-        final allCachedNotes = _nostrDataService.cachedNotes;
-        final foundNote = allCachedNotes.where((note) => note.id == _eventId).firstOrNull;
-
-        if (foundNote != null) {
-          debugPrint('[QuoteWidget] Found note in cached data: $_eventId');
-          _setNote(foundNote);
-        } else {
-          debugPrint('[QuoteWidget] Note not found in any cached data: $_eventId');
-          _retryOrSetError();
-        }
-      } catch (e) {
-        debugPrint('[QuoteWidget] Background fetch error: $e');
-        _retryOrSetError();
-      }
-    });
+        },
+        (error) {
+          debugPrint('[QuoteWidget] Error fetching note: $error');
+          _setError();
+        },
+      );
+    } catch (e) {
+      debugPrint('[QuoteWidget] Exception loading quote data: $e');
+      _setError();
+    }
   }
 
   void _setNote(NoteModel note) {
@@ -171,25 +137,6 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
       _isLoading = false;
       _hasError = true;
     });
-  }
-
-  void _retryOrSetError() {
-    if (_retryCount < _maxRetries) {
-      _retryCount++;
-      debugPrint('[QuoteWidget] Retrying fetch (attempt $_retryCount/$_maxRetries)');
-
-      final retryTime = DateTime.now();
-      _lastRetryTime = retryTime;
-      
-      Future.delayed(Duration(seconds: _retryCount * 2), () {
-        if (!_isDisposed && mounted && _lastRetryTime == retryTime) {
-          _startBackgroundFetch();
-        }
-      });
-    } else {
-      debugPrint('[QuoteWidget] Max retries reached, setting error');
-      _setError();
-    }
   }
 
   void _precomputeData(NoteModel note) {
@@ -379,14 +326,6 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
               fontWeight: FontWeight.w500,
             ),
           ),
-          if (_retryCount > 0)
-            Text(
-              'Tried $_retryCount times',
-              style: TextStyle(
-                color: context.colors.textSecondary,
-                fontSize: 12,
-              ),
-            ),
         ],
       ),
     );

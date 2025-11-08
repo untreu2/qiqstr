@@ -357,6 +357,7 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
                     notesListProvider: widget.notesListProvider,
                     noteId: _noteId,
                     authorProfileImageUrl: _stateNotifier.value.authorUser?.profileImage,
+                    authorId: _authorId,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -607,6 +608,7 @@ class _FocusedContentSection extends StatelessWidget {
   final dynamic notesListProvider;
   final String noteId;
   final String? authorProfileImageUrl;
+  final String authorId;
 
   const _FocusedContentSection({
     required this.parsedContent,
@@ -614,6 +616,7 @@ class _FocusedContentSection extends StatelessWidget {
     this.notesListProvider,
     required this.noteId,
     this.authorProfileImageUrl,
+    required this.authorId,
   });
 
   @override

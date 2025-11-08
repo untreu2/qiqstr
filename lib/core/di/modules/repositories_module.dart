@@ -19,16 +19,17 @@ class RepositoriesModule extends DIModule {
           validationService: AppDI.get<ValidationService>(),
         ));
 
-    AppDI.registerLazySingleton<NoteRepository>(() => NoteRepository(
-          networkService: AppDI.get<NetworkService>(),
-          nostrDataService: AppDI.get<NostrDataService>(),
-        ));
-
     AppDI.registerLazySingleton<UserRepository>(() => UserRepository(
           authService: AppDI.get<AuthService>(),
           validationService: AppDI.get<ValidationService>(),
           nostrDataService: AppDI.get<NostrDataService>(),
           followCacheService: AppDI.get<FollowCacheService>(),
+        ));
+
+    AppDI.registerLazySingleton<NoteRepository>(() => NoteRepository(
+          networkService: AppDI.get<NetworkService>(),
+          nostrDataService: AppDI.get<NostrDataService>(),
+          userRepository: AppDI.get<UserRepository>(),
         ));
 
     AppDI.registerLazySingleton<NotificationRepository>(() => NotificationRepository(

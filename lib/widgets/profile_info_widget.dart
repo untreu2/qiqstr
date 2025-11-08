@@ -252,12 +252,12 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
       debugPrint('[ProfileInfoWidget] Checking if ${_userNotifier.value.pubkeyHex} follows $_currentUserNpub');
 
-      final nostrDataService = AppDI.get<NostrDataService>();
-      final followingResult = await nostrDataService.getFollowingList(_userNotifier.value.pubkeyHex);
+      final followingResult = await _userRepository.getFollowingListForUser(_userNotifier.value.pubkeyHex);
 
       followingResult.fold(
-        (followingHexList) {
+        (followingUsers) {
           final currentUserHex = _convertToHex(_currentUserNpub!);
+          final followingHexList = followingUsers.map((u) => u.pubkeyHex).toList();
 
           final doesFollow = currentUserHex != null && followingHexList.contains(currentUserHex);
 
@@ -378,15 +378,13 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   Future<void> _loadFollowerCounts() async {
     try {
-      final nostrDataService = AppDI.get<NostrDataService>();
-      
-      final followingResult = await nostrDataService.getFollowingList(_userNotifier.value.pubkeyHex);
+      final followingResult = await _userRepository.getFollowingListForUser(_userNotifier.value.pubkeyHex);
 
       followingResult.fold(
-        (followingHexList) {
+        (followingUsers) {
           if (mounted) {
             setState(() {
-              _followingCount = followingHexList.length;
+              _followingCount = followingUsers.length;
             });
           }
         },
@@ -400,6 +398,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         },
       );
 
+      final nostrDataService = AppDI.get<NostrDataService>();
       final followerCount = await nostrDataService.fetchFollowerCount(_userNotifier.value.pubkeyHex);
       if (mounted) {
         setState(() {

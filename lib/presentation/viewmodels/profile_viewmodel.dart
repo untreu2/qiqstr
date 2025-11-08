@@ -431,6 +431,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
 
   bool get canLoadMoreProfileNotes => _profileNotesState.isLoaded && !_isLoadingMore;
 
+
   @override
   void onRetry() {
     if (_currentProfileNpub.isNotEmpty) {

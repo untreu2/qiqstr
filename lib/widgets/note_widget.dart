@@ -576,6 +576,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                               notesListProvider: widget.notesListProvider,
                               noteId: _noteId,
                               authorProfileImageUrl: _stateNotifier.value.authorUser?.profileImage,
+                              authorId: _authorId,
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -711,6 +712,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                           notesListProvider: widget.notesListProvider,
                           noteId: _noteId,
                           authorProfileImageUrl: _stateNotifier.value.authorUser?.profileImage,
+                          authorId: _authorId,
                         ),
                       ),
                     ),
@@ -1114,6 +1116,7 @@ class _SafeContentSection extends StatelessWidget {
   final dynamic notesListProvider;
   final String noteId;
   final String? authorProfileImageUrl;
+  final String authorId;
 
   const _SafeContentSection({
     required this.parsedContent,
@@ -1122,6 +1125,7 @@ class _SafeContentSection extends StatelessWidget {
     this.notesListProvider,
     required this.noteId,
     this.authorProfileImageUrl,
+    required this.authorId,
   });
 
   @override
