@@ -352,26 +352,31 @@ class FeedPageState extends State<FeedPage> {
                         GestureDetector(
                           onTap: () => viewModel.toggleSortMode(),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            constraints: const BoxConstraints(minHeight: 40),
+                            alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              color: colors.textSecondary.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(16),
+                              color: colors.buttonPrimary,
+                              borderRadius: BorderRadius.circular(20),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 Icon(
                                   viewModel.sortMode == FeedSortMode.mostInteracted ? Icons.trending_up : Icons.access_time,
-                                  size: 16,
-                                  color: colors.textPrimary,
+                                  size: 18,
+                                  color: colors.buttonText,
                                 ),
-                                const SizedBox(width: 4),
+                                const SizedBox(width: 6),
                                 Text(
                                   viewModel.sortMode == FeedSortMode.mostInteracted ? 'Popular' : 'Latest',
                                   style: TextStyle(
-                                    color: colors.textPrimary,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
+                                    color: colors.buttonText,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.0,
                                   ),
                                 ),
                               ],
