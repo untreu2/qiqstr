@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:bounce/bounce.dart';
 import '../theme/theme_manager.dart';
+import 'common_buttons.dart';
 
 enum BackButtonType {
   appBar,
@@ -63,14 +64,12 @@ class BackButtonWidget extends StatelessWidget {
       child: Semantics(
         label: semanticsLabel ?? 'Go back to previous screen',
         button: true,
-        child: IconButton(
-          icon: Icon(
-            Icons.arrow_back_ios_new_rounded,
-            color: iconColor ?? context.colors.textPrimary,
-            size: iconSize ?? 20,
-          ),
+        child: IconActionButton(
+          icon: Icons.arrow_back_ios_new_rounded,
+          iconColor: iconColor ?? context.colors.textPrimary,
           onPressed: onPressed ?? () => Navigator.pop(context),
           tooltip: tooltip ?? 'Go back',
+          size: ButtonSize.small,
         ),
       ),
     );

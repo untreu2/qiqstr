@@ -52,6 +52,13 @@ class WalletRepository {
         return Result.error(authResult.error!);
       }
 
+      final userInfoResult = await _coinosService.getAccountInfo();
+      if (userInfoResult.isSuccess && userInfoResult.data != null) {
+        final user = userInfoResult.data!;
+        debugPrint('[WalletRepository] Nostr authentication successful for user: ${user.username}');
+        return Result.success(user);
+      }
+
       final user = authResult.data!.user;
       debugPrint('[WalletRepository] Nostr authentication successful for user: ${user.username}');
 

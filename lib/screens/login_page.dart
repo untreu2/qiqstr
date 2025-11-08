@@ -6,6 +6,7 @@ import 'package:qiqstr/screens/edit_new_account_profile.dart';
 import 'package:qiqstr/screens/keys_info_page.dart';
 
 import 'package:qiqstr/theme/theme_manager.dart';
+import 'package:qiqstr/widgets/common_buttons.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -161,53 +162,30 @@ class _LoginPageState extends State<LoginPage> {
               filled: true,
               fillColor: context.colors.inputFill,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(25),
+                borderRadius: BorderRadius.circular(40),
                 borderSide: BorderSide.none,
               ),
             ),
-            maxLines: 3,
-            textAlignVertical: TextAlignVertical.top,
           ),
           const SizedBox(height: 20),
-          GestureDetector(
-            onTap: _loginWithInput,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: context.colors.buttonPrimary,
-                borderRadius: BorderRadius.circular(40),
-              ),
-              child: Text(
-                'Login',
-                style: TextStyle(
-                  color: context.colors.buttonText,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+          SizedBox(
+            width: double.infinity,
+            child: PrimaryButton(
+              label: 'Login',
+              onPressed: _isLoading ? null : _loginWithInput,
+              size: ButtonSize.large,
+              isLoading: _isLoading,
             ),
           ),
           const SizedBox(height: 12),
-          GestureDetector(
-            onTap: _createNewAccount,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: context.colors.overlayLight,
-                borderRadius: BorderRadius.circular(40),
-              ),
-              child: Text(
-                'Create a New Account',
-                style: TextStyle(
-                  color: context.colors.textPrimary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+          SizedBox(
+            width: double.infinity,
+            child: SecondaryButton(
+              label: 'Create a New Account',
+              onPressed: _isLoading ? null : _createNewAccount,
+              size: ButtonSize.large,
+              backgroundColor: context.colors.overlayLight,
+              foregroundColor: context.colors.textPrimary,
             ),
           ),
           const SizedBox(height: 20),

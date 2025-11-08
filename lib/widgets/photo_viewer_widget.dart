@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'common_buttons.dart';
 
 class PhotoViewerWidget extends StatefulWidget {
   final List<String> imageUrls;
@@ -122,9 +123,11 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
                             ),
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white, size: 22),
+                        IconActionButton(
+                          icon: Icons.close,
+                          iconColor: Colors.white,
                           onPressed: () => Navigator.of(context).pop(),
+                          size: ButtonSize.small,
                         ),
                       ],
                     ),

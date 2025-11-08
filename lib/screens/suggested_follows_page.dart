@@ -67,6 +67,7 @@ class SuggestedFollowsPage extends StatelessWidget {
                   PrimaryButton(
                     label: 'Retry',
                     onPressed: () => viewModel.loadSuggestedUsers(),
+                    size: ButtonSize.large,
                   ),
                 ],
               ),
@@ -227,6 +228,7 @@ class SuggestedFollowsPage extends StatelessWidget {
               onPressed: viewModel.isProcessing ? null : () async {
                 await _skipToHome(context, viewModel);
               },
+              size: ButtonSize.large,
               backgroundColor: context.colors.overlayLight,
               foregroundColor: context.colors.textPrimary,
             ),
@@ -239,6 +241,7 @@ class SuggestedFollowsPage extends StatelessWidget {
               onPressed: viewModel.isProcessing ? null : () async {
                 await _continueToHome(context, viewModel);
               },
+              size: ButtonSize.large,
               isLoading: viewModel.isProcessing,
             ),
           ),

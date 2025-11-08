@@ -10,6 +10,7 @@ import '../data/repositories/user_repository.dart';
 import '../services/media_service.dart';
 import '../widgets/snackbar_widget.dart';
 import '../widgets/back_button_widget.dart';
+import '../widgets/common_buttons.dart';
 
 class EditNewAccountProfilePage extends StatefulWidget {
   final String npub;
@@ -208,9 +209,11 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       suffixIcon: onUpload != null
-          ? IconButton(
-              icon: Icon(Icons.upload, color: context.colors.accent),
+          ? IconActionButton(
+              icon: Icons.upload,
+              iconColor: context.colors.accent,
               onPressed: onUpload,
+              size: ButtonSize.small,
             )
           : null,
     );

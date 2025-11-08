@@ -9,6 +9,7 @@ import 'package:file_picker/file_picker.dart';
 import '../services/media_service.dart';
 import '../widgets/snackbar_widget.dart';
 import '../widgets/back_button_widget.dart';
+import '../widgets/common_buttons.dart';
 
 class EditOwnProfilePage extends StatelessWidget {
   const EditOwnProfilePage({super.key});
@@ -215,9 +216,11 @@ class _EditProfileContentState extends State<_EditProfileContent> {
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       suffixIcon: onUpload != null
-          ? IconButton(
-              icon: Icon(Icons.upload, color: context.colors.accent),
+          ? IconActionButton(
+              icon: Icons.upload,
+              iconColor: context.colors.accent,
               onPressed: onUpload,
+              size: ButtonSize.small,
             )
           : null,
     );

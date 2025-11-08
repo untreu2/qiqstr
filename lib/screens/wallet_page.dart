@@ -7,6 +7,7 @@ import '../core/di/app_di.dart';
 import '../data/repositories/wallet_repository.dart';
 import '../models/wallet_model.dart';
 import '../theme/theme_manager.dart';
+import '../widgets/snackbar_widget.dart';
 
 class WalletPage extends StatefulWidget {
   const WalletPage({super.key});
@@ -150,6 +151,11 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
         });
       }
     }
+  }
+
+  String? _getCoinosLud16() {
+    if (_user == null) return null;
+    return _user!.lud16;
   }
 
   Widget _buildHeader(BuildContext context) {
@@ -297,6 +303,42 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
                     ),
                   ],
                 ),
+                if (_getCoinosLud16() != null) ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _getCoinosLud16()!,
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: context.colors.textPrimary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () {
+                          Clipboard.setData(ClipboardData(text: _getCoinosLud16()!));
+                          AppSnackbar.success(context, 'Lightning address copied', duration: const Duration(seconds: 2));
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: context.colors.overlayLight,
+                            borderRadius: BorderRadius.circular(40),
+                          ),
+                          child: Icon(
+                            Icons.copy,
+                            size: 18,
+                            color: context.colors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
@@ -435,6 +477,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
       ),
       builder: (context) => ReceiveDialog(
         walletRepository: _walletRepository,
+        lud16: _getCoinosLud16(),
       ),
     );
   }
@@ -612,10 +655,12 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
 
 class ReceiveDialog extends StatefulWidget {
   final WalletRepository walletRepository;
+  final String? lud16;
 
   const ReceiveDialog({
     super.key,
     required this.walletRepository,
+    this.lud16,
   });
 
   @override
@@ -713,6 +758,32 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
                 ),
               ),
             ),
+            if (widget.lud16 != null && widget.lud16!.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(
+                'Your Lightning Address',
+                style: TextStyle(
+                  color: context.colors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: context.colors.surface,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: SelectableText(
+                  widget.lud16!,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: context.colors.textPrimary,
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 45),
           ],
         ),

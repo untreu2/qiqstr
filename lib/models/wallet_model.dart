@@ -22,6 +22,7 @@ class CoinosUser {
   final String? picture;
   final String currency;
   final int? balance;
+  final String? lud16;
 
   const CoinosUser({
     required this.id,
@@ -31,17 +32,24 @@ class CoinosUser {
     this.picture,
     required this.currency,
     this.balance,
+    this.lud16,
   });
 
   factory CoinosUser.fromJson(Map<String, dynamic> json) {
+    final username = json['username'] as String? ?? '';
+    final lud16 = json['lud16'] as String?;
+    final cleanUsername = username.replaceAll(' ', '');
+    final finalLud16 = lud16 ?? (cleanUsername.isNotEmpty ? '$cleanUsername@coinos.io' : null);
+    
     return CoinosUser(
       id: json['id'] as String? ?? '',
-      username: json['username'] as String? ?? '',
+      username: username,
       pubkey: json['pubkey'] as String? ?? '',
       display: json['display'] as String? ?? '',
       picture: json['picture'] as String?,
       currency: json['currency'] as String? ?? 'USD',
       balance: _parseToInt(json['balance']),
+      lud16: finalLud16,
     );
   }
 
@@ -61,6 +69,7 @@ class CoinosUser {
         'picture': picture,
         'currency': currency,
         'balance': balance,
+        'lud16': lud16,
       };
 
   @override
