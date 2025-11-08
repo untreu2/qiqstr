@@ -2651,12 +2651,12 @@ class NostrDataService {
       for (int i = 0; i < noteIds.length; i += batchSize) {
         final batch = noteIds.skip(i).take(batchSize).toList();
 
-        await Future.wait([
-          _fetchReactionsForBatch(batch),
-          _fetchRepliesForBatch(batch),
-          _fetchRepostsForBatch(batch),
-          _fetchZapsForBatch(batch),
-        ], eagerError: false);
+        final filter = NostrService.createCombinedInteractionFilter(
+          eventIds: batch,
+          limit: 2000,
+        );
+        final request = NostrService.createRequest(filter);
+        await _relayManager.broadcast(NostrService.serializeRequest(request));
 
         if (i + batchSize < noteIds.length) {
           await Future.delayed(const Duration(milliseconds: 50));
@@ -2666,58 +2666,6 @@ class NostrDataService {
       debugPrint('[NostrDataService] Interaction fetching completed for ${noteIds.length} notes');
     } catch (e) {
       debugPrint('[NostrDataService] Error fetching interactions: $e');
-    }
-  }
-
-  Future<void> _fetchReactionsForBatch(List<String> noteIds) async {
-    try {
-      final filter = NostrService.createReactionFilter(
-        eventIds: noteIds,
-        limit: 500,
-      );
-      final request = NostrService.createRequest(filter);
-      await _relayManager.broadcast(NostrService.serializeRequest(request));
-    } catch (e) {
-      debugPrint('[NostrDataService] Failed to fetch reactions: $e');
-    }
-  }
-
-  Future<void> _fetchRepliesForBatch(List<String> noteIds) async {
-    try {
-      final filter = NostrService.createReplyFilter(
-        eventIds: noteIds,
-        limit: 500,
-      );
-      final request = NostrService.createRequest(filter);
-      await _relayManager.broadcast(NostrService.serializeRequest(request));
-    } catch (e) {
-      debugPrint('[NostrDataService] Failed to fetch replies: $e');
-    }
-  }
-
-  Future<void> _fetchRepostsForBatch(List<String> noteIds) async {
-    try {
-      final filter = NostrService.createRepostFilter(
-        eventIds: noteIds,
-        limit: 500,
-      );
-      final request = NostrService.createRequest(filter);
-      await _relayManager.broadcast(NostrService.serializeRequest(request));
-    } catch (e) {
-      debugPrint('[NostrDataService] Failed to fetch reposts: $e');
-    }
-  }
-
-  Future<void> _fetchZapsForBatch(List<String> noteIds) async {
-    try {
-      final filter = NostrService.createZapFilter(
-        eventIds: noteIds,
-        limit: 500,
-      );
-      final request = NostrService.createRequest(filter);
-      await _relayManager.broadcast(NostrService.serializeRequest(request));
-    } catch (e) {
-      debugPrint('[NostrDataService] Failed to fetch zaps: $e');
     }
   }
 

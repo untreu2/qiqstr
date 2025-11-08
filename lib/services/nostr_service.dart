@@ -375,58 +375,6 @@ class NostrService {
     );
   }
 
-  static Filter createReactionFilter({
-    required List<String> eventIds,
-    int? limit,
-    int? since,
-  }) {
-    return Filter(
-      kinds: [7],
-      e: eventIds,
-      limit: limit,
-      since: since,
-    );
-  }
-
-  static Filter createReplyFilter({
-    required List<String> eventIds,
-    int? limit,
-    int? since,
-  }) {
-    return Filter(
-      kinds: [1],
-      e: eventIds,
-      limit: limit,
-      since: since,
-    );
-  }
-
-  static Filter createRepostFilter({
-    required List<String> eventIds,
-    int? limit,
-    int? since,
-  }) {
-    return Filter(
-      kinds: [6],
-      e: eventIds,
-      limit: limit,
-      since: since,
-    );
-  }
-
-  static Filter createZapFilter({
-    required List<String> eventIds,
-    int? limit,
-    int? since,
-  }) {
-    return Filter(
-      kinds: [9735],
-      e: eventIds,
-      limit: limit,
-      since: since,
-    );
-  }
-
   static Filter createNotificationFilter({
     required List<String> pubkeys,
     List<int>? kinds,
@@ -759,8 +707,7 @@ class NostrService {
   static void preWarmCache() {
     createNotesFilter(kinds: [1, 6], limit: 50);
     createProfileFilter(authors: [], limit: 100);
-    createReactionFilter(eventIds: [], limit: 100);
-    createReplyFilter(eventIds: [], limit: 100);
+    createCombinedInteractionFilter(eventIds: [], limit: 100);
     createNotificationFilter(pubkeys: [], limit: 50);
   }
 }
