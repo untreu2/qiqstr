@@ -53,6 +53,9 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   String _currentUserNpub = '';
   String get currentUserNpub => _currentUserNpub;
 
+  UserModel? _currentUser;
+  UserModel? get currentUser => _currentUser;
+
   String? _hashtag;
   String? get hashtag => _hashtag;
   bool get isHashtagMode => _hashtag != null;
@@ -106,22 +109,60 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
       final result = await _authRepository.getCurrentUserNpub();
 
-      result.fold(
-        (npub) {
+      await result.fold(
+        (npub) async {
           if (npub != null && npub.isNotEmpty) {
             _currentUserNpub = npub;
             _currentUserState = LoadedState(npub);
+            
+            final userResult = await _userRepository.getCurrentUser();
+            userResult.fold(
+              (user) {
+                _currentUser = user;
+                _profiles[user.npub] = user;
+                _profilesController.add(Map.from(_profiles));
+              },
+              (error) {
+                debugPrint('[FeedViewModel] Error loading current user profile: $error');
+              },
+            );
+            
+            _subscribeToCurrentUserStream();
             _loadFeed();
             _subscribeToRealTimeUpdates();
           } else {
             _currentUserState = const ErrorState('User not authenticated');
           }
         },
-        (error) => _currentUserState = ErrorState(error),
+        (error) async {
+          _currentUserState = ErrorState(error);
+        },
       );
 
       safeNotifyListeners();
     }, showLoading: false);
+  }
+
+  void _subscribeToCurrentUserStream() {
+    addSubscription(
+      _userRepository.currentUserStream.listen((updatedUser) {
+        if (isDisposed) return;
+
+        final hasChanges = _currentUser == null ||
+            _currentUser!.npub != updatedUser.npub ||
+            _currentUser!.profileImage != updatedUser.profileImage ||
+            _currentUser!.name != updatedUser.name;
+
+        if (!hasChanges) {
+          return;
+        }
+
+        _currentUser = updatedUser;
+        _profiles[updatedUser.npub] = updatedUser;
+        _profilesController.add(Map.from(_profiles));
+        safeNotifyListeners();
+      }),
+    );
   }
 
   Future<void> _loadFeed() async {

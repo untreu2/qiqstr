@@ -37,12 +37,14 @@ class ViewModelsModule extends DIModule {
     AppDI.registerFactory<NotificationViewModel>(() => NotificationViewModel(
           notificationRepository: AppDI.get<NotificationRepository>(),
           userRepository: AppDI.get<UserRepository>(),
+          authRepository: AppDI.get<AuthRepository>(),
           nostrDataService: AppDI.get<NostrDataService>(),
         ));
 
     AppDI.registerFactory<ThreadViewModel>(() => ThreadViewModel(
           noteRepository: AppDI.get<NoteRepository>(),
           userRepository: AppDI.get<UserRepository>(),
+          authRepository: AppDI.get<AuthRepository>(),
         ));
 
     AppDI.registerFactory<ComposeViewModel>(() => ComposeViewModel(

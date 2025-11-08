@@ -7,14 +7,11 @@ import '../theme/theme_manager.dart';
 import '../core/ui/ui_state_builder.dart';
 import '../presentation/providers/viewmodel_provider.dart';
 import '../presentation/viewmodels/notification_viewmodel.dart';
-import '../data/repositories/notification_repository.dart';
 import '../models/notification_model.dart';
+import '../data/repositories/notification_repository.dart';
 import '../widgets/note_content_widget.dart';
 import '../widgets/quote_widget.dart';
 import '../widgets/common_buttons.dart';
-import '../core/di/app_di.dart';
-import '../data/repositories/user_repository.dart';
-import '../data/services/auth_service.dart';
 import '../screens/profile_page.dart';
 import '../screens/thread_page.dart';
 
@@ -26,39 +23,18 @@ class NotificationPage extends StatefulWidget {
 }
 
 class _NotificationPageState extends State<NotificationPage> {
-  String? _currentUserNpub;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadCurrentUser();
-  }
-
-  Future<void> _loadCurrentUser() async {
-    final authService = AuthService.instance;
-    final result = await authService.getCurrentUserNpub();
-    if (result.isSuccess && result.data != null) {
-      setState(() {
-        _currentUserNpub = result.data;
-      });
-    }
-  }
-
-  bool _isSelfNotification(dynamic item) {
-    if (_currentUserNpub == null) return false;
+  bool _isSelfNotification(dynamic item, String currentUserNpub) {
+    if (currentUserNpub.isEmpty) return false;
 
     if (item is NotificationGroup) {
-      return item.notifications.any((notification) => notification.author == _currentUserNpub);
+      return item.notifications.any((notification) => notification.author == currentUserNpub);
     } else if (item is NotificationModel) {
-      return item.author == _currentUserNpub;
+      return item.author == currentUserNpub;
     }
 
     return false;
   }
 
-  List<dynamic> _filterSelfNotifications(List<dynamic> notifications) {
-    return notifications.where((item) => !_isSelfNotification(item)).toList();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -88,7 +64,7 @@ class _NotificationPageState extends State<NotificationPage> {
                     return UIStateBuilder<List<dynamic>>(
                       state: vm.notificationsState,
                       builder: (context, notifications) {
-                        final filteredNotifications = _filterSelfNotifications(notifications);
+                        final filteredNotifications = notifications.where((item) => !_isSelfNotification(item, vm.currentUserNpub)).toList();
 
                         return filteredNotifications.isEmpty
                             ? _buildEmptyContent(context)
@@ -182,7 +158,7 @@ class _NotificationPageState extends State<NotificationPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     GestureDetector(
-                      onTap: () => _navigateToAuthorProfile(first.author),
+                      onTap: () => _navigateToAuthorProfile(first.author, viewModel),
                       child: CircleAvatar(
                         radius: 20,
                         backgroundColor: context.colors.grey800,
@@ -206,7 +182,7 @@ class _NotificationPageState extends State<NotificationPage> {
                               );
                               if (item.notifications.length == 1) {
                                 return GestureDetector(
-                                  onTap: () => _navigateToAuthorProfile(first.author),
+                                  onTap: () => _navigateToAuthorProfile(first.author, viewModel),
                                   child: Text(titleText, style: titleStyle),
                                 );
                               } else {
@@ -227,7 +203,7 @@ class _NotificationPageState extends State<NotificationPage> {
                             NoteContentWidget(
                               parsedContent: _parseContent(first.content),
                               noteId: first.id,
-                              onNavigateToMentionProfile: _navigateToProfileFromContent,
+                              onNavigateToMentionProfile: (npub) => _navigateToProfileFromContent(npub, viewModel),
                             ),
                           ],
                           const SizedBox(height: 8),
@@ -262,7 +238,7 @@ class _NotificationPageState extends State<NotificationPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     GestureDetector(
-                      onTap: () => _navigateToAuthorProfile(item.author),
+                      onTap: () => _navigateToAuthorProfile(item.author, viewModel),
                       child: CircleAvatar(
                         radius: 20,
                         backgroundColor: Colors.amber.shade700,
@@ -276,7 +252,7 @@ class _NotificationPageState extends State<NotificationPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           GestureDetector(
-                            onTap: () => _navigateToAuthorProfile(item.author),
+                            onTap: () => _navigateToAuthorProfile(item.author, viewModel),
                             child: RichText(
                               text: TextSpan(
                                 children: [
@@ -357,7 +333,7 @@ class _NotificationPageState extends State<NotificationPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     GestureDetector(
-                      onTap: () => _navigateToAuthorProfile(item.author),
+                      onTap: () => _navigateToAuthorProfile(item.author, viewModel),
                       child: CircleAvatar(
                         radius: 20,
                         backgroundColor: context.colors.grey800,
@@ -371,7 +347,7 @@ class _NotificationPageState extends State<NotificationPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           GestureDetector(
-                            onTap: () => _navigateToAuthorProfile(item.author),
+                            onTap: () => _navigateToAuthorProfile(item.author, viewModel),
                             child: Text(
                               viewModel.buildGroupTitle(item),
                               style: TextStyle(
@@ -395,7 +371,7 @@ class _NotificationPageState extends State<NotificationPage> {
                             NoteContentWidget(
                               parsedContent: _parseContent(item.content),
                               noteId: item.id,
-                              onNavigateToMentionProfile: _navigateToProfileFromContent,
+                              onNavigateToMentionProfile: (npub) => _navigateToProfileFromContent(npub, viewModel),
                             ),
                           ],
                           const SizedBox(height: 8),
@@ -434,20 +410,19 @@ class _NotificationPageState extends State<NotificationPage> {
     }
   }
 
-  void _navigateToProfileFromContent(String npub) {
-    _openUserProfile(context, npub);
+  void _navigateToProfileFromContent(String npub, NotificationViewModel viewModel) {
+    _openUserProfile(context, npub, viewModel);
   }
 
-  void _navigateToAuthorProfile(String npub) {
+  void _navigateToAuthorProfile(String npub, NotificationViewModel viewModel) {
     if (npub.isNotEmpty) {
-      _openUserProfile(context, npub);
+      _openUserProfile(context, npub, viewModel);
     }
   }
 
-  void _openUserProfile(BuildContext context, String npub) async {
+  void _openUserProfile(BuildContext context, String npub, NotificationViewModel viewModel) async {
     try {
-      final userRepository = AppDI.get<UserRepository>();
-      final userResult = await userRepository.getUserProfile(npub);
+      final userResult = await viewModel.getUserProfile(npub);
 
       userResult.fold(
         (user) {

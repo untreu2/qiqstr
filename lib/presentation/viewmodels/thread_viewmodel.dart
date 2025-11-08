@@ -7,6 +7,7 @@ import '../../core/base/app_error.dart';
 import '../../core/base/result.dart';
 import '../../data/repositories/note_repository.dart';
 import '../../data/repositories/user_repository.dart';
+import '../../data/repositories/auth_repository.dart';
 import '../../data/services/user_batch_fetcher.dart';
 import '../../models/note_model.dart';
 import '../../models/user_model.dart';
@@ -14,12 +15,15 @@ import '../../models/user_model.dart';
 class ThreadViewModel extends BaseViewModel with CommandMixin {
   final NoteRepository _noteRepository;
   final UserRepository _userRepository;
+  final AuthRepository _authRepository;
 
   ThreadViewModel({
     required NoteRepository noteRepository,
     required UserRepository userRepository,
+    required AuthRepository authRepository,
   })  : _noteRepository = noteRepository,
-        _userRepository = userRepository;
+        _userRepository = userRepository,
+        _authRepository = authRepository;
 
   UIState<NoteModel> _rootNoteState = const InitialState();
   UIState<NoteModel> get rootNoteState => _rootNoteState;
@@ -41,6 +45,12 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
   String? _focusedNoteId;
   String? get focusedNoteId => _focusedNoteId;
+
+  String _currentUserNpub = '';
+  String get currentUserNpub => _currentUserNpub;
+
+  UserModel? _currentUser;
+  UserModel? get currentUser => _currentUser;
 
   LoadThreadCommand? _loadThreadCommand;
   AddReplyCommand? _addReplyCommand;
@@ -66,9 +76,27 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     _rootNoteId = rootNoteId;
     _focusedNoteId = focusedNoteId;
 
+    _loadCurrentUser();
     _loadExistingProfileCache();
     _subscribeToThreadUpdates();
     loadThread();
+  }
+
+  Future<void> _loadCurrentUser() async {
+    try {
+      final result = await _authRepository.getCurrentUserNpub();
+      if (result.isSuccess && result.data != null) {
+        _currentUserNpub = result.data!;
+
+        final userResult = await _userRepository.getCurrentUser();
+        if (userResult.isSuccess && userResult.data != null) {
+          _currentUser = userResult.data!;
+          safeNotifyListeners();
+        }
+      }
+    } catch (e) {
+      debugPrint('[ThreadViewModel] Error loading current user: $e');
+    }
   }
 
   void _loadExistingProfileCache() {

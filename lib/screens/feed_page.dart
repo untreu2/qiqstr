@@ -11,15 +11,11 @@ import 'package:qiqstr/widgets/sidebar_widget.dart';
 import 'package:qiqstr/widgets/back_button_widget.dart';
 import '../widgets/common_buttons.dart';
 import '../theme/theme_manager.dart';
-import '../utils/stream_debouncer.dart';
 import '../models/note_model.dart';
-import '../models/user_model.dart';
 import '../core/ui/ui_state_builder.dart';
 import '../core/di/app_di.dart';
 import '../presentation/providers/viewmodel_provider.dart';
 import '../presentation/viewmodels/feed_viewmodel.dart';
-import '../data/repositories/auth_repository.dart';
-import '../data/repositories/user_repository.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -36,123 +32,51 @@ class FeedPageState extends State<FeedPage> {
   bool isFirstOpen = false;
 
   final ValueNotifier<List<NoteModel>> _notesNotifier = ValueNotifier([]);
-  late final Map<String, UserModel> _profiles;
-
-  UserModel? _currentUser;
-  StreamSubscription<UserModel>? _userStreamSubscription;
-  StreamSubscription<Map<String, UserModel>>? _profilesStreamSubscription;
-  late UserRepository _userRepository;
-  int _lastProfileCount = 0;
-  StreamSubscription<Map<String, UserModel>>? _debouncedProfileSubscription;
+  Timer? _scrollDebounceTimer;
 
   @override
   void initState() {
     super.initState();
-    _profiles = <String, UserModel>{};
-    _userRepository = AppDI.get<UserRepository>();
     _scrollController = ScrollController()..addListener(_scrollListener);
-    _loadInitialUser();
-    _setupUserStreamListener();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkFirstOpen();
     });
   }
 
-  StreamSubscription<UserModel>? _debouncedUserSubscription;
-
-  void _setupUserStreamListener() {
-    _debouncedUserSubscription = _userRepository.currentUserStream
-        .debounceTime(const Duration(milliseconds: 5000))
-        .listen(
-      (updatedUser) {
-        if (!mounted) return;
-
-        final hasChanges = _currentUser == null ||
-            _currentUser!.npub != updatedUser.npub ||
-            _currentUser!.profileImage != updatedUser.profileImage ||
-            _currentUser!.name != updatedUser.name;
-
-        if (!hasChanges) {
-          debugPrint('[FeedPage] User data unchanged, skipping update');
-          return;
-        }
-
-        setState(() {
-          _currentUser = updatedUser;
-          _profiles[updatedUser.npub] = updatedUser;
-        });
-      },
-      onError: (error) {
-        debugPrint('[FeedPage] Error in user stream: $error');
-      },
-    );
-  }
-
-  Future<void> _loadInitialUser() async {
-    final user = await _getCurrentUser();
-    if (mounted && user != null) {
-      setState(() {
-        _currentUser = user;
-        _profiles[user.npub] = user;
-      });
-
-      if (user.profileImage.isEmpty) {
-        debugPrint('[FeedPage] ️ Current user profile image missing, reloading...');
-        _reloadCurrentUserProfile();
-      } else {
-        debugPrint('[FeedPage]  Current user loaded with profile image');
-      }
-    }
-  }
-
-  Future<void> _reloadCurrentUserProfile() async {
-    try {
-      final authRepository = AppDI.get<AuthRepository>();
-      final npubResult = await authRepository.getCurrentUserNpub();
-
-      if (npubResult.isError || npubResult.data == null) {
-        return;
-      }
-
-      final userResult = await _userRepository.getUserProfile(npubResult.data!);
-      userResult.fold(
-        (user) {
-          if (mounted) {
-            setState(() {
-              _currentUser = user;
-              _profiles[user.npub] = user;
-            });
-            debugPrint('[FeedPage]  Reloaded current user: ${user.name} (image: ${user.profileImage.isNotEmpty ? "✓" : "✗"})');
-          }
-        },
-        (error) {
-          debugPrint('[FeedPage]  Failed to reload current user: $error');
-        },
-      );
-    } catch (e) {
-      debugPrint('[FeedPage]  Error reloading current user: $e');
-    }
-  }
-
   void _scrollListener() {
-    final direction = _scrollController.position.userScrollDirection;
-    if (direction == ScrollDirection.reverse && _showAppBar) {
-      setState(() {
-        _showAppBar = false;
-      });
-    } else if (direction == ScrollDirection.forward && !_showAppBar) {
-      setState(() {
-        _showAppBar = true;
-      });
-    }
+    if (!_scrollController.hasClients) return;
+    
+    _scrollDebounceTimer?.cancel();
+    _scrollDebounceTimer = Timer(const Duration(milliseconds: 100), () {
+      if (!mounted || !_scrollController.hasClients) return;
+      
+      final offset = _scrollController.offset;
+      final direction = _scrollController.position.userScrollDirection;
+      
+      bool shouldShow;
+      
+      if (offset < 50) {
+        shouldShow = true;
+      } else if (direction == ScrollDirection.forward) {
+        shouldShow = true;
+      } else if (direction == ScrollDirection.reverse) {
+        shouldShow = false;
+      } else {
+        shouldShow = _showAppBar;
+      }
+      
+      if (_showAppBar != shouldShow) {
+        setState(() {
+          _showAppBar = shouldShow;
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
-    _userStreamSubscription?.cancel();
-    _profilesStreamSubscription?.cancel();
-    _debouncedUserSubscription?.cancel();
-    _debouncedProfileSubscription?.cancel();
+    _scrollDebounceTimer?.cancel();
+    _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     _notesNotifier.dispose();
     super.dispose();
@@ -193,68 +117,6 @@ class FeedPageState extends State<FeedPage> {
     }
   }
 
-  Future<UserModel?> _getCurrentUser() async {
-    try {
-      final authRepository = AppDI.get<AuthRepository>();
-      final userRepository = AppDI.get<UserRepository>();
-
-      final npubResult = await authRepository.getCurrentUserNpub();
-      if (npubResult.isError || npubResult.data == null) {
-        return null;
-      }
-
-      final userResult = await userRepository.getUserProfile(npubResult.data!);
-      return userResult.fold(
-        (user) => user,
-        (error) => null,
-      );
-    } catch (e) {
-      debugPrint('Error getting current user: $e');
-      return null;
-    }
-  }
-
-  void _setupProfilesStreamListener(FeedViewModel viewModel) {
-    _debouncedProfileSubscription = viewModel.profilesStream
-        .debounceTime(const Duration(milliseconds: 5000))
-        .listen(
-      (profiles) {
-        if (!mounted || profiles.isEmpty) return;
-        if (profiles.length == _lastProfileCount) {
-          debugPrint('[FeedPage] Profile count unchanged, skipping');
-          return;
-        }
-
-        bool hasChanges = false;
-        for (final entry in profiles.entries) {
-          final existing = _profiles[entry.key];
-          if (existing == null || existing.profileImage != entry.value.profileImage || existing.name != entry.value.name) {
-            _profiles[entry.key] = entry.value;
-            hasChanges = true;
-          }
-        }
-
-        if (_currentUser != null && profiles.containsKey(_currentUser!.npub)) {
-          final updatedCurrentUser = profiles[_currentUser!.npub]!;
-          if (updatedCurrentUser.profileImage.isNotEmpty || _currentUser!.profileImage.isEmpty) {
-            _currentUser = updatedCurrentUser;
-            hasChanges = true;
-          }
-        }
-
-        if (!hasChanges) {
-          debugPrint('[FeedPage] No profile data changes, skipping update');
-          return;
-        }
-
-        _lastProfileCount = _profiles.length;
-        setState(() {});
-      },
-      onError: (error) {
-        debugPrint('[FeedPage] Error in profiles stream: $error');
-      },
-    );
-  }
 
   Widget _buildHeader(BuildContext context, double topPadding, FeedViewModel viewModel) {
     final colors = context.colors;
@@ -270,48 +132,48 @@ class FeedPageState extends State<FeedPage> {
             height: 40,
             child: Stack(
               alignment: Alignment.center,
-              children: [
-                if (!isHashtagMode)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: GestureDetector(
-                      onTap: () => Scaffold.of(context).openDrawer(),
-                      child: _currentUser != null
-                          ? Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: colors.avatarPlaceholder,
-                                image: _currentUser!.profileImage.isNotEmpty == true
-                                    ? DecorationImage(
-                                        image: CachedNetworkImageProvider(_currentUser!.profileImage),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : null,
-                              ),
-                              child: _currentUser!.profileImage.isEmpty != false
-                                  ? Icon(
-                                      Icons.person,
-                                      size: 20,
-                                      color: colors.textSecondary,
+                      children: [
+                        if (!isHashtagMode)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: GestureDetector(
+                              onTap: () => Scaffold.of(context).openDrawer(),
+                              child: viewModel.currentUser != null
+                                  ? Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: colors.avatarPlaceholder,
+                                        image: viewModel.currentUser!.profileImage.isNotEmpty == true
+                                            ? DecorationImage(
+                                                image: CachedNetworkImageProvider(viewModel.currentUser!.profileImage),
+                                                fit: BoxFit.cover,
+                                              )
+                                            : null,
+                                      ),
+                                      child: viewModel.currentUser!.profileImage.isEmpty != false
+                                          ? Icon(
+                                              Icons.person,
+                                              size: 20,
+                                              color: colors.textSecondary,
+                                            )
+                                          : null,
                                     )
-                                  : null,
-                            )
-                          : Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: colors.avatarPlaceholder,
-                              ),
-                              child: CircularProgressIndicator(
-                                color: colors.accent,
-                                strokeWidth: 2,
-                              ),
+                                  : Container(
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: colors.avatarPlaceholder,
+                                      ),
+                                      child: CircularProgressIndicator(
+                                        color: colors.accent,
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
                             ),
-                    ),
-                  ),
+                          ),
                 if (isHashtagMode)
                   Align(
                     alignment: Alignment.centerLeft,
@@ -406,8 +268,6 @@ class FeedPageState extends State<FeedPage> {
       create: () => AppDI.get<FeedViewModel>(),
       onModelReady: (viewModel) {
         viewModel.initializeWithUser(widget.npub, hashtag: widget.hashtag);
-
-        _setupProfilesStreamListener(viewModel);
       },
       builder: (context, viewModel) {
         return Scaffold(
@@ -453,7 +313,7 @@ class FeedPageState extends State<FeedPage> {
                               notes: notes,
                               currentUserNpub: viewModel.currentUserNpub,
                               notesNotifier: _notesNotifier,
-                              profiles: _profiles,
+                              profiles: viewModel.profiles,
                               isLoading: viewModel.isLoadingMore,
                               canLoadMore: viewModel.canLoadMore,
                               onLoadMore: viewModel.loadMoreNotes,

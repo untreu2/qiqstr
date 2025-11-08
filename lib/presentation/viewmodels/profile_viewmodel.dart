@@ -42,6 +42,9 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
   String _currentProfileNpub = '';
   String get currentProfileNpub => _currentProfileNpub;
 
+  String _currentUserNpub = '';
+  String get currentUserNpub => _currentUserNpub;
+
   int _currentLimit = 50;
   int get currentLimit => _currentLimit;
 
@@ -302,12 +305,17 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
       final result = await _authRepository.getCurrentUserNpub();
       result.fold(
         (currentNpub) {
+          _currentUserNpub = currentNpub ?? '';
           _isCurrentUser = currentNpub == _currentProfileNpub;
           safeNotifyListeners();
         },
-        (_) => _isCurrentUser = false,
+        (_) {
+          _currentUserNpub = '';
+          _isCurrentUser = false;
+        },
       );
     } catch (e) {
+      _currentUserNpub = '';
       _isCurrentUser = false;
     }
   }

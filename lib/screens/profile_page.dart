@@ -9,7 +9,7 @@ import '../widgets/common_buttons.dart';
 import 'package:qiqstr/widgets/note_list_widget.dart' as widgets;
 import '../core/di/app_di.dart';
 import '../presentation/viewmodels/profile_viewmodel.dart';
-import '../data/repositories/auth_repository.dart';
+import 'dart:async';
 import '../core/ui/ui_state_builder.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -24,12 +24,11 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   late ScrollController _scrollController;
   late ProfileViewModel _profileViewModel;
-  late AuthRepository _authRepository;
 
   final ValueNotifier<List<NoteModel>> _notesNotifier = ValueNotifier([]);
   late final Map<String, UserModel> _profiles;
-  String? _currentUserNpub;
-  bool _showUsernameBubble = false;
+  final ValueNotifier<bool> _showUsernameBubbleNotifier = ValueNotifier<bool>(false);
+  Timer? _scrollDebounceTimer;
 
   @override
   void initState() {
@@ -38,50 +37,34 @@ class _ProfilePageState extends State<ProfilePage> {
     _scrollController = ScrollController()..addListener(_scrollListener);
 
     _profileViewModel = AppDI.get<ProfileViewModel>();
-    _authRepository = AppDI.get<AuthRepository>();
     _profileViewModel.initialize();
 
     _profiles[widget.user.npub] = widget.user;
 
-    _loadCurrentUser();
     _profileViewModel.initializeWithUser(widget.user.npub);
   }
 
   void _scrollListener() {
-    if (_scrollController.hasClients) {
+    if (!_scrollController.hasClients) return;
+    
+    _scrollDebounceTimer?.cancel();
+    _scrollDebounceTimer = Timer(const Duration(milliseconds: 100), () {
+      if (!mounted || !_scrollController.hasClients) return;
+      
       final shouldShow = _scrollController.offset > 100;
-      if (_showUsernameBubble != shouldShow) {
-        setState(() {
-          _showUsernameBubble = shouldShow;
-        });
+      if (_showUsernameBubbleNotifier.value != shouldShow) {
+        _showUsernameBubbleNotifier.value = shouldShow;
       }
-    }
-  }
-
-  void _loadCurrentUser() async {
-    try {
-      final result = await _authRepository.getCurrentUserNpub();
-      result.fold(
-        (npub) {
-          if (mounted) {
-            setState(() {
-              _currentUserNpub = npub;
-            });
-          }
-        },
-        (error) {
-          debugPrint('[ProfilePage] Failed to get current user: $error');
-        },
-      );
-    } catch (e) {
-      debugPrint('[ProfilePage] Error loading current user: $e');
-    }
+    });
   }
 
   @override
   void dispose() {
+    _scrollDebounceTimer?.cancel();
+    _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     _notesNotifier.dispose();
+    _showUsernameBubbleNotifier.dispose();
     _profileViewModel.dispose();
     super.dispose();
   }
@@ -108,60 +91,68 @@ class _ProfilePageState extends State<ProfilePage> {
             left: 0,
             right: 0,
             child: Center(
-              child: AnimatedOpacity(
-                opacity: _showUsernameBubble ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 300),
-                child: GestureDetector(
-                  onTap: () {
-                    _scrollController.animateTo(
-                      0,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: colors.buttonPrimary,
-                      borderRadius: BorderRadius.circular(40),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 24,
-                          height: 24,
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _showUsernameBubbleNotifier,
+                builder: (context, showBubble, child) {
+                  return AnimatedOpacity(
+                    opacity: showBubble ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: IgnorePointer(
+                      ignoring: !showBubble,
+                      child: GestureDetector(
+                        onTap: () {
+                          _scrollController.animateTo(
+                            0,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOut,
+                          );
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: colors.avatarPlaceholder,
-                            image: widget.user.profileImage.isNotEmpty
-                                ? DecorationImage(
-                                    image: CachedNetworkImageProvider(widget.user.profileImage),
-                                    fit: BoxFit.cover,
-                                  )
-                                : null,
+                            color: colors.buttonPrimary,
+                            borderRadius: BorderRadius.circular(40),
                           ),
-                          child: widget.user.profileImage.isEmpty
-                              ? Icon(
-                                  Icons.person,
-                                  size: 14,
-                                  color: colors.textSecondary,
-                                )
-                              : null,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          widget.user.name.isNotEmpty ? widget.user.name : widget.user.npub.substring(0, 8),
-                          style: TextStyle(
-                            color: colors.buttonText,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 24,
+                                height: 24,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: colors.avatarPlaceholder,
+                                  image: widget.user.profileImage.isNotEmpty
+                                      ? DecorationImage(
+                                          image: CachedNetworkImageProvider(widget.user.profileImage),
+                                          fit: BoxFit.cover,
+                                        )
+                                      : null,
+                                ),
+                                child: widget.user.profileImage.isEmpty
+                                    ? Icon(
+                                        Icons.person,
+                                        size: 14,
+                                        color: colors.textSecondary,
+                                      )
+                                    : null,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                widget.user.name.isNotEmpty ? widget.user.name : widget.user.npub.substring(0, 8),
+                                style: TextStyle(
+                                  color: colors.buttonText,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ),
           ),
@@ -223,7 +214,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
             return widgets.NoteListWidget(
               notes: notes,
-              currentUserNpub: _currentUserNpub ?? '',
+              currentUserNpub: _profileViewModel.currentUserNpub,
               notesNotifier: _notesNotifier,
               profiles: _profiles,
               isLoading: _profileViewModel.isLoadingMore,

@@ -4,8 +4,10 @@ import 'package:flutter/widgets.dart';
 import '../../core/base/base_view_model.dart';
 import '../../core/base/ui_state.dart';
 import '../../core/base/app_error.dart';
+import '../../core/base/result.dart';
 import '../../data/repositories/notification_repository.dart';
 import '../../data/repositories/user_repository.dart';
+import '../../data/repositories/auth_repository.dart';
 import '../../data/services/nostr_data_service.dart';
 import '../../data/services/user_batch_fetcher.dart';
 import '../../models/notification_model.dart';
@@ -14,14 +16,17 @@ import '../../models/user_model.dart';
 class NotificationViewModel extends BaseViewModel with CommandMixin {
   final NotificationRepository _notificationRepository;
   final UserRepository _userRepository;
+  final AuthRepository _authRepository;
   final NostrDataService _nostrDataService;
 
   NotificationViewModel({
     required NotificationRepository notificationRepository,
     required UserRepository userRepository,
+    required AuthRepository authRepository,
     required NostrDataService nostrDataService,
   })  : _notificationRepository = notificationRepository,
         _userRepository = userRepository,
+        _authRepository = authRepository,
         _nostrDataService = nostrDataService;
 
   UIState<List<dynamic>> _notificationsState = const InitialState();
@@ -32,6 +37,9 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
 
   final Map<String, UserModel> _userProfiles = {};
   Map<String, UserModel> get userProfiles => Map.unmodifiable(_userProfiles);
+
+  String _currentUserNpub = '';
+  String get currentUserNpub => _currentUserNpub;
 
   bool _isInitialized = false;
   bool get isInitialized => _isInitialized;
@@ -52,8 +60,30 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
     registerCommand('refreshNotifications', refreshNotificationsCommand);
     registerCommand('markAllAsRead', markAllAsReadCommand);
 
+    _loadCurrentUser();
     _subscribeToNotificationUpdates();
     _isInitialized = true;
+  }
+
+  Future<void> _loadCurrentUser() async {
+    try {
+      final result = await _authRepository.getCurrentUserNpub();
+      result.fold(
+        (npub) {
+          _currentUserNpub = npub ?? '';
+        },
+        (_) {
+          _currentUserNpub = '';
+        },
+      );
+    } catch (e) {
+      debugPrint('[NotificationViewModel] Error loading current user: $e');
+      _currentUserNpub = '';
+    }
+  }
+
+  Future<Result<UserModel>> getUserProfile(String npub) async {
+    return await _userRepository.getUserProfile(npub);
   }
 
   Future<void> loadNotifications() async {

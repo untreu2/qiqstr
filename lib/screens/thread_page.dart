@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qiqstr/models/note_model.dart';
-import 'package:qiqstr/models/user_model.dart';
 import 'package:qiqstr/widgets/note_widget.dart';
 import 'package:qiqstr/widgets/focused_note_widget.dart';
 import '../widgets/back_button_widget.dart';
@@ -14,9 +13,6 @@ import '../core/ui/ui_state_builder.dart';
 import '../core/di/app_di.dart';
 import '../presentation/providers/viewmodel_provider.dart';
 import '../presentation/viewmodels/thread_viewmodel.dart';
-import '../data/repositories/auth_repository.dart';
-import '../data/repositories/user_repository.dart';
-import '../data/repositories/note_repository.dart';
 import '../screens/share_note.dart';
 
 class ThreadPage extends StatefulWidget {
@@ -36,36 +32,21 @@ class ThreadPage extends StatefulWidget {
 class _ThreadPageState extends State<ThreadPage> {
   late ScrollController _scrollController;
   final GlobalKey _focusedNoteKey = GlobalKey();
-  late ValueNotifier<List<NoteModel>> _notesNotifier;
-  late final AuthRepository _authRepository;
-  late final UserRepository _userRepository;
-  late final NoteRepository _noteRepository;
-  String _currentUserNpub = '';
-  UserModel? _currentUser;
-  bool _showThreadBubble = false;
+  final ValueNotifier<bool> _showThreadBubbleNotifier = ValueNotifier<bool>(false);
 
   int _visibleRepliesCount = 3;
   static const int _repliesPerPage = 5;
   static const int _maxInitialReplies = 10;
   static const int _maxNestedReplies = 1;
 
-  DateTime? _lastRefreshTime;
   bool _isRefreshing = false;
-  StreamSubscription<List<NoteModel>>? _notesStreamSubscription;
-  StreamSubscription<Map<String, UserModel>>? _profilesStreamSubscription;
-  DateTime? _lastNotesUpdate;
+  Timer? _scrollDebounceTimer;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController()..addListener(_scrollListener);
-    _notesNotifier = ValueNotifier<List<NoteModel>>([]);
-    _authRepository = AppDI.get<AuthRepository>();
-    _userRepository = AppDI.get<UserRepository>();
-    _noteRepository = AppDI.get<NoteRepository>();
-    _loadCurrentUser();
-    _subscribeToNoteUpdates();
-
+    
     if (widget.focusedNoteId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _scheduleScrollToFocusedNote();
@@ -74,62 +55,26 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   void _scrollListener() {
-    if (_scrollController.hasClients) {
+    if (!_scrollController.hasClients) return;
+    
+    _scrollDebounceTimer?.cancel();
+    _scrollDebounceTimer = Timer(const Duration(milliseconds: 100), () {
+      if (!mounted || !_scrollController.hasClients) return;
+      
       final shouldShow = _scrollController.offset > 100;
-      if (_showThreadBubble != shouldShow) {
-        setState(() {
-          _showThreadBubble = shouldShow;
-        });
+      if (_showThreadBubbleNotifier.value != shouldShow) {
+        _showThreadBubbleNotifier.value = shouldShow;
       }
-    }
-  }
-
-  Future<void> _loadCurrentUser() async {
-    try {
-      final result = await _authRepository.getCurrentUserNpub();
-      if (result.isSuccess && result.data != null) {
-        setState(() {
-          _currentUserNpub = result.data!;
-        });
-
-        final userResult = await _userRepository.getCurrentUser();
-        if (userResult.isSuccess && userResult.data != null) {
-          setState(() {
-            _currentUser = userResult.data!;
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('[ThreadPage] Error loading current user: $e');
-    }
+    });
   }
 
   @override
   void dispose() {
-    _notesStreamSubscription?.cancel();
-    _profilesStreamSubscription?.cancel();
+    _scrollDebounceTimer?.cancel();
+    _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
-    _notesNotifier.dispose();
+    _showThreadBubbleNotifier.dispose();
     super.dispose();
-  }
-
-  void _subscribeToNoteUpdates() {
-    _notesStreamSubscription = _noteRepository.notesStream.listen((notes) {
-      if (!mounted) return;
-      
-      _notesNotifier.value = notes;
-      
-      final now = DateTime.now();
-      if (_lastNotesUpdate != null && 
-          now.difference(_lastNotesUpdate!).inMilliseconds < 500) {
-        return;
-      }
-      _lastNotesUpdate = now;
-      
-      if (mounted && notes.isNotEmpty) {
-        setState(() {});
-      }
-    });
   }
 
 
@@ -142,11 +87,6 @@ class _ThreadPageState extends State<ThreadPage> {
           rootNoteId: widget.rootNoteId,
           focusedNoteId: widget.focusedNoteId,
         );
-        
-        _profilesStreamSubscription = viewModel.profilesStream.listen((profiles) {
-          if (!mounted) return;
-          _notesNotifier.value = List.from(_notesNotifier.value);
-        });
       },
       builder: (context, viewModel) {
         return Scaffold(
@@ -162,33 +102,41 @@ class _ThreadPageState extends State<ThreadPage> {
                     left: 0,
                     right: 0,
                     child: Center(
-                      child: AnimatedOpacity(
-                        opacity: _showThreadBubble ? 1.0 : 0.0,
-                        duration: const Duration(milliseconds: 300),
-                        child: GestureDetector(
-                          onTap: () {
-                            _scrollController.animateTo(
-                              0,
-                              duration: const Duration(milliseconds: 300),
-                              curve: Curves.easeOut,
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: context.colors.buttonPrimary,
-                              borderRadius: BorderRadius.circular(40),
-                            ),
-                            child: Text(
-                              'Thread',
-                              style: TextStyle(
-                                color: context.colors.buttonText,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: _showThreadBubbleNotifier,
+                        builder: (context, showBubble, child) {
+                          return AnimatedOpacity(
+                            opacity: showBubble ? 1.0 : 0.0,
+                            duration: const Duration(milliseconds: 200),
+                            child: IgnorePointer(
+                              ignoring: !showBubble,
+                              child: GestureDetector(
+                                onTap: () {
+                                  _scrollController.animateTo(
+                                    0,
+                                    duration: const Duration(milliseconds: 300),
+                                    curve: Curves.easeOut,
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: context.colors.buttonPrimary,
+                                    borderRadius: BorderRadius.circular(40),
+                                  ),
+                                  child: Text(
+                                    'Thread',
+                                    style: TextStyle(
+                                      color: context.colors.buttonText,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                        ),
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -237,7 +185,7 @@ class _ThreadPageState extends State<ThreadPage> {
               child: _buildMainNote(context, viewModel, displayNote),
             ),
             SliverToBoxAdapter(
-              child: _buildReplyInputSection(context),
+              child: _buildReplyInputSection(context, viewModel),
             ),
             _buildThreadRepliesSliver(context, viewModel, displayNote),
           ] else ...[
@@ -305,15 +253,15 @@ class _ThreadPageState extends State<ThreadPage> {
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 6),
       child: FocusedNoteWidget(
         note: note,
-        currentUserNpub: _currentUserNpub,
-        notesNotifier: _notesNotifier,
+        currentUserNpub: viewModel.currentUserNpub,
+        notesNotifier: ValueNotifier<List<NoteModel>>([]),
         profiles: viewModel.userProfiles,
         notesListProvider: null,
       ),
     );
   }
 
-  Widget _buildReplyInputSection(BuildContext context) {
+  Widget _buildReplyInputSection(BuildContext context, ThreadViewModel viewModel) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: GestureDetector(
@@ -338,9 +286,9 @@ class _ThreadPageState extends State<ThreadPage> {
                   color: context.colors.primary.withValues(alpha: 0.1),
                 ),
                 child: ClipOval(
-                  child: _currentUser?.profileImage.isNotEmpty == true
+                  child: viewModel.currentUser?.profileImage.isNotEmpty == true
                       ? CachedNetworkImage(
-                          imageUrl: _currentUser!.profileImage,
+                          imageUrl: viewModel.currentUser!.profileImage,
                           fit: BoxFit.cover,
                           fadeInDuration: Duration.zero,
                           fadeOutDuration: Duration.zero,
@@ -634,8 +582,8 @@ class _ThreadPageState extends State<ThreadPage> {
       child: NoteWidget(
         key: ValueKey('note_${note.id}'),
         note: note,
-        currentUserNpub: _currentUserNpub,
-        notesNotifier: _notesNotifier,
+        currentUserNpub: viewModel.currentUserNpub,
+        notesNotifier: ValueNotifier<List<NoteModel>>([]),
         profiles: viewModel.userProfiles,
         containerColor: Colors.transparent,
         isSmallView: depth > 0,
@@ -655,8 +603,8 @@ class _ThreadPageState extends State<ThreadPage> {
       child: NoteWidget(
         key: ValueKey('simple_${note.id}'),
         note: note,
-        currentUserNpub: _currentUserNpub,
-        notesNotifier: _notesNotifier,
+        currentUserNpub: viewModel.currentUserNpub,
+        notesNotifier: ValueNotifier<List<NoteModel>>([]),
         profiles: viewModel.userProfiles,
         containerColor: context.colors.background,
         isSmallView: isSmallView,
@@ -766,7 +714,7 @@ class _ThreadPageState extends State<ThreadPage> {
   void _scheduleScrollToFocusedNote() {
     if (!mounted || widget.focusedNoteId == null) return;
 
-    Future.delayed(const Duration(milliseconds: 300), () {
+    Future.delayed(const Duration(milliseconds: 500), () {
       if (!mounted) return;
 
       _attemptScrollToFocusedNote(retries: 5);
@@ -793,13 +741,6 @@ class _ThreadPageState extends State<ThreadPage> {
 
   Future<void> _debouncedRefresh(ThreadViewModel viewModel) async {
     if (_isRefreshing) return;
-
-    final refreshTime = DateTime.now();
-    _lastRefreshTime = refreshTime;
-    
-    await Future.delayed(const Duration(milliseconds: 300));
-    
-    if (!mounted || _lastRefreshTime != refreshTime) return;
 
     setState(() {
       _isRefreshing = true;
