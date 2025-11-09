@@ -10,6 +10,7 @@ import 'package:carbon_icons/carbon_icons.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/auth_repository.dart';
 import '../data/repositories/user_repository.dart';
+import '../data/services/nostr_data_service.dart';
 
 class SidebarWidget extends StatefulWidget {
   const SidebarWidget({super.key});
@@ -22,6 +23,9 @@ class _SidebarWidgetState extends State<SidebarWidget> {
   late UserRepository _userRepository;
   UserModel? _currentUser;
   StreamSubscription<UserModel>? _userStreamSubscription;
+  int _followingCount = 0;
+  int _followerCount = 0;
+  bool _isLoadingCounts = true;
 
   @override
   void initState() {
@@ -45,6 +49,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
           setState(() {
             _currentUser = updatedUser;
           });
+          _loadFollowerCounts();
         }
       },
       onError: (error) {
@@ -69,6 +74,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
             setState(() {
               _currentUser = user;
             });
+            _loadFollowerCounts();
           }
         },
         (error) {
@@ -77,6 +83,50 @@ class _SidebarWidgetState extends State<SidebarWidget> {
       );
     } catch (e) {
       debugPrint('[SidebarWidget] Error getting current user: $e');
+    }
+  }
+
+  Future<void> _loadFollowerCounts() async {
+    if (_currentUser == null) return;
+
+    try {
+      final followingResult = await _userRepository.getFollowingListForUser(_currentUser!.pubkeyHex);
+
+      followingResult.fold(
+        (followingUsers) {
+          if (mounted) {
+            setState(() {
+              _followingCount = followingUsers.length;
+            });
+          }
+        },
+        (error) {
+          debugPrint('[SidebarWidget] Error loading following count: $error');
+          if (mounted) {
+            setState(() {
+              _followingCount = 0;
+            });
+          }
+        },
+      );
+
+      final nostrDataService = AppDI.get<NostrDataService>();
+      final followerCount = await nostrDataService.fetchFollowerCount(_currentUser!.pubkeyHex);
+      if (mounted) {
+        setState(() {
+          _followerCount = followerCount;
+          _isLoadingCounts = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[SidebarWidget] Error loading follower counts: $e');
+      if (mounted) {
+        setState(() {
+          _followingCount = 0;
+          _followerCount = 0;
+          _isLoadingCounts = false;
+        });
+      }
     }
   }
 
@@ -111,7 +161,13 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                   )
                 : Column(
                     children: [
-                      _UserProfileHeader(user: _currentUser!, colors: colors),
+                      _UserProfileHeader(
+                        user: _currentUser!,
+                        colors: colors,
+                        followerCount: _followerCount,
+                        followingCount: _followingCount,
+                        isLoadingCounts: _isLoadingCounts,
+                      ),
                       _SidebarContent(user: _currentUser!, colors: colors),
                     ],
                   ),
@@ -125,8 +181,17 @@ class _SidebarWidgetState extends State<SidebarWidget> {
 class _UserProfileHeader extends StatelessWidget {
   final UserModel user;
   final AppThemeColors colors;
+  final int followerCount;
+  final int followingCount;
+  final bool isLoadingCounts;
 
-  const _UserProfileHeader({required this.user, required this.colors});
+  const _UserProfileHeader({
+    required this.user,
+    required this.colors,
+    required this.followerCount,
+    required this.followingCount,
+    required this.isLoadingCounts,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -188,6 +253,66 @@ class _UserProfileHeader extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          _buildFollowerInfo(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFollowerInfo(BuildContext context) {
+    if (isLoadingCounts) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 4.0),
+        child: SizedBox(
+          height: 16,
+          width: 16,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4.0),
+      child: Row(
+        children: [
+          Text(
+            '$followerCount',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: colors.textPrimary,
+            ),
+          ),
+          Text(
+            ' followers',
+            style: TextStyle(
+              fontSize: 14,
+              color: colors.textSecondary,
+            ),
+          ),
+          Text(
+            ' • ',
+            style: TextStyle(
+              fontSize: 14,
+              color: colors.textSecondary,
+            ),
+          ),
+          Text(
+            '$followingCount',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: colors.textPrimary,
+            ),
+          ),
+          Text(
+            ' following',
+            style: TextStyle(
+              fontSize: 14,
+              color: colors.textSecondary,
+            ),
           ),
         ],
       ),

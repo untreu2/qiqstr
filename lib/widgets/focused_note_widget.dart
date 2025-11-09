@@ -331,7 +331,7 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
           elevation: 0,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: Padding(
-            padding: const EdgeInsets.only(bottom: 12.0),
+            padding: const EdgeInsets.only(top: 16.0, bottom: 12.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

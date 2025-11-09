@@ -8,6 +8,7 @@ import '../data/repositories/user_repository.dart';
 import '../data/services/nostr_data_service.dart';
 import '../screens/profile_page.dart';
 import '../widgets/back_button_widget.dart';
+import '../widgets/title_widget.dart';
 
 class NoteStatisticsPage extends StatefulWidget {
   final NoteModel note;
@@ -212,30 +213,9 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: Row(
-        children: [
-          Container(
-            width: 5,
-            height: 20,
-            decoration: BoxDecoration(
-              color: context.colors.accent,
-              borderRadius: BorderRadius.circular(2.5),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            'Interactions',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
-              color: context.colors.textPrimary,
-              letterSpacing: -0.5,
-            ),
-          ),
-        ],
-      ),
+    return const TitleWidget(
+      title: 'Interactions',
+      padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
     );
   }
 

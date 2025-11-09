@@ -7,6 +7,7 @@ import '../screens/keys_page.dart';
 import '../utils/logout.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import '../widgets/title_widget.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -44,49 +45,11 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    final double topPadding = MediaQuery.of(context).padding.top;
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 5,
-                height: 20,
-                decoration: BoxDecoration(
-                  color: context.colors.accent,
-                  borderRadius: BorderRadius.circular(2.5),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Settings',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w700,
-                  color: context.colors.textPrimary,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.only(left: 17),
-            child: Text(
-              "Manage your app preferences.",
-              style: TextStyle(
-                fontSize: 15,
-                color: context.colors.textSecondary,
-                height: 1.4,
-              ),
-            ),
-          ),
-        ],
-      ),
+    return TitleWidget(
+      title: 'Settings',
+      fontSize: 32,
+      subtitle: "Manage your app preferences.",
+      useTopPadding: true,
     );
   }
 

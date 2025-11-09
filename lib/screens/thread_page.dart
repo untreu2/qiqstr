@@ -32,7 +32,6 @@ class ThreadPage extends StatefulWidget {
 class _ThreadPageState extends State<ThreadPage> {
   late ScrollController _scrollController;
   final GlobalKey _focusedNoteKey = GlobalKey();
-  final ValueNotifier<bool> _showThreadBubbleNotifier = ValueNotifier<bool>(false);
 
   int _visibleRepliesCount = 3;
   static const int _repliesPerPage = 5;
@@ -40,12 +39,11 @@ class _ThreadPageState extends State<ThreadPage> {
   static const int _maxNestedReplies = 1;
 
   bool _isRefreshing = false;
-  Timer? _scrollDebounceTimer;
 
   @override
   void initState() {
     super.initState();
-    _scrollController = ScrollController()..addListener(_scrollListener);
+    _scrollController = ScrollController();
     
     if (widget.focusedNoteId != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -54,26 +52,9 @@ class _ThreadPageState extends State<ThreadPage> {
     }
   }
 
-  void _scrollListener() {
-    if (!_scrollController.hasClients) return;
-    
-    _scrollDebounceTimer?.cancel();
-    _scrollDebounceTimer = Timer(const Duration(milliseconds: 100), () {
-      if (!mounted || !_scrollController.hasClients) return;
-      
-      final shouldShow = _scrollController.offset > 100;
-      if (_showThreadBubbleNotifier.value != shouldShow) {
-        _showThreadBubbleNotifier.value = shouldShow;
-      }
-    });
-  }
-
   @override
   void dispose() {
-    _scrollDebounceTimer?.cancel();
-    _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
-    _showThreadBubbleNotifier.dispose();
     super.dispose();
   }
 
@@ -93,50 +74,39 @@ class _ThreadPageState extends State<ThreadPage> {
           backgroundColor: context.colors.background,
           body: Consumer<ThreadViewModel>(
             builder: (context, vm, child) {
+              final double topPadding = MediaQuery.of(context).padding.top;
               return Stack(
                 children: [
                   _buildContent(context, vm),
                   const BackButtonWidget.floating(),
                   Positioned(
-                    top: MediaQuery.of(context).padding.top + 8,
+                    top: topPadding + 10,
                     left: 0,
                     right: 0,
                     child: Center(
-                      child: ValueListenableBuilder<bool>(
-                        valueListenable: _showThreadBubbleNotifier,
-                        builder: (context, showBubble, child) {
-                          return AnimatedOpacity(
-                            opacity: showBubble ? 1.0 : 0.0,
-                            duration: const Duration(milliseconds: 200),
-                            child: IgnorePointer(
-                              ignoring: !showBubble,
-                              child: GestureDetector(
-                                onTap: () {
-                                  _scrollController.animateTo(
-                                    0,
-                                    duration: const Duration(milliseconds: 300),
-                                    curve: Curves.easeOut,
-                                  );
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: context.colors.buttonPrimary,
-                                    borderRadius: BorderRadius.circular(40),
-                                  ),
-                                  child: Text(
-                                    'Thread',
-                                    style: TextStyle(
-                                      color: context.colors.buttonText,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
+                      child: GestureDetector(
+                        onTap: () {
+                          _scrollController.animateTo(
+                            0,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeOut,
                           );
                         },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: context.colors.buttonPrimary,
+                            borderRadius: BorderRadius.circular(40),
+                          ),
+                          child: Text(
+                            'Thread',
+                            style: TextStyle(
+                              color: context.colors.buttonText,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -174,9 +144,6 @@ class _ThreadPageState extends State<ThreadPage> {
           SliverToBoxAdapter(
             child: SizedBox(height: MediaQuery.of(context).padding.top + 60),
           ),
-          SliverToBoxAdapter(
-            child: _buildHeader(context),
-          ),
           if (displayNote != null) ...[
             SliverToBoxAdapter(
               child: _buildContextNote(context, viewModel, displayNote),
@@ -207,34 +174,6 @@ class _ThreadPageState extends State<ThreadPage> {
           ],
           SliverToBoxAdapter(
             child: const SizedBox(height: 24.0),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Row(
-        children: [
-          Container(
-            width: 5,
-            height: 20,
-            decoration: BoxDecoration(
-              color: context.colors.accent,
-              borderRadius: BorderRadius.circular(2.5),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            'Thread',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
-              color: context.colors.textPrimary,
-              letterSpacing: -0.5,
-            ),
           ),
         ],
       ),
@@ -631,7 +570,6 @@ class _ThreadPageState extends State<ThreadPage> {
     return SingleChildScrollView(
       child: Column(
         children: [
-          _buildHeader(context),
           SizedBox(height: MediaQuery.of(context).size.height * 0.2),
           Center(
             child: Column(
@@ -677,7 +615,6 @@ class _ThreadPageState extends State<ThreadPage> {
     return SingleChildScrollView(
       child: Column(
         children: [
-          _buildHeader(context),
           SizedBox(height: MediaQuery.of(context).size.height * 0.2),
           Center(
             child: Column(

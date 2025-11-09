@@ -7,6 +7,7 @@ import '../models/user_model.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/user_repository.dart';
 import '../widgets/user_tile_widget.dart';
+import '../widgets/title_widget.dart';
 
 class UserSearchPage extends StatefulWidget {
   const UserSearchPage({super.key});
@@ -138,31 +139,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
 
 
   Widget _buildHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 60, 16, 8),
-      child: Row(
-        children: [
-          Container(
-            width: 5,
-            height: 20,
-            decoration: BoxDecoration(
-              color: context.colors.accent,
-              borderRadius: BorderRadius.circular(2.5),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            'Search',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
-              color: context.colors.textPrimary,
-              letterSpacing: -0.5,
-            ),
-          ),
-        ],
-      ),
-    );
+    return const TitleWidget(title: 'Search');
   }
 
   Future<void> _pasteFromClipboard() async {

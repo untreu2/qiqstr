@@ -6,6 +6,7 @@ import 'package:nostr/nostr.dart';
 import 'package:qiqstr/theme/theme_manager.dart';
 import '../widgets/back_button_widget.dart';
 import '../widgets/snackbar_widget.dart';
+import '../widgets/title_widget.dart';
 import 'package:provider/provider.dart';
 
 class KeysPage extends StatefulWidget {
@@ -169,49 +170,11 @@ class _KeysPageState extends State<KeysPage> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    final double topPadding = MediaQuery.of(context).padding.top;
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 5,
-                height: 20,
-                decoration: BoxDecoration(
-                  color: context.colors.accent,
-                  borderRadius: BorderRadius.circular(2.5),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Keys',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w700,
-                  color: context.colors.textPrimary,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.only(left: 17),
-            child: Text(
-              "Manage your Nostr identity keys securely.",
-              style: TextStyle(
-                fontSize: 15,
-                color: context.colors.textSecondary,
-                height: 1.4,
-              ),
-            ),
-          ),
-        ],
-      ),
+    return TitleWidget(
+      title: 'Keys',
+      fontSize: 32,
+      subtitle: "Manage your Nostr identity keys securely.",
+      useTopPadding: true,
     );
   }
 

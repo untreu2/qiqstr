@@ -14,6 +14,7 @@ import '../widgets/quote_widget.dart';
 import '../widgets/common_buttons.dart';
 import '../screens/profile_page.dart';
 import '../screens/thread_page.dart';
+import '../widgets/title_widget.dart';
 
 class NotificationPage extends StatefulWidget {
   const NotificationPage({super.key});
@@ -114,31 +115,13 @@ class _NotificationPageState extends State<NotificationPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 5,
-                height: 20,
-                decoration: BoxDecoration(
-                  color: context.colors.accent,
-                  borderRadius: BorderRadius.circular(2.5),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Notifications',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
-                  color: context.colors.textPrimary,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
+          const TitleWidget(
+            title: 'Notifications',
+            padding: EdgeInsets.zero,
           ),
           if (notificationCount > 0)
             Padding(
-              padding: const EdgeInsets.only(top: 4, left: 16),
+              padding: const EdgeInsets.only(top: 4, left: 17),
               child: Text(
                 '$notificationCount notification${notificationCount != 1 ? 's' : ''}',
                 style: TextStyle(

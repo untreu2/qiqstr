@@ -8,6 +8,7 @@ import '../data/repositories/wallet_repository.dart';
 import '../models/wallet_model.dart';
 import '../theme/theme_manager.dart';
 import '../widgets/snackbar_widget.dart';
+import '../widgets/title_widget.dart';
 
 class WalletPage extends StatefulWidget {
   const WalletPage({super.key});
@@ -159,30 +160,16 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
   }
 
   Widget _buildHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 60, 16, 8),
-      child: Row(
-        children: [
-          Container(
-            width: 5,
-            height: 20,
-            decoration: BoxDecoration(
-              color: context.colors.accent,
-              borderRadius: BorderRadius.circular(2.5),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            'Wallet',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w700,
-              color: context.colors.textPrimary,
-              letterSpacing: -0.5,
-            ),
-          ),
-        ],
-      ),
+    final lud16 = _getCoinosLud16();
+    return TitleWidget(
+      title: 'Wallet',
+      subtitle: lud16,
+      subtitleOnTap: lud16 != null
+          ? () {
+              Clipboard.setData(ClipboardData(text: lud16));
+              AppSnackbar.success(context, 'Lightning address copied', duration: const Duration(seconds: 2));
+            }
+          : null,
     );
   }
 
@@ -287,7 +274,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            padding: const EdgeInsets.fromLTRB(24, 8, 16, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -316,42 +303,6 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
                     ),
                   ],
                 ),
-                if (_getCoinosLud16() != null) ...[
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _getCoinosLud16()!,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: context.colors.textPrimary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: () {
-                          Clipboard.setData(ClipboardData(text: _getCoinosLud16()!));
-                          AppSnackbar.success(context, 'Lightning address copied', duration: const Duration(seconds: 2));
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: context.colors.overlayLight,
-                            borderRadius: BorderRadius.circular(40),
-                          ),
-                          child: Icon(
-                            Icons.copy,
-                            size: 18,
-                            color: context.colors.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
               ],
             ),
           ),

@@ -9,6 +9,7 @@ import '../data/repositories/user_repository.dart';
 import '../data/services/user_batch_fetcher.dart';
 import '../widgets/back_button_widget.dart';
 import '../widgets/common_buttons.dart';
+import '../widgets/title_widget.dart';
 
 class FollowingPage extends StatefulWidget {
   final UserModel user;
@@ -138,19 +139,9 @@ class _FollowingPageState extends State<FollowingPage> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    final double topPadding = MediaQuery.of(context).padding.top;
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 0),
-      child: Text(
-        'Following',
-        style: TextStyle(
-          fontSize: 28,
-          fontWeight: FontWeight.w700,
-          color: context.colors.textPrimary,
-          letterSpacing: -0.5,
-        ),
-      ),
+    return const TitleWidget(
+      title: 'Following',
+      useTopPadding: true,
     );
   }
 
