@@ -15,6 +15,7 @@ import '../widgets/common_buttons.dart';
 import '../screens/profile_page.dart';
 import '../screens/thread_page.dart';
 import '../widgets/title_widget.dart';
+import '../utils/string_optimizer.dart';
 
 class NotificationPage extends StatefulWidget {
   const NotificationPage({super.key});
@@ -194,7 +195,7 @@ class _NotificationPageState extends State<NotificationPage> {
                               color: context.colors.textSecondary,
                             ),
                           ),
-                          if (first.type == 'mention' && first.content.trim().isNotEmpty) ...[
+                          if (first.content.trim().isNotEmpty) ...[
                             const SizedBox(height: 8),
                             NoteContentWidget(
                               parsedContent: _parseContent(first.content),
@@ -362,7 +363,7 @@ class _NotificationPageState extends State<NotificationPage> {
                               color: context.colors.textSecondary,
                             ),
                           ),
-                          if (item.type == 'mention' && item.content.trim().isNotEmpty) ...[
+                          if (item.content.trim().isNotEmpty) ...[
                             const SizedBox(height: 8),
                             NoteContentWidget(
                               parsedContent: _parseContent(item.content),
@@ -458,14 +459,7 @@ class _NotificationPageState extends State<NotificationPage> {
 
   Map<String, dynamic> _parseContent(String content) {
     try {
-      return {
-        'textParts': [
-          {'type': 'text', 'text': content}
-        ],
-        'mediaUrls': <String>[],
-        'linkUrls': <String>[],
-        'quoteIds': <String>[],
-      };
+      return StringOptimizer.instance.parseContentOptimized(content);
     } catch (e) {
       return {
         'textParts': [
