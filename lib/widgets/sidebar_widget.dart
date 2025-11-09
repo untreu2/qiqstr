@@ -11,6 +11,7 @@ import '../core/di/app_di.dart';
 import '../data/repositories/auth_repository.dart';
 import '../data/repositories/user_repository.dart';
 import '../data/services/nostr_data_service.dart';
+import 'title_widget.dart';
 
 class SidebarWidget extends StatefulWidget {
   const SidebarWidget({super.key});
@@ -161,6 +162,38 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                   )
                 : Column(
                     children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 68, 20, 0),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: SvgPicture.asset(
+                                'assets/main_icon_white.svg',
+                                width: 30,
+                                height: 30,
+                                colorFilter: ColorFilter.mode(colors.textPrimary, BlendMode.srcIn),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: TitleWidget(
+                                title: 'qiqstr',
+                                padding: EdgeInsets.zero,
+                                useTopPadding: false,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Divider(
+                        height: 1,
+                        thickness: 1,
+                        color: colors.borderLight,
+                      ),
+                      const SizedBox(height: 16),
                       _UserProfileHeader(
                         user: _currentUser!,
                         colors: colors,
@@ -195,10 +228,8 @@ class _UserProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double topPadding = MediaQuery.of(context).padding.top;
-
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, topPadding + 16, 20, 0),
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
