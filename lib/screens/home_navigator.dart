@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:bounce/bounce.dart';
 import 'package:carbon_icons/carbon_icons.dart';
@@ -77,6 +78,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                   child: Bounce(
                     scaleFactor: 0.85,
                     onTap: () {
+                      HapticFeedback.lightImpact();
                       Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => const ShareNotePage(),
@@ -108,14 +110,31 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
               return Expanded(
                 child: Bounce(
                   scaleFactor: 0.85,
-                  onTap: () => _handleNavigation(index),
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    _handleNavigation(index);
+                  },
                   behavior: HitTestBehavior.opaque,
-                  child: Center(
-                    child: index == 3
-                        ? _buildNotificationIcon(item['icon'] as String, isSelected)
-                        : index == 2
-                            ? _buildWalletIcon(item['icon'] as String, isSelected)
-                            : _buildRegularIcon(item, isSelected),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOut,
+                        width: 4,
+                        height: isSelected ? 18 : 0,
+                        margin: EdgeInsets.only(right: isSelected ? 8 : 0),
+                        decoration: BoxDecoration(
+                          color: context.colors.accent,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      index == 3
+                          ? _buildNotificationIcon(item['icon'] as String, isSelected)
+                          : index == 2
+                              ? _buildWalletIcon(item['icon'] as String, isSelected)
+                              : _buildRegularIcon(item, isSelected),
+                    ],
                   ),
                 ),
               );
@@ -126,10 +145,10 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
     );
   }
 
-  static const double _iconSizeSelected = 26.0;
-  static const double _iconSizeUnselected = 22.0;
-  static const double _homeIconSizeSelected = 27.0;
-  static const double _homeIconSizeUnselected = 23.0;
+  static const double _iconSizeSelected = 25.0;
+  static const double _iconSizeUnselected = 21.0;
+  static const double _homeIconSizeSelected = 26.0;
+  static const double _homeIconSizeUnselected = 22.0;
 
   Widget _buildIcon({
     required String iconPath,

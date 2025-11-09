@@ -171,22 +171,38 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Set Up Profile',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.w700,
-              color: context.colors.textPrimary,
-              letterSpacing: -0.5,
-            ),
+          Row(
+            children: [
+              Container(
+                width: 5,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: context.colors.accent,
+                  borderRadius: BorderRadius.circular(2.5),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Set Up Profile',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w700,
+                  color: context.colors.textPrimary,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
-          Text(
-            'Add some basic information to help others discover you.',
-            style: TextStyle(
-              fontSize: 15,
-              color: context.colors.textSecondary,
-              height: 1.4,
+          Padding(
+            padding: const EdgeInsets.only(left: 17),
+            child: Text(
+              'Add some basic information to help others discover you.',
+              style: TextStyle(
+                fontSize: 15,
+                color: context.colors.textSecondary,
+                height: 1.4,
+              ),
             ),
           ),
         ],

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../theme/theme_manager.dart';
@@ -208,6 +209,7 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   void _handleReplyTap() {
+    HapticFeedback.lightImpact();
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -217,6 +219,7 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   void _handleRepostTap() {
+    HapticFeedback.lightImpact();
     final currentState = _stateNotifier.value;
     if (currentState.hasReposted || widget.note == null) return;
 
@@ -242,6 +245,7 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   Future<void> _handleReactionTap() async {
+    HapticFeedback.lightImpact();
     final currentState = _stateNotifier.value;
     if (currentState.hasReacted || !mounted) return;
 
@@ -284,6 +288,7 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   void _handleZapTap() async {
+    HapticFeedback.lightImpact();
     final currentState = _stateNotifier.value;
     if (widget.note == null || currentState.hasZapped || !mounted) return;
 
@@ -313,6 +318,7 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   void _handleStatsTap() {
+    HapticFeedback.lightImpact();
     if (widget.note == null) return;
     
     final noteForStats = _findNote() ?? widget.note!;
@@ -326,6 +332,7 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   void _handleDeleteTap() {
+    HapticFeedback.lightImpact();
     if (widget.note == null || !mounted) return;
 
     showModalBottomSheet(
@@ -498,6 +505,7 @@ class _InteractionBarState extends State<InteractionBar> {
       color: colors.buttonPrimary,
       elevation: 0,
       onSelected: (value) {
+        HapticFeedback.lightImpact();
         if (value == 'interactions') {
           _handleStatsTap();
         } else if (value == 'delete') {

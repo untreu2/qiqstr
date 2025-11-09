@@ -641,22 +641,38 @@ class _RelayPageState extends State<RelayPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Relays',
-            style: TextStyle(
-              fontSize: 32,
-              fontWeight: FontWeight.w700,
-              color: context.colors.textPrimary,
-              letterSpacing: -0.5,
-            ),
+          Row(
+            children: [
+              Container(
+                width: 5,
+                height: 20,
+                decoration: BoxDecoration(
+                  color: context.colors.accent,
+                  borderRadius: BorderRadius.circular(2.5),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Relays',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w700,
+                  color: context.colors.textPrimary,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
-          Text(
-            "Manage your relay connections and publish your relay list.",
-            style: TextStyle(
-              fontSize: 15,
-              color: context.colors.textSecondary,
-              height: 1.4,
+          Padding(
+            padding: const EdgeInsets.only(left: 17),
+            child: Text(
+              "Manage your relay connections and publish your relay list.",
+              style: TextStyle(
+                fontSize: 15,
+                color: context.colors.textSecondary,
+                height: 1.4,
+              ),
             ),
           ),
         ],

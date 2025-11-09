@@ -187,10 +187,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             _feedState = LoadedState(sortedNotes);
             safeNotifyListeners();
             
-            
-            _loadUserProfilesForNotes(sortedNotes).catchError((_) {});
-            
-            
             _subscribeToRealTimeUpdates();
           }
         } catch (e) {
@@ -597,6 +593,28 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
   String? get errorMessage => _feedState.error;
 
+  void updateUserProfile(String userId, UserModel user) {
+    if (!_profiles.containsKey(userId) || _profiles[userId]!.profileImage.isEmpty) {
+      _profiles[userId] = user;
+      _profilesController.add(Map.from(_profiles));
+      safeNotifyListeners();
+    }
+  }
+
+  void updateUserProfiles(Map<String, UserModel> users) {
+    bool hasUpdates = false;
+    for (final entry in users.entries) {
+      if (!_profiles.containsKey(entry.key) || _profiles[entry.key]!.profileImage.isEmpty) {
+        _profiles[entry.key] = entry.value;
+        hasUpdates = true;
+      }
+    }
+    if (hasUpdates) {
+      _profilesController.add(Map.from(_profiles));
+      safeNotifyListeners();
+    }
+  }
+
   Future<void> _loadUserProfilesForNotes(List<NoteModel> notes) async {
     try {
       final Set<String> authorIds = {};
@@ -646,6 +664,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
       }
 
       _profilesController.add(Map.from(_profiles));
+      safeNotifyListeners();
     } catch (e) {
       debugPrint('[FeedViewModel] Error loading user profiles: $e');
     }
