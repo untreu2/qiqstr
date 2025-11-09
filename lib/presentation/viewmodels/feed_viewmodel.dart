@@ -636,7 +636,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
       final results = await _userRepository.getUserProfiles(
         missingAuthorIds,
-        priority: FetchPriority.high,
+        priority: FetchPriority.urgent,
       );
 
       for (final entry in results.entries) {
