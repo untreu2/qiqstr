@@ -4,11 +4,11 @@ class AppColors {
   static const Color primary = Color(0xFFFFFFFF);
   static const Color primaryVariant = Color(0xFFE5E5E5);
   static const Color secondary = Color(0xFFB3B3B3);
-  static const Color accent = Color.fromARGB(255, 222, 169, 54);
+  static const Color accent = Color.fromARGB(255, 240, 164, 89);
 
-  static const Color background = Color(0xFF000000);
-  static const Color backgroundElevated = Color(0xFF111111);
-  static const Color surface = Color(0xFF000000);
+  static const Color background = Color(0xFF0D0B0A);
+  static const Color backgroundElevated = Color(0xFF1A1816);
+  static const Color surface = Color(0xFF0D0B0A);
   static const Color surfaceVariant = Color(0xFF141414);
   static const Color surfaceElevated = Color(0xFF1A1A1A);
   static const Color surfaceHighest = Color(0xFF242424);
@@ -45,10 +45,10 @@ class AppColors {
   static const Color divider = Color(0xFF2A2A2A);
   static const Color dividerLight = Color(0xFF404040);
 
-  static const Color overlay = Color(0x80000000);
+  static const Color overlay = Color(0x800D0B0A);
   static const Color overlayLight = Color(0x1AFFFFFF);
-  static const Color overlayDark = Color(0xCC000000);
-  static const Color overlayGlass = Color(0x40111111);
+  static const Color overlayDark = Color(0xCC0D0B0A);
+  static const Color overlayGlass = Color(0x401A1816);
 
   static const Color iconPrimary = Color(0xFFE0E0E0);
   static const Color iconSecondary = Color(0xFFB3B3B3);
@@ -86,18 +86,18 @@ class AppColors {
   static const Color notificationBorder = Color(0xFF404040);
   static const Color notificationDot = Color(0xFFFFFFFF);
 
-  static Color get backgroundTransparent => Color(0xFF000000).withValues(alpha: 0.85);
-  static Color get surfaceTransparent => Color(0xFF0A0A0A).withValues(alpha: 0.9);
-  static Color get overlayTransparent => Color(0xFF000000).withValues(alpha: 0.75);
+  static Color get backgroundTransparent => Color(0xFF0D0B0A).withValues(alpha: 0.85);
+  static Color get surfaceTransparent => Color(0xFF0F0D0B).withValues(alpha: 0.9);
+  static Color get overlayTransparent => Color(0xFF0D0B0A).withValues(alpha: 0.75);
   static Color get borderTransparent => Color(0xFFFFFFFF).withValues(alpha: 0.3);
   static Color get hoverTransparent => Color(0xFFFFFFFF).withValues(alpha: 0.1);
   static Color get focusTransparent => Color(0xFFFFFFFF).withValues(alpha: 0.2);
   static Color get pressedTransparent => Color(0xFFFFFFFF).withValues(alpha: 0.15);
 
   static const List<Color> backgroundGradient = [
-    Color(0xFF000000),
-    Color(0xFF0A0A0A),
-    Color(0xFF000000),
+    Color(0xFF0D0B0A),
+    Color(0xFF0F0D0B),
+    Color(0xFF0D0B0A),
   ];
 
   static const List<Color> primaryGradient = [
@@ -113,7 +113,7 @@ class AppColors {
   static Color get cardBackground => Color(0xFF141414);
   static Color get cardBackgroundElevated => Color(0xFF1A1A1A);
   static Color get cardBorder => Color(0xFF333333);
-  static Color get cardShadow => Color(0xFF000000).withValues(alpha: 0.5);
+  static Color get cardShadow => Color(0xFF0D0B0A).withValues(alpha: 0.5);
   static Color get videoBorder => Color(0xFFFFFFFF).withValues(alpha: 0.3);
 
   static const Color sliderActive = Color(0xFFFFFFFF);
@@ -121,7 +121,7 @@ class AppColors {
   static const Color sliderThumb = Color(0xFFFFFFFF);
   static const Color sliderTrack = Color(0xFF2A2A2A);
 
-  static Color get glassBackground => Color(0xFF0A0A0A).withValues(alpha: 0.7);
+  static Color get glassBackground => Color(0xFF0F0D0B).withValues(alpha: 0.7);
   static Color get glassBorder => Color(0xFFFFFFFF).withValues(alpha: 0.2);
 
   static Color get grey50 => Color(0xFFF5F5F5);
