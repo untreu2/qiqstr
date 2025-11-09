@@ -187,6 +187,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             _feedState = LoadedState(sortedNotes);
             safeNotifyListeners();
             
+            _loadUserProfilesForNotes(sortedNotes);
             _subscribeToRealTimeUpdates();
           }
         } catch (e) {
