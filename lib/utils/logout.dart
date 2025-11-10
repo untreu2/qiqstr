@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../screens/login_page.dart';
+import '../ui/screens/login_page.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/auth_repository.dart';
-import '../widgets/snackbar_widget.dart';
+import '../ui/widgets/snackbar_widget.dart';
 
 class Logout {
   static Future<void> performLogout(BuildContext context) async {
