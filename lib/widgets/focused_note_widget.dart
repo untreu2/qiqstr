@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/note_model.dart';
 import '../models/user_model.dart';
+import '../core/di/app_di.dart';
+import '../data/repositories/user_repository.dart';
 import '../services/time_service.dart';
 import '../theme/theme_manager.dart';
 import '../screens/profile_page.dart';
@@ -49,11 +51,13 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
 
   bool _isDisposed = false;
   bool _isInitialized = false;
+  late final UserRepository _userRepository;
 
   @override
   void initState() {
     super.initState();
     try {
+      _userRepository = AppDI.get<UserRepository>();
       _precomputeImmutableData();
       _initializeAsync();
     } catch (e) {
@@ -99,6 +103,7 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
       try {
         _setupUserListener();
         _loadInitialUserData();
+        _loadUsersAsync();
       } catch (e) {
         debugPrint('[FocusedNoteWidget] Async init error: $e');
       }
@@ -137,8 +142,8 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
     try {
       final currentState = _stateNotifier.value;
 
-      UserModel? authorUser = widget.note.authorUser;
-      UserModel? reposterUser = widget.note.reposterUser;
+      UserModel? authorUser = widget.profiles[_authorId];
+      UserModel? reposterUser = _reposterId != null ? widget.profiles[_reposterId] : null;
 
       authorUser ??= UserModel(
         pubkeyHex: _authorId,
@@ -185,6 +190,50 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
     }
   }
 
+  Future<void> _loadUsersAsync() async {
+    if (_isDisposed || !mounted) return;
+
+    try {
+      if (widget.notesListProvider != null) {
+        final authorPreloaded = widget.notesListProvider.getPreloadedUser(_authorId);
+        final reposterPreloaded = _reposterId != null ? widget.notesListProvider.getPreloadedUser(_reposterId) : null;
+
+        if (authorPreloaded != null &&
+            authorPreloaded.name != 'Anonymous' &&
+            (_reposterId == null || (reposterPreloaded != null && reposterPreloaded.name != 'Anonymous'))) {
+          return;
+        }
+      }
+
+      final authorResult = await _userRepository.getUserProfile(_authorId);
+      authorResult.fold(
+        (user) {
+          if (mounted && !_isDisposed) {
+            widget.profiles[_authorId] = user;
+            _updateUserData();
+          }
+        },
+        (error) => debugPrint('[FocusedNoteWidget] Failed to load author: $error'),
+      );
+
+      if (_reposterId != null) {
+        final reposterId = _reposterId;
+        final reposterResult = await _userRepository.getUserProfile(reposterId);
+        reposterResult.fold(
+          (user) {
+            if (mounted && !_isDisposed) {
+              widget.profiles[reposterId] = user;
+              _updateUserData();
+            }
+          },
+          (error) => debugPrint('[FocusedNoteWidget] Failed to load reposter: $error'),
+        );
+      }
+    } catch (e) {
+      debugPrint('[FocusedNoteWidget] Load users async error: $e');
+    }
+  }
+
   String _calculateTimestamp(DateTime timestamp) {
     try {
       final d = timeService.difference(timestamp);
@@ -219,30 +268,24 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
       if (mounted && !_isDisposed) {
         debugPrint('[FocusedNoteWidget] Attempting to navigate to profile: $npub');
 
-        UserModel? user;
-        if (npub == _authorId) {
-          user = widget.note.authorUser;
-        } else if (npub == _reposterId) {
-          user = widget.note.reposterUser;
-        }
-
-        user ??= UserModel(
-          pubkeyHex: npub,
-          name: npub.length > 8 ? npub.substring(0, 8) : npub,
-          about: '',
-          profileImage: '',
-          banner: '',
-          website: '',
-          nip05: '',
-          lud16: '',
-          updatedAt: DateTime.now(),
-          nip05Verified: false,
-        );
+        final user = widget.profiles[npub] ??
+            UserModel(
+              pubkeyHex: npub,
+              name: npub.length > 8 ? npub.substring(0, 8) : npub,
+              about: '',
+              profileImage: '',
+              banner: '',
+              website: '',
+              nip05: '',
+              lud16: '',
+              updatedAt: DateTime.now(),
+              nip05Verified: false,
+            );
 
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => ProfilePage(user: user!),
+            builder: (_) => ProfilePage(user: user),
           ),
         );
       }

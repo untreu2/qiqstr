@@ -189,41 +189,15 @@ class UserCacheService {
     String pubkeyHex,
     Future<UserModel?> Function() fetcher,
   ) async {
-    UserModel? cached;
-
-    try {
-      cached = await get(pubkeyHex);
-      if (cached != null) {
-        return cached;
-      }
-    } catch (e) {
-      debugPrint('[UserCacheService] Error checking cache for $pubkeyHex: $e');
-    }
-
-    if (_isIsarInitialized) {
-      try {
-        final profileData = await _isarService.getUserProfile(pubkeyHex);
-        if (profileData != null) {
-          final user = UserModel.fromCachedProfile(pubkeyHex, profileData);
-          _putInMemory(user);
-          _l2CacheHits++;
-          _persistentReads++;
-          return user;
-        }
-      } catch (e) {
-        debugPrint('[UserCacheService] Error checking database for $pubkeyHex: $e');
-      }
+    final cached = await get(pubkeyHex);
+    if (cached != null) {
+      return cached;
     }
 
     if (_pendingRequests.containsKey(pubkeyHex)) {
       _deduplicatedRequests++;
       debugPrint('[UserCacheService] Deduplicating request for: $pubkeyHex');
-      try {
-        return await _pendingRequests[pubkeyHex]!.future;
-      } catch (e) {
-        debugPrint('[UserCacheService] Error in pending request for $pubkeyHex: $e');
-        _pendingRequests.remove(pubkeyHex);
-      }
+      return await _pendingRequests[pubkeyHex]!.future;
     }
 
     final completer = Completer<UserModel?>();
@@ -240,8 +214,8 @@ class UserCacheService {
       return user;
     } catch (e) {
       debugPrint('[UserCacheService] Error fetching user $pubkeyHex: $e');
-      completer.complete(null);
-      return null;
+      completer.completeError(e);
+      rethrow;
     } finally {
       _pendingRequests.remove(pubkeyHex);
     }
@@ -252,15 +226,10 @@ class UserCacheService {
     final missingKeys = <String>[];
 
     for (final pubkeyHex in pubkeyHexList) {
-      try {
-        final user = getSync(pubkeyHex);
-        if (user != null) {
-          result[pubkeyHex] = user;
-        } else {
-          missingKeys.add(pubkeyHex);
-        }
-      } catch (e) {
-        debugPrint('[UserCacheService] Error checking memory cache for $pubkeyHex: $e');
+      final user = getSync(pubkeyHex);
+      if (user != null) {
+        result[pubkeyHex] = user;
+      } else {
         missingKeys.add(pubkeyHex);
       }
     }
@@ -278,7 +247,7 @@ class UserCacheService {
           result[entry.key] = user;
         }
       } catch (e) {
-        debugPrint('[UserCacheService] Error batch reading from database: $e');
+        debugPrint('[UserCacheService] Error batch reading from L2 cache: $e');
       }
     }
 

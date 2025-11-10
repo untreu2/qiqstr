@@ -20,17 +20,12 @@ import '../../constants/relays.dart';
 import 'auth_service.dart';
 import 'user_cache_service.dart';
 import 'follow_cache_service.dart';
-import '../../core/di/app_di.dart';
-import '../repositories/user_repository.dart';
-import '../services/user_batch_fetcher.dart';
 
 class NostrDataService {
   final AuthService _authService;
   final WebSocketManager _relayManager;
   final UserCacheService _userCacheService = UserCacheService.instance;
   final FollowCacheService _followCacheService = FollowCacheService.instance;
-  
-  UserRepository? _userRepository;
 
   final StreamController<List<NoteModel>> _notesController = StreamController<List<NoteModel>>.broadcast();
   final StreamController<List<UserModel>> _usersController = StreamController<List<UserModel>>.broadcast();
@@ -66,11 +61,6 @@ class NostrDataService {
 
   bool _notificationSubscriptionActive = false;
   String? _notificationSubscriptionId;
-  
-  final Set<String> _pendingUserLoads = {};
-  Timer? _userLoadBatchTimer;
-  static const Duration _userLoadBatchTimeout = Duration(milliseconds: 200);
-  static const int _userLoadBatchSize = 10;
 
   NostrDataService({
     required AuthService authService,
@@ -79,106 +69,6 @@ class NostrDataService {
         _relayManager = relayManager ?? WebSocketManager.instance {
     _setupRelayEventHandling();
     _startCacheCleanup();
-  }
-  
-  UserRepository? _getUserRepository() {
-    if (_userRepository != null) return _userRepository;
-    
-    try {
-      if (AppDI.isRegistered<UserRepository>()) {
-        _userRepository = AppDI.get<UserRepository>();
-        return _userRepository;
-      }
-    } catch (e) {
-    }
-    return null;
-  }
-  
-  void _loadUsersForNote(NoteModel note) {
-    final userRepository = _getUserRepository();
-    if (userRepository == null) return;
-    
-    try {
-      final authorHex = _authService.npubToHex(note.author) ?? note.author;
-      
-      if (note.authorUser == null) {
-        _pendingUserLoads.add(authorHex);
-      }
-      
-      if (note.isRepost && note.repostedBy != null) {
-        final reposterHex = _authService.npubToHex(note.repostedBy!) ?? note.repostedBy!;
-        if (note.reposterUser == null) {
-          _pendingUserLoads.add(reposterHex);
-        }
-      }
-      
-      if (_pendingUserLoads.length >= _userLoadBatchSize) {
-        _flushUserLoadBatch();
-      } else {
-        _userLoadBatchTimer ??= Timer(_userLoadBatchTimeout, _flushUserLoadBatch);
-      }
-    } catch (e) {
-      debugPrint('[NostrDataService] Error queueing user load for note ${note.id}: $e');
-    }
-  }
-  
-  Future<void> _flushUserLoadBatch() async {
-    if (_pendingUserLoads.isEmpty) return;
-    
-    _userLoadBatchTimer?.cancel();
-    _userLoadBatchTimer = null;
-    
-    final userRepository = _getUserRepository();
-    if (userRepository == null) {
-      _pendingUserLoads.clear();
-      return;
-    }
-    
-    final hexKeysToLoad = _pendingUserLoads.toList();
-    _pendingUserLoads.clear();
-    
-    if (hexKeysToLoad.isEmpty) return;
-    
-    final npubsToLoad = hexKeysToLoad.map((hex) {
-      final npub = _authService.hexToNpub(hex);
-      return npub ?? hex;
-    }).toList();
-    
-    unawaited(userRepository.getUserProfiles(
-      npubsToLoad,
-      priority: FetchPriority.urgent,
-    ).then((results) {
-      for (final entry in results.entries) {
-        final npub = entry.key;
-        final result = entry.value;
-        final hex = _authService.npubToHex(npub) ?? npub;
-        
-        result.fold(
-          (user) {
-            for (final note in _noteCache.values) {
-              final authorHex = _authService.npubToHex(note.author) ?? note.author;
-              if (authorHex == hex && note.authorUser == null) {
-                note.authorUser = user;
-              }
-              
-              if (note.isRepost && note.repostedBy != null) {
-                final reposterHex = _authService.npubToHex(note.repostedBy!) ?? note.repostedBy!;
-                if (reposterHex == hex && note.reposterUser == null) {
-                  note.reposterUser = user;
-                }
-              }
-            }
-          },
-          (error) {
-            debugPrint('[NostrDataService] Failed to load user $hex: $error');
-          },
-        );
-      }
-      
-      _scheduleUIUpdate();
-    }).catchError((e) {
-      debugPrint('[NostrDataService] Error in batch user load: $e');
-    }));
   }
 
   Stream<List<NoteModel>> get notesStream => _notesController.stream;
@@ -531,8 +421,6 @@ class NostrDataService {
 
       _noteCache[id] = note;
       _eventIds.add(id);
-      
-      _loadUsersForNote(note);
 
       debugPrint('Note added to cache. Total cached notes: ${_noteCache.length}');
 
@@ -638,8 +526,6 @@ class NostrDataService {
 
       _noteCache[id] = replyNote;
       _eventIds.add(id);
-      
-      _loadUsersForNote(replyNote);
 
       _ensureProfileExists(pubkey, authorNpub);
 
@@ -853,9 +739,6 @@ class NostrDataService {
 
               _noteCache[originalEventId] = originalNoteFromRepost;
               _eventIds.add(originalEventId);
-              
-              _loadUsersForNote(originalNoteFromRepost);
-              
               debugPrint(' [NostrDataService] Cached original ${detectedIsReply ? "REPLY" : "NOTE"}: $originalEventId');
               debugPrint(' [NostrDataService] Original note parentId: $detectedParentId, rootId: $detectedRootId');
             }
@@ -908,8 +791,6 @@ class NostrDataService {
 
         _noteCache[id] = repostNote;
         _eventIds.add(id);
-        
-        _loadUsersForNote(repostNote);
 
         _fetchInteractionCountsForNotesImmediately([originalEventId]);
 
@@ -2060,9 +1941,6 @@ class NostrDataService {
 
       _noteCache[note.id] = note;
       _eventIds.add(note.id);
-      
-      _loadUsersForNote(note);
-      
       _scheduleUIUpdate();
 
       debugPrint('[NostrDataService] Note posted and cached successfully');
@@ -2347,9 +2225,6 @@ class NostrDataService {
 
       _noteCache[reply.id] = reply;
       _eventIds.add(reply.id);
-      
-      _loadUsersForNote(reply);
-      
       _scheduleUIUpdate();
 
       debugPrint('[NostrDataService] NIP-10 compliant reply posted successfully');
@@ -3345,9 +3220,6 @@ class NostrDataService {
 
       _noteCache[note.id] = note;
       _eventIds.add(note.id);
-      
-      _loadUsersForNote(note);
-      
       _scheduleUIUpdate();
 
       debugPrint('[NostrDataService] Quote note posted successfully');
@@ -3658,7 +3530,6 @@ class NostrDataService {
     _isClosed = true;
     _batchProcessingTimer?.cancel();
     _uiUpdateThrottleTimer?.cancel();
-    _userLoadBatchTimer?.cancel();
     _relayManager.unregisterService('nostr_data_service');
     _notesController.close();
     _usersController.close();

@@ -5,7 +5,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/user_model.dart';
 import '../screens/profile_page.dart';
 import '../core/di/app_di.dart';
-import '../presentation/viewmodels/following_page_viewmodel.dart';
+import '../data/repositories/user_repository.dart';
+import '../data/services/user_batch_fetcher.dart';
 import '../widgets/back_button_widget.dart';
 import '../widgets/common_buttons.dart';
 import '../widgets/title_widget.dart';
@@ -23,27 +24,118 @@ class FollowingPage extends StatefulWidget {
 }
 
 class _FollowingPageState extends State<FollowingPage> {
-  late final FollowingPageViewModel _viewModel;
+  List<UserModel> _followingUsers = [];
+  bool _isLoading = true;
+  String? _error;
+
+  final Map<String, UserModel> _loadedUsers = {};
+  final Map<String, bool> _loadingStates = {};
+
+  late final UserRepository _userRepository;
 
   @override
   void initState() {
     super.initState();
-    _viewModel = AppDI.get<FollowingPageViewModel>();
-    _viewModel.addListener(_onViewModelChanged);
-    _viewModel.loadFollowingList(widget.user.npub);
+    _userRepository = AppDI.get<UserRepository>();
+    _loadFollowingUsers();
   }
 
-  void _onViewModelChanged() {
-    if (mounted) {
-      setState(() {});
+  Future<void> _loadFollowingUsers() async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+
+      final result = await _userRepository.getFollowingListForUser(widget.user.npub);
+
+      if (mounted) {
+        result.fold(
+          (users) async {
+            setState(() {
+              _followingUsers = users;
+            });
+
+            await _loadUserProfilesBatch(users);
+
+            if (mounted) {
+              setState(() {
+                _isLoading = false;
+              });
+            }
+          },
+          (error) {
+            setState(() {
+              _error = error;
+              _isLoading = false;
+              _followingUsers = [];
+            });
+          },
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
     }
   }
 
-  @override
-  void dispose() {
-    _viewModel.removeListener(_onViewModelChanged);
-    _viewModel.dispose();
-    super.dispose();
+  Future<void> _loadUserProfilesBatch(List<UserModel> users) async {
+    final npubsToLoad = users
+        .where((user) => !_loadingStates.containsKey(user.npub) && !_loadedUsers.containsKey(user.npub))
+        .map((user) => user.npub)
+        .toList();
+
+    if (npubsToLoad.isEmpty) return;
+
+    for (final npub in npubsToLoad) {
+      _loadingStates[npub] = true;
+    }
+
+    try {
+      final results = await _userRepository.getUserProfiles(npubsToLoad, priority: FetchPriority.high);
+
+      if (mounted) {
+        for (final entry in results.entries) {
+          final npub = entry.key;
+          entry.value.fold(
+            (user) {
+              _loadedUsers[npub] = user;
+              _loadingStates[npub] = false;
+              final index = _followingUsers.indexWhere((u) => u.npub == npub);
+              if (index != -1) {
+                _followingUsers[index] = user;
+              }
+            },
+            (error) {
+              _loadedUsers[npub] = UserModel(
+                pubkeyHex: npub,
+                name: npub.length > 8 ? npub.substring(0, 8) : npub,
+                about: '',
+                profileImage: '',
+                banner: '',
+                website: '',
+                nip05: '',
+                lud16: '',
+                updatedAt: DateTime.now(),
+                nip05Verified: false,
+              );
+              _loadingStates[npub] = false;
+            },
+          );
+        }
+        setState(() {});
+      }
+    } catch (e) {
+      if (mounted) {
+        for (final npub in npubsToLoad) {
+          _loadingStates[npub] = false;
+        }
+      }
+    }
   }
 
   Widget _buildHeader(BuildContext context) {
@@ -54,9 +146,14 @@ class _FollowingPageState extends State<FollowingPage> {
   }
 
   Widget _buildUserTile(BuildContext context, UserModel user) {
+    final isLoading = _loadingStates[user.npub] == true;
+    final loadedUser = _loadedUsers[user.npub] ?? user;
+
     String displayName;
-    if (user.name.isNotEmpty && user.name != user.npub.substring(0, 8)) {
-      displayName = user.name.length > 25 ? '${user.name.substring(0, 25)}...' : user.name;
+    if (isLoading) {
+      displayName = '${user.npub.substring(0, 16)}... (Loading)';
+    } else if (loadedUser.name.isNotEmpty) {
+      displayName = loadedUser.name.length > 25 ? '${loadedUser.name.substring(0, 25)}...' : loadedUser.name;
     } else {
       displayName = user.npub.startsWith('npub1') ? '${user.npub.substring(0, 16)}...' : 'Unknown User';
     }
@@ -68,7 +165,7 @@ class _FollowingPageState extends State<FollowingPage> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => ProfilePage(user: user),
+              builder: (_) => ProfilePage(user: loadedUser),
             ),
           );
         },
@@ -83,9 +180,9 @@ class _FollowingPageState extends State<FollowingPage> {
             children: [
               CircleAvatar(
                 radius: 24,
-                backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
+                backgroundImage: loadedUser.profileImage.isNotEmpty ? CachedNetworkImageProvider(loadedUser.profileImage) : null,
                 backgroundColor: Colors.grey.shade800,
-                child: user.profileImage.isEmpty
+                child: loadedUser.profileImage.isEmpty
                     ? Icon(
                         Icons.person,
                         size: 26,
@@ -106,12 +203,12 @@ class _FollowingPageState extends State<FollowingPage> {
                             style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w600,
-                              color: context.colors.textPrimary,
+                              color: isLoading ? context.colors.textSecondary : context.colors.textPrimary,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (user.nip05.isNotEmpty && user.nip05Verified) ...[
+                        if (loadedUser.nip05.isNotEmpty && loadedUser.nip05Verified) ...[
                           const SizedBox(width: 4),
                           Icon(
                             Icons.verified,
@@ -121,7 +218,7 @@ class _FollowingPageState extends State<FollowingPage> {
                         ],
                       ],
                     ),
-                    if (_viewModel.isLoadingProfiles) ...[
+                    if (isLoading) ...[
                       const SizedBox(height: 4),
                       Row(
                         children: [
@@ -155,9 +252,7 @@ class _FollowingPageState extends State<FollowingPage> {
   }
 
   Widget _buildContent(BuildContext context) {
-    final state = _viewModel.followingState;
-
-    if (state.isError) {
+    if (_error != null) {
       return SingleChildScrollView(
         child: Column(
           children: [
@@ -185,7 +280,7 @@ class _FollowingPageState extends State<FollowingPage> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 32),
                     child: Text(
-                      state.error ?? 'Unknown error',
+                      _error!,
                       style: TextStyle(color: context.colors.textSecondary),
                       textAlign: TextAlign.center,
                     ),
@@ -193,7 +288,7 @@ class _FollowingPageState extends State<FollowingPage> {
                   const SizedBox(height: 16),
                   PrimaryButton(
                     label: 'Retry',
-                    onPressed: () => _viewModel.loadFollowingList(widget.user.npub),
+                    onPressed: _loadFollowingUsers,
                     backgroundColor: context.colors.accent,
                     foregroundColor: context.colors.background,
                   ),
@@ -205,7 +300,7 @@ class _FollowingPageState extends State<FollowingPage> {
       );
     }
 
-    if (state.isEmpty) {
+    if (_followingUsers.isEmpty && !_isLoading) {
       return SingleChildScrollView(
         child: Column(
           children: [
@@ -242,16 +337,14 @@ class _FollowingPageState extends State<FollowingPage> {
       );
     }
 
-    final users = _viewModel.followingUsers;
-
     return RefreshIndicator(
-      onRefresh: () => _viewModel.loadFollowingList(widget.user.npub),
+      onRefresh: _loadFollowingUsers,
       child: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(
             child: _buildHeader(context),
           ),
-          if (state.isLoading && users.isEmpty) ...[
+          if (_followingUsers.isEmpty && _isLoading) ...[
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.only(top: 80),
@@ -267,16 +360,16 @@ class _FollowingPageState extends State<FollowingPage> {
                 ),
               ),
             ),
-          ] else if (users.isNotEmpty) ...[
+          ] else ...[
             SliverList(
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
-                  if (index < users.length) {
-                    return _buildUserTile(context, users[index]);
+                  if (index < _followingUsers.length) {
+                    return _buildUserTile(context, _followingUsers[index]);
                   }
                   return null;
                 },
-                childCount: users.length,
+                childCount: _followingUsers.length,
                 addAutomaticKeepAlives: false,
                 addRepaintBoundaries: true,
               ),
