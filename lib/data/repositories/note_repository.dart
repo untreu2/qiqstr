@@ -6,6 +6,7 @@ import '../../core/base/result.dart';
 import '../../models/note_model.dart';
 import '../../models/reaction_model.dart';
 import '../../models/zap_model.dart';
+import '../../models/user_model.dart';
 import '../filters/feed_filters.dart';
 import '../services/network_service.dart';
 import '../services/nostr_data_service.dart';
@@ -66,6 +67,10 @@ class NoteRepository {
       final filtered = filter.apply(allCachedNotes);
       
       debugPrint('[NoteRepository] Filter returned ${filtered.length} notes');
+      
+      if (filtered.isNotEmpty && _userRepository != null) {
+        await _loadUsersForNotes(filtered);
+      }
       
       return Result.success(filtered);
     } catch (e) {
@@ -146,6 +151,107 @@ class NoteRepository {
     }
     
     return allNotes;
+  }
+
+  Future<void> _loadUsersForNotes(List<NoteModel> notes) async {
+    if (notes.isEmpty || _userRepository == null) return;
+
+    final userRepository = _userRepository!;
+
+    try {
+      final allNpubs = <String>{};
+      final noteAuthorMap = <String, List<NoteModel>>{};
+      final noteReposterMap = <String, List<NoteModel>>{};
+      
+      for (final note in notes) {
+        if (note.authorUser == null) {
+          allNpubs.add(note.author);
+          noteAuthorMap.putIfAbsent(note.author, () => []).add(note);
+        }
+        
+        if (note.isRepost && note.repostedBy != null && note.reposterUser == null) {
+          allNpubs.add(note.repostedBy!);
+          noteReposterMap.putIfAbsent(note.repostedBy!, () => []).add(note);
+        }
+      }
+
+      if (allNpubs.isEmpty) return;
+
+      final cachedUsers = <String, UserModel>{};
+      final npubsToLoad = <String>[];
+
+      final cacheFutures = allNpubs.map((npub) async {
+        try {
+          final cachedUser = await userRepository.getCachedUser(npub);
+          if (cachedUser != null && cachedUser.name.isNotEmpty && cachedUser.name != cachedUser.npub.substring(0, 8)) {
+            cachedUsers[npub] = cachedUser;
+          } else {
+            npubsToLoad.add(npub);
+          }
+        } catch (e) {
+          debugPrint('[NoteRepository] Error getting cached user $npub: $e');
+          npubsToLoad.add(npub);
+        }
+      });
+
+      await Future.wait(cacheFutures);
+
+      for (final entry in cachedUsers.entries) {
+        final npub = entry.key;
+        final user = entry.value;
+        
+        if (noteAuthorMap.containsKey(npub)) {
+          for (final note in noteAuthorMap[npub]!) {
+            if (note.authorUser == null) {
+              note.authorUser = user;
+            }
+          }
+        }
+        
+        if (noteReposterMap.containsKey(npub)) {
+          for (final note in noteReposterMap[npub]!) {
+            if (note.reposterUser == null) {
+              note.reposterUser = user;
+            }
+          }
+        }
+      }
+
+      if (npubsToLoad.isNotEmpty) {
+        final results = await userRepository.getUserProfiles(
+          npubsToLoad,
+          priority: FetchPriority.urgent,
+        );
+
+        for (final entry in results.entries) {
+          final npub = entry.key;
+          entry.value.fold(
+            (user) {
+              if (noteAuthorMap.containsKey(npub)) {
+                for (final note in noteAuthorMap[npub]!) {
+                  if (note.authorUser == null) {
+                    note.authorUser = user;
+                  }
+                }
+              }
+              
+              if (noteReposterMap.containsKey(npub)) {
+                for (final note in noteReposterMap[npub]!) {
+                  if (note.reposterUser == null) {
+                    note.reposterUser = user;
+                  }
+                }
+              }
+            },
+            (error) {
+              debugPrint('[NoteRepository] Failed to load user $npub: $error');
+            },
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[NoteRepository] Error loading users for notes: $e');
+    }
   }
 
   Future<Result<NoteModel?>> getNoteById(String noteId) async {
@@ -732,9 +838,9 @@ class NoteRepository {
 
     _userRepository.getUserProfiles(
       authorIds.toList(),
-      priority: FetchPriority.high,
+      priority: FetchPriority.urgent,
     ).then((_) {}).catchError((e) {
-      debugPrint('[NoteRepository] Error preloading mentions: $e');
+      debugPrint('[NoteRepository] Error preloading user profiles: $e');
     });
   }
 

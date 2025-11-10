@@ -4,24 +4,24 @@ import 'package:flutter/foundation.dart';
 import '../../core/base/base_view_model.dart';
 import '../../core/base/ui_state.dart';
 import '../../core/base/app_error.dart';
-import '../../core/base/result.dart';
-import '../../data/repositories/note_repository.dart';
+import '../../data/repositories/thread_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/repositories/auth_repository.dart';
-import '../../data/services/user_batch_fetcher.dart';
 import '../../models/note_model.dart';
 import '../../models/user_model.dart';
 
+export '../../data/repositories/thread_repository.dart' show ThreadStructure;
+
 class ThreadViewModel extends BaseViewModel with CommandMixin {
-  final NoteRepository _noteRepository;
+  final ThreadRepository _threadRepository;
   final UserRepository _userRepository;
   final AuthRepository _authRepository;
 
   ThreadViewModel({
-    required NoteRepository noteRepository,
+    required ThreadRepository threadRepository,
     required UserRepository userRepository,
     required AuthRepository authRepository,
-  })  : _noteRepository = noteRepository,
+  })  : _threadRepository = threadRepository,
         _userRepository = userRepository,
         _authRepository = authRepository;
 
@@ -117,8 +117,8 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
   Future<void> loadThread() async {
     await executeOperation('loadThread', () async {
       try {
-        final cachedRootResult = await _noteRepository.getNoteById(_rootNoteId);
-        final cachedRepliesResult = await _noteRepository.getThreadReplies(_rootNoteId);
+        final cachedRootResult = await _threadRepository.getRootNote(_rootNoteId);
+        final cachedRepliesResult = await _threadRepository.getThreadReplies(_rootNoteId);
 
         bool hasImmediateData = false;
 
@@ -133,7 +133,7 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
             cachedRootResult.data != null) {
           _repliesState = LoadedState(cachedRepliesResult.data!);
 
-          final structure = _buildThreadStructure(cachedRootResult.data!, cachedRepliesResult.data!);
+          final structure = _threadRepository.buildThreadStructure(cachedRootResult.data!, cachedRepliesResult.data!);
           _threadStructureState = LoadedState(structure);
 
           hasImmediateData = true;
@@ -146,52 +146,29 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
           safeNotifyListeners();
         }
 
-        final results = await Future.wait([
-          _noteRepository.getNoteById(_rootNoteId),
-          _noteRepository.getThreadReplies(_rootNoteId),
-        ]);
+        final threadResult = await _threadRepository.loadThread(_rootNoteId);
 
-        final rootResult = results[0] as Result<NoteModel?>;
-        if (rootResult.isError) {
-          _rootNoteState = ErrorState(rootResult.error!);
-          _repliesState = ErrorState(rootResult.error!);
-          safeNotifyListeners();
-          return;
-        }
+        threadResult.fold(
+          (threadData) {
+            final shouldUpdate = !hasImmediateData || _hasDataChanged(threadData.rootNote, threadData.replies);
+            if (shouldUpdate) {
+              _rootNoteState = LoadedState(threadData.rootNote);
+              _repliesState = LoadedState(threadData.replies);
+              _threadStructureState = LoadedState(threadData.structure);
 
-        final rootNote = rootResult.data;
-        if (rootNote == null) {
-          _rootNoteState = const ErrorState('Note not found');
-          _repliesState = const ErrorState('Note not found');
-          safeNotifyListeners();
-          return;
-        }
-
-        _rootNoteState = LoadedState(rootNote);
-
-        final repliesResult = results[1] as Result<List<NoteModel>>;
-        if (repliesResult.isSuccess) {
-          final replies = repliesResult.data!;
-
-          final shouldUpdate = !hasImmediateData || _hasDataChanged(rootNote, replies);
-          if (shouldUpdate) {
-            _rootNoteState = LoadedState(rootNote);
-            _repliesState = LoadedState(replies);
-
-            final structure = _buildThreadStructure(rootNote, replies);
-            _threadStructureState = LoadedState(structure);
-
-            final allThreadNotes = [rootNote, ...replies];
-            _loadUserProfiles(allThreadNotes);
-            _loadInteractionsForThread(allThreadNotes);
+              final allThreadNotes = [threadData.rootNote, ...threadData.replies];
+              _loadInteractionsForThread(allThreadNotes);
+              safeNotifyListeners();
+            } else {
+              _loadInteractionsForThread([threadData.rootNote, ...threadData.replies]);
+            }
+          },
+          (error) {
+            _rootNoteState = ErrorState(error);
+            _repliesState = ErrorState(error);
             safeNotifyListeners();
-          } else {
-            _loadInteractionsForThread([rootNote, ...replies]);
-          }
-        } else {
-          _repliesState = ErrorState(repliesResult.error!);
-          safeNotifyListeners();
-        }
+          },
+        );
       } catch (e) {
         _rootNoteState = ErrorState('Failed to load thread: $e');
         _repliesState = ErrorState('Failed to load thread: $e');
@@ -235,7 +212,7 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         throw Exception('Parent note not found');
       }
 
-      final result = await _noteRepository.postReply(
+      final result = await _threadRepository.addReply(
         content: content,
         rootId: rootId ?? _rootNoteId,
         replyId: parentNoteId,
@@ -251,118 +228,20 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     });
   }
 
-  Future<void> _loadUserProfiles(List<NoteModel> notes) async {
-    try {
-      final Set<String> authorIds = {};
-      for (final note in notes) {
-        authorIds.add(note.author);
-      }
-
-      final missingAuthorIds = authorIds.where((id) => !_userProfiles.containsKey(id)).take(10).toList();
-
-      if (missingAuthorIds.isEmpty) {
-        return;
-      }
-
-      final results = await _userRepository.getUserProfiles(
-        missingAuthorIds,
-        priority: FetchPriority.low,
-      );
-
-      for (final entry in results.entries) {
-        entry.value.fold(
-          (user) {
-            _userProfiles[entry.key] = user;
-          },
-          (error) {
-            _userProfiles[entry.key] = UserModel(
-              pubkeyHex: entry.key,
-              name: entry.key.length > 8 ? entry.key.substring(0, 8) : entry.key,
-              about: '',
-              profileImage: '',
-              banner: '',
-              website: '',
-              nip05: '',
-              lud16: '',
-              updatedAt: DateTime.now(),
-              nip05Verified: false,
-            );
-          },
-        );
-      }
-
-      if (_userProfiles.isNotEmpty) {
-        _profilesController.add(Map.from(_userProfiles));
-      }
-    } catch (e) {
-      debugPrint('[ThreadViewModel] Error loading user profiles: $e');
-    }
-  }
 
   Future<void> _loadInteractionsForThread(List<NoteModel> notes) async {
     try {
-      const maxInitialInteractionFetch = 8;
-      final limitedNotes = notes.take(maxInitialInteractionFetch).toList();
-      
-      if (notes.length > maxInitialInteractionFetch) {
-        debugPrint('[ThreadViewModel] Limiting interaction fetch from ${notes.length} to $maxInitialInteractionFetch notes (only visible notes)');
-      }
-      
-      final noteIds = <String>{};
-      for (final note in limitedNotes) {
-        if (note.isRepost && note.rootId != null) {
-          noteIds.add(note.rootId!);
-        } else {
-          noteIds.add(note.id);
-        }
-      }
-      
-      if (noteIds.isEmpty) return;
-
-      debugPrint('[ThreadViewModel] Fetching interactions for ${noteIds.length} initially visible notes');
-      
-      await _noteRepository.fetchInteractionsForNotes(
-        noteIds.toList(), 
-        useCount: false,
-        forceLoad: true,
-      );
-      
+      await _threadRepository.fetchInteractionsForThread(notes);
       safeNotifyListeners();
     } catch (e) {
       debugPrint('[ThreadViewModel] Error loading interactions for thread: $e');
     }
   }
 
-  ThreadStructure _buildThreadStructure(NoteModel root, List<NoteModel> replies) {
-    final Map<String, List<NoteModel>> childrenMap = {};
-    final Map<String, NoteModel> notesMap = {root.id: root};
-
-    for (final reply in replies) {
-      notesMap[reply.id] = reply;
-    }
-
-    for (final reply in replies) {
-      final parentId = reply.parentId ?? root.id;
-
-      childrenMap.putIfAbsent(parentId, () => []);
-      childrenMap[parentId]!.add(reply);
-    }
-
-    for (final children in childrenMap.values) {
-      children.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    }
-
-    return ThreadStructure(
-      rootNote: root,
-      childrenMap: childrenMap,
-      notesMap: notesMap,
-      totalReplies: replies.length,
-    );
-  }
 
   void _subscribeToThreadUpdates() {
     addSubscription(
-      _noteRepository.realTimeNotesStream.listen((notes) {
+      _threadRepository.realTimeNotesStream.listen((notes) {
         if (!isDisposed && _rootNoteState.isLoaded) {
           if (_focusedNoteId != null) {
             final newFocusedNotes = notes.where((note) => note.id == _focusedNoteId).toList();
@@ -399,7 +278,7 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
   Future<void> reactToNote(String noteId, String reaction) async {
     try {
-      final result = await _noteRepository.reactToNote(noteId, reaction);
+      final result = await _threadRepository.reactToNote(noteId, reaction);
       result.fold(
         (_) {},
         (error) {
@@ -413,7 +292,7 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
   Future<void> repostNote(String noteId) async {
     try {
-      final result = await _noteRepository.repostNote(noteId);
+      final result = await _threadRepository.repostNote(noteId);
       result.fold(
         (_) {},
         (error) {
@@ -466,47 +345,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
   }
 }
 
-class ThreadStructure {
-  final NoteModel rootNote;
-  final Map<String, List<NoteModel>> childrenMap;
-  final Map<String, NoteModel> notesMap;
-  final int totalReplies;
-
-  ThreadStructure({
-    required this.rootNote,
-    required this.childrenMap,
-    required this.notesMap,
-    required this.totalReplies,
-  });
-
-  List<NoteModel> getChildren(String noteId) {
-    return childrenMap[noteId] ?? [];
-  }
-
-  NoteModel? getNote(String noteId) {
-    return notesMap[noteId];
-  }
-
-  int getDepth(String noteId) {
-    int depth = 0;
-    NoteModel? current = notesMap[noteId];
-
-    while (current != null && current.parentId != null) {
-      depth++;
-      current = notesMap[current.parentId!];
-    }
-
-    return depth;
-  }
-
-  bool hasChildren(String noteId) {
-    return childrenMap.containsKey(noteId) && childrenMap[noteId]!.isNotEmpty;
-  }
-
-  List<NoteModel> getAllNotes() {
-    return notesMap.values.toList();
-  }
-}
 
 class LoadThreadCommand extends ParameterlessCommand {
   final ThreadViewModel _viewModel;

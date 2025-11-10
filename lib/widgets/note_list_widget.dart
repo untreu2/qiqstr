@@ -5,8 +5,6 @@ import '../models/note_model.dart';
 import '../models/user_model.dart';
 import '../core/di/app_di.dart';
 import '../data/repositories/note_repository.dart';
-import '../data/repositories/user_repository.dart';
-import '../data/services/user_batch_fetcher.dart';
 import '../presentation/viewmodels/note_visibility_viewmodel.dart';
 import 'note_widget.dart';
 import 'common_buttons.dart';
@@ -45,24 +43,18 @@ class NoteListWidget extends StatefulWidget {
 
 class _NoteListWidgetState extends State<NoteListWidget> {
   late final NoteRepository _noteRepository;
-  late final UserRepository _userRepository;
-  final Set<String> _preloadedUserIds = {};
   StreamSubscription<List<NoteModel>>? _notesStreamSubscription;
   bool _isScrolling = false;
   DateTime _lastScrollTime = DateTime.now();
   DateTime _lastInteractionFetchTime = DateTime.now();
-  DateTime _lastUserFetchTime = DateTime.now();
   bool _hasPendingUpdate = false;
   final Set<String> _fetchedInteractionNoteIds = {};
-  final Set<String> _fetchedUserIds = {};
 
   @override
   void initState() {
     super.initState();
     try {
       _noteRepository = AppDI.get<NoteRepository>();
-      _userRepository = AppDI.get<UserRepository>();
-      _preloadUsersForNotes(widget.notes);
       _setupVisibleNotesSubscription();
       
       if (widget.scrollController != null) {
@@ -72,7 +64,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _fetchInteractionsForVisibleNotes();
-          _fetchUsersForVisibleNotes();
         }
       });
     } catch (e) {
@@ -81,55 +72,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   }
 
 
-  void _preloadUsersForNotes(List<NoteModel> notes) {
-    if (notes.isEmpty) return;
-
-    final userIdsToLoad = <String>{};
-    final currentProfileKeys = Set<String>.from(widget.profiles.keys);
-    
-    for (final note in notes) {
-      if (!_preloadedUserIds.contains(note.author) && 
-          !currentProfileKeys.contains(note.author)) {
-        userIdsToLoad.add(note.author);
-      }
-      
-      if (note.repostedBy != null && 
-          !_preloadedUserIds.contains(note.repostedBy!) &&
-          !currentProfileKeys.contains(note.repostedBy!)) {
-        userIdsToLoad.add(note.repostedBy!);
-      }
-    }
-
-    if (userIdsToLoad.isEmpty) return;
-
-    _preloadedUserIds.addAll(userIdsToLoad);
-
-    _userRepository.getUserProfiles(
-      userIdsToLoad.toList(),
-      priority: FetchPriority.urgent,
-    ).then((results) {
-      if (!mounted) return;
-      
-      bool hasNewUsers = false;
-      for (final entry in results.entries) {
-        entry.value.fold(
-          (user) {
-            if (!widget.profiles.containsKey(entry.key)) {
-              widget.profiles[entry.key] = user;
-              hasNewUsers = true;
-            }
-          },
-          (_) {},
-        );
-      }
-
-      if (mounted && hasNewUsers) {
-        setState(() {});
-      }
-    }).catchError((e) {
-      debugPrint('[NoteListWidget] Error preloading users: $e');
-    });
-  }
 
   @override
   void dispose() {
@@ -225,106 +167,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     }
   }
 
-  void _fetchUsersForVisibleNotes() {
-    if (!mounted || widget.scrollController == null || !widget.scrollController!.hasClients) {
-      return;
-    }
-
-    final now = DateTime.now();
-    final timeSinceLastFetch = now.difference(_lastUserFetchTime);
-    if (timeSinceLastFetch.inMilliseconds < 100) {
-      return;
-    }
-
-    try {
-      final scrollController = widget.scrollController!;
-      final viewportHeight = scrollController.position.viewportDimension;
-      final scrollOffset = scrollController.offset;
-      
-      final estimatedItemHeight = 350.0;
-      final startIndex = (scrollOffset / estimatedItemHeight).floor().clamp(0, widget.notes.length - 1);
-      final endIndex = ((scrollOffset + viewportHeight) / estimatedItemHeight).ceil().clamp(0, widget.notes.length);
-      
-      final buffer = 5;
-      final bufferedStartIndex = (startIndex - buffer).clamp(0, widget.notes.length - 1);
-      final bufferedEndIndex = (endIndex + buffer).clamp(0, widget.notes.length);
-      
-      final maxVisibleNotes = 20;
-      final actualEndIndex = bufferedEndIndex > bufferedStartIndex + maxVisibleNotes 
-          ? bufferedStartIndex + maxVisibleNotes 
-          : bufferedEndIndex;
-      
-      if (bufferedStartIndex >= actualEndIndex || bufferedStartIndex >= widget.notes.length) {
-        return;
-      }
-      
-      final visibleNotes = widget.notes.sublist(bufferedStartIndex, actualEndIndex.clamp(0, widget.notes.length));
-      
-      if (visibleNotes.isEmpty) return;
-      
-      final userIdsToFetch = <String>{};
-      final currentProfileKeys = Set<String>.from(widget.profiles.keys);
-      
-      for (final note in visibleNotes) {
-        if (!_fetchedUserIds.contains(note.author) && !currentProfileKeys.contains(note.author)) {
-          userIdsToFetch.add(note.author);
-          _fetchedUserIds.add(note.author);
-        }
-        
-        if (note.repostedBy != null && 
-            !_fetchedUserIds.contains(note.repostedBy!) &&
-            !currentProfileKeys.contains(note.repostedBy!)) {
-          userIdsToFetch.add(note.repostedBy!);
-          _fetchedUserIds.add(note.repostedBy!);
-        }
-      }
-      
-      if (userIdsToFetch.isEmpty) return;
-      
-      _lastUserFetchTime = now;
-      
-      _userRepository.getUserProfiles(
-        userIdsToFetch.toList(),
-        priority: FetchPriority.high,
-      ).then((results) {
-        if (!mounted) return;
-        
-        bool hasNewUsers = false;
-        for (final entry in results.entries) {
-          entry.value.fold(
-            (user) {
-              if (!widget.profiles.containsKey(entry.key)) {
-                widget.profiles[entry.key] = user;
-                hasNewUsers = true;
-              }
-            },
-            (_) {},
-          );
-        }
-        
-        if (mounted && hasNewUsers) {
-          setState(() {});
-        }
-      }).catchError((e) {
-        debugPrint('[NoteListWidget] Error fetching users for visible notes: $e');
-      });
-      
-      if (_fetchedUserIds.length > 200) {
-        final cutoff = bufferedStartIndex - 20;
-        if (cutoff > 0) {
-          for (int i = 0; i < cutoff && i < widget.notes.length; i++) {
-            final note = widget.notes[i];
-            _fetchedUserIds.remove(note.author);
-            if (note.repostedBy != null) {
-              _fetchedUserIds.remove(note.repostedBy!);
-            }
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('[NoteListWidget] Error fetching users for visible notes: $e');
-    }
-  }
 
   void _scheduleUpdate() {
     if (!_hasPendingUpdate) return;
@@ -354,7 +196,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     final timeSinceLastFetch = now.difference(_lastInteractionFetchTime).inMilliseconds;
     if (timeSinceLastFetch >= 100) {
       _fetchInteractionsForVisibleNotes();
-      _fetchUsersForVisibleNotes();
     }
     
     _startScrollDebounce();
@@ -385,7 +226,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     }
     
     _fetchInteractionsForVisibleNotes();
-    _fetchUsersForVisibleNotes();
   }
 
   void _onNoteBecameVisible(String noteId) {
@@ -411,12 +251,10 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     super.didUpdateWidget(oldWidget);
 
     if (oldWidget.notes != widget.notes) {
-      _preloadUsersForNotes(widget.notes);
       
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _fetchInteractionsForVisibleNotes();
-          _fetchUsersForVisibleNotes();
         }
       });
     }

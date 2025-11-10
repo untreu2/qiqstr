@@ -2,6 +2,7 @@ import 'dart:async';
 import '../utils/string_optimizer.dart';
 import 'reaction_model.dart';
 import 'zap_model.dart';
+import 'user_model.dart';
 
 class NoteModel {
   final String id;
@@ -27,6 +28,9 @@ class NoteModel {
   List<Map<String, String>> eTags;
   List<Map<String, String>> pTags;
   String? replyMarker;
+  
+  UserModel? authorUser;
+  UserModel? reposterUser;
 
   static final Map<String, Map<String, dynamic>> _globalParseCache = {};
   static const int _maxCacheSize = 500;
@@ -75,6 +79,8 @@ class NoteModel {
     List<Map<String, String>>? eTags,
     List<Map<String, String>>? pTags,
     this.replyMarker,
+    this.authorUser,
+    this.reposterUser,
   })  : replyIds = replyIds ?? [],
         eTags = eTags ?? [],
         pTags = pTags ?? [];

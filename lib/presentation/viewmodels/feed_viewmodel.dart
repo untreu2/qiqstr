@@ -10,7 +10,6 @@ import '../../data/repositories/note_repository.dart';
 import '../../data/repositories/note_repository_compat.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/user_repository.dart';
-import '../../data/services/user_batch_fetcher.dart';
 import '../../data/services/nostr_data_service.dart';
 import '../../models/note_model.dart';
 import '../../models/user_model.dart';
@@ -187,7 +186,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             _feedState = LoadedState(sortedNotes);
             safeNotifyListeners();
             
-            _loadUserProfilesForNotes(sortedNotes);
             _subscribeToRealTimeUpdates();
           }
         } catch (e) {
@@ -260,8 +258,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             } else {
               final sortedNotes = _sortNotes(notes);
               _feedState = LoadedState(sortedNotes);
-
-              await _loadUserProfilesForNotes(sortedNotes);
             }
 
             _subscribeToRealTimeUpdates();
@@ -320,8 +316,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             } else {
               final sortedNotes = _sortNotes(notes);
               _feedState = LoadedState(sortedNotes);
-
-              await _loadUserProfilesForNotes(sortedNotes);
             }
           },
           (error) async {
@@ -411,7 +405,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           if (notes.isNotEmpty) {
             final sortedNotes = _sortNotes(notes);
             _feedState = LoadedState(sortedNotes);
-            _loadUserProfilesForNotes(notes);
             safeNotifyListeners();
           }
         },
@@ -481,7 +474,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           if (currentNotes.isEmpty) {
             if (notes.isNotEmpty) {
               _feedState = LoadedState(notes);
-              _loadUserProfilesForNotes(notes);
               safeNotifyListeners();
             }
             return;
@@ -558,7 +550,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
               final sortedNotes = _sortNotes(allNotes);
               _feedState = LoadedState(sortedNotes);
               _lastNoteCount = sortedNotes.length;
-              _loadUserProfilesForNotes(userNotes);
             }
 
             if (otherNotes.isNotEmpty) {
@@ -616,60 +607,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     }
   }
 
-  Future<void> _loadUserProfilesForNotes(List<NoteModel> notes) async {
-    try {
-      final Set<String> authorIds = {};
-      for (final note in notes) {
-        authorIds.add(note.author);
-        if (note.repostedBy != null) {
-          authorIds.add(note.repostedBy!);
-        }
-      }
-
-      final missingAuthorIds = authorIds.where((id) {
-        final cachedProfile = _profiles[id];
-        return cachedProfile == null || cachedProfile.profileImage.isEmpty;
-      }).toList();
-
-      if (missingAuthorIds.isEmpty) {
-        return;
-      }
-
-      final results = await _userRepository.getUserProfiles(
-        missingAuthorIds,
-        priority: FetchPriority.urgent,
-      );
-
-      for (final entry in results.entries) {
-        entry.value.fold(
-          (user) {
-            _profiles[entry.key] = user;
-          },
-          (error) {
-            if (!_profiles.containsKey(entry.key)) {
-              _profiles[entry.key] = UserModel(
-                pubkeyHex: entry.key,
-                name: entry.key.length > 8 ? entry.key.substring(0, 8) : entry.key,
-                about: '',
-                profileImage: '',
-                banner: '',
-                website: '',
-                nip05: '',
-                lud16: '',
-                updatedAt: DateTime.now(),
-                nip05Verified: false,
-              );
-            }
-          },
-        );
-      }
-
-      _profilesController.add(Map.from(_profiles));
-      safeNotifyListeners();
-    } catch (e) {
-      debugPrint('[FeedViewModel] Error loading user profiles: $e');
-    }
-  }
 
   @override
   void onRetry() {

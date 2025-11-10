@@ -6,10 +6,12 @@ import '../../../presentation/viewmodels/notification_viewmodel.dart';
 import '../../../presentation/viewmodels/thread_viewmodel.dart';
 import '../../../presentation/viewmodels/compose_viewmodel.dart';
 import '../../../presentation/viewmodels/edit_profile_viewmodel.dart';
+import '../../../presentation/viewmodels/following_page_viewmodel.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/note_repository.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../data/repositories/notification_repository.dart';
+import '../../../data/repositories/thread_repository.dart';
 import '../../../data/services/validation_service.dart';
 import '../../../data/services/nostr_data_service.dart';
 
@@ -42,7 +44,7 @@ class ViewModelsModule extends DIModule {
         ));
 
     AppDI.registerFactory<ThreadViewModel>(() => ThreadViewModel(
-          noteRepository: AppDI.get<NoteRepository>(),
+          threadRepository: AppDI.get<ThreadRepository>(),
           userRepository: AppDI.get<UserRepository>(),
           authRepository: AppDI.get<AuthRepository>(),
         ));
@@ -56,6 +58,10 @@ class ViewModelsModule extends DIModule {
     AppDI.registerFactory<EditProfileViewModel>(() => EditProfileViewModel(
           userRepository: AppDI.get<UserRepository>(),
           authRepository: AppDI.get<AuthRepository>(),
+        ));
+
+    AppDI.registerFactory<FollowingPageViewModel>(() => FollowingPageViewModel(
+          userRepository: AppDI.get<UserRepository>(),
         ));
   }
 }

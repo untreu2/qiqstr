@@ -90,24 +90,78 @@ class UserRepository {
 
       final pubkeyHex = _authService.npubToHex(npub) ?? npub;
 
-      final user = await _cacheService.getOrFetch(
-        pubkeyHex,
-        () => _batchFetcher.fetchUser(pubkeyHex, priority: priority),
-      );
+      UserModel? user;
+
+      try {
+        user = await _cacheService.get(pubkeyHex);
+      } catch (e) {
+        debugPrint('[UserRepository] Error checking cache for $pubkeyHex: $e');
+      }
 
       if (user != null) {
         return Result.success(user);
       }
 
-      final directResult = await _nostrDataService.fetchUserProfile(npub);
-      if (directResult.isSuccess && directResult.data != null) {
-        _cacheService.put(directResult.data!);
-        return directResult;
+      try {
+        if (_cacheService.isarService.isInitialized) {
+          final profileData = await _cacheService.isarService.getUserProfile(pubkeyHex);
+          if (profileData != null) {
+            user = UserModel.fromCachedProfile(pubkeyHex, profileData);
+            await _cacheService.put(user);
+            return Result.success(user);
+          }
+        }
+      } catch (e) {
+        debugPrint('[UserRepository] Error checking database for $pubkeyHex: $e');
       }
 
-      return const Result.error('User profile not found');
+      try {
+        user = await _batchFetcher.fetchUser(pubkeyHex, priority: priority);
+        if (user != null) {
+          await _cacheService.put(user);
+          return Result.success(user);
+        }
+      } catch (e) {
+        debugPrint('[UserRepository] Error fetching from batch fetcher for $pubkeyHex: $e');
+      }
+
+      try {
+        final directResult = await _nostrDataService.fetchUserProfile(npub);
+        if (directResult.isSuccess && directResult.data != null) {
+          await _cacheService.put(directResult.data!);
+          return directResult;
+        }
+      } catch (e) {
+        debugPrint('[UserRepository] Error fetching directly from network for $pubkeyHex: $e');
+      }
+
+      final basicUser = UserModel(
+        pubkeyHex: npub,
+        name: npub.length > 8 ? npub.substring(0, 8) : npub,
+        profileImage: '',
+        about: '',
+        nip05: '',
+        lud16: '',
+        banner: '',
+        website: '',
+        updatedAt: DateTime.now(),
+      );
+
+      return Result.success(basicUser);
     } catch (e) {
-      return Result.error('Failed to get user profile: $e');
+      debugPrint('[UserRepository] Unexpected error getting user profile: $e');
+      final basicUser = UserModel(
+        pubkeyHex: npub,
+        name: npub.length > 8 ? npub.substring(0, 8) : npub,
+        profileImage: '',
+        about: '',
+        nip05: '',
+        lud16: '',
+        banner: '',
+        website: '',
+        updatedAt: DateTime.now(),
+      );
+      return Result.success(basicUser);
     }
   }
 
@@ -138,21 +192,108 @@ class UserRepository {
       final missingHexKeys = pubkeyHexMap.keys.where((hex) => !cachedUsers.containsKey(hex)).toList();
 
       if (missingHexKeys.isNotEmpty) {
-        debugPrint('[UserRepository] Batch fetching ${missingHexKeys.length} missing profiles');
+        debugPrint('[UserRepository] Batch fetching ${missingHexKeys.length} missing profiles from database and network');
 
-        final fetchedUsers = await _batchFetcher.fetchUsers(
-          missingHexKeys,
-          priority: priority,
-        );
-
-        for (final entry in fetchedUsers.entries) {
-          final npub = pubkeyHexMap[entry.key]!;
-          if (entry.value != null) {
-            await _cacheService.put(entry.value!);
-            results[npub] = Result.success(entry.value!);
-          } else {
-            results[npub] = const Result.error('User not found');
+        final databaseUsers = <String, UserModel>{};
+        if (_cacheService.isarService.isInitialized) {
+          try {
+            final profileDataMap = await _cacheService.isarService.getUserProfiles(missingHexKeys);
+            for (final entry in profileDataMap.entries) {
+              final user = UserModel.fromCachedProfile(entry.key, entry.value);
+              databaseUsers[entry.key] = user;
+              await _cacheService.put(user);
+            }
+          } catch (e) {
+            debugPrint('[UserRepository] Error batch reading from database: $e');
           }
+        }
+
+        for (final entry in databaseUsers.entries) {
+          final npub = pubkeyHexMap[entry.key]!;
+          if (!results.containsKey(npub)) {
+            results[npub] = Result.success(entry.value);
+          }
+        }
+
+        final stillMissingHexKeys = missingHexKeys.where((hex) => !databaseUsers.containsKey(hex)).toList();
+
+        if (stillMissingHexKeys.isNotEmpty) {
+          try {
+            final fetchedUsers = await _batchFetcher.fetchUsers(
+              stillMissingHexKeys,
+              priority: priority,
+            );
+
+            for (final entry in fetchedUsers.entries) {
+              final npub = pubkeyHexMap[entry.key]!;
+              if (entry.value != null) {
+                await _cacheService.put(entry.value!);
+                results[npub] = Result.success(entry.value!);
+              }
+            }
+          } catch (e) {
+            debugPrint('[UserRepository] Error batch fetching from network: $e');
+          }
+
+          final finalMissingHexKeys = stillMissingHexKeys.where((hex) {
+            final npub = pubkeyHexMap[hex]!;
+            return !results.containsKey(npub);
+          }).toList();
+
+          for (final hex in finalMissingHexKeys) {
+            final npub = pubkeyHexMap[hex]!;
+            try {
+              final directResult = await _nostrDataService.fetchUserProfile(npub);
+              if (directResult.isSuccess && directResult.data != null) {
+                await _cacheService.put(directResult.data!);
+                results[npub] = Result.success(directResult.data!);
+              } else {
+                final basicUser = UserModel(
+                  pubkeyHex: npub,
+                  name: npub.length > 8 ? npub.substring(0, 8) : npub,
+                  profileImage: '',
+                  about: '',
+                  nip05: '',
+                  lud16: '',
+                  banner: '',
+                  website: '',
+                  updatedAt: DateTime.now(),
+                );
+                results[npub] = Result.success(basicUser);
+              }
+            } catch (e) {
+              debugPrint('[UserRepository] Error fetching individual profile for $npub: $e');
+              final basicUser = UserModel(
+                pubkeyHex: npub,
+                name: npub.length > 8 ? npub.substring(0, 8) : npub,
+                profileImage: '',
+                about: '',
+                nip05: '',
+                lud16: '',
+                banner: '',
+                website: '',
+                updatedAt: DateTime.now(),
+              );
+              results[npub] = Result.success(basicUser);
+            }
+          }
+        }
+      }
+
+      for (final npub in npubs) {
+        if (!results.containsKey(npub)) {
+          final basicUser = UserModel(
+            pubkeyHex: npub,
+            name: npub.length > 8 ? npub.substring(0, 8) : npub,
+            profileImage: '',
+            about: '',
+            nip05: '',
+            lud16: '',
+            banner: '',
+            website: '',
+            updatedAt: DateTime.now(),
+          );
+          results[npub] = Result.success(basicUser);
         }
       }
 
@@ -162,7 +303,18 @@ class UserRepository {
 
       for (final npub in npubs) {
         if (!results.containsKey(npub)) {
-          results[npub] = Result.error('Failed to fetch profile: $e');
+          final basicUser = UserModel(
+            pubkeyHex: npub,
+            name: npub.length > 8 ? npub.substring(0, 8) : npub,
+            profileImage: '',
+            about: '',
+            nip05: '',
+            lud16: '',
+            banner: '',
+            website: '',
+            updatedAt: DateTime.now(),
+          );
+          results[npub] = Result.success(basicUser);
         }
       }
 

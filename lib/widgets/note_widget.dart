@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/note_model.dart';
 import '../models/user_model.dart';
-import '../core/di/app_di.dart';
-import '../data/repositories/user_repository.dart';
 import '../services/time_service.dart';
 import '../theme/theme_manager.dart';
 import '../screens/thread_page.dart';
@@ -60,13 +58,11 @@ class _NoteWidgetState extends State<NoteWidget> {
 
   bool _isDisposed = false;
   bool _isInitialized = false;
-  late final UserRepository _userRepository;
 
   @override
   void initState() {
     super.initState();
     try {
-      _userRepository = AppDI.get<UserRepository>();
       _precomputeImmutableData();
       _setupUserListener();
       _loadInitialUserDataSync();
@@ -115,8 +111,8 @@ class _NoteWidgetState extends State<NoteWidget> {
     try {
       final currentState = _stateNotifier.value;
 
-      UserModel? authorUser = widget.profiles[_authorId];
-      UserModel? reposterUser = _reposterId != null ? widget.profiles[_reposterId] : null;
+      UserModel? authorUser = widget.note.authorUser;
+      UserModel? reposterUser = widget.note.reposterUser;
 
       authorUser ??= UserModel(
         pubkeyHex: _authorId,
@@ -168,7 +164,6 @@ class _NoteWidgetState extends State<NoteWidget> {
       if (_isDisposed || !mounted) return;
 
       try {
-        _loadUsersAsync();
         _loadInteractionsAsync();
       } catch (e) {
         debugPrint('[NoteWidget] Async init error: $e');
@@ -210,8 +205,8 @@ class _NoteWidgetState extends State<NoteWidget> {
     try {
       final currentState = _stateNotifier.value;
 
-      UserModel? authorUser = widget.profiles[_authorId];
-      UserModel? reposterUser = _reposterId != null ? widget.profiles[_reposterId] : null;
+      UserModel? authorUser = widget.note.authorUser;
+      UserModel? reposterUser = widget.note.reposterUser;
 
       authorUser ??= UserModel(
         pubkeyHex: _authorId,
@@ -253,69 +248,6 @@ class _NoteWidgetState extends State<NoteWidget> {
       if (currentState != newState) {
         if (mounted && !_isDisposed) {
           _stateNotifier.value = newState;
-        }
-      }
-    } catch (e) {
-    }
-  }
-
-  Future<void> _loadUsersAsync() async {
-    if (_isDisposed || !mounted) return;
-
-    try {
-      final authorUser = widget.profiles[_authorId];
-      final reposterUser = _reposterId != null ? widget.profiles[_reposterId] : null;
-
-      bool isProfileComplete(UserModel? user, String userId) {
-        if (user == null) return false;
-        if (user.name == 'Anonymous') return false;
-        if (user.name == userId.substring(0, 8)) return false;
-        if (user.profileImage.isEmpty) return false;
-        return true;
-      }
-
-      final reposterId = _reposterId;
-      if (isProfileComplete(authorUser, _authorId) && (reposterId == null || isProfileComplete(reposterUser, reposterId))) {
-        return;
-      }
-
-      if (widget.notesListProvider != null) {
-        final authorPreloaded = widget.notesListProvider.getPreloadedUser(_authorId);
-        final reposterPreloaded = reposterId != null ? widget.notesListProvider.getPreloadedUser(reposterId) : null;
-
-        if (isProfileComplete(authorPreloaded, _authorId) && (reposterId == null || isProfileComplete(reposterPreloaded, reposterId))) {
-          return;
-        }
-      }
-
-      if (!isProfileComplete(authorUser, _authorId)) {
-        final authorResult = await _userRepository.getUserProfile(_authorId);
-        authorResult.fold(
-          (user) {
-            if (mounted && !_isDisposed) {
-              widget.profiles[_authorId] = user;
-              _updateUserData();
-            }
-          },
-          (_) {},
-        );
-      }
-
-      if (_reposterId != null) {
-        final reposterId = _reposterId;
-        final currentReposterUser = widget.profiles[reposterId];
-
-        if (!isProfileComplete(currentReposterUser, reposterId)) {
-          final reposterResult = await _userRepository.getUserProfile(reposterId);
-          reposterResult.fold(
-            (user) {
-              if (mounted && !_isDisposed) {
-                widget.profiles[reposterId] = user;
-                _updateUserData();
-              }
-            },
-            (_) {},
-          );
         }
       }
     } catch (e) {

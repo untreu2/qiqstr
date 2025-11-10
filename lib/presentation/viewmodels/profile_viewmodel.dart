@@ -417,6 +417,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
   }
 
 
+
   UserModel? get currentProfile {
     return _profileState.data;
   }
