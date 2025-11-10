@@ -10,6 +10,7 @@ import '../services/media_service.dart';
 import '../widgets/snackbar_widget.dart';
 import '../widgets/back_button_widget.dart';
 import '../widgets/common_buttons.dart';
+import '../widgets/title_widget.dart';
 
 class EditOwnProfilePage extends StatelessWidget {
   const EditOwnProfilePage({super.key});
@@ -227,37 +228,10 @@ class _EditProfileContentState extends State<_EditProfileContent> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    final double topPadding = MediaQuery.of(context).padding.top;
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 5,
-                height: 20,
-                decoration: BoxDecoration(
-                  color: context.colors.accent,
-                  borderRadius: BorderRadius.circular(2.5),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Edit Profile',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w700,
-                  color: context.colors.textPrimary,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+    return TitleWidget(
+      title: 'Edit Profile',
+      fontSize: 32,
+      useTopPadding: true,
     );
   }
 
@@ -430,13 +404,13 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
+                                valueColor: AlwaysStoppedAnimation<Color>(context.colors.buttonText),
                               ),
                             ),
                           )
                         : Icon(
                             Icons.check,
-                            color: context.colors.background,
+                            color: context.colors.buttonText,
                             size: 24,
                           ),
                   ),

@@ -20,7 +20,7 @@ class AppColors {
   static const Color textHint = Color(0xFF808080);
   static const Color textMuted = Color(0xFF999999);
 
-  static const Color error = Color(0xFFFFFFFF);
+  static const Color error = Color(0xFFFF6B6B);
   static const Color errorBackground = Color(0xFF333333);
   static const Color success = Color(0xFFFFFFFF);
   static const Color successBackground = Color(0xFF2A2A2A);

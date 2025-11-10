@@ -11,6 +11,7 @@ import '../services/media_service.dart';
 import '../widgets/snackbar_widget.dart';
 import '../widgets/back_button_widget.dart';
 import '../widgets/common_buttons.dart';
+import '../widgets/title_widget.dart';
 
 class EditNewAccountProfilePage extends StatefulWidget {
   final String npub;
@@ -164,49 +165,11 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    final double topPadding = MediaQuery.of(context).padding.top;
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, topPadding + 70, 16, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 5,
-                height: 20,
-                decoration: BoxDecoration(
-                  color: context.colors.accent,
-                  borderRadius: BorderRadius.circular(2.5),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                'Set Up Profile',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w700,
-                  color: context.colors.textPrimary,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Padding(
-            padding: const EdgeInsets.only(left: 17),
-            child: Text(
-              'Add some basic information to help others discover you.',
-              style: TextStyle(
-                fontSize: 15,
-                color: context.colors.textSecondary,
-                height: 1.4,
-              ),
-            ),
-          ),
-        ],
-      ),
+    return TitleWidget(
+      title: 'Set Up Profile',
+      fontSize: 32,
+      subtitle: 'Add some basic information to help others discover you.',
+      useTopPadding: true,
     );
   }
 
@@ -321,13 +284,13 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
+                                valueColor: AlwaysStoppedAnimation<Color>(context.colors.buttonText),
                               ),
                             ),
                           )
                         : Icon(
                             Icons.check,
-                            color: context.colors.background,
+                            color: context.colors.buttonText,
                             size: 24,
                           ),
                   ),

@@ -83,65 +83,70 @@ class _KeysPageState extends State<KeysPage> {
     });
   }
 
+  Widget _buildKeyTitle(BuildContext context, String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 33, right: 16, bottom: 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: context.colors.textSecondary,
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
   Widget _buildKeyDisplayCard(BuildContext context, String title, String value, String keyType, bool isCopied) {
     final displayValue = keyType == 'mnemonic' ? '•' * 48 : value;
     final isMnemonic = keyType == 'mnemonic';
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      padding: const EdgeInsets.all(20.0),
-      decoration: BoxDecoration(
-        color: context.colors.surface,
-        borderRadius: BorderRadius.circular(16.0),
-        border: Border.all(
-          color: context.colors.border.withValues(alpha: 0.3),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              color: context.colors.textSecondary,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildKeyTitle(context, title),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+            decoration: BoxDecoration(
+              color: context.colors.overlayLight,
+              borderRadius: BorderRadius.circular(40),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    displayValue,
+                    maxLines: isMnemonic ? 3 : 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: context.colors.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: keyType == 'mnemonic' ? 2 : 0,
+                      height: isMnemonic ? 1.4 : 1.0,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                GestureDetector(
+                  onTap: () => _copyToClipboard(value, keyType),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    child: Icon(
+                      isCopied ? Icons.check : Icons.content_copy,
+                      color: isCopied ? context.colors.success : context.colors.iconSecondary,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  displayValue,
-                  maxLines: isMnemonic ? 3 : 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: context.colors.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w400,
-                    letterSpacing: keyType == 'mnemonic' ? 2 : 0,
-                    height: isMnemonic ? 1.4 : 1.0,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              GestureDetector(
-                onTap: () => _copyToClipboard(value, keyType),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  child: Icon(
-                    isCopied ? Icons.check : Icons.content_copy,
-                    color: isCopied ? context.colors.success : context.colors.iconSecondary,
-                    size: 20,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -173,7 +178,7 @@ class _KeysPageState extends State<KeysPage> {
     return TitleWidget(
       title: 'Keys',
       fontSize: 32,
-      subtitle: "Manage your Nostr identity keys securely.",
+      subtitle: "Manage your Nostr identity keys.",
       useTopPadding: true,
     );
   }
@@ -198,7 +203,7 @@ class _KeysPageState extends State<KeysPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeader(context),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               _buildKeyDisplayCard(
                 context,
                 'Public Key (npub)',
@@ -206,6 +211,7 @@ class _KeysPageState extends State<KeysPage> {
                 'npub',
                 _copiedKeyType == 'npub',
               ),
+              const SizedBox(height: 24),
               if (_showAdvanced) ...[
                 _buildKeyDisplayCard(
                   context,
@@ -214,6 +220,7 @@ class _KeysPageState extends State<KeysPage> {
                   'nsec',
                   _copiedKeyType == 'nsec',
                 ),
+                const SizedBox(height: 24),
               ],
               _buildKeyDisplayCard(
                 context,
@@ -222,7 +229,7 @@ class _KeysPageState extends State<KeysPage> {
                 'mnemonic',
                 _copiedKeyType == 'mnemonic',
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 32),
               _buildAdvancedLink(context),
               const SizedBox(height: 32),
             ],

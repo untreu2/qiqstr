@@ -5,6 +5,7 @@ import '../models/user_model.dart';
 import '../screens/home_navigator.dart';
 import '../theme/theme_manager.dart';
 import '../widgets/common_buttons.dart';
+import '../widgets/title_widget.dart';
 import '../core/ui/ui_state_builder.dart';
 import '../core/di/app_di.dart';
 import '../presentation/viewmodels/suggested_follows_viewmodel.dart';
@@ -96,7 +97,7 @@ class SuggestedFollowsPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildHeader(context),
-                const SizedBox(height: 48),
+                const SizedBox(height: 16),
                 ...users.map((user) => _buildUserTile(context, viewModel, user)),
                 const SizedBox(height: 120),
               ],
@@ -109,21 +110,14 @@ class SuggestedFollowsPage extends StatelessWidget {
   }
 
   Widget _buildHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 100, 24, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Here are some interesting people you might want to follow to get started.',
-            style: TextStyle(
-              fontSize: 16,
-              color: context.colors.textSecondary,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ),
+    final double topPadding = MediaQuery.of(context).padding.top;
+
+    return TitleWidget(
+      title: 'Suggested Follows',
+      fontSize: 32,
+      subtitle: "Select at least 3 people to follow to get started.",
+      useTopPadding: false,
+      padding: EdgeInsets.fromLTRB(16, topPadding + 20, 16, 8),
     );
   }
 
@@ -138,9 +132,8 @@ class SuggestedFollowsPage extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
           decoration: BoxDecoration(
-            color: isSelected ? context.colors.overlayLight.withValues(alpha: 0.7) : context.colors.overlayLight,
+            color: context.colors.overlayLight,
             borderRadius: BorderRadius.circular(40),
-            border: isSelected ? Border.all(color: context.colors.accent.withValues(alpha: 0.3), width: 1) : null,
           ),
           child: Row(
             children: [
@@ -218,41 +211,53 @@ class SuggestedFollowsPage extends StatelessWidget {
           top: BorderSide(color: context.colors.border),
         ),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: double.infinity,
-            child: SecondaryButton(
-              label: 'Skip',
-              onPressed: viewModel.isProcessing ? null : () async {
-                await _skipToHome(context, viewModel);
-              },
-              size: ButtonSize.large,
-              backgroundColor: context.colors.overlayLight,
-              foregroundColor: context.colors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: PrimaryButton(
-              label: 'Continue',
-              onPressed: viewModel.isProcessing ? null : () async {
-                await _continueToHome(context, viewModel);
-              },
-              size: ButtonSize.large,
-              isLoading: viewModel.isProcessing,
-            ),
-          ),
-        ],
+      child: SizedBox(
+        width: double.infinity,
+        child: _buildContinueButton(context, viewModel),
       ),
     );
   }
 
-  Future<void> _skipToHome(BuildContext context, SuggestedFollowsViewModel viewModel) async {
-    viewModel.skipToHome();
-    _navigateToHome(context);
+  Widget _buildContinueButton(BuildContext context, SuggestedFollowsViewModel viewModel) {
+    final hasMinimumSelection = viewModel.selectedUsers.length >= 3;
+    final isDisabled = viewModel.isProcessing || !hasMinimumSelection;
+
+    return GestureDetector(
+      onTap: isDisabled
+          ? null
+          : () async {
+              await _continueToHome(context, viewModel);
+            },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 18),
+        decoration: BoxDecoration(
+          color: isDisabled ? context.colors.buttonPrimary.withValues(alpha: 0.3) : context.colors.buttonPrimary,
+          borderRadius: BorderRadius.circular(40),
+        ),
+        child: viewModel.isProcessing
+            ? Center(
+                child: SizedBox(
+                  height: 20,
+                  width: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: context.colors.buttonText,
+                  ),
+                ),
+              )
+            : Text(
+                'Continue',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isDisabled ? context.colors.buttonText.withValues(alpha: 0.5) : context.colors.buttonText,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  decoration: hasMinimumSelection ? TextDecoration.none : TextDecoration.lineThrough,
+                ),
+              ),
+      ),
+    );
   }
 
   Future<void> _continueToHome(BuildContext context, SuggestedFollowsViewModel viewModel) async {
