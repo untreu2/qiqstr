@@ -37,6 +37,7 @@ Future<void> showUnfollowUserDialog({
                 child: PrimaryButton(
                   label: 'Cancel',
                   onPressed: () => Navigator.pop(modalContext),
+                  size: ButtonSize.large,
                 ),
               ),
               const SizedBox(width: 12),
@@ -49,6 +50,7 @@ Future<void> showUnfollowUserDialog({
                   },
                   backgroundColor: context.colors.error.withValues(alpha: 0.1),
                   foregroundColor: context.colors.error,
+                  size: ButtonSize.large,
                 ),
               ),
             ],
