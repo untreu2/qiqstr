@@ -4,6 +4,7 @@ import '../theme/theme_manager.dart';
 import '../widgets/back_button_widget.dart';
 import 'relay_page.dart';
 import 'keys_page.dart';
+import 'display_page.dart';
 import '../../utils/logout.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -84,9 +85,18 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const SizedBox(height: 8),
-          _buildExpandedNoteModeToggleItem(context, themeManager),
-          const SizedBox(height: 8),
-          _buildThemeToggleItem(context, themeManager),
+          _buildSettingsItem(
+            context: context,
+            title: 'Display',
+            subtitle: '',
+            icon: CarbonIcons.view,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const DisplayPage(),
+              ),
+            ),
+          ),
           const SizedBox(height: 8),
           _buildLogoutItem(context),
           const SizedBox(height: 32),
@@ -138,90 +148,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildExpandedNoteModeToggleItem(BuildContext context, ThemeManager themeManager) {
-    return GestureDetector(
-      onTap: () => themeManager.toggleExpandedNoteMode(),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-        decoration: BoxDecoration(
-          color: context.colors.overlayLight,
-          borderRadius: BorderRadius.circular(40),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              themeManager.isExpandedNoteMode ? CarbonIcons.expand_all : CarbonIcons.collapse_all,
-              size: 22,
-              color: context.colors.textPrimary,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                themeManager.isExpandedNoteMode ? 'Expanded Notes' : 'Normal Notes',
-                style: TextStyle(
-                  color: context.colors.textPrimary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            Switch(
-              value: themeManager.isExpandedNoteMode,
-              onChanged: (value) => themeManager.toggleExpandedNoteMode(),
-              activeThumbColor: context.colors.accent,
-              inactiveThumbColor: context.colors.textSecondary,
-              inactiveTrackColor: context.colors.border,
-              activeTrackColor: context.colors.accent.withValues(alpha: 0.3),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildThemeToggleItem(BuildContext context, ThemeManager themeManager) {
-    return GestureDetector(
-      onTap: () => themeManager.toggleTheme(),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-        decoration: BoxDecoration(
-          color: context.colors.overlayLight,
-          borderRadius: BorderRadius.circular(40),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              themeManager.isDarkMode ? CarbonIcons.asleep : CarbonIcons.light,
-              size: 22,
-              color: context.colors.textPrimary,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                themeManager.isDarkMode ? 'Dark Mode' : 'Light Mode',
-                style: TextStyle(
-                  color: context.colors.textPrimary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            Switch(
-              value: themeManager.isDarkMode,
-              onChanged: (value) => themeManager.toggleTheme(),
-              activeThumbColor: context.colors.accent,
-              inactiveThumbColor: context.colors.textSecondary,
-              inactiveTrackColor: context.colors.border,
-              activeTrackColor: context.colors.accent.withValues(alpha: 0.3),
             ),
           ],
         ),
