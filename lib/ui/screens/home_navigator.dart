@@ -115,25 +115,28 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                     _handleNavigation(index);
                   },
                   behavior: HitTestBehavior.opaque,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    clipBehavior: Clip.none,
                     children: [
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeInOut,
-                        width: 4,
-                        height: isSelected ? 18 : 0,
-                        margin: EdgeInsets.only(right: isSelected ? 8 : 0),
-                        decoration: BoxDecoration(
-                          color: context.colors.accent,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
                       index == 3
                           ? _buildNotificationIcon(item['icon'] as String, isSelected)
                           : index == 2
                               ? _buildWalletIcon(item['icon'] as String, isSelected)
                               : _buildRegularIcon(item, isSelected),
+                      Positioned(
+                        top: -12,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeInOut,
+                          width: isSelected ? 48 : 0,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: context.colors.accent,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
