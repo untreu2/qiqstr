@@ -11,6 +11,7 @@ import 'package:qiqstr/ui/screens/notification_page.dart';
 import 'package:qiqstr/ui/screens/wallet_page.dart';
 import 'package:qiqstr/ui/screens/share_note.dart';
 import '../theme/theme_manager.dart';
+import '../widgets/indicator_widget.dart';
 
 class HomeNavigator extends StatefulWidget {
   final String npub;
@@ -131,10 +132,13 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                           curve: Curves.easeInOut,
                           width: isSelected ? 48 : 0,
                           height: 4,
-                          decoration: BoxDecoration(
-                            color: context.colors.accent,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
+                          alignment: Alignment.center,
+                          child: isSelected
+                              ? const IndicatorWidget(
+                                  orientation: IndicatorOrientation.horizontal,
+                                  size: IndicatorSize.big,
+                                )
+                              : const SizedBox.shrink(),
                         ),
                       ),
                     ],

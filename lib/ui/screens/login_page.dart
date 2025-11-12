@@ -9,6 +9,7 @@ import 'package:qiqstr/ui/screens/keys_info_page.dart';
 
 import 'package:qiqstr/ui/theme/theme_manager.dart';
 import 'package:qiqstr/ui/widgets/common_buttons.dart';
+import 'package:qiqstr/ui/widgets/indicator_widget.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -204,13 +205,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     const SizedBox(width: 12),
                     Row(
                       children: [
-                        Container(
-                          width: 8,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: context.colors.accent,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
+                        const IndicatorWidget(
+                          orientation: IndicatorOrientation.vertical,
+                          size: IndicatorSize.big,
                         ),
                         const SizedBox(width: 12),
                         Text(

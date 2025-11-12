@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/theme_manager.dart';
+import 'indicator_widget.dart';
 
 class TitleWidget extends StatelessWidget {
   final String title;
@@ -32,13 +33,9 @@ class TitleWidget extends StatelessWidget {
 
     final Widget titleRow = Row(
       children: [
-        Container(
-          width: 5,
-          height: 20,
-          decoration: BoxDecoration(
-            color: context.colors.accent,
-            borderRadius: BorderRadius.circular(2.5),
-          ),
+        const IndicatorWidget(
+          orientation: IndicatorOrientation.vertical,
+          size: IndicatorSize.small,
         ),
         const SizedBox(width: 12),
         Text(
