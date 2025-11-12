@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:carbon_icons/carbon_icons.dart';
 import '../../models/note_model.dart';
 import '../../models/user_model.dart';
 import '../../core/di/app_di.dart';
@@ -540,60 +541,113 @@ class _NoteWidgetState extends State<NoteWidget> {
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _SafeProfileSection(
-                      stateNotifier: _stateNotifier,
-                      isRepost: _isRepost,
-                      onAuthorTap: () => _navigateToProfile(_authorId),
-                      onReposterTap: _reposterId != null
-                          ? () {
-                              final reposterId = _reposterId;
-                              _navigateToProfile(reposterId);
-                            }
-                          : null,
-                      colors: colors,
-                      widgetKey: _widgetKey,
-                      isExpanded: false,
-                      formattedTimestamp: _formattedTimestamp,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _SafeUserInfoSection(
-                            stateNotifier: _stateNotifier,
-                            formattedTimestamp: _formattedTimestamp,
-                            colors: colors,
-                          ),
-                          RepaintBoundary(
-                            child: _SafeContentSection(
-                              parsedContent: _shouldTruncate ? _truncatedContent! : _parsedContent,
-                              onMentionTap: _navigateToMentionProfile,
-                              onShowMoreTap: _shouldTruncate ? (_) => _navigateToThreadPage() : null,
-                              notesListProvider: widget.notesListProvider,
-                              noteId: _noteId,
-                              authorProfileImageUrl: _stateNotifier.value.authorUser?.profileImage,
-                              authorId: _authorId,
+                    if (_isRepost && _reposterId != null)
+                      ValueListenableBuilder<_NoteState>(
+                        valueListenable: _stateNotifier,
+                        builder: (context, state, _) {
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: GestureDetector(
+                              onTap: () {
+                                final reposterId = _reposterId;
+                                _navigateToProfile(reposterId);
+                              },
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    CarbonIcons.renew,
+                                    size: 16,
+                                    color: colors.textSecondary,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  _ProfileAvatar(
+                                    imageUrl: state.reposterUser?.profileImage ?? '',
+                                    radius: 12,
+                                    colors: colors,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Reposted by ',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: colors.textSecondary,
+                                    ),
+                                  ),
+                                  Text(
+                                    state.reposterUser?.name.isNotEmpty == true
+                                        ? state.reposterUser!.name
+                                        : (state.reposterUser?.pubkeyHex.substring(0, 8) ?? 'Anonymous'),
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: colors.textSecondary,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 8),
-                          RepaintBoundary(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
-                              child: widget.currentUserNpub.isNotEmpty && widget.isVisible
-                                  ? InteractionBar(
-                                      noteId: _getInteractionNoteId(),
-                                      currentUserNpub: widget.currentUserNpub,
-                                      note: widget.note,
-                                    )
-                                  : const SizedBox(height: 32),
-                            ),
-                          ),
-                        ],
+                          );
+                        },
                       ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _SafeProfileSection(
+                          stateNotifier: _stateNotifier,
+                          isRepost: _isRepost,
+                          onAuthorTap: () => _navigateToProfile(_authorId),
+                          onReposterTap: _reposterId != null
+                              ? () {
+                                  final reposterId = _reposterId;
+                                  _navigateToProfile(reposterId);
+                                }
+                              : null,
+                          colors: colors,
+                          widgetKey: _widgetKey,
+                          isExpanded: false,
+                          formattedTimestamp: _formattedTimestamp,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _SafeUserInfoSection(
+                                stateNotifier: _stateNotifier,
+                                formattedTimestamp: _formattedTimestamp,
+                                colors: colors,
+                              ),
+                              RepaintBoundary(
+                                child: _SafeContentSection(
+                                  parsedContent: _shouldTruncate ? _truncatedContent! : _parsedContent,
+                                  onMentionTap: _navigateToMentionProfile,
+                                  onShowMoreTap: _shouldTruncate ? (_) => _navigateToThreadPage() : null,
+                                  notesListProvider: widget.notesListProvider,
+                                  noteId: _noteId,
+                                  authorProfileImageUrl: _stateNotifier.value.authorUser?.profileImage,
+                                  authorId: _authorId,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              RepaintBoundary(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                                  child: widget.currentUserNpub.isNotEmpty && widget.isVisible
+                                      ? InteractionBar(
+                                          noteId: _getInteractionNoteId(),
+                                          currentUserNpub: widget.currentUserNpub,
+                                          note: widget.note,
+                                        )
+                                      : const SizedBox(height: 32),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -635,24 +689,46 @@ class _NoteWidgetState extends State<NoteWidget> {
                               Padding(
                                 padding: EdgeInsets.only(
                                   top: 4,
-                                  bottom: hasReply ? 2 : 4,
+                                  bottom: hasReply ? 2 : 8,
                                 ),
-                                child: Row(
-                                  children: [
-                                    Icon(
-                                      Icons.repeat,
-                                      size: 14,
-                                      color: colors.textSecondary,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Reposted by ${state.reposterUser?.name ?? 'Anonymous'}',
-                                      style: TextStyle(
-                                        fontSize: 12,
+                                child: GestureDetector(
+                                  onTap: () {
+                                    final reposterId = _reposterId;
+                                    _navigateToProfile(reposterId);
+                                  },
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        CarbonIcons.renew,
+                                        size: 16,
                                         color: colors.textSecondary,
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 6),
+                                      _ProfileAvatar(
+                                        imageUrl: state.reposterUser?.profileImage ?? '',
+                                        radius: 12,
+                                        colors: colors,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Reposted by ',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: colors.textSecondary,
+                                        ),
+                                      ),
+                                      Text(
+                                        state.reposterUser?.name.isNotEmpty == true
+                                            ? state.reposterUser!.name
+                                            : (state.reposterUser?.pubkeyHex.substring(0, 8) ?? 'Anonymous'),
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: colors.textSecondary,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             if (hasReply)
@@ -834,41 +910,17 @@ class _SafeProfileSection extends StatelessWidget {
 
   Widget _buildNormalProfile(_NoteState state) {
     final authorImageUrl = state.authorUser?.profileImage ?? '';
-    final reposterImageUrl = state.reposterUser?.profileImage ?? '';
     
-    return Stack(
-      children: [
-        Padding(
-          padding: isRepost ? const EdgeInsets.only(top: 8, left: 10) : const EdgeInsets.only(top: 8),
-          child: GestureDetector(
-            onTap: onAuthorTap,
-            child: _ProfileAvatar(
-              imageUrl: authorImageUrl,
-              radius: 22,
-              colors: colors,
-            ),
-          ),
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: GestureDetector(
+        onTap: onAuthorTap,
+        child: _ProfileAvatar(
+          imageUrl: authorImageUrl,
+          radius: 22,
+          colors: colors,
         ),
-        if (isRepost && state.reposterUser != null)
-          Positioned(
-            top: 0,
-            left: 0,
-            child: GestureDetector(
-              onTap: onReposterTap,
-              child: Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: colors.surface,
-                ),
-                child: _ProfileAvatar(
-                  imageUrl: reposterImageUrl,
-                  radius: 12,
-                  colors: colors,
-                ),
-              ),
-            ),
-          ),
-      ],
+      ),
     );
   }
 
