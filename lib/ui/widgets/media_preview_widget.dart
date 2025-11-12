@@ -82,72 +82,107 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
         ),
       );
     } else if (imageUrls.length == 2) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(MediaPreviewWidget.borderRadius),
-        child: Row(
+      return Row(
         children: [
           Expanded(
-            child: _buildImage(
-              context,
-              imageUrls[0],
-              0,
-              imageUrls,
-              aspectRatio: 1.0,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(MediaPreviewWidget.borderRadius),
+                bottomLeft: Radius.circular(MediaPreviewWidget.borderRadius),
+              ),
+              child: _buildImage(
+                context,
+                imageUrls[0],
+                0,
+                imageUrls,
+                aspectRatio: 1.0,
+              ),
             ),
           ),
           const SizedBox(width: 4),
           Expanded(
-            child: _buildImage(
-              context,
-              imageUrls[1],
-              1,
-              imageUrls,
-              aspectRatio: 1.0,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(MediaPreviewWidget.borderRadius),
+                bottomRight: Radius.circular(MediaPreviewWidget.borderRadius),
+              ),
+              child: _buildImage(
+                context,
+                imageUrls[1],
+                1,
+                imageUrls,
+                aspectRatio: 1.0,
+              ),
             ),
           ),
         ],
-      ),
       );
     } else if (imageUrls.length == 3) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(MediaPreviewWidget.borderRadius),
-        child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: _buildImage(
-              context,
-              imageUrls[0],
-              0,
-              imageUrls,
-              aspectRatio: 1.0,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            flex: 1,
-            child: Column(
-              children: [
-                _buildImage(
-                  context,
-                  imageUrls[1],
-                  1,
-                  imageUrls,
-                  aspectRatio: 1.0,
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final totalWidth = constraints.maxWidth;
+          final spacing = 4.0;
+          final rightWidth = (totalWidth - spacing) / 3;
+          final leftWidth = (totalWidth - spacing) * 2 / 3;
+          final rightImageHeight = rightWidth;
+          final totalRightHeight = rightImageHeight * 2 + spacing;
+          final leftAspectRatio = leftWidth / totalRightHeight;
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 2,
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(MediaPreviewWidget.borderRadius),
+                    bottomLeft: Radius.circular(MediaPreviewWidget.borderRadius),
+                  ),
+                  child: _buildImage(
+                    context,
+                    imageUrls[0],
+                    0,
+                    imageUrls,
+                    aspectRatio: leftAspectRatio,
+                  ),
                 ),
-                const SizedBox(height: 4),
-                _buildImage(
-                  context,
-                  imageUrls[2],
-                  2,
-                  imageUrls,
-                  aspectRatio: 1.0,
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                flex: 1,
+                child: Column(
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.only(
+                        topRight: Radius.circular(MediaPreviewWidget.borderRadius),
+                      ),
+                      child: _buildImage(
+                        context,
+                        imageUrls[1],
+                        1,
+                        imageUrls,
+                        aspectRatio: 1.0,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    ClipRRect(
+                      borderRadius: const BorderRadius.only(
+                        bottomRight: Radius.circular(MediaPreviewWidget.borderRadius),
+                      ),
+                      child: _buildImage(
+                        context,
+                        imageUrls[2],
+                        2,
+                        imageUrls,
+                        aspectRatio: 1.0,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-        ],
-      ),
+              ),
+            ],
+          );
+        },
       );
     } else {
       int itemCount = imageUrls.length >= 4 ? 4 : imageUrls.length;
