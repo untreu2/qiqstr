@@ -434,12 +434,16 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
   }
 
   void _showReceiveDialog() {
+    final themeManager = context.themeManager;
+    final oppositeColors = themeManager?.isDarkMode == true 
+        ? AppThemeColors.light() 
+        : AppThemeColors.dark();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: context.colors.background,
+      backgroundColor: oppositeColors.background,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.zero,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) => ReceiveDialog(
         walletRepository: _walletRepository,
@@ -449,12 +453,16 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
   }
 
   void _showSendDialog() {
+    final themeManager = context.themeManager;
+    final oppositeColors = themeManager?.isDarkMode == true 
+        ? AppThemeColors.light() 
+        : AppThemeColors.dark();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: context.colors.background,
+      backgroundColor: oppositeColors.background,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.zero,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) => SendDialog(
         walletRepository: _walletRepository,

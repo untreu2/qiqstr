@@ -9,6 +9,7 @@ import '../../utils/logout.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../widgets/title_widget.dart';
+import '../widgets/dialogs/logout_dialog.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -157,7 +158,12 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _buildLogoutItem(BuildContext context) {
     return GestureDetector(
-      onTap: () => Logout.performLogout(context),
+      onTap: () {
+        showLogoutDialog(
+          context: context,
+          onConfirm: () => Logout.performLogout(context),
+        );
+      },
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),

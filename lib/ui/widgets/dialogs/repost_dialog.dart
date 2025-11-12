@@ -14,12 +14,16 @@ Future<void> showRepostDialog({
   required NoteModel note,
   VoidCallback? onRepostSuccess,
 }) async {
+  final themeManager = context.themeManager;
+  final oppositeColors = themeManager?.isDarkMode == true 
+      ? AppThemeColors.light() 
+      : AppThemeColors.dark();
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: context.colors.background,
+    backgroundColor: oppositeColors.background,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.zero,
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
     builder: (modalContext) => Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
@@ -36,18 +40,18 @@ Future<void> showRepostDialog({
               padding: const EdgeInsets.symmetric(vertical: 12),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: context.colors.buttonPrimary,
+                color: oppositeColors.buttonPrimary,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.repeat, color: context.colors.buttonText, size: 20),
+                  Icon(Icons.repeat, color: oppositeColors.buttonText, size: 20),
                   const SizedBox(width: 8),
                   Text(
                     'Repost',
                     style: TextStyle(
-                      color: context.colors.buttonText,
+                      color: oppositeColors.buttonText,
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
                     ),
@@ -77,18 +81,18 @@ Future<void> showRepostDialog({
               padding: const EdgeInsets.symmetric(vertical: 12),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: context.colors.overlayLight,
+                color: oppositeColors.overlayLight,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.format_quote, color: context.colors.textPrimary, size: 20),
+                  Icon(Icons.format_quote, color: oppositeColors.textPrimary, size: 20),
                   const SizedBox(width: 8),
                   Text(
                     'Quote',
                     style: TextStyle(
-                      color: context.colors.textPrimary,
+                      color: oppositeColors.textPrimary,
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
                     ),

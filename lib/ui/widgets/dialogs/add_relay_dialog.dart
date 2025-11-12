@@ -9,12 +9,16 @@ Future<void> showAddRelayDialog({
   required VoidCallback onAdd,
 }) async {
   controller.clear();
+  final themeManager = context.themeManager;
+  final oppositeColors = themeManager?.isDarkMode == true 
+      ? AppThemeColors.light() 
+      : AppThemeColors.dark();
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: context.colors.background,
+    backgroundColor: oppositeColors.background,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.zero,
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
     builder: (modalContext) => Padding(
       padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(modalContext).viewInsets.bottom + 40),
@@ -25,17 +29,17 @@ Future<void> showAddRelayDialog({
             controller: controller,
             autofocus: true,
             style: TextStyle(
-              color: context.colors.textPrimary,
+              color: oppositeColors.textPrimary,
               fontSize: 15,
             ),
             decoration: InputDecoration(
               hintText: 'wss://relay.example.com',
               hintStyle: TextStyle(
-                color: context.colors.textSecondary,
+                color: oppositeColors.textSecondary,
                 fontSize: 15,
               ),
               filled: true,
-              fillColor: context.colors.inputFill,
+              fillColor: oppositeColors.inputFill,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(25),
                 borderSide: BorderSide.none,
@@ -60,8 +64,8 @@ Future<void> showAddRelayDialog({
             child: SecondaryButton(
               label: 'Cancel',
               onPressed: () => Navigator.pop(modalContext),
-              backgroundColor: context.colors.overlayLight,
-              foregroundColor: context.colors.textPrimary,
+              backgroundColor: oppositeColors.overlayLight,
+              foregroundColor: oppositeColors.textPrimary,
               size: ButtonSize.large,
             ),
           ),

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:qiqstr/data/services/auth_service.dart';
 import 'package:qiqstr/ui/screens/home_navigator.dart';
 import 'package:qiqstr/ui/screens/edit_new_account_profile.dart';
@@ -9,7 +7,7 @@ import 'package:qiqstr/ui/screens/keys_info_page.dart';
 
 import 'package:qiqstr/ui/theme/theme_manager.dart';
 import 'package:qiqstr/ui/widgets/common_buttons.dart';
-import 'package:qiqstr/ui/widgets/indicator_widget.dart';
+import 'package:qiqstr/ui/widgets/brand_widget.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -189,40 +187,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             builder: (context, child) {
               return Transform.scale(
                 scale: _bounceAnimation.value,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 24),
-                      child: SvgPicture.asset(
-                        'assets/main_icon_white.svg',
-                        width: 50,
-                        height: 50,
-                        colorFilter: ColorFilter.mode(context.colors.textPrimary, BlendMode.srcIn),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Row(
-                      children: [
-                        const IndicatorWidget(
-                          orientation: IndicatorOrientation.vertical,
-                          size: IndicatorSize.big,
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          'qiqstr',
-                          style: GoogleFonts.poppins(
-                            fontSize: 48,
-                            fontWeight: FontWeight.w700,
-                            color: context.colors.textPrimary,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                child: const BrandWidget(),
               );
             },
           ),

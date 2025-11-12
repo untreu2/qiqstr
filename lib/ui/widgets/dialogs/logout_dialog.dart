@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import '../../theme/theme_manager.dart';
 import '../common_buttons.dart';
 
-Future<void> showUnfollowUserDialog({
+Future<void> showLogoutDialog({
   required BuildContext context,
-  required String userName,
   required VoidCallback onConfirm,
 }) async {
   final themeManager = context.themeManager;
@@ -29,11 +28,21 @@ Future<void> showUnfollowUserDialog({
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Unfollow $userName?',
+            'Are you sure you want to logout?',
             style: TextStyle(
               color: oppositeColors.textPrimary,
               fontSize: 20,
               fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'IF YOU HAVEN\'T SAVED YOUR SEED PHRASE, YOU WILL LOSE YOUR ACCOUNT FOREVER.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: oppositeColors.textSecondary,
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
             ),
           ),
           const SizedBox(height: 24),
@@ -49,7 +58,7 @@ Future<void> showUnfollowUserDialog({
               const SizedBox(width: 12),
               Expanded(
                 child: SecondaryButton(
-                  label: 'Unfollow',
+                  label: 'Logout',
                   onPressed: () {
                     Navigator.pop(modalContext);
                     onConfirm();

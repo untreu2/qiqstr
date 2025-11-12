@@ -6,11 +6,17 @@ Future<void> showDeleteNoteDialog({
   required BuildContext context,
   required VoidCallback onConfirm,
 }) async {
+  final themeManager = context.themeManager;
+  final oppositeColors = themeManager?.isDarkMode == true 
+      ? AppThemeColors.light() 
+      : AppThemeColors.dark();
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: context.colors.background,
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+    backgroundColor: oppositeColors.background,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
     builder: (modalContext) => Padding(
       padding: EdgeInsets.only(
         left: 16,
@@ -24,7 +30,7 @@ Future<void> showDeleteNoteDialog({
           Text(
             'Delete this post?',
             style: TextStyle(
-              color: context.colors.textPrimary,
+              color: oppositeColors.textPrimary,
               fontSize: 20,
               fontWeight: FontWeight.w600,
             ),
@@ -36,6 +42,7 @@ Future<void> showDeleteNoteDialog({
                 child: PrimaryButton(
                   label: 'Cancel',
                   onPressed: () => Navigator.pop(modalContext),
+                  size: ButtonSize.large,
                 ),
               ),
               const SizedBox(width: 12),
@@ -46,8 +53,9 @@ Future<void> showDeleteNoteDialog({
                     Navigator.pop(modalContext);
                     onConfirm();
                   },
-                  backgroundColor: context.colors.error.withValues(alpha: 0.1),
-                  foregroundColor: context.colors.error,
+                  backgroundColor: oppositeColors.error.withValues(alpha: 0.1),
+                  foregroundColor: oppositeColors.error,
+                  size: ButtonSize.large,
                 ),
               ),
             ],

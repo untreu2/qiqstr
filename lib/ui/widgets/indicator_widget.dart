@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../theme/theme_manager.dart';
 
 enum IndicatorOrientation {
@@ -25,39 +26,43 @@ class IndicatorWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final double width;
-    final double height;
-    final double borderRadius;
+    return Consumer<ThemeManager>(
+      builder: (context, themeManager, child) {
+        final double width;
+        final double height;
+        final double borderRadius;
 
-    if (orientation == IndicatorOrientation.horizontal) {
-      if (size == IndicatorSize.small) {
-        width = 18;
-        height = 3;
-        borderRadius = 1.5;
-      } else {
-        width = 48;
-        height = 4;
-        borderRadius = 2;
-      }
-    } else {
-      if (size == IndicatorSize.small) {
-        width = 5;
-        height = 20;
-        borderRadius = 2.5;
-      } else {
-        width = 8;
-        height = 40;
-        borderRadius = 4;
-      }
-    }
+        if (orientation == IndicatorOrientation.horizontal) {
+          if (size == IndicatorSize.small) {
+            width = 18;
+            height = 3;
+            borderRadius = 1.5;
+          } else {
+            width = 48;
+            height = 4;
+            borderRadius = 2;
+          }
+        } else {
+          if (size == IndicatorSize.small) {
+            width = 5;
+            height = 20;
+            borderRadius = 2.5;
+          } else {
+            width = 8;
+            height = 40;
+            borderRadius = 4;
+          }
+        }
 
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        color: color ?? context.colors.accent,
-        borderRadius: BorderRadius.circular(borderRadius),
-      ),
+        return Container(
+          width: width,
+          height: height,
+          decoration: BoxDecoration(
+            color: color ?? themeManager.colors.accent,
+            borderRadius: BorderRadius.circular(borderRadius),
+          ),
+        );
+      },
     );
   }
 }

@@ -250,12 +250,18 @@ Future<Map<String, dynamic>> showZapDialog({
 }) async {
   final amountController = TextEditingController(text: '21');
   final noteController = TextEditingController();
+  final themeManager = context.themeManager;
+  final oppositeColors = themeManager?.isDarkMode == true 
+      ? AppThemeColors.light() 
+      : AppThemeColors.dark();
 
   final result = await showModalBottomSheet<Map<String, dynamic>>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: context.colors.background,
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+    backgroundColor: oppositeColors.background,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
     builder: (modalContext) => StatefulBuilder(
       builder: (context, setState) {
         return Padding(
@@ -266,15 +272,15 @@ Future<Map<String, dynamic>> showZapDialog({
               TextField(
                 controller: amountController,
                 keyboardType: TextInputType.number,
-                style: TextStyle(color: context.colors.textPrimary),
+                style: TextStyle(color: oppositeColors.textPrimary),
                 decoration: InputDecoration(
                   labelText: 'Amount (sats)',
                   labelStyle: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: context.colors.textSecondary,
+                    color: oppositeColors.textSecondary,
                   ),
                   filled: true,
-                  fillColor: context.colors.inputFill,
+                  fillColor: oppositeColors.inputFill,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(25),
                     borderSide: BorderSide.none,
@@ -285,15 +291,15 @@ Future<Map<String, dynamic>> showZapDialog({
               const SizedBox(height: 16),
               TextField(
                 controller: noteController,
-                style: TextStyle(color: context.colors.textPrimary),
+                style: TextStyle(color: oppositeColors.textPrimary),
                 decoration: InputDecoration(
                   labelText: 'Comment (Optional)',
                   labelStyle: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: context.colors.textSecondary,
+                    color: oppositeColors.textSecondary,
                   ),
                   filled: true,
-                  fillColor: context.colors.inputFill,
+                  fillColor: oppositeColors.inputFill,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(25),
                     borderSide: BorderSide.none,
@@ -322,13 +328,13 @@ Future<Map<String, dynamic>> showZapDialog({
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: context.colors.buttonPrimary,
+                    color: oppositeColors.buttonPrimary,
                     borderRadius: BorderRadius.circular(40),
                   ),
                   child: Text(
                     'Send',
                     style: TextStyle(
-                      color: context.colors.buttonText,
+                      color: oppositeColors.buttonText,
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
                     ),

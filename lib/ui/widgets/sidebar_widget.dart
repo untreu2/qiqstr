@@ -11,7 +11,8 @@ import '../../core/di/app_di.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/services/nostr_data_service.dart';
-import 'title_widget.dart';
+import 'brand_widget.dart';
+import 'indicator_widget.dart';
 
 class SidebarWidget extends StatefulWidget {
   const SidebarWidget({super.key});
@@ -163,28 +164,13 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                 : Column(
                     children: [
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 68, 20, 0),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(top: 12),
-                              child: SvgPicture.asset(
-                                'assets/main_icon_white.svg',
-                                width: 30,
-                                height: 30,
-                                colorFilter: ColorFilter.mode(colors.textPrimary, BlendMode.srcIn),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: TitleWidget(
-                                title: 'qiqstr',
-                                padding: EdgeInsets.zero,
-                                useTopPadding: false,
-                              ),
-                            ),
-                          ],
+                        padding: const EdgeInsets.fromLTRB(28, 68, 20, 0),
+                        child: _UserProfileHeader(
+                          user: _currentUser!,
+                          colors: colors,
+                          followerCount: _followerCount,
+                          followingCount: _followingCount,
+                          isLoadingCounts: _isLoadingCounts,
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -192,14 +178,6 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                         height: 1,
                         thickness: 1,
                         color: colors.borderLight,
-                      ),
-                      const SizedBox(height: 16),
-                      _UserProfileHeader(
-                        user: _currentUser!,
-                        colors: colors,
-                        followerCount: _followerCount,
-                        followingCount: _followingCount,
-                        isLoadingCounts: _isLoadingCounts,
                       ),
                       _SidebarContent(user: _currentUser!, colors: colors),
                     ],
@@ -229,7 +207,7 @@ class _UserProfileHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+      padding: const EdgeInsets.fromLTRB(0, 8, 20, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -386,14 +364,12 @@ class _SidebarContent extends StatelessWidget {
                     ]),
                   ),
                 ),
-                SliverFillRemaining(
-                  hasScrollBody: false,
+                SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Column(
                       children: [
-                        const Spacer(),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 275),
                         _buildModernSidebarItem(
                           context: context,
                           colors: colors,
@@ -406,7 +382,47 @@ class _SidebarContent extends StatelessWidget {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 150),
+                        const SizedBox(height: 20),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: BrandWidget(
+                                  iconSize: 30,
+                                  indicatorSize: IndicatorSize.small,
+                                  fontSize: 28,
+                                  iconTopPadding: 12,
+                                  mainAxisAlignment: MainAxisAlignment.start,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: GestureDetector(
+                                  onTap: () {
+                                    // TODO: Implement favorite/like functionality
+                                  },
+                                  child: Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      color: colors.accent.withValues(alpha: 0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Icon(
+                                      Icons.favorite,
+                                      size: 24,
+                                      color: colors.accent,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
                       ],
                     ),
                   ),
