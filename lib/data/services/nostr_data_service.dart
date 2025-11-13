@@ -2674,18 +2674,11 @@ class NostrDataService {
   Future<void> _fetchInteractionCountsForNotesImmediately(List<String> noteIds) async {
     if (noteIds.isEmpty) return;
 
-    final totalRequests = noteIds.length * 4;
-    debugPrint('[NostrDataService] Fetching interaction counts IMMEDIATELY using NIP-45 for ${noteIds.length} notes ($totalRequests queries)...');
+    debugPrint('[NostrDataService] Fetching interaction counts IMMEDIATELY for ${noteIds.length} notes using normal events...');
 
     try {
-      for (final noteId in noteIds) {
-        _fetchCountForNoteWithRetry(noteId, 7, maxRetries: 3);
-        _fetchCountForNoteWithRetry(noteId, 1, maxRetries: 3);
-        _fetchCountForNoteWithRetry(noteId, 6, maxRetries: 3);
-        _fetchCountForNoteWithRetry(noteId, 9735, maxRetries: 3);
-      }
-
-      debugPrint('[NostrDataService] $totalRequests COUNT requests sent IMMEDIATELY (parallel)');
+      await _fetchInteractionsForNotes(noteIds);
+      debugPrint('[NostrDataService] Interaction counts fetched IMMEDIATELY for ${noteIds.length} notes');
     } catch (e) {
       debugPrint('[NostrDataService] Error fetching interaction counts: $e');
     }
@@ -2694,116 +2687,13 @@ class NostrDataService {
   Future<void> _fetchInteractionCountsForNotes(List<String> noteIds) async {
     if (noteIds.isEmpty) return;
 
-    final totalRequests = noteIds.length * 4;
-    debugPrint('[NostrDataService] Fetching interaction counts using NIP-45 for ${noteIds.length} notes ($totalRequests queries)...');
+    debugPrint('[NostrDataService] Fetching interaction counts for ${noteIds.length} notes using normal events...');
 
     try {
-      for (final noteId in noteIds) {
-        _fetchCountForNoteWithRetry(noteId, 7, maxRetries: 3);
-        _fetchCountForNoteWithRetry(noteId, 1, maxRetries: 3);
-        _fetchCountForNoteWithRetry(noteId, 6, maxRetries: 3);
-        _fetchCountForNoteWithRetry(noteId, 9735, maxRetries: 3);
-      }
-
-      debugPrint('[NostrDataService] $totalRequests COUNT requests sent (parallel)');
+      await _fetchInteractionsForNotes(noteIds);
+      debugPrint('[NostrDataService] Interaction counts fetched for ${noteIds.length} notes');
     } catch (e) {
       debugPrint('[NostrDataService] Error fetching interaction counts: $e');
-    }
-  }
-
-  Future<void> _fetchCountForNoteWithRetry(String noteId, int kind, {int maxRetries = 3, int attempt = 1}) async {
-    try {
-      final filterMap = <String, dynamic>{
-        'kinds': [kind],
-        '#e': [noteId],
-      };
-      final subscriptionId = NostrService.generateUUID();
-      
-      final completer = Completer<void>();
-      
-      _pendingCountRequests[subscriptionId] = {
-        'kind': kind,
-        'noteId': noteId,
-        'completer': completer,
-        'attempt': attempt,
-      };
-      
-      final countRequest = jsonEncode(['COUNT', subscriptionId, filterMap]);
-      
-      final ws = _relayManager.webSockets[countRelayUrl];
-      if (ws != null && ws.readyState == WebSocket.open) {
-        ws.add(countRequest);
-        
-        final kindName = _getKindName(kind);
-        if (attempt == 1) {
-          debugPrint('[NostrDataService] COUNT → $noteId ($kindName)');
-        } else {
-          debugPrint('[NostrDataService] COUNT → $noteId ($kindName) - retry $attempt/$maxRetries');
-        }
-        
-        try {
-          await completer.future.timeout(
-            const Duration(seconds: 3),
-            onTimeout: () {
-              _pendingCountRequests.remove(subscriptionId);
-              throw TimeoutException('COUNT timeout');
-            },
-          );
-        } on TimeoutException {
-          if (attempt < maxRetries) {
-            debugPrint('[NostrDataService] TIMEOUT $noteId ($kindName), retrying...');
-            await Future.delayed(Duration(milliseconds: 500 * attempt));
-            return _fetchCountForNoteWithRetry(noteId, kind, maxRetries: maxRetries, attempt: attempt + 1);
-          } else {
-            debugPrint('[NostrDataService] FAILED ✗ $noteId ($kindName) after $maxRetries attempts');
-            _setDefaultCount(noteId, kind);
-          }
-        } catch (e) {
-          if (e.toString().contains('CLOSED')) {
-            debugPrint('[NostrDataService] RELAY REFUSED ✗ $noteId ($kindName) - not retrying');
-            _setDefaultCount(noteId, kind);
-          } else if (attempt < maxRetries) {
-            debugPrint('[NostrDataService] ERROR $noteId ($kindName): $e - retrying...');
-            await Future.delayed(Duration(milliseconds: 500 * attempt));
-            return _fetchCountForNoteWithRetry(noteId, kind, maxRetries: maxRetries, attempt: attempt + 1);
-          } else {
-            debugPrint('[NostrDataService] FAILED ✗ $noteId ($kindName) - $e');
-            _setDefaultCount(noteId, kind);
-          }
-        }
-      } else {
-        _pendingCountRequests.remove(subscriptionId);
-        debugPrint('[NostrDataService] WebSocket not ready for COUNT request');
-        _setDefaultCount(noteId, kind);
-      }
-    } catch (e) {
-      debugPrint('[NostrDataService] Exception in COUNT request for $noteId kind $kind: $e');
-      _setDefaultCount(noteId, kind);
-    }
-  }
-
-  void _setDefaultCount(String noteId, int kind) {
-    final note = _noteCache[noteId];
-    if (note == null) return;
-
-    final kindName = _getKindName(kind);
-    debugPrint('[NostrDataService] Keeping existing count for $noteId ($kindName) - COUNT query failed');
-    
-    _notesController.add(_getNotesList());
-  }
-
-  String _getKindName(int kind) {
-    switch (kind) {
-      case 1:
-        return 'replies';
-      case 6:
-        return 'reposts';
-      case 7:
-        return 'reactions';
-      case 9735:
-        return 'zaps';
-      default:
-        return 'kind-$kind';
     }
   }
 
@@ -2828,71 +2718,6 @@ class NostrDataService {
           _pendingCountRequests.remove(subscriptionId);
           return;
         }
-        
-        final kind = requestData['kind'] as int;
-        final noteId = requestData['noteId'] as String;
-        final kindName = _getKindName(kind);
-        
-        final note = _noteCache[noteId];
-        if (note != null) {
-          switch (kind) {
-            case 7:
-              final oldCount = note.reactionCount;
-              if (count >= oldCount) {
-                note.reactionCount = count;
-                if (count > oldCount) {
-                  debugPrint('[NostrDataService] COUNT ✓ Note $noteId reactions: $oldCount → $count');
-                } else {
-                  debugPrint('[NostrDataService] COUNT ✓ Note $noteId reactions: $count');
-                }
-              } else {
-                debugPrint('[NostrDataService] COUNT ⚠ Note $noteId reactions: kept $oldCount (received $count)');
-              }
-              break;
-            case 1:
-              final oldCount = note.replyCount;
-              if (count >= oldCount) {
-                note.replyCount = count;
-                if (count > oldCount) {
-                  debugPrint('[NostrDataService] COUNT ✓ Note $noteId replies: $oldCount → $count');
-                } else {
-                  debugPrint('[NostrDataService] COUNT ✓ Note $noteId replies: $count');
-                }
-              } else {
-                debugPrint('[NostrDataService] COUNT ⚠ Note $noteId replies: kept $oldCount (received $count)');
-              }
-              break;
-            case 6:
-              final oldCount = note.repostCount;
-              if (count >= oldCount) {
-                note.repostCount = count;
-                if (count > oldCount) {
-                  debugPrint('[NostrDataService] COUNT ✓ Note $noteId reposts: $oldCount → $count');
-                } else {
-                  debugPrint('[NostrDataService] COUNT ✓ Note $noteId reposts: $count');
-                }
-              } else {
-                debugPrint('[NostrDataService] COUNT ⚠ Note $noteId reposts: kept $oldCount (received $count)');
-              }
-              break;
-            case 9735:
-              debugPrint('[NostrDataService] COUNT ✓ Note $noteId zaps = $count');
-              break;
-          }
-          
-          if (requestData.containsKey('completer')) {
-            final completer = requestData['completer'] as Completer<void>;
-            if (!completer.isCompleted) {
-              completer.complete();
-            }
-          }
-          
-          _notesController.add(_getNotesList());
-        } else {
-          debugPrint('[NostrDataService] COUNT response for unknown note: $noteId ($kindName)');
-        }
-
-        _pendingCountRequests.remove(subscriptionId);
       }
     } catch (e) {
       debugPrint('[NostrDataService] Error handling COUNT response: $e');
@@ -2916,19 +2741,6 @@ class NostrDataService {
           }
           _pendingCountRequests.remove(subscriptionId);
           return;
-        }
-        
-        final kind = requestData['kind'] as int;
-        final noteId = requestData['noteId'] as String;
-        final kindName = _getKindName(kind);
-        
-        debugPrint('[NostrDataService] CLOSED ✗ COUNT for $noteId ($kindName) - reason: $reason');
-        
-        if (requestData.containsKey('completer')) {
-          final completer = requestData['completer'] as Completer<void>;
-          if (!completer.isCompleted) {
-            completer.completeError('CLOSED: $reason');
-          }
         }
         
         _pendingCountRequests.remove(subscriptionId);
