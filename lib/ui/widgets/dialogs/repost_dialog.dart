@@ -14,14 +14,10 @@ Future<void> showRepostDialog({
   required NoteModel note,
   VoidCallback? onRepostSuccess,
 }) async {
-  final themeManager = context.themeManager;
-  final oppositeColors = themeManager?.isDarkMode == true 
-      ? AppThemeColors.light() 
-      : AppThemeColors.dark();
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: oppositeColors.background,
+    backgroundColor: context.colors.background,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
@@ -40,18 +36,18 @@ Future<void> showRepostDialog({
               padding: const EdgeInsets.symmetric(vertical: 12),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: oppositeColors.buttonPrimary,
+                color: context.colors.buttonPrimary,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.repeat, color: oppositeColors.buttonText, size: 20),
+                  Icon(Icons.repeat, color: context.colors.buttonText, size: 20),
                   const SizedBox(width: 8),
                   Text(
                     'Repost',
                     style: TextStyle(
-                      color: oppositeColors.buttonText,
+                      color: context.colors.buttonText,
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
                     ),
@@ -81,18 +77,18 @@ Future<void> showRepostDialog({
               padding: const EdgeInsets.symmetric(vertical: 12),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: oppositeColors.overlayLight,
+                color: context.colors.overlayLight,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.format_quote, color: oppositeColors.textPrimary, size: 20),
+                  Icon(Icons.format_quote, color: context.colors.textPrimary, size: 20),
                   const SizedBox(width: 8),
                   Text(
                     'Quote',
                     style: TextStyle(
-                      color: oppositeColors.textPrimary,
+                      color: context.colors.textPrimary,
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
                     ),

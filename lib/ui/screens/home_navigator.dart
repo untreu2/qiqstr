@@ -130,7 +130,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 300),
                           curve: Curves.easeInOut,
-                          width: isSelected ? 48 : 0,
+                          width: isSelected ? 56 : 0,
                           height: 4,
                           alignment: Alignment.center,
                           child: isSelected

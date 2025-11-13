@@ -13,6 +13,7 @@ import '../../data/repositories/user_repository.dart';
 import '../../data/services/nostr_data_service.dart';
 import 'brand_widget.dart';
 import 'indicator_widget.dart';
+import 'accent_heart_widget.dart';
 
 class SidebarWidget extends StatefulWidget {
   const SidebarWidget({super.key});
@@ -400,23 +401,10 @@ class _SidebarContent extends StatelessWidget {
                               const SizedBox(width: 12),
                               Padding(
                                 padding: const EdgeInsets.only(top: 8),
-                                child: GestureDetector(
+                                child: AccentHeartWidget(
                                   onTap: () {
                                     // TODO: Implement favorite/like functionality
                                   },
-                                  child: Container(
-                                    width: 48,
-                                    height: 48,
-                                    decoration: BoxDecoration(
-                                      color: colors.accent.withValues(alpha: 0.1),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      Icons.favorite,
-                                      size: 24,
-                                      color: colors.accent,
-                                    ),
-                                  ),
                                 ),
                               ),
                             ],

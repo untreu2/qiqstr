@@ -38,7 +38,7 @@ class IndicatorWidget extends StatelessWidget {
             height = 3;
             borderRadius = 1.5;
           } else {
-            width = 48;
+            width = 56;
             height = 4;
             borderRadius = 2;
           }

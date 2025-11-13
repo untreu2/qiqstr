@@ -93,7 +93,7 @@ class AppColors {
 class AppColorsLight {
   static const Color primary = Color(0xFF2D2D2D);
   static const Color secondary = Color.fromARGB(255, 74, 69, 69);
-  static const Color accent = Color.fromARGB(255, 140, 0, 125);
+  static const Color accent = Color.fromARGB(255, 140, 60, 130);
 
   static const Color background = Colors.white;
   static const Color surface = Colors.white;
