@@ -499,9 +499,64 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Future<void> _sendNote(String content) async {
-    // Extract hashtags from content and create t tags
     final hashtags = _extractHashtags(content);
     final tags = _createHashtagTags(hashtags);
+    
+    final additionalTags = <List<String>>[];
+    additionalTags.addAll(tags);
+    
+    if (widget.initialText != null && widget.initialText!.startsWith('nostr:')) {
+      final cleanId = widget.initialText!.replaceFirst('nostr:', '');
+      
+      if (cleanId.startsWith('note1')) {
+        try {
+          final eventIdHex = decodeBasicBech32(cleanId, 'note');
+          additionalTags.add(['e', eventIdHex]);
+          debugPrint('[ShareNotePage] Added e tag for note: $eventIdHex');
+        } catch (e) {
+          debugPrint('[ShareNotePage] Error decoding note1 to hex: $e');
+        }
+      } else if (cleanId.startsWith('npub1')) {
+        try {
+          final pubkeyHex = decodeBasicBech32(cleanId, 'npub');
+          additionalTags.add(['p', pubkeyHex]);
+          debugPrint('[ShareNotePage] Added p tag for profile: $pubkeyHex');
+        } catch (e) {
+          debugPrint('[ShareNotePage] Error decoding npub1 to hex: $e');
+        }
+      } else if (RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(cleanId)) {
+        additionalTags.add(['e', cleanId]);
+        debugPrint('[ShareNotePage] Added e tag for hex event ID: $cleanId');
+      }
+    }
+    
+    if (_isReply() && widget.replyToNoteId != null) {
+      try {
+        String eventIdHex;
+        if (widget.replyToNoteId!.startsWith('note1')) {
+          eventIdHex = decodeBasicBech32(widget.replyToNoteId!, 'note');
+        } else if (RegExp(r'^[0-9a-fA-F]{64}$').hasMatch(widget.replyToNoteId!)) {
+          eventIdHex = widget.replyToNoteId!;
+        } else {
+          eventIdHex = widget.replyToNoteId!;
+        }
+        
+        bool hasETag = false;
+        for (final tag in additionalTags) {
+          if (tag.isNotEmpty && tag[0] == 'e' && tag.length > 1 && tag[1] == eventIdHex) {
+            hasETag = true;
+            break;
+          }
+        }
+        
+        if (!hasETag) {
+          additionalTags.add(['e', eventIdHex]);
+          debugPrint('[ShareNotePage] Added e tag for reply: $eventIdHex');
+        }
+      } catch (e) {
+        debugPrint('[ShareNotePage] Error processing replyToNoteId: $e');
+      }
+    }
 
     if (_isReply()) {
       final result = await _noteRepository.postReply(
@@ -509,7 +564,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
         rootId: widget.replyToNoteId!,
         parentAuthor: 'unknown',
         relayUrls: ['wss://relay.damus.io'],
-        additionalTags: tags,
+        additionalTags: additionalTags,
       );
 
       if (result.isError) {
@@ -519,7 +574,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
       debugPrint('[ShareNotePage] Sending as regular note with content: ${content.length > 100 ? content.substring(0, 100) : content}...');
       final result = await _noteRepository.postNote(
         content: content,
-        tags: tags,
+        tags: additionalTags,
       );
 
       if (result.isError) {

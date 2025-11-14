@@ -93,27 +93,36 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
     }
     _lastVisibilityCheck = now;
     
-    final renderObject = _widgetKey.currentContext?.findRenderObject();
-    if (renderObject is RenderBox && renderObject.attached) {
-      final position = renderObject.localToGlobal(Offset.zero);
-      final size = renderObject.size;
-      final screenHeight = MediaQuery.of(context).size.height;
-      final screenWidth = MediaQuery.of(context).size.width;
-      
-      final isVisible = position.dy < screenHeight && 
-                       position.dy + size.height > 0 &&
-                       position.dx < screenWidth &&
-                       position.dx + size.width > 0;
-      
-      if (isVisible != _isVisible) {
-        _isVisible = isVisible;
-        if (!_isVisible) {
-          if (_controller!.value.isPlaying) {
-            _controller!.pause();
-            setState(() => _isPlaying = false);
+    try {
+      final renderObject = _widgetKey.currentContext?.findRenderObject();
+      if (renderObject is RenderBox && 
+          renderObject.attached && 
+          renderObject.hasSize) {
+        final position = renderObject.localToGlobal(Offset.zero);
+        final size = renderObject.size;
+        
+        if (!mounted) return;
+        
+        final screenHeight = MediaQuery.of(context).size.height;
+        final screenWidth = MediaQuery.of(context).size.width;
+        
+        final isVisible = position.dy < screenHeight && 
+                         position.dy + size.height > 0 &&
+                         position.dx < screenWidth &&
+                         position.dx + size.width > 0;
+        
+        if (isVisible != _isVisible) {
+          _isVisible = isVisible;
+          if (!_isVisible && mounted) {
+            if (_controller!.value.isPlaying) {
+              _controller!.pause();
+              setState(() => _isPlaying = false);
+            }
           }
         }
       }
+    } catch (e) {
+      debugPrint('[VP] Visibility check error: $e');
     }
   }
 
@@ -180,12 +189,16 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkVisibility();
+      if (mounted) {
+        _checkVisibility();
+      }
     });
     
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
-        _checkVisibility();
+        if (mounted) {
+          _checkVisibility();
+        }
         return false;
       },
       child: RepaintBoundary(

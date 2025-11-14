@@ -3,6 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:carbon_icons/carbon_icons.dart';
+import 'package:bounce/bounce.dart';
+import 'package:nostr_nip19/nostr_nip19.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/ui/widgets/note_widget.dart';
 import 'package:qiqstr/ui/widgets/focused_note_widget.dart';
@@ -79,6 +83,7 @@ class _ThreadPageState extends State<ThreadPage> {
                 children: [
                   _buildContent(context, vm),
                   const BackButtonWidget.floating(),
+                  _buildShareButton(context, topPadding, vm),
                   Positioned(
                     top: topPadding + 10,
                     left: 0,
@@ -209,6 +214,7 @@ class _ThreadPageState extends State<ThreadPage> {
         notesNotifier: ValueNotifier<List<NoteModel>>([]),
         profiles: viewModel.userProfiles,
         notesListProvider: null,
+        isSelectable: true,
       ),
     );
   }
@@ -705,5 +711,60 @@ class _ThreadPageState extends State<ThreadPage> {
         });
       }
     }
+  }
+
+  Widget _buildShareButton(BuildContext context, double topPadding, ThreadViewModel viewModel) {
+    return Positioned(
+      top: topPadding + 14,
+      right: 16,
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: context.colors.buttonPrimary,
+          borderRadius: BorderRadius.circular(22.0),
+        ),
+        child: Bounce(
+          scaleFactor: 0.85,
+          onTap: () async {
+            final rootNote = viewModel.rootNoteState.data;
+            if (rootNote == null) return;
+
+            try {
+              String noteId;
+              if (rootNote.id.startsWith('note1')) {
+                noteId = rootNote.id;
+              } else {
+                noteId = encodeBasicBech32(rootNote.id, 'note');
+              }
+              
+              final nostrLink = 'nostr:$noteId';
+              
+              final box = context.findRenderObject() as RenderBox?;
+              await SharePlus.instance.share(
+                ShareParams(
+                  text: nostrLink,
+                  sharePositionOrigin: box != null 
+                      ? box.localToGlobal(Offset.zero) & box.size 
+                      : null,
+                ),
+              );
+            } catch (e) {
+              debugPrint('[ThreadPage] Share error: $e');
+            }
+          },
+          behavior: HitTestBehavior.opaque,
+          child: Semantics(
+            label: 'Share',
+            button: true,
+            child: Icon(
+              CarbonIcons.share,
+              color: context.colors.buttonText,
+              size: 20,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

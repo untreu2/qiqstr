@@ -25,6 +25,7 @@ class NoteContentWidget extends StatefulWidget {
   final void Function(String noteId)? onShowMoreTap;
   final NoteContentSize size;
   final String? authorProfileImageUrl;
+  final bool isSelectable;
 
   const NoteContentWidget({
     super.key,
@@ -34,6 +35,7 @@ class NoteContentWidget extends StatefulWidget {
     this.onShowMoreTap,
     this.size = NoteContentSize.small,
     this.authorProfileImageUrl,
+    this.isSelectable = false,
   });
 
   @override
@@ -385,13 +387,25 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         children: [
           if (_textParts.isNotEmpty)
             RepaintBoundary(
-              child: RichText(
-                text: TextSpan(children: _buildSpans()),
-                textHeightBehavior: const TextHeightBehavior(
-                  applyHeightToFirstAscent: false,
-                  applyHeightToLastDescent: false,
-                ),
-              ),
+              child: widget.isSelectable
+                  ? SelectableText.rich(
+                      TextSpan(children: _buildSpans()),
+                      style: TextStyle(
+                        fontSize: _fontSize(context),
+                        height: 1.2,
+                      ),
+                      textHeightBehavior: const TextHeightBehavior(
+                        applyHeightToFirstAscent: false,
+                        applyHeightToLastDescent: false,
+                      ),
+                    )
+                  : RichText(
+                      text: TextSpan(children: _buildSpans()),
+                      textHeightBehavior: const TextHeightBehavior(
+                        applyHeightToFirstAscent: false,
+                        applyHeightToLastDescent: false,
+                      ),
+                    ),
             ),
           if (_mediaUrls.isNotEmpty)
             RepaintBoundary(

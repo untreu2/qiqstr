@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:carbon_icons/carbon_icons.dart';
+import 'package:bounce/bounce.dart';
+import 'package:share_plus/share_plus.dart';
 import '../theme/theme_manager.dart';
 import '../../models/user_model.dart';
 import '../../models/note_model.dart';
@@ -86,6 +89,7 @@ class _ProfilePageState extends State<ProfilePage> {
           const BackButtonWidget.floating(
             topOffset: 6,
           ),
+          _buildShareButton(context, topPadding),
           Positioned(
             top: topPadding + 8,
             left: 0,
@@ -275,6 +279,52 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildShareButton(BuildContext context, double topPadding) {
+    return Positioned(
+      top: topPadding + 6,
+      right: 16,
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: context.colors.buttonPrimary,
+          borderRadius: BorderRadius.circular(22.0),
+        ),
+        child: Bounce(
+          scaleFactor: 0.85,
+          onTap: () async {
+            try {
+              final npub = widget.user.npub;
+              final nostrLink = 'nostr:$npub';
+              
+              final box = context.findRenderObject() as RenderBox?;
+              await SharePlus.instance.share(
+                ShareParams(
+                  text: nostrLink,
+                  sharePositionOrigin: box != null 
+                      ? box.localToGlobal(Offset.zero) & box.size 
+                      : null,
+                ),
+              );
+            } catch (e) {
+              debugPrint('[ProfilePage] Share error: $e');
+            }
+          },
+          behavior: HitTestBehavior.opaque,
+          child: Semantics(
+            label: 'Share',
+            button: true,
+            child: Icon(
+              CarbonIcons.share,
+              color: context.colors.buttonText,
+              size: 20,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

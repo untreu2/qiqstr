@@ -16,6 +16,7 @@ class FocusedNoteWidget extends StatefulWidget {
   final ValueNotifier<List<NoteModel>> notesNotifier;
   final Map<String, UserModel> profiles;
   final dynamic notesListProvider;
+  final bool isSelectable;
 
   const FocusedNoteWidget({
     super.key,
@@ -24,6 +25,7 @@ class FocusedNoteWidget extends StatefulWidget {
     required this.notesNotifier,
     required this.profiles,
     this.notesListProvider,
+    this.isSelectable = false,
   });
 
   @override
@@ -358,6 +360,7 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
                     noteId: _noteId,
                     authorProfileImageUrl: _stateNotifier.value.authorUser?.profileImage,
                     authorId: _authorId,
+                    isSelectable: widget.isSelectable,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -609,6 +612,7 @@ class _FocusedContentSection extends StatelessWidget {
   final String noteId;
   final String? authorProfileImageUrl;
   final String authorId;
+  final bool isSelectable;
 
   const _FocusedContentSection({
     required this.parsedContent,
@@ -617,6 +621,7 @@ class _FocusedContentSection extends StatelessWidget {
     required this.noteId,
     this.authorProfileImageUrl,
     required this.authorId,
+    this.isSelectable = false,
   });
 
   @override
@@ -628,6 +633,7 @@ class _FocusedContentSection extends StatelessWidget {
         onNavigateToMentionProfile: onMentionTap,
         size: NoteContentSize.big,
         authorProfileImageUrl: authorProfileImageUrl,
+        isSelectable: isSelectable,
       );
     } catch (e) {
       debugPrint('[FocusedContentSection] Build error: $e');

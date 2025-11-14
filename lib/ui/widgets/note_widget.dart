@@ -22,6 +22,7 @@ class NoteWidget extends StatefulWidget {
   final ScrollController? scrollController;
   final dynamic notesListProvider;
   final bool isVisible;
+  final bool isSelectable;
 
   const NoteWidget({
     super.key,
@@ -34,6 +35,7 @@ class NoteWidget extends StatefulWidget {
     this.scrollController,
     this.notesListProvider,
     this.isVisible = true,
+    this.isSelectable = false,
   });
 
   @override
@@ -629,6 +631,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                                   noteId: _noteId,
                                   authorProfileImageUrl: _stateNotifier.value.authorUser?.profileImage,
                                   authorId: _authorId,
+                                  isSelectable: widget.isSelectable,
                                 ),
                               ),
                               const SizedBox(height: 8),
@@ -789,6 +792,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                           noteId: _noteId,
                           authorProfileImageUrl: _stateNotifier.value.authorUser?.profileImage,
                           authorId: _authorId,
+                          isSelectable: widget.isSelectable,
                         ),
                       ),
                     ),
@@ -1169,6 +1173,7 @@ class _SafeContentSection extends StatelessWidget {
   final String noteId;
   final String? authorProfileImageUrl;
   final String authorId;
+  final bool isSelectable;
 
   const _SafeContentSection({
     required this.parsedContent,
@@ -1178,6 +1183,7 @@ class _SafeContentSection extends StatelessWidget {
     required this.noteId,
     this.authorProfileImageUrl,
     required this.authorId,
+    this.isSelectable = false,
   });
 
   @override
@@ -1189,6 +1195,7 @@ class _SafeContentSection extends StatelessWidget {
         onNavigateToMentionProfile: onMentionTap,
         onShowMoreTap: onShowMoreTap,
         authorProfileImageUrl: authorProfileImageUrl,
+        isSelectable: isSelectable,
       );
     } catch (e) {
       debugPrint('[ContentSection] Build error: $e');

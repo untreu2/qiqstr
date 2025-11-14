@@ -79,6 +79,7 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
           imageUrls,
           useAspectRatio: false,
           fit: BoxFit.contain,
+          limitResolution: false,
         ),
       );
     } else if (imageUrls.length == 2) {
@@ -95,7 +96,7 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
               imageUrls[0],
               0,
               imageUrls,
-              aspectRatio: 1.0,
+              aspectRatio: 3 / 4,
               ),
             ),
           ),
@@ -111,7 +112,7 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
               imageUrls[1],
               1,
               imageUrls,
-              aspectRatio: 1.0,
+              aspectRatio: 3 / 4,
               ),
             ),
           ),
@@ -238,6 +239,7 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
     double? aspectRatio,
     BoxFit fit = BoxFit.cover,
     bool useAspectRatio = true,
+    bool limitResolution = true,
   }) {
     Widget image = CachedNetworkImage(
       key: ValueKey('media_${url.hashCode}_$index'),
@@ -245,9 +247,9 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
       fit: fit,
       fadeInDuration: Duration.zero,
       fadeOutDuration: Duration.zero,
-      maxHeightDiskCache: 900,
-      maxWidthDiskCache: 900,
-      memCacheWidth: 900,
+      maxHeightDiskCache: limitResolution ? 900 : null,
+      maxWidthDiskCache: limitResolution ? 900 : null,
+      memCacheWidth: limitResolution ? 900 : null,
       placeholder: (context, url) => AspectRatio(
         aspectRatio: aspectRatio ?? 1.0,
         child: Container(
