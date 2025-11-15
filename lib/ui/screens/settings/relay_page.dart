@@ -563,6 +563,8 @@ class _RelayPageState extends State<RelayPage> {
                   label: 'Add Relay',
                   icon: Icons.add,
                   onPressed: _showAddRelayDialog,
+                  backgroundColor: context.colors.accent,
+                  foregroundColor: context.colors.background,
                   size: ButtonSize.large,
                 ),
               ),
@@ -606,70 +608,43 @@ class _RelayPageState extends State<RelayPage> {
   }
 
   Widget _buildRelayTile(String relay, bool isMainRelay) {
-    final userRelay = _userRelays.firstWhere(
-      (r) => r['url'] == relay,
-      orElse: () => <String, dynamic>{},
-    );
-    final isUserRelay = userRelay.isNotEmpty;
-
     return RepaintBoundary(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color: context.colors.overlayLight,
             borderRadius: BorderRadius.circular(40),
           ),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: isUserRelay ? context.colors.accent.withValues(alpha: 0.1) : Colors.grey.shade800,
-                child: Icon(
-                  isUserRelay ? Icons.cloud_sync : Icons.router,
-                  color: isUserRelay ? context.colors.accent : context.colors.textSecondary,
-                  size: 26,
-                ),
-              ),
-              const SizedBox(width: 16),
               Expanded(
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            relay,
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w600,
-                              color: context.colors.textPrimary,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  relay,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: context.colors.textPrimary,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: 12),
               GestureDetector(
                 onTap: () => _removeRelay(relay, isMainRelay),
                 child: Container(
-                  width: 48,
-                  height: 48,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
-                    color: context.colors.error.withValues(alpha: 0.1),
+                    color: context.colors.buttonPrimary,
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
                     CarbonIcons.delete,
-                    size: 24,
-                    color: context.colors.error,
+                    size: 20,
+                    color: context.colors.buttonText,
                   ),
                 ),
               ),

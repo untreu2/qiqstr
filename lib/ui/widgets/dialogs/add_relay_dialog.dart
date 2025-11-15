@@ -46,34 +46,14 @@ Future<void> showAddRelayDialog({
             ),
           ),
           const SizedBox(height: 24),
-          Row(
-            children: [
-              GestureDetector(
-                onTap: () => Navigator.pop(modalContext),
-                child: Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: colors.buttonPrimary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.close,
-                    color: Colors.white,
-                    size: 20,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: SecondaryButton(
-                  label: 'Add Relay',
-                  onPressed: isLoading ? null : onAdd,
-                  isLoading: isLoading,
-                  size: ButtonSize.large,
-                ),
-              ),
-            ],
+          SizedBox(
+            width: double.infinity,
+            child: SecondaryButton(
+              label: 'Add Relay',
+              onPressed: isLoading ? null : onAdd,
+              isLoading: isLoading,
+              size: ButtonSize.large,
+            ),
           ),
         ],
       ),

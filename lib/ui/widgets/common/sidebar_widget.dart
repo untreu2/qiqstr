@@ -343,43 +343,43 @@ class _SidebarContent extends StatelessWidget {
           Expanded(
             child: Column(
               children: [
-                Expanded(
-                  child: CustomScrollView(
-                    slivers: [
-                      SliverPadding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        sliver: SliverList(
-                          delegate: SliverChildListDelegate([
-                            _buildModernSidebarItem(
-                              context: context,
-                              colors: colors,
-                              svgAsset: 'assets/profile_button.svg',
-                              label: 'Profile',
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ProfilePage(user: user),
-                                ),
-                              ),
-                            ),
-                          ]),
+          Expanded(
+            child: CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
+                      _buildModernSidebarItem(
+                        context: context,
+                        colors: colors,
+                        svgAsset: 'assets/profile_button.svg',
+                        label: 'Profile',
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ProfilePage(user: user),
+                          ),
                         ),
                       ),
+                    ]),
+                  ),
+                ),
                     ],
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: _buildModernSidebarItem(
-                    context: context,
-                    colors: colors,
-                    icon: CarbonIcons.settings,
-                    label: 'Settings',
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const SettingsPage(),
-                      ),
+                          context: context,
+                          colors: colors,
+                          icon: CarbonIcons.settings,
+                          label: 'Settings',
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const SettingsPage(),
+                            ),
                     ),
                   ),
                 ),

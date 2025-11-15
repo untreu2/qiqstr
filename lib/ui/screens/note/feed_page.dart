@@ -212,7 +212,7 @@ class FeedPageState extends State<FeedPage> {
                             constraints: const BoxConstraints(minHeight: 40),
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              color: colors.overlayLight,
+                              color: colors.buttonPrimary,
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Row(
@@ -227,14 +227,14 @@ class FeedPageState extends State<FeedPage> {
                                           ? Icons.trending_up
                                           : Icons.access_time,
                                   size: 18,
-                                  color: colors.textPrimary,
+                                  color: colors.buttonText,
                                 ),
                                 if (viewModel.hashtag != null) ...[
                                   const SizedBox(width: 4),
                                   Text(
                                     viewModel.hashtag!,
                                     style: TextStyle(
-                                      color: colors.textPrimary,
+                                      color: colors.buttonText,
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
                                       height: 1.0,
@@ -245,7 +245,7 @@ class FeedPageState extends State<FeedPage> {
                                   Text(
                                     viewModel.sortMode == FeedSortMode.mostInteracted ? 'Popular' : 'Latest',
                                     style: TextStyle(
-                                      color: colors.textPrimary,
+                                      color: colors.buttonText,
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
                                       height: 1.0,

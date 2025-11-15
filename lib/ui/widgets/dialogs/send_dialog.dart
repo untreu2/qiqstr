@@ -166,34 +166,14 @@ class _SendDialogState extends State<SendDialog> {
             ),
           ],
           const SizedBox(height: 24),
-          Row(
-            children: [
-          GestureDetector(
-                onTap: () => Navigator.pop(context),
-            child: Container(
-                  width: 48,
-                  height: 48,
-              decoration: BoxDecoration(
-                    color: colors.buttonPrimary,
-                    shape: BoxShape.circle,
-              ),
-                  child: Icon(
-                    Icons.close,
-                    color: Colors.white,
-                    size: 20,
-                      ),
-                    ),
+          SizedBox(
+            width: double.infinity,
+            child: SecondaryButton(
+              label: 'Pay Invoice',
+              onPressed: _isLoading ? null : _payInvoice,
+              isLoading: _isLoading,
+              size: ButtonSize.large,
             ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: SecondaryButton(
-                  label: 'Pay Invoice',
-                  onPressed: _isLoading ? null : _payInvoice,
-                  isLoading: _isLoading,
-                  size: ButtonSize.large,
-                ),
-              ),
-            ],
           ),
         ],
       ),

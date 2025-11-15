@@ -28,7 +28,7 @@ class AppSnackbar {
       SnackBar(
         content: Container(
           decoration: BoxDecoration(
-            color: colors.surface,
+            color: colors.accent,
             borderRadius: BorderRadius.circular(40),
             boxShadow: [
               BoxShadow(
@@ -45,7 +45,7 @@ class AppSnackbar {
                 child: Text(
                   message,
                   style: TextStyle(
-                    color: colors.textPrimary,
+                    color: colors.background,
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
@@ -58,7 +58,7 @@ class AppSnackbar {
                   label: action.label,
                   onPressed: action.onPressed,
                   size: ButtonSize.small,
-                  foregroundColor: colors.accent,
+                  foregroundColor: colors.background,
                 ),
               ],
             ],

@@ -210,34 +210,14 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
             ),
           ],
           const SizedBox(height: 24),
-          Row(
-            children: [
-          GestureDetector(
-                onTap: () => Navigator.pop(context),
-            child: Container(
-                  width: 48,
-                  height: 48,
-              decoration: BoxDecoration(
-                    color: colors.buttonPrimary,
-                    shape: BoxShape.circle,
-              ),
-                  child: Icon(
-                    Icons.close,
-                    color: Colors.white,
-                    size: 20,
-                      ),
-                    ),
+          SizedBox(
+            width: double.infinity,
+            child: SecondaryButton(
+              label: 'Create Invoice',
+              onPressed: _isLoading ? null : _createInvoice,
+              isLoading: _isLoading,
+              size: ButtonSize.large,
             ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: SecondaryButton(
-                  label: 'Create Invoice',
-                  onPressed: _isLoading ? null : _createInvoice,
-                  isLoading: _isLoading,
-                  size: ButtonSize.large,
-                ),
-              ),
-            ],
           ),
         ],
       ),

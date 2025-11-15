@@ -112,7 +112,7 @@ class SecondaryButton extends StatelessWidget {
       style: OutlinedButton.styleFrom(
         side: BorderSide.none,
         backgroundColor: backgroundColor ?? colors.buttonPrimary,
-        foregroundColor: foregroundColor ?? Colors.white,
+        foregroundColor: foregroundColor ?? colors.buttonText,
         padding: config.padding,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(config.borderRadius),
@@ -125,7 +125,7 @@ class SecondaryButton extends StatelessWidget {
               child: CircularProgressIndicator(
                 strokeWidth: 2,
                 valueColor: AlwaysStoppedAnimation<Color>(
-                  foregroundColor ?? Colors.white,
+                  foregroundColor ?? colors.buttonText,
                 ),
               ),
             )
@@ -217,6 +217,7 @@ class IconActionButton extends StatelessWidget {
   final Color? backgroundColor;
   final Color? iconColor;
   final String? tooltip;
+  final bool isCircular;
 
   const IconActionButton({
     super.key,
@@ -226,6 +227,7 @@ class IconActionButton extends StatelessWidget {
     this.backgroundColor,
     this.iconColor,
     this.tooltip,
+    this.isCircular = false,
   });
 
   @override
@@ -236,14 +238,16 @@ class IconActionButton extends StatelessWidget {
     return IconButton(
       icon: Icon(icon, size: config.iconSize),
       onPressed: onPressed,
-      color: iconColor ?? colors.iconPrimary,
+      color: iconColor ?? colors.textPrimary,
       tooltip: tooltip,
       style: IconButton.styleFrom(
-        backgroundColor: backgroundColor,
+        backgroundColor: backgroundColor ?? colors.overlayLight,
         padding: config.padding,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(config.borderRadius),
-        ),
+        shape: isCircular
+            ? const CircleBorder()
+            : RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(config.borderRadius),
+              ),
       ),
     );
   }

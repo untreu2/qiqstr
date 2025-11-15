@@ -585,7 +585,6 @@ class _NoteWidgetState extends State<NoteWidget> {
                                     style: TextStyle(
                                       fontSize: 13,
                                       color: colors.textSecondary,
-                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                 ],
@@ -727,7 +726,6 @@ class _NoteWidgetState extends State<NoteWidget> {
                                         style: TextStyle(
                                           fontSize: 13,
                                           color: colors.textSecondary,
-                                          fontWeight: FontWeight.bold,
                                         ),
                                       ),
                                     ],

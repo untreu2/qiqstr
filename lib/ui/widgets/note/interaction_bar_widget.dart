@@ -306,18 +306,18 @@ class _InteractionBarState extends State<InteractionBar> {
 
       result.fold(
         (_) {
-          if (mounted) {
-            _stateNotifier.value = _InteractionState(
-              reactionCount: currentState.reactionCount,
-              repostCount: currentState.repostCount,
-              replyCount: currentState.replyCount,
-              zapAmount: currentState.zapAmount,
-              hasReacted: currentState.hasReacted,
-              hasReposted: true,
-              hasZapped: currentState.hasZapped,
-            );
-          }
-        },
+        if (mounted) {
+          _stateNotifier.value = _InteractionState(
+            reactionCount: currentState.reactionCount,
+            repostCount: currentState.repostCount,
+            replyCount: currentState.replyCount,
+            zapAmount: currentState.zapAmount,
+            hasReacted: currentState.hasReacted,
+            hasReposted: true,
+            hasZapped: currentState.hasZapped,
+          );
+        }
+      },
         (error) {
           if (mounted) {
             AppSnackbar.error(context, 'Failed to repost: $error');
