@@ -77,9 +77,7 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
           imageUrls[0],
           0,
           imageUrls,
-          useAspectRatio: false,
-          fit: BoxFit.contain,
-          limitResolution: false,
+          fit: BoxFit.cover,
         ),
       );
     } else if (imageUrls.length == 2) {
@@ -247,9 +245,9 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
       fit: fit,
       fadeInDuration: Duration.zero,
       fadeOutDuration: Duration.zero,
-      maxHeightDiskCache: limitResolution ? 900 : null,
-      maxWidthDiskCache: limitResolution ? 900 : null,
-      memCacheWidth: limitResolution ? 900 : null,
+      maxHeightDiskCache: limitResolution ? 1500 : null,
+      maxWidthDiskCache: limitResolution ? 1500 : null,
+      memCacheWidth: limitResolution ? 1500 : null,
       placeholder: (context, url) => AspectRatio(
         aspectRatio: aspectRatio ?? 1.0,
         child: Container(
