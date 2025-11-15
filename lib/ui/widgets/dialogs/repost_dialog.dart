@@ -36,7 +36,7 @@ Future<void> showRepostDialog({
               padding: const EdgeInsets.symmetric(vertical: 12),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: context.colors.accentBright,
+                color: context.colors.accent,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: Row(

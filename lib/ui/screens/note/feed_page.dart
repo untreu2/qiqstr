@@ -46,16 +46,16 @@ class FeedPageState extends State<FeedPage> {
 
   void _scrollListener() {
     if (!_scrollController.hasClients) return;
-    
+
     _scrollDebounceTimer?.cancel();
     _scrollDebounceTimer = Timer(const Duration(milliseconds: 100), () {
       if (!mounted || !_scrollController.hasClients) return;
-      
+
       final offset = _scrollController.offset;
       final direction = _scrollController.position.userScrollDirection;
-      
+
       bool shouldShow;
-      
+
       if (offset < 50) {
         shouldShow = true;
       } else if (direction == ScrollDirection.forward) {
@@ -65,7 +65,7 @@ class FeedPageState extends State<FeedPage> {
       } else {
         shouldShow = _showAppBar;
       }
-      
+
       if (_showAppBar != shouldShow) {
         setState(() {
           _showAppBar = shouldShow;
@@ -118,7 +118,6 @@ class FeedPageState extends State<FeedPage> {
     }
   }
 
-
   Widget _buildHeader(BuildContext context, double topPadding, FeedViewModel viewModel) {
     final colors = context.colors;
     final isHashtagMode = widget.hashtag != null;
@@ -133,48 +132,48 @@ class FeedPageState extends State<FeedPage> {
             height: 40,
             child: Stack(
               alignment: Alignment.center,
-                      children: [
-                        if (!isHashtagMode)
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: GestureDetector(
-                              onTap: () => Scaffold.of(context).openDrawer(),
-                              child: viewModel.currentUser != null
-                                  ? Container(
-                                      width: 36,
-                                      height: 36,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: colors.avatarPlaceholder,
-                                        image: viewModel.currentUser!.profileImage.isNotEmpty == true
-                                            ? DecorationImage(
-                                                image: CachedNetworkImageProvider(viewModel.currentUser!.profileImage),
-                                                fit: BoxFit.cover,
-                                              )
-                                            : null,
-                                      ),
-                                      child: viewModel.currentUser!.profileImage.isEmpty != false
-                                          ? Icon(
-                                              Icons.person,
-                                              size: 20,
-                                              color: colors.textSecondary,
-                                            )
-                                          : null,
+              children: [
+                if (!isHashtagMode)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: GestureDetector(
+                      onTap: () => Scaffold.of(context).openDrawer(),
+                      child: viewModel.currentUser != null
+                          ? Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: colors.avatarPlaceholder,
+                                image: viewModel.currentUser!.profileImage.isNotEmpty == true
+                                    ? DecorationImage(
+                                        image: CachedNetworkImageProvider(viewModel.currentUser!.profileImage),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
+                              ),
+                              child: viewModel.currentUser!.profileImage.isEmpty != false
+                                  ? Icon(
+                                      Icons.person,
+                                      size: 20,
+                                      color: colors.textSecondary,
                                     )
-                                  : Container(
-                                      width: 36,
-                                      height: 36,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: colors.avatarPlaceholder,
-                                      ),
-                                      child: CircularProgressIndicator(
-                                        color: colors.accent,
-                                        strokeWidth: 2,
-                                      ),
-                                    ),
+                                  : null,
+                            )
+                          : Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: colors.avatarPlaceholder,
+                              ),
+                              child: CircularProgressIndicator(
+                                color: colors.accent,
+                                strokeWidth: 2,
+                              ),
                             ),
-                          ),
+                    ),
+                  ),
                 if (isHashtagMode)
                   Align(
                     alignment: Alignment.centerLeft,
@@ -213,7 +212,7 @@ class FeedPageState extends State<FeedPage> {
                             constraints: const BoxConstraints(minHeight: 40),
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              color: colors.accentBright,
+                              color: colors.overlayLight,
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Row(
@@ -228,29 +227,27 @@ class FeedPageState extends State<FeedPage> {
                                           ? Icons.trending_up
                                           : Icons.access_time,
                                   size: 18,
-                                  color: colors.background,
+                                  color: colors.textPrimary,
                                 ),
                                 if (viewModel.hashtag != null) ...[
                                   const SizedBox(width: 4),
                                   Text(
                                     viewModel.hashtag!,
                                     style: TextStyle(
-                                      color: colors.background,
+                                      color: colors.textPrimary,
                                       fontSize: 13,
-                                      fontWeight: FontWeight.bold,
+                                      fontWeight: FontWeight.w600,
                                       height: 1.0,
                                     ),
                                   ),
                                 ] else ...[
                                   const SizedBox(width: 6),
                                   Text(
-                                    viewModel.sortMode == FeedSortMode.mostInteracted
-                                        ? 'Popular'
-                                        : 'Latest',
+                                    viewModel.sortMode == FeedSortMode.mostInteracted ? 'Popular' : 'Latest',
                                     style: TextStyle(
-                                      color: colors.background,
+                                      color: colors.textPrimary,
                                       fontSize: 13,
-                                      fontWeight: FontWeight.bold,
+                                      fontWeight: FontWeight.w600,
                                       height: 1.0,
                                     ),
                                   ),

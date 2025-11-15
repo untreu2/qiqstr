@@ -144,7 +144,7 @@ class _SendDialogState extends State<SendDialog> {
               padding: const EdgeInsets.symmetric(vertical: 12),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: colors.accentBright,
+                color: colors.accent,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: _isLoading
@@ -171,4 +171,3 @@ class _SendDialogState extends State<SendDialog> {
     );
   }
 }
-

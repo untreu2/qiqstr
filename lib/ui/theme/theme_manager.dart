@@ -91,7 +91,6 @@ class ThemeManager extends ChangeNotifier {
 
 class AppThemeColors {
   final Color accent;
-  final Color accentBright;
   final Color background;
   final Color surface;
   final Color textPrimary;
@@ -113,7 +112,6 @@ class AppThemeColors {
 
   AppThemeColors({
     required this.accent,
-    required this.accentBright,
     required this.background,
     required this.surface,
     required this.textPrimary,
@@ -181,7 +179,6 @@ class AppThemeColors {
   factory AppThemeColors.dark() {
     return AppThemeColors(
       accent: AppColors.accent,
-      accentBright: AppColors.accentBright,
       background: AppColors.background,
       surface: AppColors.surface,
       textPrimary: AppColors.textPrimary,
@@ -206,7 +203,6 @@ class AppThemeColors {
   factory AppThemeColors.light() {
     return AppThemeColors(
       accent: AppColorsLight.accent,
-      accentBright: AppColorsLight.accentBright,
       background: AppColorsLight.background,
       surface: AppColorsLight.surface,
       textPrimary: AppColorsLight.textPrimary,

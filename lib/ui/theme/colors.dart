@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 class AppColors {
   static const Color accent = Color.fromARGB(255, 240, 160, 90);
-  static const Color accentBright = Color.fromARGB(255, 230, 170, 115);
 
   static const Color background = Color(0xFF181818);
   static const Color surface = Color(0xFF181818);
@@ -34,7 +33,6 @@ class AppColors {
 
 class AppColorsLight {
   static const Color accent = Color.fromARGB(255, 140, 60, 130);
-  static const Color accentBright = Color.fromARGB(255, 180, 100, 170);
 
   static const Color background = Colors.white;
   static const Color surface = Colors.white;

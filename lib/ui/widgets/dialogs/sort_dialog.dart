@@ -26,34 +26,55 @@ Future<void> showSortDialog({
             },
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
-                color: viewModel.sortMode == FeedSortMode.latest && viewModel.hashtag == null
-                    ? context.colors.accentBright
-                    : context.colors.overlayLight,
+                color: context.colors.overlayLight,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: Row(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(
-                    Icons.access_time,
-                    color: viewModel.sortMode == FeedSortMode.latest && viewModel.hashtag == null
-                        ? context.colors.background
-                        : context.colors.textPrimary,
-                    size: 20,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.access_time,
+                        color: context.colors.textPrimary,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Latest',
+                        style: TextStyle(
+                          color: context.colors.textPrimary,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Latest',
-                    style: TextStyle(
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
                       color: viewModel.sortMode == FeedSortMode.latest && viewModel.hashtag == null
-                          ? context.colors.background
-                          : context.colors.textPrimary,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
+                          ? context.colors.accent
+                          : Colors.transparent,
+                      border: Border.all(
+                        color: viewModel.sortMode == FeedSortMode.latest && viewModel.hashtag == null
+                            ? context.colors.accent
+                            : context.colors.border,
+                        width: 2,
+                      ),
                     ),
+                    child: viewModel.sortMode == FeedSortMode.latest && viewModel.hashtag == null
+                        ? Icon(
+                            Icons.check,
+                            color: context.colors.buttonText,
+                            size: 16,
+                          )
+                        : null,
                   ),
                 ],
               ),
@@ -68,34 +89,55 @@ Future<void> showSortDialog({
             },
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
-                color: viewModel.sortMode == FeedSortMode.mostInteracted && viewModel.hashtag == null
-                    ? context.colors.accentBright
-                    : context.colors.overlayLight,
+                color: context.colors.overlayLight,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: Row(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(
-                    Icons.trending_up,
-                    color: viewModel.sortMode == FeedSortMode.mostInteracted && viewModel.hashtag == null
-                        ? context.colors.background
-                        : context.colors.textPrimary,
-                    size: 20,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.trending_up,
+                        color: context.colors.textPrimary,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Popular',
+                        style: TextStyle(
+                          color: context.colors.textPrimary,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Popular',
-                    style: TextStyle(
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
                       color: viewModel.sortMode == FeedSortMode.mostInteracted && viewModel.hashtag == null
-                          ? context.colors.background
-                          : context.colors.textPrimary,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
+                          ? context.colors.accent
+                          : Colors.transparent,
+                      border: Border.all(
+                        color: viewModel.sortMode == FeedSortMode.mostInteracted && viewModel.hashtag == null
+                            ? context.colors.accent
+                            : context.colors.border,
+                        width: 2,
+                      ),
                     ),
+                    child: viewModel.sortMode == FeedSortMode.mostInteracted && viewModel.hashtag == null
+                        ? Icon(
+                            Icons.check,
+                            color: context.colors.buttonText,
+                            size: 16,
+                          )
+                        : null,
                   ),
                 ],
               ),
@@ -109,34 +151,51 @@ Future<void> showSortDialog({
             },
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
-                color: viewModel.hashtag == 'bitcoin'
-                    ? context.colors.accentBright
-                    : context.colors.overlayLight,
+                color: context.colors.overlayLight,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: Row(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(
-                    Icons.tag,
-                    color: viewModel.hashtag == 'bitcoin'
-                        ? context.colors.background
-                        : context.colors.textPrimary,
-                    size: 20,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.tag,
+                        color: context.colors.textPrimary,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'bitcoin',
+                        style: TextStyle(
+                          color: context.colors.textPrimary,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'bitcoin',
-                    style: TextStyle(
-                      color: viewModel.hashtag == 'bitcoin'
-                          ? context.colors.background
-                          : context.colors.textPrimary,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: viewModel.hashtag == 'bitcoin' ? context.colors.accent : Colors.transparent,
+                      border: Border.all(
+                        color: viewModel.hashtag == 'bitcoin' ? context.colors.accent : context.colors.border,
+                        width: 2,
+                      ),
                     ),
+                    child: viewModel.hashtag == 'bitcoin'
+                        ? Icon(
+                            Icons.check,
+                            color: context.colors.buttonText,
+                            size: 16,
+                          )
+                        : null,
                   ),
                 ],
               ),
@@ -150,34 +209,51 @@ Future<void> showSortDialog({
             },
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
-                color: viewModel.hashtag == 'nostr'
-                    ? context.colors.accentBright
-                    : context.colors.overlayLight,
+                color: context.colors.overlayLight,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: Row(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(
-                    Icons.tag,
-                    color: viewModel.hashtag == 'nostr'
-                        ? context.colors.background
-                        : context.colors.textPrimary,
-                    size: 20,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.tag,
+                        color: context.colors.textPrimary,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'nostr',
+                        style: TextStyle(
+                          color: context.colors.textPrimary,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'nostr',
-                    style: TextStyle(
-                      color: viewModel.hashtag == 'nostr'
-                          ? context.colors.background
-                          : context.colors.textPrimary,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: viewModel.hashtag == 'nostr' ? context.colors.accent : Colors.transparent,
+                      border: Border.all(
+                        color: viewModel.hashtag == 'nostr' ? context.colors.accent : context.colors.border,
+                        width: 2,
+                      ),
                     ),
+                    child: viewModel.hashtag == 'nostr'
+                        ? Icon(
+                            Icons.check,
+                            color: context.colors.buttonText,
+                            size: 16,
+                          )
+                        : null,
                   ),
                 ],
               ),
@@ -191,34 +267,51 @@ Future<void> showSortDialog({
             },
             child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
-                color: viewModel.hashtag == 'foodstr'
-                    ? context.colors.accentBright
-                    : context.colors.overlayLight,
+                color: context.colors.overlayLight,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: Row(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(
-                    Icons.tag,
-                    color: viewModel.hashtag == 'foodstr'
-                        ? context.colors.background
-                        : context.colors.textPrimary,
-                    size: 20,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.tag,
+                        color: context.colors.textPrimary,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'foodstr',
+                        style: TextStyle(
+                          color: context.colors.textPrimary,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    'foodstr',
-                    style: TextStyle(
-                      color: viewModel.hashtag == 'foodstr'
-                          ? context.colors.background
-                          : context.colors.textPrimary,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: viewModel.hashtag == 'foodstr' ? context.colors.accent : Colors.transparent,
+                      border: Border.all(
+                        color: viewModel.hashtag == 'foodstr' ? context.colors.accent : context.colors.border,
+                        width: 2,
+                      ),
                     ),
+                    child: viewModel.hashtag == 'foodstr'
+                        ? Icon(
+                            Icons.check,
+                            color: context.colors.buttonText,
+                            size: 16,
+                          )
+                        : null,
                   ),
                 ],
               ),
@@ -229,4 +322,3 @@ Future<void> showSortDialog({
     ),
   );
 }
-

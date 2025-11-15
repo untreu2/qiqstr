@@ -37,7 +37,7 @@ Future<void> showResetRelaysDialog({
               padding: const EdgeInsets.symmetric(vertical: 12),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: colors.accentBright,
+                color: colors.accent,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: Row(
@@ -83,4 +83,3 @@ Future<void> showResetRelaysDialog({
     ),
   );
 }
-

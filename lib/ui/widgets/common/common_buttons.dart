@@ -35,8 +35,8 @@ class PrimaryButton extends StatelessWidget {
     return ElevatedButton(
       onPressed: isLoading ? null : onPressed,
       style: ElevatedButton.styleFrom(
-        backgroundColor: backgroundColor ?? colors.buttonPrimary,
-        foregroundColor: foregroundColor ?? colors.buttonText,
+        backgroundColor: backgroundColor ?? colors.accent,
+        foregroundColor: foregroundColor ?? colors.background,
         padding: config.padding,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(config.borderRadius),
@@ -113,8 +113,8 @@ class SecondaryButton extends StatelessWidget {
         side: BorderSide(
           color: borderColor ?? colors.primary.withValues(alpha: 0.3),
         ),
-        backgroundColor: backgroundColor ?? colors.primary.withValues(alpha: 0.05),
-        foregroundColor: foregroundColor ?? colors.primary,
+        backgroundColor: backgroundColor ?? colors.buttonPrimary,
+        foregroundColor: foregroundColor ?? colors.background,
         padding: config.padding,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(config.borderRadius),
@@ -295,4 +295,3 @@ _ButtonSizeConfig _getSizeConfig(ButtonSize size) {
       );
   }
 }
-

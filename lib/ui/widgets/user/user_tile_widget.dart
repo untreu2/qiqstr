@@ -121,9 +121,7 @@ class _UserTileState extends State<UserTile> {
     if (originalFollowState == true) {
       final userName = widget.user.name.isNotEmpty
           ? widget.user.name
-          : (widget.user.nip05.isNotEmpty
-              ? widget.user.nip05.split('@').first
-              : 'this user');
+          : (widget.user.nip05.isNotEmpty ? widget.user.nip05.split('@').first : 'this user');
 
       showUnfollowUserDialog(
         context: context,
@@ -152,9 +150,7 @@ class _UserTileState extends State<UserTile> {
     });
 
     try {
-      final targetNpub = widget.user.pubkeyHex.startsWith('npub1')
-          ? widget.user.pubkeyHex
-          : _getNpubBech32(widget.user.pubkeyHex);
+      final targetNpub = widget.user.pubkeyHex.startsWith('npub1') ? widget.user.pubkeyHex : _getNpubBech32(widget.user.pubkeyHex);
 
       final result = await _userRepository.followUser(targetNpub);
 
@@ -200,9 +196,7 @@ class _UserTileState extends State<UserTile> {
     });
 
     try {
-      final targetNpub = widget.user.pubkeyHex.startsWith('npub1')
-          ? widget.user.pubkeyHex
-          : _getNpubBech32(widget.user.pubkeyHex);
+      final targetNpub = widget.user.pubkeyHex.startsWith('npub1') ? widget.user.pubkeyHex : _getNpubBech32(widget.user.pubkeyHex);
 
       final result = await _userRepository.unfollowUser(targetNpub);
 
@@ -256,115 +250,104 @@ class _UserTileState extends State<UserTile> {
       future: _authRepository.getCurrentUserNpub(),
       builder: (context, snapshot) {
         final currentUserNpub = snapshot.data?.fold((data) => data, (error) => null);
-        final isCurrentUser = currentUserNpub == widget.user.pubkeyHex || 
-                             currentUserNpub == widget.user.npub;
+        final isCurrentUser = currentUserNpub == widget.user.pubkeyHex || currentUserNpub == widget.user.npub;
 
-    return RepaintBoundary(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        child: GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ProfilePage(user: widget.user),
-              ),
-            );
-          },
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-            decoration: BoxDecoration(
-              color: context.colors.overlayLight,
-              borderRadius: BorderRadius.circular(40),
-            ),
-            child: Row(
-              children: [
-                _UserAvatar(
-                  imageUrl: widget.user.profileImage,
-                  colors: context.colors,
+        return RepaintBoundary(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ProfilePage(user: widget.user),
+                  ),
+                );
+              },
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+                decoration: BoxDecoration(
+                  color: context.colors.overlayLight,
+                  borderRadius: BorderRadius.circular(40),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          widget.user.name.length > 25
-                              ? '${widget.user.name.substring(0, 25)}...'
-                              : widget.user.name,
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w600,
-                            color: context.colors.textPrimary,
+                child: Row(
+                  children: [
+                    _UserAvatar(
+                      imageUrl: widget.user.profileImage,
+                      colors: context.colors,
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              widget.user.name.length > 25 ? '${widget.user.name.substring(0, 25)}...' : widget.user.name,
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                                color: context.colors.textPrimary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                          if (widget.user.nip05.isNotEmpty && widget.user.nip05Verified) ...[
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.verified,
+                              size: 16,
+                              color: context.colors.accent,
+                            ),
+                          ],
+                        ],
                       ),
-                      if (widget.user.nip05.isNotEmpty && widget.user.nip05Verified) ...[
-                        const SizedBox(width: 4),
-                        Icon(
-                          Icons.verified,
-                          size: 16,
-                          color: context.colors.accent,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (widget.showFollowButton && !isCurrentUser && _isFollowing != null) ...[
-                  const SizedBox(width: 12),
-                  Builder(
-                    builder: (context) {
-                      final followBgColor = context.colors.accentBright;
-                      final followIconColor = context.colors.background;
-                      final unfollowBgColor = context.colors.background;
-                      final unfollowIconColor = context.colors.accentBright;
+                    ),
+                    if (widget.showFollowButton && !isCurrentUser && _isFollowing != null) ...[
+                      const SizedBox(width: 12),
+                      Builder(
+                        builder: (context) {
+                          final followBgColor = context.colors.accent;
+                          final followIconColor = context.colors.background;
+                          final unfollowBgColor = context.colors.background;
+                          final unfollowIconColor = context.colors.accent;
 
-                      return GestureDetector(
-                        onTap: _isLoading ? null : _toggleFollow,
-                        child: Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: _isFollowing == true
-                                ? unfollowBgColor
-                                : followBgColor,
-                            shape: BoxShape.circle,
-                          ),
-                          child: _isLoading
-                              ? SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                      _isFollowing == true
-                                          ? unfollowIconColor
-                                          : followIconColor,
+                          return GestureDetector(
+                            onTap: _isLoading ? null : _toggleFollow,
+                            child: Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: _isFollowing == true ? unfollowBgColor : followBgColor,
+                                shape: BoxShape.circle,
+                              ),
+                              child: _isLoading
+                                  ? SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                          _isFollowing == true ? unfollowIconColor : followIconColor,
+                                        ),
+                                      ),
+                                    )
+                                  : Icon(
+                                      _isFollowing == true ? CarbonIcons.user_admin : CarbonIcons.user_follow,
+                                      size: 21,
+                                      color: _isFollowing == true ? unfollowIconColor : followIconColor,
                                     ),
-                                  ),
-                                )
-                              : Icon(
-                                  _isFollowing == true
-                                      ? CarbonIcons.user_admin
-                                      : CarbonIcons.user_follow,
-                                  size: 21,
-                                  color: _isFollowing == true
-                                      ? unfollowIconColor
-                                      : followIconColor,
-                                ),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
-      ),
-    );
+        );
       },
     );
   }
@@ -433,4 +416,3 @@ class _UserAvatar extends StatelessWidget {
     );
   }
 }
-

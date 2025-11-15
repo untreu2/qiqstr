@@ -228,7 +228,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
-            child: PrimaryButton(
+            child: SecondaryButton(
               label: 'Login',
               onPressed: _isLoading ? null : _loginWithInput,
               size: ButtonSize.large,
@@ -238,12 +238,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
-            child: SecondaryButton(
+            child: PrimaryButton(
               label: 'Create a New Account',
               onPressed: _isLoading ? null : _createNewAccount,
               size: ButtonSize.large,
-              backgroundColor: context.colors.overlayLight,
-              foregroundColor: context.colors.textPrimary,
             ),
           ),
           const SizedBox(height: 20),

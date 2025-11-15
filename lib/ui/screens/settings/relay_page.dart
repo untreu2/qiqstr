@@ -564,8 +564,6 @@ class _RelayPageState extends State<RelayPage> {
                   icon: Icons.add,
                   onPressed: _showAddRelayDialog,
                   size: ButtonSize.large,
-                  backgroundColor: context.colors.accentBright,
-                  foregroundColor: context.colors.background,
                 ),
               ),
               const SizedBox(width: 12),
@@ -628,9 +626,7 @@ class _RelayPageState extends State<RelayPage> {
             children: [
               CircleAvatar(
                 radius: 24,
-                backgroundColor: isUserRelay 
-                    ? context.colors.accent.withValues(alpha: 0.1) 
-                    : Colors.grey.shade800,
+                backgroundColor: isUserRelay ? context.colors.accent.withValues(alpha: 0.1) : Colors.grey.shade800,
                 child: Icon(
                   isUserRelay ? Icons.cloud_sync : Icons.router,
                   color: isUserRelay ? context.colors.accent : context.colors.textSecondary,
