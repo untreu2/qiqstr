@@ -16,6 +16,7 @@ import '../../../core/ui/ui_state_builder.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/providers/viewmodel_provider.dart';
 import '../../../presentation/viewmodels/feed_viewmodel.dart';
+import '../../widgets/dialogs/sort_dialog.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -188,21 +189,12 @@ class FeedPageState extends State<FeedPage> {
                         curve: Curves.easeOut,
                       );
                     },
-                    child: isHashtagMode
-                        ? Text(
-                            '#${widget.hashtag}',
-                            style: TextStyle(
-                              color: colors.textPrimary,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          )
-                        : SvgPicture.asset(
-                            'assets/main_icon_white.svg',
-                            width: 30,
-                            height: 30,
-                            colorFilter: ColorFilter.mode(colors.textPrimary, BlendMode.srcIn),
-                          ),
+                    child: SvgPicture.asset(
+                      'assets/main_icon_white.svg',
+                      width: 30,
+                      height: 30,
+                      colorFilter: ColorFilter.mode(colors.textPrimary, BlendMode.srcIn),
+                    ),
                   ),
                 ),
                 Align(
@@ -212,13 +204,16 @@ class FeedPageState extends State<FeedPage> {
                     children: [
                       if (!isHashtagMode) ...[
                         GestureDetector(
-                          onTap: () => viewModel.toggleSortMode(),
+                          onTap: () => showSortDialog(
+                            context: context,
+                            viewModel: viewModel,
+                          ),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                             constraints: const BoxConstraints(minHeight: 40),
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              color: colors.buttonPrimary,
+                              color: colors.accentBright,
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Row(
@@ -227,20 +222,39 @@ class FeedPageState extends State<FeedPage> {
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 Icon(
-                                  viewModel.sortMode == FeedSortMode.mostInteracted ? Icons.trending_up : Icons.access_time,
+                                  viewModel.hashtag != null
+                                      ? Icons.tag
+                                      : viewModel.sortMode == FeedSortMode.mostInteracted
+                                          ? Icons.trending_up
+                                          : Icons.access_time,
                                   size: 18,
-                                  color: colors.buttonText,
+                                  color: colors.background,
                                 ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  viewModel.sortMode == FeedSortMode.mostInteracted ? 'Popular' : 'Latest',
-                                  style: TextStyle(
-                                    color: colors.buttonText,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    height: 1.0,
+                                if (viewModel.hashtag != null) ...[
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    viewModel.hashtag!,
+                                    style: TextStyle(
+                                      color: colors.background,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      height: 1.0,
+                                    ),
                                   ),
-                                ),
+                                ] else ...[
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    viewModel.sortMode == FeedSortMode.mostInteracted
+                                        ? 'Popular'
+                                        : 'Latest',
+                                    style: TextStyle(
+                                      color: colors.background,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      height: 1.0,
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),

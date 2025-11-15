@@ -36,18 +36,18 @@ Future<void> showRepostDialog({
               padding: const EdgeInsets.symmetric(vertical: 12),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: context.colors.buttonPrimary,
+                color: context.colors.accentBright,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.repeat, color: context.colors.buttonText, size: 20),
+                  Icon(Icons.repeat, color: context.colors.background, size: 20),
                   const SizedBox(width: 8),
                   Text(
                     'Repost',
                     style: TextStyle(
-                      color: context.colors.buttonText,
+                      color: context.colors.background,
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
                     ),

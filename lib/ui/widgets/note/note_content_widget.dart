@@ -62,7 +62,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     _userRepository = AppDI.get<UserRepository>();
     _processParsedContent();
     _loadMentionUsersSync();
-    _preloadMentionUsers();
+    _preloadMentionUsersAsync();
   }
 
   @override
@@ -127,7 +127,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     }
   }
 
-  void _preloadMentionUsers() {
+  Future<void> _preloadMentionUsersAsync() async {
     final mentionIds = _textParts.where((part) => part['type'] == 'mention').map((part) => part['id'] as String).toSet();
     
     if (mentionIds.isEmpty) return;
@@ -147,7 +147,49 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     
     if (npubsToFetch.isEmpty) return;
 
-    _loadMentionUsersBatch(npubsToFetch, pubkeyHexToNpubMap);
+    try {
+      final cachedResults = await _userRepository.getUserProfiles(npubsToFetch, priority: FetchPriority.urgent);
+      
+      if (!mounted) return;
+
+      bool hasUpdates = false;
+      for (final entry in cachedResults.entries) {
+        final npub = entry.key;
+        final result = entry.value;
+        
+        final pubkeyHex = pubkeyHexToNpubMap.entries
+            .firstWhere((e) => e.value == npub, orElse: () => MapEntry('', ''))
+            .key;
+        
+        if (pubkeyHex.isEmpty) continue;
+        
+        result.fold(
+          (user) {
+            if (!_mentionUsers.containsKey(pubkeyHex) || _mentionUsers[pubkeyHex]!.name == pubkeyHex.substring(0, 8) || _mentionUsers[pubkeyHex]!.profileImage.isEmpty) {
+              _mentionUsers[pubkeyHex] = user;
+              hasUpdates = true;
+            }
+          },
+          (_) {},
+        );
+      }
+      
+      if (mounted && hasUpdates) {
+        setState(() {});
+      }
+
+      final missingNpubs = cachedResults.entries
+          .where((e) => e.value.isError)
+          .map((e) => e.key)
+          .toList();
+      
+      if (missingNpubs.isNotEmpty) {
+        _loadMentionUsersBatch(missingNpubs, pubkeyHexToNpubMap);
+      }
+    } catch (e) {
+      debugPrint('[NoteContentWidget] Preload cached profiles error: $e');
+      _loadMentionUsersBatch(npubsToFetch, pubkeyHexToNpubMap);
+    }
   }
 
   Future<void> _loadMentionUsersBatch(List<String> npubs, Map<String, String> pubkeyMap) async {
@@ -171,13 +213,13 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         
         result.fold(
           (user) {
-            if (_mentionUsers[pubkeyHex]?.name != user.name) {
+            if (!_mentionUsers.containsKey(pubkeyHex) || _mentionUsers[pubkeyHex]!.name == pubkeyHex.substring(0, 8) || _mentionUsers[pubkeyHex]!.profileImage.isEmpty) {
               _mentionUsers[pubkeyHex] = user;
               hasUpdates = true;
             }
           },
           (_) {
-            if (_mentionUsers[pubkeyHex] == null) {
+            if (!_mentionUsers.containsKey(pubkeyHex)) {
               _mentionUsers[pubkeyHex] = _createPlaceholderUser(pubkeyHex);
               hasUpdates = true;
             }

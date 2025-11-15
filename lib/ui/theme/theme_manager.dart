@@ -90,265 +90,141 @@ class ThemeManager extends ChangeNotifier {
 }
 
 class AppThemeColors {
-  final Color primary;
-  final Color secondary;
   final Color accent;
+  final Color accentBright;
   final Color background;
   final Color surface;
-  final Color surfaceVariant;
   final Color textPrimary;
   final Color textSecondary;
-  final Color textTertiary;
-  final Color textDisabled;
-  final Color textHint;
   final Color error;
   final Color success;
   final Color warning;
   final Color buttonPrimary;
   final Color buttonText;
-  final Color buttonSecondary;
-  final Color buttonBorder;
   final Color border;
-  final Color borderLight;
-  final Color borderAccent;
   final Color divider;
-  final Color overlay;
   final Color overlayLight;
-  final Color overlayDark;
-  final Color iconPrimary;
-  final Color iconSecondary;
-  final Color iconDisabled;
+  final Color inputFill;
+  final Color avatarPlaceholder;
   final Color reaction;
   final Color reply;
   final Color repost;
   final Color zap;
-  final Color avatarBackground;
-  final Color avatarPlaceholder;
-  final Color inputFill;
-  final Color inputBorder;
-  final Color inputFocused;
-  final Color inputLabel;
-  final Color loading;
-  final Color loadingBackground;
-  final Color notificationBackground;
-  final Color backgroundTransparent;
-  final Color surfaceTransparent;
-  final Color overlayTransparent;
-  final Color borderTransparent;
-  final Color hoverTransparent;
-  final List<Color> backgroundGradient;
-  final Color cardBackground;
-  final Color cardBorder;
-  final Color profileBorder;
-  final Color videoBorder;
-  final Color sliderActive;
-  final Color sliderInactive;
-  final Color sliderThumb;
-  final Color glassBackground;
-  final Color grey600;
-  final Color grey700;
-  final Color grey800;
-  final Color grey900;
-  final Color red400;
-  final Color blue200;
-  final Color green400;
 
   AppThemeColors({
-    required this.primary,
-    required this.secondary,
     required this.accent,
+    required this.accentBright,
     required this.background,
     required this.surface,
-    required this.surfaceVariant,
     required this.textPrimary,
     required this.textSecondary,
-    required this.textTertiary,
-    required this.textDisabled,
-    required this.textHint,
     required this.error,
     required this.success,
     required this.warning,
     required this.buttonPrimary,
     required this.buttonText,
-    required this.buttonSecondary,
-    required this.buttonBorder,
     required this.border,
-    required this.borderLight,
-    required this.borderAccent,
     required this.divider,
-    required this.overlay,
     required this.overlayLight,
-    required this.overlayDark,
-    required this.iconPrimary,
-    required this.iconSecondary,
-    required this.iconDisabled,
+    required this.inputFill,
+    required this.avatarPlaceholder,
     required this.reaction,
     required this.reply,
     required this.repost,
     required this.zap,
-    required this.avatarBackground,
-    required this.avatarPlaceholder,
-    required this.inputFill,
-    required this.inputBorder,
-    required this.inputFocused,
-    required this.inputLabel,
-    required this.loading,
-    required this.loadingBackground,
-    required this.notificationBackground,
-    required this.backgroundTransparent,
-    required this.surfaceTransparent,
-    required this.overlayTransparent,
-    required this.borderTransparent,
-    required this.hoverTransparent,
-    required this.backgroundGradient,
-    required this.cardBackground,
-    required this.cardBorder,
-    required this.profileBorder,
-    required this.videoBorder,
-    required this.sliderActive,
-    required this.sliderInactive,
-    required this.sliderThumb,
-    required this.glassBackground,
-    required this.grey600,
-    required this.grey700,
-    required this.grey800,
-    required this.grey900,
-    required this.red400,
-    required this.blue200,
-    required this.green400,
   });
+
+  Color get primary => textPrimary;
+  Color get secondary => textSecondary;
+  Color get surfaceVariant => surface;
+  Color get textTertiary => textSecondary;
+  Color get textDisabled => textSecondary.withValues(alpha: 0.5);
+  Color get textHint => textSecondary;
+  Color get buttonSecondary => overlayLight;
+  Color get buttonBorder => border;
+  Color get borderLight => border;
+  Color get borderAccent => border;
+  Color get overlay => background.withValues(alpha: 0.5);
+  Color get overlayDark => background.withValues(alpha: 0.8);
+  Color get iconPrimary => textPrimary;
+  Color get iconSecondary => textSecondary;
+  Color get iconDisabled => textSecondary.withValues(alpha: 0.5);
+  Color get avatarBackground => surface;
+  Color get inputBorder => border;
+  Color get inputFocused => textPrimary;
+  Color get inputLabel => textSecondary;
+  Color get loading => textPrimary;
+  Color get loadingBackground => surface;
+  Color get notificationBackground => surface;
+  Color get backgroundTransparent => background.withValues(alpha: 0.85);
+  Color get surfaceTransparent => surface.withValues(alpha: 0.9);
+  Color get overlayTransparent => background.withValues(alpha: 0.75);
+  Color get borderTransparent => textPrimary.withValues(alpha: 0.3);
+  Color get hoverTransparent => textPrimary.withValues(alpha: 0.1);
+  List<Color> get backgroundGradient => [background, surface, background];
+  Color get cardBackground => surface;
+  Color get cardBorder => border;
+  Color get profileBorder => border;
+  Color get videoBorder => textPrimary.withValues(alpha: 0.3);
+  Color get sliderActive => textPrimary;
+  Color get sliderInactive => border;
+  Color get sliderThumb => textPrimary;
+  Color get glassBackground => surface.withValues(alpha: 0.7);
+  Color get grey600 => textSecondary;
+  Color get grey700 => textSecondary;
+  Color get grey800 => border;
+  Color get grey900 => border;
+  Color get red400 => reaction;
+  Color get blue200 => reply;
+  Color get green400 => repost;
 
   factory AppThemeColors.dark() {
     return AppThemeColors(
-      primary: AppColors.primary,
-      secondary: AppColors.secondary,
       accent: AppColors.accent,
+      accentBright: AppColors.accentBright,
       background: AppColors.background,
       surface: AppColors.surface,
-      surfaceVariant: AppColors.surfaceVariant,
       textPrimary: AppColors.textPrimary,
       textSecondary: AppColors.textSecondary,
-      textTertiary: AppColors.textTertiary,
-      textDisabled: AppColors.textDisabled,
-      textHint: AppColors.textHint,
       error: AppColors.error,
       success: AppColors.success,
       warning: AppColors.warning,
       buttonPrimary: AppColors.buttonPrimary,
       buttonText: AppColors.buttonText,
-      buttonSecondary: AppColors.buttonSecondary,
-      buttonBorder: AppColors.buttonBorder,
       border: AppColors.border,
-      borderLight: AppColors.borderLight,
-      borderAccent: AppColors.borderAccent,
       divider: AppColors.divider,
-      overlay: AppColors.overlay,
       overlayLight: AppColors.overlayLight,
-      overlayDark: AppColors.overlayDark,
-      iconPrimary: AppColors.iconPrimary,
-      iconSecondary: AppColors.iconSecondary,
-      iconDisabled: AppColors.iconDisabled,
+      inputFill: AppColors.inputFill,
+      avatarPlaceholder: AppColors.avatarPlaceholder,
       reaction: AppColors.reaction,
       reply: AppColors.reply,
       repost: AppColors.repost,
       zap: AppColors.zap,
-      avatarBackground: AppColors.avatarBackground,
-      avatarPlaceholder: AppColors.avatarPlaceholder,
-      inputFill: AppColors.inputFill,
-      inputBorder: AppColors.inputBorder,
-      inputFocused: AppColors.inputFocused,
-      inputLabel: AppColors.inputLabel,
-      loading: AppColors.loading,
-      loadingBackground: AppColors.loadingBackground,
-      notificationBackground: AppColors.notificationBackground,
-      backgroundTransparent: AppColors.backgroundTransparent,
-      surfaceTransparent: AppColors.surfaceTransparent,
-      overlayTransparent: AppColors.overlayTransparent,
-      borderTransparent: AppColors.borderTransparent,
-      hoverTransparent: AppColors.hoverTransparent,
-      backgroundGradient: AppColors.backgroundGradient,
-      cardBackground: AppColors.cardBackground,
-      cardBorder: AppColors.cardBorder,
-      profileBorder: AppColors.profileBorder,
-      videoBorder: AppColors.videoBorder,
-      sliderActive: AppColors.sliderActive,
-      sliderInactive: AppColors.sliderInactive,
-      sliderThumb: AppColors.sliderThumb,
-      glassBackground: AppColors.glassBackground,
-      grey600: AppColors.grey600,
-      grey700: AppColors.grey700,
-      grey800: AppColors.grey800,
-      grey900: AppColors.grey900,
-      red400: AppColors.red400,
-      blue200: AppColors.blue400,
-      green400: AppColors.green400,
     );
   }
 
   factory AppThemeColors.light() {
     return AppThemeColors(
-      primary: AppColorsLight.primary,
-      secondary: AppColorsLight.secondary,
       accent: AppColorsLight.accent,
+      accentBright: AppColorsLight.accentBright,
       background: AppColorsLight.background,
       surface: AppColorsLight.surface,
-      surfaceVariant: AppColorsLight.surfaceVariant,
       textPrimary: AppColorsLight.textPrimary,
       textSecondary: AppColorsLight.textSecondary,
-      textTertiary: AppColorsLight.textTertiary,
-      textDisabled: AppColorsLight.textDisabled,
-      textHint: AppColorsLight.textHint,
       error: AppColorsLight.error,
       success: AppColorsLight.success,
       warning: AppColorsLight.warning,
       buttonPrimary: AppColorsLight.buttonPrimary,
       buttonText: AppColorsLight.buttonText,
-      buttonSecondary: AppColorsLight.buttonSecondary,
-      buttonBorder: AppColorsLight.buttonBorder,
       border: AppColorsLight.border,
-      borderLight: AppColorsLight.borderLight,
-      borderAccent: AppColorsLight.borderAccent,
       divider: AppColorsLight.divider,
-      overlay: AppColorsLight.overlay,
       overlayLight: AppColorsLight.overlayLight,
-      overlayDark: AppColorsLight.overlayDark,
-      iconPrimary: AppColorsLight.iconPrimary,
-      iconSecondary: AppColorsLight.iconSecondary,
-      iconDisabled: AppColorsLight.iconDisabled,
+      inputFill: AppColorsLight.inputFill,
+      avatarPlaceholder: AppColorsLight.avatarPlaceholder,
       reaction: AppColorsLight.reaction,
       reply: AppColorsLight.reply,
       repost: AppColorsLight.repost,
       zap: AppColorsLight.zap,
-      avatarBackground: AppColorsLight.avatarBackground,
-      avatarPlaceholder: AppColorsLight.avatarPlaceholder,
-      inputFill: AppColorsLight.inputFill,
-      inputBorder: AppColorsLight.inputBorder,
-      inputFocused: AppColorsLight.inputFocused,
-      inputLabel: AppColorsLight.inputLabel,
-      loading: AppColorsLight.loading,
-      loadingBackground: AppColorsLight.loadingBackground,
-      notificationBackground: AppColorsLight.notificationBackground,
-      backgroundTransparent: AppColorsLight.backgroundTransparent,
-      surfaceTransparent: AppColorsLight.surfaceTransparent,
-      overlayTransparent: AppColorsLight.overlayTransparent,
-      borderTransparent: AppColorsLight.borderTransparent,
-      hoverTransparent: AppColorsLight.hoverTransparent,
-      backgroundGradient: AppColorsLight.backgroundGradient,
-      cardBackground: AppColorsLight.cardBackground,
-      cardBorder: AppColorsLight.cardBorder,
-      profileBorder: AppColorsLight.profileBorder,
-      videoBorder: AppColorsLight.videoBorder,
-      sliderActive: AppColorsLight.sliderActive,
-      sliderInactive: AppColorsLight.sliderInactive,
-      sliderThumb: AppColorsLight.sliderThumb,
-      glassBackground: AppColorsLight.glassBackground,
-      grey600: AppColorsLight.grey600,
-      grey700: AppColorsLight.grey700,
-      grey800: AppColorsLight.grey800,
-      grey900: AppColorsLight.grey900,
-      red400: AppColorsLight.red400,
-      blue200: AppColorsLight.blue200,
-      green400: AppColorsLight.green400,
     );
   }
 }

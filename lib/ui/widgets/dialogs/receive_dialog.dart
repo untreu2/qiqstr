@@ -76,10 +76,7 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final themeManager = context.themeManager;
-    final oppositeColors = themeManager?.isDarkMode == true 
-        ? AppThemeColors.light() 
-        : AppThemeColors.dark();
+    final colors = context.colors;
     if (_invoice != null) {
       return Padding(
         padding: const EdgeInsets.all(16),
@@ -90,7 +87,7 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
             Text(
               _amount != null ? 'Receive $_amount sats' : 'Lightning Invoice',
               style: TextStyle(
-                color: oppositeColors.textPrimary,
+                color: colors.textPrimary,
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
               ),
@@ -99,7 +96,7 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: oppositeColors.surface,
+                color: colors.overlayLight,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: SelectableText(
@@ -107,7 +104,7 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
                 style: TextStyle(
                   fontFamily: 'monospace',
                   fontSize: 11,
-                  color: oppositeColors.textPrimary,
+                  color: colors.textPrimary,
                 ),
               ),
             ),
@@ -116,7 +113,7 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
               Text(
                 'Your Lightning Address',
                 style: TextStyle(
-                  color: oppositeColors.textSecondary,
+                  color: colors.textSecondary,
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -125,14 +122,14 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: oppositeColors.surface,
+                  color: colors.overlayLight,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: SelectableText(
                   widget.lud16!,
                   style: TextStyle(
                     fontSize: 14,
-                    color: oppositeColors.textPrimary,
+                    color: colors.textPrimary,
                   ),
                 ),
               ),
@@ -157,15 +154,15 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
             controller: _amountController,
             keyboardType: TextInputType.number,
             enabled: !_isLoading,
-            style: TextStyle(color: oppositeColors.textPrimary),
+            style: TextStyle(color: colors.textPrimary),
             decoration: InputDecoration(
               labelText: 'Amount (sats)',
               labelStyle: TextStyle(
                 fontWeight: FontWeight.w600,
-                color: oppositeColors.textSecondary,
+                color: colors.textSecondary,
               ),
               filled: true,
-              fillColor: oppositeColors.inputFill,
+              fillColor: colors.overlayLight,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(25),
                 borderSide: BorderSide.none,
@@ -177,7 +174,7 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
             const SizedBox(height: 12),
             Text(
               _error!,
-              style: TextStyle(color: oppositeColors.error, fontSize: 12),
+              style: TextStyle(color: colors.error, fontSize: 12),
             ),
           ],
           const SizedBox(height: 24),
@@ -188,7 +185,7 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
               padding: const EdgeInsets.symmetric(vertical: 12),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: oppositeColors.buttonPrimary,
+                color: colors.accentBright,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: _isLoading
@@ -197,13 +194,13 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(oppositeColors.background),
+                        valueColor: AlwaysStoppedAnimation<Color>(colors.background),
                       ),
                     )
                   : Text(
                       'Create Invoice',
                       style: TextStyle(
-                        color: oppositeColors.buttonText,
+                        color: colors.background,
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
                       ),

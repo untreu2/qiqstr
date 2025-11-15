@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:nostr/nostr.dart';
+import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../../../constants/relays.dart';
 import '../../../core/di/app_di.dart';
@@ -563,6 +564,8 @@ class _RelayPageState extends State<RelayPage> {
                   icon: Icons.add,
                   onPressed: _showAddRelayDialog,
                   size: ButtonSize.large,
+                  backgroundColor: context.colors.accentBright,
+                  foregroundColor: context.colors.background,
                 ),
               ),
               const SizedBox(width: 12),
@@ -597,16 +600,8 @@ class _RelayPageState extends State<RelayPage> {
             ),
           )
         else
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: relays.length,
-            itemBuilder: (context, index) => _buildRelayTile(relays[index], isMainRelay),
-            separatorBuilder: (_, __) => Divider(
-              color: context.colors.border.withValues(alpha: 0.3),
-              height: 1,
-            ),
+          Column(
+            children: relays.map((relay) => _buildRelayTile(relay, isMainRelay)).toList(),
           ),
       ],
     );
@@ -618,83 +613,71 @@ class _RelayPageState extends State<RelayPage> {
       orElse: () => <String, dynamic>{},
     );
     final isUserRelay = userRelay.isNotEmpty;
-    final marker = userRelay['marker'] as String? ?? '';
 
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 4),
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: isUserRelay ? context.colors.accent.withValues(alpha: 0.1) : context.colors.surface,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isUserRelay ? context.colors.accent.withValues(alpha: 0.3) : context.colors.border.withValues(alpha: 0.3),
-            width: 1,
+    return RepaintBoundary(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+          decoration: BoxDecoration(
+            color: context.colors.overlayLight,
+            borderRadius: BorderRadius.circular(40),
           ),
-        ),
-        child: Icon(
-          isUserRelay ? Icons.cloud_sync : Icons.router,
-          color: isUserRelay ? context.colors.accent : context.colors.textSecondary,
-          size: 20,
-        ),
-      ),
-      title: Text(
-        relay,
-        style: TextStyle(
-          color: context.colors.textPrimary,
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      subtitle: isUserRelay
-          ? Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: context.colors.accent.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    'Synced',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: context.colors.accent,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: isUserRelay 
+                    ? context.colors.accent.withValues(alpha: 0.1) 
+                    : Colors.grey.shade800,
+                child: Icon(
+                  isUserRelay ? Icons.cloud_sync : Icons.router,
+                  color: isUserRelay ? context.colors.accent : context.colors.textSecondary,
+                  size: 26,
                 ),
-                if (marker.isNotEmpty) ...[
-                  const SizedBox(width: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: context.colors.surface,
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: context.colors.border),
-                    ),
-                    child: Text(
-                      marker.replaceAll(',', ' • '),
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: context.colors.textSecondary,
-                        fontWeight: FontWeight.w400,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            relay,
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              color: context.colors.textPrimary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
                     ),
+                  ],
+                ),
+              ),
+              GestureDetector(
+                onTap: () => _removeRelay(relay, isMainRelay),
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: context.colors.error.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
                   ),
-                ],
-              ],
-            )
-          : null,
-      trailing: GestureDetector(
-        onTap: () => _removeRelay(relay, isMainRelay),
-        child: Container(
-          padding: const EdgeInsets.all(8),
-          child: Icon(
-            Icons.delete_outline,
-            color: context.colors.textSecondary,
-            size: 20,
+                  child: Icon(
+                    CarbonIcons.delete,
+                    size: 24,
+                    color: context.colors.error,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

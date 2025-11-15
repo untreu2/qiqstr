@@ -434,14 +434,10 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
   }
 
   void _showReceiveDialog() {
-    final themeManager = context.themeManager;
-    final oppositeColors = themeManager?.isDarkMode == true 
-        ? AppThemeColors.light() 
-        : AppThemeColors.dark();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: oppositeColors.background,
+      backgroundColor: context.colors.background,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -453,14 +449,10 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
   }
 
   void _showSendDialog() {
-    final themeManager = context.themeManager;
-    final oppositeColors = themeManager?.isDarkMode == true 
-        ? AppThemeColors.light() 
-        : AppThemeColors.dark();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: oppositeColors.background,
+      backgroundColor: context.colors.background,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),

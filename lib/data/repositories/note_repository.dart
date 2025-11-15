@@ -65,9 +65,18 @@ class NoteRepository {
       final allCachedNotes = _getAllCachedNotes();
       final filtered = filter.apply(allCachedNotes);
       
-      debugPrint('[NoteRepository] Filter returned ${filtered.length} notes');
+      final seenIds = <String>{};
+      final deduplicatedNotes = <NoteModel>[];
+      for (final note in filtered) {
+        if (!seenIds.contains(note.id)) {
+          seenIds.add(note.id);
+          deduplicatedNotes.add(note);
+        }
+      }
       
-      return Result.success(filtered);
+      debugPrint('[NoteRepository] Filter returned ${filtered.length} notes, after deduplication: ${deduplicatedNotes.length}');
+      
+      return Result.success(deduplicatedNotes);
     } catch (e) {
       debugPrint('[NoteRepository] Exception in getFilteredNotes: $e');
       return Result.error('Failed to apply filter: ${e.toString()}');

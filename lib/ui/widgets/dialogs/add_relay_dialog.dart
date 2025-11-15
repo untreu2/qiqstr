@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../theme/theme_manager.dart';
-import '../common/common_buttons.dart';
 
 Future<void> showAddRelayDialog({
   required BuildContext context,
@@ -9,14 +8,11 @@ Future<void> showAddRelayDialog({
   required VoidCallback onAdd,
 }) async {
   controller.clear();
-  final themeManager = context.themeManager;
-  final oppositeColors = themeManager?.isDarkMode == true 
-      ? AppThemeColors.light() 
-      : AppThemeColors.dark();
+  final colors = context.colors;
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: oppositeColors.background,
+    backgroundColor: colors.background,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
@@ -29,17 +25,17 @@ Future<void> showAddRelayDialog({
             controller: controller,
             autofocus: true,
             style: TextStyle(
-              color: oppositeColors.textPrimary,
+              color: colors.textPrimary,
               fontSize: 15,
             ),
             decoration: InputDecoration(
               hintText: 'wss://relay.example.com',
               hintStyle: TextStyle(
-                color: oppositeColors.textSecondary,
+                color: colors.textSecondary,
                 fontSize: 15,
               ),
               filled: true,
-              fillColor: oppositeColors.inputFill,
+              fillColor: colors.overlayLight,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(25),
                 borderSide: BorderSide.none,
@@ -47,26 +43,34 @@ Future<void> showAddRelayDialog({
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
           ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: PrimaryButton(
-              label: 'Add Relay',
-              icon: Icons.add,
-              onPressed: isLoading ? null : onAdd,
-              isLoading: isLoading,
-              size: ButtonSize.large,
-            ),
-          ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: SecondaryButton(
-              label: 'Cancel',
-              onPressed: () => Navigator.pop(modalContext),
-              backgroundColor: oppositeColors.overlayLight,
-              foregroundColor: oppositeColors.textPrimary,
-              size: ButtonSize.large,
+          const SizedBox(height: 24),
+          GestureDetector(
+            onTap: isLoading ? null : onAdd,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: colors.accentBright,
+                borderRadius: BorderRadius.circular(40),
+              ),
+              child: isLoading
+                  ? SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(colors.background),
+                      ),
+                    )
+                  : Text(
+                      'Add Relay',
+                      style: TextStyle(
+                        color: colors.background,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
             ),
           ),
         ],

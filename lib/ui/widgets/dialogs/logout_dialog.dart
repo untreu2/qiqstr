@@ -6,14 +6,11 @@ Future<void> showLogoutDialog({
   required BuildContext context,
   required VoidCallback onConfirm,
 }) async {
-  final themeManager = context.themeManager;
-  final oppositeColors = themeManager?.isDarkMode == true 
-      ? AppThemeColors.light() 
-      : AppThemeColors.dark();
+  final colors = context.colors;
   return showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: oppositeColors.background,
+    backgroundColor: colors.background,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
@@ -30,7 +27,7 @@ Future<void> showLogoutDialog({
           Text(
             'Are you sure you want to logout?',
             style: TextStyle(
-              color: oppositeColors.textPrimary,
+              color: colors.textPrimary,
               fontSize: 20,
               fontWeight: FontWeight.w600,
             ),
@@ -40,7 +37,7 @@ Future<void> showLogoutDialog({
             'IF YOU HAVEN\'T SAVED YOUR SEED PHRASE, YOU WILL LOSE YOUR ACCOUNT FOREVER.',
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: oppositeColors.textSecondary,
+              color: colors.textSecondary,
               fontSize: 14,
               fontWeight: FontWeight.w400,
             ),
@@ -63,8 +60,8 @@ Future<void> showLogoutDialog({
                     Navigator.pop(modalContext);
                     onConfirm();
                   },
-                  backgroundColor: oppositeColors.error.withValues(alpha: 0.1),
-                  foregroundColor: oppositeColors.error,
+                  backgroundColor: colors.error.withValues(alpha: 0.1),
+                  foregroundColor: colors.error,
                   size: ButtonSize.large,
                 ),
               ),

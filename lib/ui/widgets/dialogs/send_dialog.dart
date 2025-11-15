@@ -73,10 +73,7 @@ class _SendDialogState extends State<SendDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final themeManager = context.themeManager;
-    final oppositeColors = themeManager?.isDarkMode == true 
-        ? AppThemeColors.light() 
-        : AppThemeColors.dark();
+    final colors = context.colors;
     if (_successMessage != null) {
       return Padding(
         padding: const EdgeInsets.all(16),
@@ -85,13 +82,13 @@ class _SendDialogState extends State<SendDialog> {
           children: [
             Icon(
               Icons.check_circle,
-              color: oppositeColors.textPrimary,
+              color: colors.textPrimary,
               size: 48,
             ),
             const SizedBox(height: 16),
             Text(
               _successMessage!,
-              style: TextStyle(color: oppositeColors.textPrimary, fontSize: 14),
+              style: TextStyle(color: colors.textPrimary, fontSize: 14),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 45),
@@ -113,17 +110,17 @@ class _SendDialogState extends State<SendDialog> {
           TextField(
             controller: _invoiceController,
             enabled: !_isLoading,
-            style: TextStyle(color: oppositeColors.textPrimary),
+            style: TextStyle(color: colors.textPrimary),
             decoration: InputDecoration(
               labelText: 'Lightning Invoice',
               hintText: 'Paste invoice here...',
               labelStyle: TextStyle(
                 fontWeight: FontWeight.w600,
-                color: oppositeColors.textSecondary,
+                color: colors.textSecondary,
               ),
-              hintStyle: TextStyle(color: oppositeColors.textSecondary),
+              hintStyle: TextStyle(color: colors.textSecondary),
               filled: true,
-              fillColor: oppositeColors.inputFill,
+              fillColor: colors.overlayLight,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(25),
                 borderSide: BorderSide.none,
@@ -136,7 +133,7 @@ class _SendDialogState extends State<SendDialog> {
             const SizedBox(height: 12),
             Text(
               _error!,
-              style: TextStyle(color: oppositeColors.error, fontSize: 12),
+              style: TextStyle(color: colors.error, fontSize: 12),
             ),
           ],
           const SizedBox(height: 24),
@@ -147,7 +144,7 @@ class _SendDialogState extends State<SendDialog> {
               padding: const EdgeInsets.symmetric(vertical: 12),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: oppositeColors.buttonPrimary,
+                color: colors.accentBright,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: _isLoading
@@ -156,13 +153,13 @@ class _SendDialogState extends State<SendDialog> {
                       height: 20,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(oppositeColors.background),
+                        valueColor: AlwaysStoppedAnimation<Color>(colors.background),
                       ),
                     )
                   : Text(
                       'Pay Invoice',
                       style: TextStyle(
-                        color: oppositeColors.buttonText,
+                        color: colors.background,
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
                       ),

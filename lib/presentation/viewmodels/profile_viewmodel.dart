@@ -212,7 +212,16 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
             debugPrint(
                 '[ProfileViewModel] PROFILE MODE: Notes breakdown - Posts: ${notes.where((n) => !n.isReply && !n.isRepost).length}, Replies: ${notes.where((n) => n.isReply && !n.isRepost).length}, Reposts: ${notes.where((n) => n.isRepost).length}');
 
-            final filteredNotes = notes.where((note) {
+            final seenIds = <String>{};
+            final deduplicatedNotes = <NoteModel>[];
+            for (final note in notes) {
+              if (!seenIds.contains(note.id)) {
+                seenIds.add(note.id);
+                deduplicatedNotes.add(note);
+              }
+            }
+
+            final filteredNotes = deduplicatedNotes.where((note) {
               if (!note.isReply && !note.isRepost) {
                 return true;
               }
@@ -229,7 +238,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
             }).toList();
 
             debugPrint(
-                '[ProfileViewModel] PROFILE MODE: After filtering - ${filteredNotes.length} notes (${notes.length - filteredNotes.length} standalone replies hidden)');
+                '[ProfileViewModel] PROFILE MODE: After deduplication and filtering - ${filteredNotes.length} notes (${notes.length - filteredNotes.length} duplicates/replies removed)');
             debugPrint(
                 '[ProfileViewModel] PROFILE MODE: Filtered breakdown - Posts: ${filteredNotes.where((n) => !n.isReply && !n.isRepost).length}, Reposts: ${filteredNotes.where((n) => n.isRepost).length}');
 
@@ -267,7 +276,22 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
       result.fold(
         (notes) {
           if (notes.isNotEmpty) {
-            final filteredNotes = notes.where((note) {
+            final currentNotes = _profileNotesState is LoadedState<List<NoteModel>>
+                ? (_profileNotesState as LoadedState<List<NoteModel>>).data
+                : <NoteModel>[];
+            
+            final currentNoteIds = currentNotes.map((n) => n.id).toSet();
+            final seenIds = <String>{};
+            final deduplicatedNotes = <NoteModel>[];
+            
+            for (final note in notes) {
+              if (!seenIds.contains(note.id) && !currentNoteIds.contains(note.id)) {
+                seenIds.add(note.id);
+                deduplicatedNotes.add(note);
+              }
+            }
+
+            final filteredNotes = deduplicatedNotes.where((note) {
               if (!note.isReply && !note.isRepost) {
                 return true;
               }
@@ -283,7 +307,20 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
               return true;
             }).toList();
 
-            _profileNotesState = filteredNotes.isEmpty ? const EmptyState('No notes from this user yet') : LoadedState(filteredNotes);
+            if (filteredNotes.isNotEmpty || currentNotes.isEmpty) {
+              final allNotes = [...currentNotes, ...filteredNotes];
+              final allSeenIds = <String>{};
+              final finalDeduplicatedNotes = <NoteModel>[];
+              
+              for (final note in allNotes) {
+                if (!allSeenIds.contains(note.id)) {
+                  allSeenIds.add(note.id);
+                  finalDeduplicatedNotes.add(note);
+                }
+              }
+
+              _profileNotesState = finalDeduplicatedNotes.isEmpty ? const EmptyState('No notes from this user yet') : LoadedState(finalDeduplicatedNotes);
+            }
             
             safeNotifyListeners();
           }
