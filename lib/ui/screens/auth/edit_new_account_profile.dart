@@ -9,7 +9,6 @@ import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../services/media_service.dart';
 import '../../widgets/common/snackbar_widget.dart';
-import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/title_widget.dart';
 
@@ -264,7 +263,6 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                   ],
                 ),
               ),
-              const BackButtonWidget.floating(),
               Positioned(
                 top: MediaQuery.of(context).padding.top + 16,
                 right: 16,
