@@ -314,40 +314,49 @@ class _UserTileState extends State<UserTile> {
                 ),
                 if (widget.showFollowButton && !isCurrentUser && _isFollowing != null) ...[
                   const SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: _isLoading ? null : _toggleFollow,
-                    child: Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: _isFollowing == true
-                            ? context.colors.overlayLight
-                            : context.colors.buttonPrimary,
-                        shape: BoxShape.circle,
-                      ),
-                      child: _isLoading
-                          ? SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
+                  Builder(
+                    builder: (context) {
+                      final followBgColor = context.colors.accentBright;
+                      final followIconColor = context.colors.background;
+                      final unfollowBgColor = context.colors.background;
+                      final unfollowIconColor = context.colors.accentBright;
+
+                      return GestureDetector(
+                        onTap: _isLoading ? null : _toggleFollow,
+                        child: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: _isFollowing == true
+                                ? unfollowBgColor
+                                : followBgColor,
+                            shape: BoxShape.circle,
+                          ),
+                          child: _isLoading
+                              ? SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      _isFollowing == true
+                                          ? unfollowIconColor
+                                          : followIconColor,
+                                    ),
+                                  ),
+                                )
+                              : Icon(
                                   _isFollowing == true
-                                      ? context.colors.textPrimary
-                                      : context.colors.buttonText,
+                                      ? CarbonIcons.user_admin
+                                      : CarbonIcons.user_follow,
+                                  size: 21,
+                                  color: _isFollowing == true
+                                      ? unfollowIconColor
+                                      : followIconColor,
                                 ),
-                              ),
-                            )
-                          : Icon(
-                              _isFollowing == true
-                                  ? CarbonIcons.user_admin
-                                  : CarbonIcons.user_follow,
-                              size: 21,
-                              color: _isFollowing == true
-                                  ? context.colors.textPrimary
-                                  : context.colors.buttonText,
-                            ),
-                    ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ],

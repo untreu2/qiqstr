@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:carbon_icons/carbon_icons.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -823,13 +824,24 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           color: isFollowing ? context.colors.overlayLight : context.colors.buttonPrimary,
           borderRadius: BorderRadius.circular(40),
         ),
-        child: Text(
-          isFollowing ? 'Following' : 'Follow',
-          style: TextStyle(
-            color: isFollowing ? context.colors.textPrimary : context.colors.buttonText,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isFollowing ? CarbonIcons.user_admin : CarbonIcons.user_follow,
+              size: 16,
+              color: isFollowing ? context.colors.textPrimary : context.colors.buttonText,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              isFollowing ? 'Following' : 'Follow',
+              style: TextStyle(
+                color: isFollowing ? context.colors.textPrimary : context.colors.buttonText,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
       ),
     );
