@@ -2,12 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import '../../../models/note_model.dart';
-import '../../screens/share_note.dart';
+import '../../screens/note/share_note.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/note_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
-import '../snackbar_widget.dart';
+import '../common/snackbar_widget.dart';
 
 Future<void> showRepostDialog({
   required BuildContext context,

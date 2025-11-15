@@ -8,7 +8,7 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'ui/theme/colors.dart';
 import 'ui/theme/theme_manager.dart' as theme;
 import 'ui/screens/home_navigator.dart';
-import 'ui/screens/login_page.dart';
+import 'ui/screens/auth/login_page.dart';
 import 'services/logging_service.dart';
 import 'core/di/app_di.dart';
 import 'data/services/nostr_data_service.dart';

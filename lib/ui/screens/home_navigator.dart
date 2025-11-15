@@ -5,13 +5,13 @@ import 'package:bounce/bounce.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:provider/provider.dart';
 
-import 'package:qiqstr/ui/screens/feed_page.dart';
-import 'package:qiqstr/ui/screens/users_search_page.dart';
-import 'package:qiqstr/ui/screens/notification_page.dart';
-import 'package:qiqstr/ui/screens/wallet_page.dart';
-import 'package:qiqstr/ui/screens/share_note.dart';
+import 'package:qiqstr/ui/screens/note/feed_page.dart';
+import 'package:qiqstr/ui/screens/search/users_search_page.dart';
+import 'package:qiqstr/ui/screens/notification/notification_page.dart';
+import 'package:qiqstr/ui/screens/wallet/wallet_page.dart';
+import 'package:qiqstr/ui/screens/note/share_note.dart';
 import '../theme/theme_manager.dart';
-import '../widgets/indicator_widget.dart';
+import '../widgets/common/indicator_widget.dart';
 
 class HomeNavigator extends StatefulWidget {
   final String npub;

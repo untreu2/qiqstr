@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../base/ui_state.dart';
-import '../../ui/widgets/common_buttons.dart';
+import '../../ui/widgets/common/common_buttons.dart';
 
 class UIStateBuilder<T> extends StatelessWidget {
   const UIStateBuilder({

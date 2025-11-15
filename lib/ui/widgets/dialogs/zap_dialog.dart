@@ -16,7 +16,7 @@ import '../../../data/services/nostr_data_service.dart';
 import '../../../services/nostr_service.dart';
 import '../../../services/relay_service.dart';
 import '../../../constants/relays.dart';
-import '../snackbar_widget.dart';
+import '../common/snackbar_widget.dart';
 
 Future<bool> _payZapWithWallet(
   BuildContext context,
