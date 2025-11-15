@@ -25,9 +25,6 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   bool _isPlaying = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
-  bool _isVisible = true;
-  final GlobalKey _widgetKey = GlobalKey();
-  DateTime? _lastVisibilityCheck;
 
   @override
   void initState() {
@@ -41,9 +38,6 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
             _duration = _controller!.value.duration;
           });
           _controller!.addListener(_updatePosition);
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _checkVisibility();
-          });
         }
       });
   }
@@ -73,57 +67,7 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
       _controller!.pause();
       setState(() => _isPlaying = false);
     }
-    _isVisible = false;
     super.deactivate();
-  }
-
-  @override
-  void activate() {
-    super.activate();
-    _isVisible = true;
-  }
-
-  void _checkVisibility() {
-    if (!mounted || _controller == null || !_controller!.value.isInitialized) return;
-    
-    final now = DateTime.now();
-    if (_lastVisibilityCheck != null && 
-        now.difference(_lastVisibilityCheck!).inMilliseconds < 100) {
-      return;
-    }
-    _lastVisibilityCheck = now;
-    
-    try {
-      final renderObject = _widgetKey.currentContext?.findRenderObject();
-      if (renderObject is RenderBox && 
-          renderObject.attached && 
-          renderObject.hasSize) {
-        final position = renderObject.localToGlobal(Offset.zero);
-        final size = renderObject.size;
-        
-        if (!mounted) return;
-        
-        final screenHeight = MediaQuery.of(context).size.height;
-        final screenWidth = MediaQuery.of(context).size.width;
-        
-        final isVisible = position.dy < screenHeight && 
-                         position.dy + size.height > 0 &&
-                         position.dx < screenWidth &&
-                         position.dx + size.width > 0;
-        
-        if (isVisible != _isVisible) {
-          _isVisible = isVisible;
-          if (!_isVisible && mounted) {
-            if (_controller!.value.isPlaying) {
-              _controller!.pause();
-              setState(() => _isPlaying = false);
-            }
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('[VP] Visibility check error: $e');
-    }
   }
 
   void _updatePosition() {
@@ -188,22 +132,8 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _checkVisibility();
-      }
-    });
-    
-    return NotificationListener<ScrollNotification>(
-      onNotification: (notification) {
-        if (mounted) {
-          _checkVisibility();
-        }
-        return false;
-      },
-      child: RepaintBoundary(
-        key: _widgetKey,
-        child: ClipRRect(
+    return RepaintBoundary(
+      child: ClipRRect(
           borderRadius: BorderRadius.circular(12),
           child: _isInitialized && _controller != null && _controller!.value.aspectRatio > 0
               ? AspectRatio(
@@ -336,7 +266,6 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
                   ),
                 ),
         ),
-      ),
     );
   }
 }
