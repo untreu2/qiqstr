@@ -190,7 +190,7 @@ class SuggestedFollowsPage extends StatelessWidget {
                 child: isSelected
                     ? Icon(
                         Icons.check,
-                        color: context.colors.buttonText,
+                        color: context.colors.background,
                         size: 16,
                       )
                     : null,

@@ -37,7 +37,7 @@ Future<void> showUnfollowUserDialog({
           Row(
             children: [
               Expanded(
-                child: PrimaryButton(
+                child: SecondaryButton(
                   label: 'Cancel',
                   onPressed: () => Navigator.pop(modalContext),
                   size: ButtonSize.large,

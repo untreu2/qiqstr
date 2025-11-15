@@ -4,6 +4,7 @@ import 'package:isar/isar.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../models/user_model_isar.dart';
 import '../../models/following_model_isar.dart';
+import '../../models/mute_model_isar.dart';
 
 class IsarDatabaseService {
   static IsarDatabaseService? _instance;
@@ -34,7 +35,7 @@ class IsarDatabaseService {
       final dir = await getApplicationDocumentsDirectory();
 
       _isar = await Isar.open(
-        [UserModelIsarSchema, FollowingModelIsarSchema],
+        [UserModelIsarSchema, FollowingModelIsarSchema, MuteModelIsarSchema],
         directory: dir.path,
         name: 'qiqstr_db',
         inspector: kDebugMode,
@@ -431,6 +432,139 @@ class IsarDatabaseService {
   Stream<List<FollowingModelIsar>> watchAllFollowingLists() async* {
     final db = await isar;
     yield* db.followingModelIsars.where().watch(fireImmediately: true);
+  }
+
+  Future<void> saveMuteList(String userPubkeyHex, List<String> mutedPubkeys) async {
+    try {
+      final db = await isar;
+      final muteModel = MuteModelIsar.fromMuteModel(userPubkeyHex, mutedPubkeys);
+
+      await db.writeTxn(() async {
+        await db.muteModelIsars.put(muteModel);
+      });
+
+      debugPrint('[IsarDatabaseService] Saved mute list: ${mutedPubkeys.length} muted for $userPubkeyHex');
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error saving mute list: $e');
+    }
+  }
+
+  Future<void> saveMuteLists(Map<String, List<String>> muteLists) async {
+    try {
+      final db = await isar;
+      final muteModels = muteLists.entries.map((entry) {
+        return MuteModelIsar.fromMuteModel(entry.key, entry.value);
+      }).toList();
+
+      await db.writeTxn(() async {
+        await db.muteModelIsars.putAll(muteModels);
+      });
+
+      debugPrint('[IsarDatabaseService] Batch saved ${muteModels.length} mute lists');
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error batch saving mute lists: $e');
+    }
+  }
+
+  Future<List<String>?> getMuteList(String userPubkeyHex) async {
+    try {
+      final db = await isar;
+      final muteModel = await db.muteModelIsars.where().userPubkeyHexEqualTo(userPubkeyHex).findFirst();
+
+      if (muteModel != null) {
+        debugPrint('[IsarDatabaseService] Retrieved mute list from Isar: ${muteModel.mutedPubkeys.length} muted');
+        return muteModel.toMuteList();
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error getting mute list: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, List<String>>> getMuteLists(List<String> userPubkeyHexList) async {
+    try {
+      final db = await isar;
+      final results = <String, List<String>>{};
+
+      if (userPubkeyHexList.isEmpty) return results;
+
+      final muteModels = await db.muteModelIsars
+          .where()
+          .anyOf(userPubkeyHexList, (q, String userPubkeyHex) => q.userPubkeyHexEqualTo(userPubkeyHex))
+          .findAll();
+
+      for (final model in muteModels) {
+        results[model.userPubkeyHex] = model.toMuteList();
+      }
+
+      debugPrint('[IsarDatabaseService] Batch retrieved ${results.length}/${userPubkeyHexList.length} mute lists from Isar');
+      return results;
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error batch getting mute lists: $e');
+      return {};
+    }
+  }
+
+  Future<bool> hasMuteList(String userPubkeyHex) async {
+    try {
+      final db = await isar;
+      final count = await db.muteModelIsars.where().userPubkeyHexEqualTo(userPubkeyHex).count();
+      return count > 0;
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error checking mute list existence: $e');
+      return false;
+    }
+  }
+
+  Future<void> deleteMuteList(String userPubkeyHex) async {
+    try {
+      final db = await isar;
+      await db.writeTxn(() async {
+        await db.muteModelIsars.deleteByUserPubkeyHex(userPubkeyHex);
+      });
+      debugPrint('[IsarDatabaseService] Deleted mute list: $userPubkeyHex');
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error deleting mute list: $e');
+    }
+  }
+
+  Future<void> clearAllMuteLists() async {
+    try {
+      final db = await isar;
+      await db.writeTxn(() async {
+        await db.muteModelIsars.clear();
+      });
+      debugPrint('[IsarDatabaseService] Cleared all mute lists');
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error clearing mute lists: $e');
+    }
+  }
+
+  Future<int> cleanupExpiredMuteLists({Duration ttl = const Duration(days: 3)}) async {
+    try {
+      final db = await isar;
+      final cutoffDate = DateTime.now().subtract(ttl);
+
+      final expiredMuteLists = await db.muteModelIsars.filter().cachedAtLessThan(cutoffDate).findAll();
+
+      if (expiredMuteLists.isEmpty) {
+        return 0;
+      }
+
+      await db.writeTxn(() async {
+        for (final muteList in expiredMuteLists) {
+          await db.muteModelIsars.delete(muteList.id);
+        }
+      });
+
+      debugPrint('[IsarDatabaseService] Cleaned up ${expiredMuteLists.length} expired mute lists');
+      return expiredMuteLists.length;
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error cleaning up expired mute lists: $e');
+      return 0;
+    }
   }
 
   static void reset() {

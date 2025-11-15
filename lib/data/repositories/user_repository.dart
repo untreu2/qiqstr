@@ -11,6 +11,7 @@ import '../services/user_cache_service.dart';
 import '../services/user_batch_fetcher.dart';
 import '../services/isar_database_service.dart';
 import '../services/follow_cache_service.dart';
+import '../services/mute_cache_service.dart';
 
 class UserRepository {
   final AuthService _authService;
@@ -19,6 +20,7 @@ class UserRepository {
   final UserCacheService _cacheService;
   final UserBatchFetcher _batchFetcher;
   final FollowCacheService _followCacheService;
+  final MuteCacheService _muteCacheService;
 
   final StreamController<UserModel> _currentUserController = StreamController<UserModel>.broadcast();
   final StreamController<List<UserModel>> _followingListController = StreamController<List<UserModel>>.broadcast();
@@ -30,12 +32,14 @@ class UserRepository {
     UserCacheService? cacheService,
     UserBatchFetcher? batchFetcher,
     FollowCacheService? followCacheService,
+    MuteCacheService? muteCacheService,
   })  : _authService = authService,
         _validationService = validationService,
         _nostrDataService = nostrDataService,
         _cacheService = cacheService ?? UserCacheService.instance,
         _batchFetcher = batchFetcher ?? UserBatchFetcher.instance,
-        _followCacheService = followCacheService ?? FollowCacheService.instance;
+        _followCacheService = followCacheService ?? FollowCacheService.instance,
+        _muteCacheService = muteCacheService ?? MuteCacheService.instance;
 
   Stream<UserModel> get currentUserStream => _currentUserController.stream;
   Stream<List<UserModel>> get followingListStream => _followingListController.stream;
@@ -704,6 +708,210 @@ class UserRepository {
       debugPrint('[UserRepository] Pruned $toRemoveCount least recently used profiles');
     } catch (e) {
       debugPrint('[UserRepository] Error pruning users: $e');
+    }
+  }
+
+  Future<Result<void>> muteUser(String npub) async {
+    try {
+      final validation = _validationService.validateNpub(npub);
+      if (validation.isError) {
+        return Result.error(validation.error ?? 'Invalid npub');
+      }
+
+      debugPrint('[UserRepository] Muting user: $npub');
+
+      final privateKeyResult = await _authService.getCurrentUserPrivateKey();
+      if (privateKeyResult.isError || privateKeyResult.data == null) {
+        return const Result.error('Private key not found');
+      }
+
+      final privateKey = privateKeyResult.data!;
+
+      final currentUserResult = await _authService.getCurrentUserNpub();
+      if (currentUserResult.isError || currentUserResult.data == null) {
+        return const Result.error('Current user npub not found');
+      }
+
+      final currentUserNpub = currentUserResult.data!;
+
+      String currentUserHex = currentUserNpub;
+      try {
+        if (currentUserNpub.startsWith('npub1')) {
+          final hexResult = _authService.npubToHex(currentUserNpub);
+          if (hexResult != null) {
+            currentUserHex = hexResult;
+          }
+        }
+      } catch (e) {
+        debugPrint('[UserRepository] Error converting current user npub to hex: $e');
+      }
+
+      String targetUserHex = npub;
+      try {
+        if (npub.startsWith('npub1')) {
+          final hexResult = _authService.npubToHex(npub);
+          if (hexResult != null) {
+            targetUserHex = hexResult;
+          }
+        }
+      } catch (e) {
+        debugPrint('[UserRepository] Error converting target npub to hex: $e');
+      }
+
+      final cachedMuted = await _muteCacheService.getOrFetch(currentUserHex, () async {
+        final result = await _nostrDataService.getMuteList(currentUserHex);
+        return result.isSuccess ? result.data : null;
+      });
+
+      List<String> currentMuted = cachedMuted ?? [];
+
+      if (currentMuted.contains(targetUserHex)) {
+        debugPrint('[UserRepository] Already muting $targetUserHex');
+        return const Result.success(null);
+      }
+
+      currentMuted.add(targetUserHex);
+
+      final result = await _nostrDataService.publishMuteEvent(
+        mutedHexList: currentMuted,
+        privateKey: privateKey,
+      );
+
+      if (result.isSuccess) {
+        await _muteCacheService.put(currentUserHex, currentMuted);
+      }
+
+      return result;
+    } catch (e) {
+      return Result.error('Failed to mute user: $e');
+    }
+  }
+
+  Future<Result<void>> unmuteUser(String npub) async {
+    try {
+      debugPrint('[UserRepository] Unmuting user: $npub');
+
+      final validation = _validationService.validateNpub(npub);
+      if (validation.isError) {
+        return Result.error(validation.error ?? 'Invalid npub');
+      }
+
+      final privateKeyResult = await _authService.getCurrentUserPrivateKey();
+      if (privateKeyResult.isError || privateKeyResult.data == null) {
+        return const Result.error('Private key not found');
+      }
+
+      final privateKey = privateKeyResult.data!;
+
+      final currentUserResult = await _authService.getCurrentUserNpub();
+      if (currentUserResult.isError || currentUserResult.data == null) {
+        return const Result.error('Current user npub not found');
+      }
+
+      final currentUserNpub = currentUserResult.data!;
+
+      String currentUserHex = currentUserNpub;
+      try {
+        if (currentUserNpub.startsWith('npub1')) {
+          final hexResult = _authService.npubToHex(currentUserNpub);
+          if (hexResult != null) {
+            currentUserHex = hexResult;
+          }
+        }
+      } catch (e) {
+        debugPrint('[UserRepository] Error converting current user npub to hex: $e');
+      }
+
+      String targetUserHex = npub;
+      try {
+        if (npub.startsWith('npub1')) {
+          final hexResult = _authService.npubToHex(npub);
+          if (hexResult != null) {
+            targetUserHex = hexResult;
+          }
+        }
+      } catch (e) {
+        debugPrint('[UserRepository] Error converting target npub to hex: $e');
+      }
+
+      debugPrint('[UserRepository] Getting mute list for: $currentUserHex');
+      final cachedMuted = await _muteCacheService.getOrFetch(currentUserHex, () async {
+        final result = await _nostrDataService.getMuteList(currentUserHex);
+        return result.isSuccess ? result.data : null;
+      });
+
+      List<String> currentMuted = cachedMuted ?? [];
+      debugPrint('[UserRepository] Current mute list has ${currentMuted.length} users');
+
+      final isCurrentlyMuted = currentMuted.contains(targetUserHex);
+      debugPrint('[UserRepository] Is currently muting $targetUserHex: $isCurrentlyMuted');
+
+      if (!isCurrentlyMuted) {
+        debugPrint('[UserRepository] Not muting $targetUserHex - returning success (idempotent)');
+        return const Result.success(null);
+      }
+
+      currentMuted.remove(targetUserHex);
+
+      debugPrint('[UserRepository] Publishing kind 10000 unmute event with ${currentMuted.length} remaining muted');
+
+      final publishResult = await _nostrDataService.publishMuteEvent(
+        mutedHexList: currentMuted,
+        privateKey: privateKey,
+      );
+
+      if (publishResult.isSuccess) {
+        await _muteCacheService.put(currentUserHex, currentMuted);
+      }
+
+      debugPrint('[UserRepository] Publish result: ${publishResult.isSuccess ? 'SUCCESS' : 'FAILED - ${publishResult.error}'}');
+      return publishResult;
+    } catch (e) {
+      return Result.error('Failed to unmute user: $e');
+    }
+  }
+
+  Future<Result<bool>> isMuted(String targetNpub) async {
+    try {
+      final currentUserResult = await _authService.getCurrentUserNpub();
+      if (currentUserResult.isError || currentUserResult.data == null) {
+        return const Result.error('Not authenticated');
+      }
+
+      final currentUserNpub = currentUserResult.data!;
+
+      String currentUserHex = currentUserNpub;
+      try {
+        if (currentUserNpub.startsWith('npub1')) {
+          final hexResult = _authService.npubToHex(currentUserNpub);
+          if (hexResult != null) {
+            currentUserHex = hexResult;
+          }
+        }
+      } catch (e) {
+        debugPrint('[UserRepository] Error converting current user npub to hex: $e');
+      }
+
+      String targetUserHex = targetNpub;
+      try {
+        if (targetNpub.startsWith('npub1')) {
+          final hexResult = _authService.npubToHex(targetNpub);
+          if (hexResult != null) {
+            targetUserHex = hexResult;
+          }
+        }
+      } catch (e) {
+        debugPrint('[UserRepository] Error converting target npub to hex: $e');
+      }
+
+      final cachedMuted = await _muteCacheService.getOrFetch(currentUserHex, () async {
+        final result = await _nostrDataService.getMuteList(currentUserHex);
+        return result.isSuccess ? result.data : null;
+      });
+
+      return Result.success(cachedMuted?.contains(targetUserHex) ?? false);
+    } catch (e) {
+      return Result.error('Failed to check mute status: $e');
     }
   }
 

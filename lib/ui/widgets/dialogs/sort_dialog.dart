@@ -71,7 +71,7 @@ Future<void> showSortDialog({
                     child: viewModel.sortMode == FeedSortMode.latest && viewModel.hashtag == null
                         ? Icon(
                             Icons.check,
-                            color: context.colors.buttonText,
+                            color: context.colors.background,
                             size: 16,
                           )
                         : null,
@@ -134,7 +134,7 @@ Future<void> showSortDialog({
                     child: viewModel.sortMode == FeedSortMode.mostInteracted && viewModel.hashtag == null
                         ? Icon(
                             Icons.check,
-                            color: context.colors.buttonText,
+                            color: context.colors.background,
                             size: 16,
                           )
                         : null,
@@ -192,7 +192,7 @@ Future<void> showSortDialog({
                     child: viewModel.hashtag == 'bitcoin'
                         ? Icon(
                             Icons.check,
-                            color: context.colors.buttonText,
+                            color: context.colors.background,
                             size: 16,
                           )
                         : null,
@@ -250,7 +250,7 @@ Future<void> showSortDialog({
                     child: viewModel.hashtag == 'nostr'
                         ? Icon(
                             Icons.check,
-                            color: context.colors.buttonText,
+                            color: context.colors.background,
                             size: 16,
                           )
                         : null,
@@ -308,7 +308,7 @@ Future<void> showSortDialog({
                     child: viewModel.hashtag == 'foodstr'
                         ? Icon(
                             Icons.check,
-                            color: context.colors.buttonText,
+                            color: context.colors.background,
                             size: 16,
                           )
                         : null,

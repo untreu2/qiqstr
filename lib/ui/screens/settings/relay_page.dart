@@ -559,7 +559,7 @@ class _RelayPageState extends State<RelayPage> {
           Row(
             children: [
               Expanded(
-                child: PrimaryButton(
+                child: SecondaryButton(
                   label: 'Add Relay',
                   icon: Icons.add,
                   onPressed: _showAddRelayDialog,

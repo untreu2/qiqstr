@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
 
-Future<void> showDeleteNoteDialog({
+Future<void> showMuteUserDialog({
   required BuildContext context,
+  required String userName,
   required VoidCallback onConfirm,
 }) async {
   final colors = context.colors;
@@ -25,12 +26,21 @@ Future<void> showDeleteNoteDialog({
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Delete this post?',
+            'Mute $userName?',
             style: TextStyle(
               color: colors.textPrimary,
               fontSize: 20,
               fontWeight: FontWeight.w600,
             ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'You will not see notes from this user in your feed.',
+            style: TextStyle(
+              color: colors.textSecondary,
+              fontSize: 14,
+            ),
+            textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
           Row(
@@ -45,7 +55,7 @@ Future<void> showDeleteNoteDialog({
               const SizedBox(width: 12),
               Expanded(
                 child: SecondaryButton(
-                  label: 'Yes',
+                  label: 'Mute',
                   onPressed: () {
                     Navigator.pop(modalContext);
                     onConfirm();

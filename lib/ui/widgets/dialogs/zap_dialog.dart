@@ -17,6 +17,7 @@ import '../../../services/nostr_service.dart';
 import '../../../services/relay_service.dart';
 import '../../../constants/relays.dart';
 import '../common/snackbar_widget.dart';
+import '../common/common_buttons.dart';
 
 Future<bool> _payZapWithWallet(
   BuildContext context,
@@ -305,8 +306,9 @@ Future<Map<String, dynamic>> showZapDialog({
                 ),
               ),
               const SizedBox(height: 24),
-              GestureDetector(
-                onTap: () {
+              SecondaryButton(
+                label: 'Send',
+                onPressed: () {
                   final sats = int.tryParse(amountController.text.trim());
                   if (sats == null || sats <= 0) {
                     AppSnackbar.error(modalContext, 'Enter a valid amount', duration: const Duration(seconds: 1));
@@ -320,23 +322,7 @@ Future<Map<String, dynamic>> showZapDialog({
 
                   unawaited(_processZapPayment(context, note, sats, noteController.text.trim()));
                 },
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: colors.accent,
-                    borderRadius: BorderRadius.circular(40),
-                  ),
-                  child: Text(
-                    'Send',
-                    style: TextStyle(
-                      color: colors.background,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
+                size: ButtonSize.large,
               ),
             ],
           ),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../data/repositories/wallet_repository.dart';
 import '../../theme/theme_manager.dart';
+import '../common/common_buttons.dart';
 
 class ReceiveDialog extends StatefulWidget {
   final WalletRepository walletRepository;
@@ -28,6 +30,13 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
   void dispose() {
     _amountController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pasteFromClipboard() async {
+    final clipboardData = await Clipboard.getData('text/plain');
+    if (clipboardData != null && clipboardData.text != null) {
+      _amountController.text = clipboardData.text!;
+    }
   }
 
   Future<void> _createInvoice() async {
@@ -149,17 +158,40 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           TextField(
             controller: _amountController,
             keyboardType: TextInputType.number,
             enabled: !_isLoading,
-            style: TextStyle(color: colors.textPrimary),
+            style: TextStyle(
+              color: colors.textPrimary,
+              fontSize: 15,
+            ),
             decoration: InputDecoration(
-              labelText: 'Amount (sats)',
-              labelStyle: TextStyle(
-                fontWeight: FontWeight.w600,
+              hintText: 'Enter amount in sats...',
+              hintStyle: TextStyle(
                 color: colors.textSecondary,
+                fontSize: 15,
+              ),
+              suffixIcon: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: GestureDetector(
+                  onTap: _pasteFromClipboard,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: colors.background,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.content_paste,
+                      color: colors.textPrimary,
+                      size: 20,
+                    ),
+                  ),
+                ),
               ),
               filled: true,
               fillColor: colors.overlayLight,
@@ -178,34 +210,34 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
             ),
           ],
           const SizedBox(height: 24),
+          Row(
+            children: [
           GestureDetector(
-            onTap: _isLoading ? null : _createInvoice,
+                onTap: () => Navigator.pop(context),
             child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              alignment: Alignment.center,
+                  width: 48,
+                  height: 48,
               decoration: BoxDecoration(
-                color: colors.accent,
-                borderRadius: BorderRadius.circular(40),
+                    color: colors.buttonPrimary,
+                    shape: BoxShape.circle,
               ),
-              child: _isLoading
-                  ? SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(colors.background),
-                      ),
-                    )
-                  : Text(
-                      'Create Invoice',
-                      style: TextStyle(
-                        color: colors.background,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
+                  child: Icon(
+                    Icons.close,
+                    color: Colors.white,
+                    size: 20,
                       ),
                     ),
             ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SecondaryButton(
+                  label: 'Create Invoice',
+                  onPressed: _isLoading ? null : _createInvoice,
+                  isLoading: _isLoading,
+                  size: ButtonSize.large,
+                ),
+              ),
+            ],
           ),
         ],
       ),

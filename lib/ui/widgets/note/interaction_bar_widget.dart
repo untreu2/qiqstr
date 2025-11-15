@@ -10,7 +10,7 @@ import '../../../models/note_model.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/note_repository.dart';
 import '../dialogs/zap_dialog.dart';
-import '../dialogs/repost_dialog.dart';
+import 'package:nostr_nip19/nostr_nip19.dart';
 import '../dialogs/delete_note_dialog.dart';
 import '../common/snackbar_widget.dart';
 
@@ -80,6 +80,7 @@ class _InteractionBarState extends State<InteractionBar> {
   late final ValueNotifier<_InteractionState> _stateNotifier;
   StreamSubscription<List<NoteModel>>? _streamSubscription;
   DateTime? _lastUpdateTime;
+  final GlobalKey _repostButtonKey = GlobalKey();
 
   @override
   void initState() {
@@ -220,27 +221,129 @@ class _InteractionBarState extends State<InteractionBar> {
 
   void _handleRepostTap() {
     HapticFeedback.lightImpact();
-    final currentState = _stateNotifier.value;
-    if (currentState.hasReposted || widget.note == null) return;
+    _showRepostMenu();
+  }
 
-    final noteToRepost = _findNote() ?? widget.note!;
+  void _showRepostMenu() {
+    final RenderBox? renderBox = _repostButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
 
-    showRepostDialog(
+    final offset = renderBox.localToGlobal(Offset.zero);
+    final size = renderBox.size;
+
+    showMenu(
       context: context,
-      note: noteToRepost,
-      onRepostSuccess: () {
-        if (mounted) {
-          _stateNotifier.value = _InteractionState(
-            reactionCount: currentState.reactionCount,
-            repostCount: currentState.repostCount,
-            replyCount: currentState.replyCount,
-            zapAmount: currentState.zapAmount,
-            hasReacted: currentState.hasReacted,
-            hasReposted: true,
-            hasZapped: currentState.hasZapped,
-          );
-        }
-      },
+      position: RelativeRect.fromLTRB(
+        offset.dx,
+        offset.dy + size.height,
+        offset.dx + size.width,
+        offset.dy + size.height + 200,
+      ),
+      color: context.colors.buttonPrimary,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
+      items: [
+        PopupMenuItem(
+          value: 'repost',
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Icon(Icons.repeat, size: 18, color: context.colors.buttonText),
+                const SizedBox(width: 12),
+                Text(
+                  'Repost',
+                  style: TextStyle(
+                    color: context.colors.buttonText,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          enabled: !_stateNotifier.value.hasReposted && widget.note != null,
+        ),
+        PopupMenuItem(
+          value: 'quote',
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Icon(Icons.format_quote, size: 18, color: context.colors.buttonText),
+                const SizedBox(width: 12),
+                Text(
+                  'Quote',
+                  style: TextStyle(
+                    color: context.colors.buttonText,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          enabled: widget.note != null,
+        ),
+      ],
+    ).then((value) {
+      if (value == null) return;
+      HapticFeedback.lightImpact();
+      final currentState = _stateNotifier.value;
+      if (value == 'repost') {
+        if (currentState.hasReposted || widget.note == null) return;
+        final noteToRepost = _findNote() ?? widget.note!;
+        _performRepost(noteToRepost, currentState);
+      } else if (value == 'quote') {
+        _handleQuoteTap();
+      }
+    });
+  }
+
+  Future<void> _performRepost(NoteModel note, _InteractionState currentState) async {
+    try {
+      final result = await _noteRepository.repostNote(note.id);
+      if (!mounted) return;
+
+      result.fold(
+        (_) {
+          if (mounted) {
+            _stateNotifier.value = _InteractionState(
+              reactionCount: currentState.reactionCount,
+              repostCount: currentState.repostCount,
+              replyCount: currentState.replyCount,
+              zapAmount: currentState.zapAmount,
+              hasReacted: currentState.hasReacted,
+              hasReposted: true,
+              hasZapped: currentState.hasZapped,
+            );
+          }
+        },
+        (error) {
+          if (mounted) {
+            AppSnackbar.error(context, 'Failed to repost: $error');
+          }
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        AppSnackbar.error(context, 'Failed to repost note');
+      }
+    }
+  }
+
+  void _handleQuoteTap() {
+    if (widget.note == null) return;
+    final noteToQuote = _findNote() ?? widget.note!;
+    final bech32 = encodeBasicBech32(noteToQuote.id, 'note');
+    final quoteText = 'nostr:$bech32';
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ShareNotePage(
+          initialText: quoteText,
+        ),
+      ),
     );
   }
 
@@ -394,6 +497,7 @@ class _InteractionBarState extends State<InteractionBar> {
               selector: (state) => state.repostCount,
               activeSelector: (state) => state.hasReposted,
               builder: (count, isActive) => _InteractionButton(
+                key: _repostButtonKey,
                 carbonIcon: CarbonIcons.renew,
                 count: count,
                 isActive: isActive,
@@ -591,6 +695,7 @@ class _InteractionButton extends StatelessWidget {
   final _ButtonType buttonType;
 
   const _InteractionButton({
+    super.key,
     this.iconPath,
     this.carbonIcon,
     this.activeCarbonIcon,

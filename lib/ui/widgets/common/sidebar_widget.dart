@@ -11,9 +11,6 @@ import '../../../core/di/app_di.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../data/services/nostr_data_service.dart';
-import 'brand_widget.dart';
-import 'indicator_widget.dart';
-import 'accent_heart_widget.dart';
 
 class SidebarWidget extends StatefulWidget {
   const SidebarWidget({super.key});
@@ -344,77 +341,49 @@ class _SidebarContent extends StatelessWidget {
         children: [
           const SizedBox(height: 20),
           Expanded(
-            child: CustomScrollView(
-              slivers: [
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: SliverList(
-                    delegate: SliverChildListDelegate([
-                      _buildModernSidebarItem(
-                        context: context,
-                        colors: colors,
-                        svgAsset: 'assets/profile_button.svg',
-                        label: 'Profile',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ProfilePage(user: user),
-                          ),
+            child: Column(
+              children: [
+                Expanded(
+                  child: CustomScrollView(
+                    slivers: [
+                      SliverPadding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        sliver: SliverList(
+                          delegate: SliverChildListDelegate([
+                            _buildModernSidebarItem(
+                              context: context,
+                              colors: colors,
+                              svgAsset: 'assets/profile_button.svg',
+                              label: 'Profile',
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ProfilePage(user: user),
+                                ),
+                              ),
+                            ),
+                          ]),
                         ),
                       ),
-                    ]),
+                    ],
                   ),
                 ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 275),
-                        _buildModernSidebarItem(
-                          context: context,
-                          colors: colors,
-                          icon: CarbonIcons.settings,
-                          label: 'Settings',
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const SettingsPage(),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: BrandWidget(
-                                  iconSize: 30,
-                                  indicatorSize: IndicatorSize.small,
-                                  fontSize: 28,
-                                  iconTopPadding: 12,
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Padding(
-                                padding: const EdgeInsets.only(top: 8),
-                                child: AccentHeartWidget(
-                                  onTap: () {
-                                    // TODO: Implement favorite/like functionality
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                      ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _buildModernSidebarItem(
+                    context: context,
+                    colors: colors,
+                    icon: CarbonIcons.settings,
+                    label: 'Settings',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SettingsPage(),
+                      ),
                     ),
                   ),
                 ),
+                const SizedBox(height: 160),
               ],
             ),
           ),

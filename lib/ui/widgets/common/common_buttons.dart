@@ -110,11 +110,9 @@ class SecondaryButton extends StatelessWidget {
     return OutlinedButton(
       onPressed: isLoading ? null : onPressed,
       style: OutlinedButton.styleFrom(
-        side: BorderSide(
-          color: borderColor ?? colors.primary.withValues(alpha: 0.3),
-        ),
+        side: BorderSide.none,
         backgroundColor: backgroundColor ?? colors.buttonPrimary,
-        foregroundColor: foregroundColor ?? colors.background,
+        foregroundColor: foregroundColor ?? Colors.white,
         padding: config.padding,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(config.borderRadius),
@@ -127,7 +125,7 @@ class SecondaryButton extends StatelessWidget {
               child: CircularProgressIndicator(
                 strokeWidth: 2,
                 valueColor: AlwaysStoppedAnimation<Color>(
-                  foregroundColor ?? colors.primary,
+                  foregroundColor ?? Colors.white,
                 ),
               ),
             )

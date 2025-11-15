@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../theme/theme_manager.dart';
+import '../common/common_buttons.dart';
 
 Future<void> showAddRelayDialog({
   required BuildContext context,
@@ -20,6 +21,7 @@ Future<void> showAddRelayDialog({
       padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(modalContext).viewInsets.bottom + 40),
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           TextField(
             controller: controller,
@@ -44,34 +46,34 @@ Future<void> showAddRelayDialog({
             ),
           ),
           const SizedBox(height: 24),
-          GestureDetector(
-            onTap: isLoading ? null : onAdd,
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: colors.accent,
-                borderRadius: BorderRadius.circular(40),
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () => Navigator.pop(modalContext),
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: colors.buttonPrimary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.close,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
               ),
-              child: isLoading
-                  ? SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(colors.background),
-                      ),
-                    )
-                  : Text(
-                      'Add Relay',
-                      style: TextStyle(
-                        color: colors.background,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SecondaryButton(
+                  label: 'Add Relay',
+                  onPressed: isLoading ? null : onAdd,
+                  isLoading: isLoading,
+                  size: ButtonSize.large,
+                ),
+              ),
+            ],
           ),
         ],
       ),

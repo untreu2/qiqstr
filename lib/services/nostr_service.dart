@@ -213,6 +213,32 @@ class NostrService {
     return event;
   }
 
+  static Event createMuteEvent({
+    required List<String> mutedPubkeys,
+    required String privateKey,
+  }) {
+    final tags = mutedPubkeys.map((pubkey) => ['p', pubkey]).toList();
+    final cacheKey = _generateEventCacheKey(10000, "", privateKey, tags);
+
+    if (_eventCache.containsKey(cacheKey)) {
+      _cacheHits++;
+      return _eventCache[cacheKey]!;
+    }
+
+    _cacheMisses++;
+    _eventsCreated++;
+
+    final event = Event.from(
+      kind: 10000,
+      tags: tags,
+      content: "",
+      privkey: privateKey,
+    );
+
+    _addToEventCache(cacheKey, event);
+    return event;
+  }
+
   static Event createZapRequestEvent({
     required List<List<String>> tags,
     required String content,
@@ -371,6 +397,17 @@ class NostrService {
     return Filter(
       authors: authors,
       kinds: [3],
+      limit: limit,
+    );
+  }
+
+  static Filter createMuteFilter({
+    required List<String> authors,
+    int? limit,
+  }) {
+    return Filter(
+      authors: authors,
+      kinds: [10000],
       limit: limit,
     );
   }

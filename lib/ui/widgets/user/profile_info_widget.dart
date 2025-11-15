@@ -14,6 +14,7 @@ import '../media/photo_viewer_widget.dart';
 import '../note/note_content_widget.dart';
 import '../common/snackbar_widget.dart';
 import '../dialogs/unfollow_user_dialog.dart';
+import '../dialogs/mute_user_dialog.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/user_repository.dart';
@@ -35,6 +36,7 @@ class ProfileInfoWidget extends StatefulWidget {
 
 class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   bool? _isFollowing;
+  bool? _isMuted;
   String? _currentUserNpub;
   late AuthRepository _authRepository;
   late UserRepository _userRepository;
@@ -211,6 +213,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       if (currentUserHex == _userHexKey) return;
 
       await _checkFollowStatus();
+      await _checkMuteStatus();
 
       await _checkIfUserFollowsMe();
     } catch (e) {
@@ -245,6 +248,36 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       );
     } catch (e) {
       debugPrint('[ProfileInfoWidget] Error checking follow status: $e');
+    }
+  }
+
+  Future<void> _checkMuteStatus() async {
+    try {
+      if (_currentUserNpub == null) return;
+
+      final muteStatusResult = await _userRepository.isMuted(_userNotifier.value.pubkeyHex);
+
+      muteStatusResult.fold(
+        (isMuted) {
+          debugPrint('[ProfileInfoWidget] Mute check result: $isMuted for ${_userNotifier.value.pubkeyHex}');
+
+          if (mounted) {
+            setState(() {
+              _isMuted = isMuted;
+            });
+          }
+        },
+        (error) {
+          debugPrint('[ProfileInfoWidget] Error checking mute status: $error');
+          if (mounted) {
+            setState(() {
+              _isMuted = false;
+            });
+          }
+        },
+      );
+    } catch (e) {
+      debugPrint('[ProfileInfoWidget] Error checking mute status: $e');
     }
   }
 
@@ -764,14 +797,25 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       children: [
         _buildAvatar(user),
         const Spacer(),
-        if (_currentUserNpub != null)
+        if (_currentUserNpub != null && !isOwnProfile)
           Padding(
             padding: const EdgeInsets.only(top: 35.0),
-            child: isOwnProfile
-                ? _buildEditProfileButton(context)
-                : (_isFollowing != null)
-                    ? _buildFollowButton(context)
-                    : const SizedBox.shrink(),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_isMuted != null) ...[
+                  _buildMuteButton(context),
+                  const SizedBox(width: 8),
+                ],
+                if (_isFollowing != null)
+                  _buildFollowButton(context),
+              ],
+            ),
+          )
+        else if (_currentUserNpub != null && isOwnProfile)
+          Padding(
+            padding: const EdgeInsets.only(top: 35.0),
+            child: _buildEditProfileButton(context),
           ),
       ],
     );
@@ -809,6 +853,175 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             fontWeight: FontWeight.w600,
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _toggleMute() async {
+    if (_currentUserNpub == null || _userHexKey == null) {
+      debugPrint('[ProfileInfoWidget] Toggle mute aborted - missing current user or hex key');
+      return;
+    }
+
+    final originalMuteState = _isMuted;
+    final shouldMute = !(originalMuteState ?? false);
+
+    if (shouldMute) {
+      final userName = _userNotifier.value.name.isNotEmpty
+          ? _userNotifier.value.name
+          : (_userNotifier.value.nip05.isNotEmpty
+              ? _userNotifier.value.nip05.split('@').first
+              : 'this user');
+
+      showMuteUserDialog(
+        context: context,
+        userName: userName,
+        onConfirm: () => _performMute(),
+      );
+      return;
+    }
+
+    _performUnmute();
+  }
+
+  Future<void> _performMute() async {
+    if (_currentUserNpub == null || _userHexKey == null) {
+      return;
+    }
+
+    final originalMuteState = _isMuted;
+
+    setState(() {
+      _isMuted = true;
+    });
+
+    try {
+      final currentUser = _userNotifier.value;
+      final targetNpub = currentUser.pubkeyHex.startsWith('npub1')
+          ? currentUser.pubkeyHex
+          : (_userHexKey != null && _userHexKey!.length == 64)
+              ? _getNpubBech32(_userHexKey!)
+              : currentUser.pubkeyHex;
+
+      final result = await _userRepository.muteUser(targetNpub);
+
+      result.fold(
+        (_) {
+          debugPrint('[ProfileInfoWidget] Mute successful');
+          Future.delayed(const Duration(milliseconds: 1000), () {
+            if (mounted) {
+              _checkMuteStatus();
+            }
+          });
+        },
+        (error) {
+          debugPrint('[ProfileInfoWidget] Mute error: $error');
+
+          setState(() {
+            _isMuted = originalMuteState;
+          });
+
+          if (mounted) {
+            AppSnackbar.error(context, 'Failed to mute user: $error');
+          }
+        },
+      );
+    } catch (e) {
+      debugPrint('[ProfileInfoWidget] Mute exception: $e');
+      setState(() {
+        _isMuted = originalMuteState;
+      });
+    }
+  }
+
+  Future<void> _performUnmute() async {
+    if (_currentUserNpub == null || _userHexKey == null) {
+      return;
+    }
+
+    final originalMuteState = _isMuted;
+
+    setState(() {
+      _isMuted = false;
+    });
+
+    try {
+      final currentUser = _userNotifier.value;
+      final targetNpub = currentUser.pubkeyHex.startsWith('npub1')
+          ? currentUser.pubkeyHex
+          : (_userHexKey != null && _userHexKey!.length == 64)
+              ? _getNpubBech32(_userHexKey!)
+              : currentUser.pubkeyHex;
+
+      final result = await _userRepository.unmuteUser(targetNpub);
+
+      result.fold(
+        (_) {
+          debugPrint('[ProfileInfoWidget] Unmute successful');
+          Future.delayed(const Duration(milliseconds: 1000), () {
+            if (mounted) {
+              _checkMuteStatus();
+            }
+          });
+        },
+        (error) {
+          debugPrint('[ProfileInfoWidget] Unmute error: $error');
+
+          setState(() {
+            _isMuted = originalMuteState;
+          });
+
+          if (mounted) {
+            AppSnackbar.error(context, 'Failed to unmute user: $error');
+          }
+        },
+      );
+    } catch (e) {
+      debugPrint('[ProfileInfoWidget] Unmute exception: $e');
+      setState(() {
+        _isMuted = originalMuteState;
+      });
+    }
+  }
+
+  Widget _buildMuteButton(BuildContext context) {
+    final isMuted = _isMuted!;
+    return GestureDetector(
+      onTap: _toggleMute,
+      child: Container(
+        padding: isMuted 
+            ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
+            : const EdgeInsets.all(8),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isMuted ? context.colors.buttonPrimary : context.colors.overlayLight,
+          borderRadius: BorderRadius.circular(40),
+        ),
+        child: isMuted
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    CarbonIcons.notification_off,
+                    size: 16,
+                    color: context.colors.buttonText,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Muted',
+                    style: TextStyle(
+                      color: context.colors.buttonText,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              )
+            : Icon(
+                CarbonIcons.notification,
+                size: 20,
+                color: context.colors.textPrimary,
+              ),
       ),
     );
   }

@@ -20,12 +20,14 @@ import '../../constants/relays.dart';
 import 'auth_service.dart';
 import 'user_cache_service.dart';
 import 'follow_cache_service.dart';
+import 'mute_cache_service.dart';
 
 class NostrDataService {
   final AuthService _authService;
   final WebSocketManager _relayManager;
   final UserCacheService _userCacheService = UserCacheService.instance;
   final FollowCacheService _followCacheService = FollowCacheService.instance;
+  final MuteCacheService _muteCacheService = MuteCacheService.instance;
 
   final StreamController<List<NoteModel>> _notesController = StreamController<List<NoteModel>>.broadcast();
   final StreamController<List<UserModel>> _usersController = StreamController<List<UserModel>>.broadcast();
@@ -212,6 +214,9 @@ class NostrDataService {
         case 7:
           _processReactionEvent(eventData);
           break;
+        case 10000:
+          await _processMuteEvent(eventData);
+          break;
         case 9735:
           _processZapEvent(eventData);
           break;
@@ -340,6 +345,17 @@ class NostrDataService {
       if (_eventIds.contains(id) || _noteCache.containsKey(id)) {
         debugPrint(' [NostrDataService] Duplicate note detected, skipping: $id');
         return;
+      }
+
+      final currentUserResult = await _authService.getCurrentUserNpub();
+      if (currentUserResult.isSuccess && currentUserResult.data != null) {
+        final currentUserNpub = currentUserResult.data!;
+        final currentUserHex = _authService.npubToHex(currentUserNpub) ?? currentUserNpub;
+        final mutedList = _muteCacheService.getSync(currentUserHex);
+        if (mutedList != null && mutedList.contains(pubkey)) {
+          debugPrint('[NostrDataService] Note filtered out - author is muted: $pubkey');
+          return;
+        }
       }
 
       if (!_shouldIncludeNoteInFeed(pubkey, false)) {
@@ -878,6 +894,31 @@ class NostrDataService {
     }
   }
 
+  Future<void> _processMuteEvent(Map<String, dynamic> eventData) async {
+    try {
+      final pubkey = eventData['pubkey'] as String;
+      final tags = eventData['tags'] as List<dynamic>;
+
+      final List<String> newMuted = [];
+      for (var tag in tags) {
+        if (tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length > 1) {
+          newMuted.add(tag[1] as String);
+        }
+      }
+
+      try {
+        await _muteCacheService.put(pubkey, newMuted);
+        debugPrint('[NostrDataService] Updated mute cache for $pubkey: ${newMuted.length} muted');
+      } catch (e) {
+        debugPrint('[NostrDataService] Error updating mute cache: $e');
+      }
+
+      debugPrint('[NostrDataService] Mute event processed: ${newMuted.length} muted');
+    } catch (e) {
+      debugPrint('[NostrDataService] Error processing mute event: $e');
+    }
+  }
+
   void markZapAsUserPublished(String zapEventId) {
     _userPublishedZapIds.add(zapEventId);
   }
@@ -1316,6 +1357,9 @@ class NostrDataService {
         debugPrint('[NostrDataService] Non-feed mode: Returning ${notesToReturn.length} notes without follow filtering');
       }
 
+      notesToReturn = await _filterNotesByMuteList(notesToReturn);
+      notesToReturn = notesToReturn.take(limit).toList();
+
       debugPrint('[NostrDataService] Returning ${notesToReturn.length} feed notes without automatic interaction fetch');
 
       return Result.success(notesToReturn);
@@ -1442,9 +1486,11 @@ class NostrDataService {
       debugPrint('[NostrDataService] PROFILE: Total ${allProfileNotes.length} notes in cache for $userNpub');
       debugPrint('[NostrDataService] PROFILE: Note IDs: ${allProfileNotes.take(3).map((n) => n.id.substring(0, 8)).join(", ")}${allProfileNotes.length > 3 ? "..." : ""}');
 
+      final filteredProfileNotes = await _filterNotesByMuteList(allProfileNotes);
+
       _notesController.add(_getFilteredNotesList());
 
-      return Result.success(allProfileNotes);
+      return Result.success(filteredProfileNotes);
     } catch (e) {
       debugPrint('[NostrDataService] PROFILE: Error fetching profile notes: $e');
       return Result.error('Failed to fetch profile notes: $e');
@@ -1732,10 +1778,11 @@ class NostrDataService {
       );
 
       final hashtagNotes = hashtagNotesMap.values.toList();
+      final filteredHashtagNotes = await _filterNotesByMuteList(hashtagNotes);
 
-      hashtagNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      filteredHashtagNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-      final limitedNotes = hashtagNotes.take(limit).toList();
+      final limitedNotes = filteredHashtagNotes.take(limit).toList();
 
       debugPrint('[NostrDataService] HASHTAG: Returning ${limitedNotes.length} notes for #$hashtag (found ${hashtagNotes.length} total)');
 
@@ -3250,6 +3297,185 @@ class NostrDataService {
     }
   }
 
+  Future<Result<List<String>>> getMuteList(String npub) async {
+    try {
+      final pubkeyHex = _authService.npubToHex(npub) ?? npub;
+      debugPrint('[NostrDataService] Getting mute list for npub: $npub');
+      debugPrint('[NostrDataService] Converted to hex: $pubkeyHex');
+
+      final filter = NostrService.createMuteFilter(
+        authors: [pubkeyHex],
+        limit: 1000,
+      );
+
+      final request = NostrService.createRequest(filter);
+      final serializedRequest = NostrService.serializeRequest(request);
+
+      debugPrint('[NostrDataService] Sending mute list request to relays...');
+      debugPrint('[NostrDataService] Request: $serializedRequest');
+
+      final muted = <String>[];
+      final limitedRelays = _relayManager.relayUrls.take(3).toList();
+      debugPrint('[NostrDataService] Using ${limitedRelays.length} relays: $limitedRelays');
+
+      await Future.wait(limitedRelays.map((relayUrl) async {
+        WebSocket? ws;
+        StreamSubscription? sub;
+        try {
+          debugPrint('[NostrDataService] Connecting to relay: $relayUrl');
+          ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
+          if (_isClosed) {
+            await ws.close();
+            return;
+          }
+
+          final completer = Completer<void>();
+          bool hasReceivedEvent = false;
+
+          sub = ws.listen((event) {
+            try {
+              final decoded = jsonDecode(event);
+              debugPrint('[NostrDataService] Raw event from $relayUrl: $decoded');
+
+              if (decoded[0] == 'EVENT') {
+                hasReceivedEvent = true;
+                debugPrint('[NostrDataService] Received mute list EVENT from $relayUrl');
+                final eventData = decoded[2] as Map<String, dynamic>;
+                final eventAuthor = eventData['pubkey'] as String;
+                final eventKind = eventData['kind'] as int;
+                final tags = eventData['tags'] as List<dynamic>;
+
+                debugPrint('[NostrDataService] Event author: $eventAuthor (expected: $pubkeyHex)');
+                debugPrint('[NostrDataService] Event kind: $eventKind (expected: 10000)');
+                debugPrint('[NostrDataService] Event tags count: ${tags.length}');
+
+                if (eventAuthor == pubkeyHex && eventKind == 10000) {
+                  for (var tag in tags) {
+                    if (tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length >= 2) {
+                      final mutedHexPubkey = tag[1] as String;
+                      if (!muted.contains(mutedHexPubkey)) {
+                        muted.add(mutedHexPubkey);
+                        debugPrint('[NostrDataService] Found muted user (hex): $mutedHexPubkey');
+                      }
+                    }
+                  }
+                  debugPrint('[NostrDataService] Mute list now has: ${muted.length} users');
+                }
+              } else if (decoded[0] == 'EOSE') {
+                debugPrint('[NostrDataService] EOSE received from $relayUrl');
+                if (!completer.isCompleted) completer.complete();
+              }
+            } catch (e) {
+              debugPrint('[NostrDataService] Error processing mute list event from $relayUrl: $e');
+            }
+          }, onDone: () {
+            debugPrint('[NostrDataService] Connection to $relayUrl closed');
+            if (!completer.isCompleted) completer.complete();
+          }, onError: (error) {
+            debugPrint('[NostrDataService] Connection error to $relayUrl: $error');
+            if (!completer.isCompleted) completer.complete();
+          }, cancelOnError: true);
+
+          if (ws.readyState == WebSocket.open) {
+            debugPrint('[NostrDataService] Sending mute list request to $relayUrl');
+            ws.add(serializedRequest);
+          } else {
+            debugPrint('[NostrDataService] WebSocket not open for $relayUrl, state: ${ws.readyState}');
+          }
+
+          await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
+            debugPrint('[NostrDataService] Timeout waiting for mute list from $relayUrl');
+          });
+
+          await sub.cancel();
+          await ws.close();
+
+          debugPrint('[NostrDataService] Finished processing $relayUrl, got ${hasReceivedEvent ? 'events' : 'no events'}');
+        } catch (e) {
+          debugPrint('[NostrDataService] Exception with relay $relayUrl: $e');
+          await sub?.cancel();
+          await ws?.close();
+        }
+      }));
+
+      final uniqueMuted = muted.toSet().toList();
+      debugPrint('[NostrDataService] Final mute list: ${uniqueMuted.length} unique users');
+
+      if (uniqueMuted.isNotEmpty) {
+        await _muteCacheService.put(pubkeyHex, uniqueMuted);
+      }
+
+      return Result.success(uniqueMuted);
+    } catch (e) {
+      debugPrint('[NostrDataService] Error getting mute list: $e');
+      return Result.error('Failed to get mute list: $e');
+    }
+  }
+
+  Future<Result<void>> publishMuteEvent({
+    required List<String> mutedHexList,
+    required String privateKey,
+  }) async {
+    try {
+      debugPrint('[NostrDataService] Publishing kind 10000 mute event with ${mutedHexList.length} muted');
+
+      final currentUserResult = await _authService.getCurrentUserNpub();
+      if (currentUserResult.isError || currentUserResult.data == null) {
+        return const Result.error('Current user not found');
+      }
+
+      final currentUserNpub = currentUserResult.data!;
+
+      try {
+        if (_relayManager.activeSockets.isEmpty) {
+          debugPrint('[NostrDataService] No active relay connections, attempting to connect...');
+          await _relayManager.connectRelays(
+            [],
+            onEvent: _handleRelayEvent,
+            onDisconnected: _handleRelayDisconnection,
+            serviceId: 'mute_event',
+          );
+        }
+      } catch (e) {
+        debugPrint('[NostrDataService] Relay connection failed: $e, continuing anyway');
+      }
+
+      final event = NostrService.createMuteEvent(
+        mutedPubkeys: mutedHexList,
+        privateKey: privateKey,
+      );
+
+      final serializedEvent = NostrService.serializeEvent(event);
+      final activeSockets = _relayManager.activeSockets;
+
+      debugPrint('[NostrDataService] Broadcasting mute event to ${activeSockets.length} active sockets...');
+      for (final ws in activeSockets) {
+        if (ws.readyState == WebSocket.open) {
+          try {
+            ws.add(serializedEvent);
+            debugPrint('[NostrDataService] Mute event sent to relay via WebSocket');
+          } catch (e) {
+            debugPrint('[NostrDataService] Error sending mute event to WebSocket: $e');
+          }
+        }
+      }
+
+      try {
+        final currentUserHex = _authService.npubToHex(currentUserNpub) ?? currentUserNpub;
+        await _muteCacheService.put(currentUserHex, mutedHexList);
+        debugPrint('[NostrDataService] Mute event broadcasted DIRECTLY and cached locally');
+        debugPrint('[NostrDataService] Updated mute cache for $currentUserNpub: ${mutedHexList.length} muted');
+      } catch (e) {
+        debugPrint('[NostrDataService] Error caching mute list: $e');
+      }
+
+      return const Result.success(null);
+    } catch (e) {
+      debugPrint('[NostrDataService] Failed to publish mute event: $e');
+      return Result.error('Failed to publish mute event: $e');
+    }
+  }
+
   void clearCaches() {
     _noteCache.clear();
     _profileCache.clear();
@@ -3336,6 +3562,50 @@ class NostrDataService {
 
     debugPrint('[NostrDataService] Filtered result: ${filteredNotes.length} notes (${notes.length - filteredNotes.length} excluded)');
     return filteredNotes;
+  }
+
+  Future<List<NoteModel>> _filterNotesByMuteList(List<NoteModel> notes) async {
+    try {
+      final currentUserResult = await _authService.getCurrentUserNpub();
+      if (currentUserResult.isError || currentUserResult.data == null) {
+        return notes;
+      }
+
+      final currentUserNpub = currentUserResult.data!;
+      final currentUserHex = _authService.npubToHex(currentUserNpub) ?? currentUserNpub;
+
+      final mutedList = _muteCacheService.getSync(currentUserHex);
+      if (mutedList == null || mutedList.isEmpty) {
+        return notes;
+      }
+
+      final mutedSet = mutedList.toSet();
+      debugPrint('[NostrDataService] Filtering ${notes.length} notes by mute list with ${mutedSet.length} muted users');
+
+      final filteredNotes = notes.where((note) {
+        if (note.isRepost && note.repostedBy != null) {
+          final reposterHex = _authService.npubToHex(note.repostedBy!) ?? note.repostedBy!;
+          if (mutedSet.contains(reposterHex)) {
+            debugPrint('[NostrDataService] Excluding repost by muted user: ${note.repostedBy}');
+            return false;
+          }
+        }
+
+        final noteAuthorHex = _authService.npubToHex(note.author) ?? note.author;
+        if (mutedSet.contains(noteAuthorHex)) {
+          debugPrint('[NostrDataService] Excluding note by muted user: ${note.author}');
+          return false;
+        }
+
+        return true;
+      }).toList();
+
+      debugPrint('[NostrDataService] Mute filtered result: ${filteredNotes.length} notes (${notes.length - filteredNotes.length} excluded)');
+      return filteredNotes;
+    } catch (e) {
+      debugPrint('[NostrDataService] Error filtering notes by mute list: $e');
+      return notes;
+    }
   }
 
   void dispose() {

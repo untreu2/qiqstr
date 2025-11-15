@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../theme/theme_manager.dart';
+import '../common/common_buttons.dart';
 
 Future<void> showResetRelaysDialog({
   required BuildContext context,
@@ -27,56 +28,20 @@ Future<void> showResetRelaysDialog({
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 20),
-          GestureDetector(
-            onTap: () {
+          SecondaryButton(
+            label: 'Reset to Defaults',
+            icon: Icons.refresh,
+            onPressed: () {
               Navigator.pop(modalContext);
               onConfirm();
             },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: colors.accent,
-                borderRadius: BorderRadius.circular(40),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.refresh, color: colors.background, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Reset to Defaults',
-                    style: TextStyle(
-                      color: colors.background,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            size: ButtonSize.large,
           ),
           const SizedBox(height: 12),
-          GestureDetector(
-            onTap: () => Navigator.pop(modalContext),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: colors.overlayLight,
-                borderRadius: BorderRadius.circular(40),
-              ),
-              child: Text(
-                'Cancel',
-                style: TextStyle(
-                  color: colors.textPrimary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
+          SecondaryButton(
+            label: 'Cancel',
+            onPressed: () => Navigator.pop(modalContext),
+            size: ButtonSize.large,
           ),
         ],
       ),
