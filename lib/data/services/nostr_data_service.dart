@@ -78,6 +78,7 @@ class NostrDataService {
   Stream<List<NotificationModel>> get notificationsStream => _notificationsController.stream;
 
   AuthService get authService => _authService;
+  String get currentUserNpub => _currentUserNpub;
 
   
 
@@ -107,14 +108,27 @@ class NostrDataService {
         debugPrint('[NostrDataService] Initializing follow list cache for: $_currentUserNpub');
 
         final currentUserHex = _authService.npubToHex(_currentUserNpub) ?? _currentUserNpub;
+        
         await _followCacheService.getOrFetch(currentUserHex, () async {
           final result = await getFollowingList(_currentUserNpub);
           return result.isSuccess ? result.data : null;
         });
         debugPrint('[NostrDataService] Follow list cache initialized via FollowCacheService');
-      }
 
-      _fetchInitialGlobalContent();
+        final muteList = await _muteCacheService.getOrFetch(currentUserHex, () async {
+          final result = await getMuteList(currentUserHex);
+          return result.isSuccess ? result.data : null;
+        });
+        debugPrint('[NostrDataService] Mute list cache initialized via MuteCacheService: ${muteList?.length ?? 0} muted users');
+        
+        if (muteList != null && muteList.isNotEmpty) {
+          _cleanMutedNotesFromCache(muteList);
+        }
+        
+        _fetchInitialGlobalContent();
+      } else {
+        _fetchInitialGlobalContent();
+      }
     } catch (e) {
       debugPrint('[NostrDataService]  Error initializing follow list cache: $e');
       _fetchInitialGlobalContent();
@@ -621,6 +635,18 @@ class NostrDataService {
       if (_eventIds.contains(id) || _noteCache.containsKey(id)) {
         debugPrint(' [NostrDataService] Duplicate repost detected, skipping: $id');
         return;
+      }
+
+      // Check if reposter is muted
+      final currentUserResult = await _authService.getCurrentUserNpub();
+      if (currentUserResult.isSuccess && currentUserResult.data != null) {
+        final currentUserNpub = currentUserResult.data!;
+        final currentUserHex = _authService.npubToHex(currentUserNpub) ?? currentUserNpub;
+        final mutedList = _muteCacheService.getSync(currentUserHex);
+        if (mutedList != null && mutedList.contains(pubkey)) {
+          debugPrint('[NostrDataService] Repost filtered out - reposter is muted: $pubkey');
+          return;
+        }
       }
 
       if (!_shouldIncludeNoteInFeed(pubkey, true)) {
@@ -1357,7 +1383,7 @@ class NostrDataService {
         debugPrint('[NostrDataService] Non-feed mode: Returning ${notesToReturn.length} notes without follow filtering');
       }
 
-      notesToReturn = await _filterNotesByMuteList(notesToReturn);
+      notesToReturn = await filterNotesByMuteList(notesToReturn);
       notesToReturn = notesToReturn.take(limit).toList();
 
       debugPrint('[NostrDataService] Returning ${notesToReturn.length} feed notes without automatic interaction fetch');
@@ -1486,7 +1512,7 @@ class NostrDataService {
       debugPrint('[NostrDataService] PROFILE: Total ${allProfileNotes.length} notes in cache for $userNpub');
       debugPrint('[NostrDataService] PROFILE: Note IDs: ${allProfileNotes.take(3).map((n) => n.id.substring(0, 8)).join(", ")}${allProfileNotes.length > 3 ? "..." : ""}');
 
-      final filteredProfileNotes = await _filterNotesByMuteList(allProfileNotes);
+      final filteredProfileNotes = await filterNotesByMuteList(allProfileNotes);
 
       _notesController.add(_getFilteredNotesList());
 
@@ -1778,7 +1804,7 @@ class NostrDataService {
       );
 
       final hashtagNotes = hashtagNotesMap.values.toList();
-      final filteredHashtagNotes = await _filterNotesByMuteList(hashtagNotes);
+      final filteredHashtagNotes = await filterNotesByMuteList(hashtagNotes);
 
       filteredHashtagNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
@@ -3476,6 +3502,40 @@ class NostrDataService {
     }
   }
 
+  void _cleanMutedNotesFromCache(List<String> mutedHexList) {
+    try {
+      final mutedSet = mutedHexList.toSet();
+      int removedCount = 0;
+      
+      final notesToRemove = <String>[];
+      for (final note in _noteCache.values) {
+        final noteAuthorHex = _authService.npubToHex(note.author);
+        if (noteAuthorHex != null && mutedSet.contains(noteAuthorHex)) {
+          notesToRemove.add(note.id);
+          removedCount++;
+        } else if (note.isRepost && note.repostedBy != null) {
+          final reposterHex = _authService.npubToHex(note.repostedBy!);
+          if (reposterHex != null && mutedSet.contains(reposterHex)) {
+            notesToRemove.add(note.id);
+            removedCount++;
+          }
+        }
+      }
+      
+      for (final noteId in notesToRemove) {
+        _noteCache.remove(noteId);
+        _eventIds.remove(noteId);
+      }
+      
+      if (removedCount > 0) {
+        debugPrint('[NostrDataService] Cleaned $removedCount muted notes from cache');
+        _scheduleUIUpdate();
+      }
+    } catch (e) {
+      debugPrint('[NostrDataService] Error cleaning muted notes from cache: $e');
+    }
+  }
+
   void clearCaches() {
     _noteCache.clear();
     _profileCache.clear();
@@ -3564,7 +3624,7 @@ class NostrDataService {
     return filteredNotes;
   }
 
-  Future<List<NoteModel>> _filterNotesByMuteList(List<NoteModel> notes) async {
+  Future<List<NoteModel>> filterNotesByMuteList(List<NoteModel> notes) async {
     try {
       final currentUserResult = await _authService.getCurrentUserNpub();
       if (currentUserResult.isError || currentUserResult.data == null) {

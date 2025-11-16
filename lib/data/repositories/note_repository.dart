@@ -9,6 +9,7 @@ import '../../models/zap_model.dart';
 import '../filters/feed_filters.dart';
 import '../services/network_service.dart';
 import '../services/nostr_data_service.dart';
+import '../services/mute_cache_service.dart';
 import '../services/user_batch_fetcher.dart';
 import '../../services/lifecycle_manager.dart';
 import 'user_repository.dart';
@@ -147,6 +148,11 @@ class NoteRepository {
     final existingIds = _notesCache.keys.toSet();
     
     for (final note in serviceNotes) {
+      // Skip muted users' notes
+      if (_isNoteFromMutedUser(note)) {
+        continue;
+      }
+
       if (!existingIds.contains(note.id)) {
         allNotes.add(note);
         _notesCache[note.id] = note;
@@ -277,6 +283,12 @@ class NoteRepository {
 
   Future<Result<void>> addNote(NoteModel note) async {
     try {
+      // Skip muted users' notes
+      if (_isNoteFromMutedUser(note)) {
+        debugPrint('[NoteRepository] Skipping note from muted user in addNote: ${note.author}');
+        return const Result.success(null);
+      }
+
       final existingNote = _notesCache[note.id];
       if (existingNote != null) {
         return const Result.success(null);
@@ -614,6 +626,12 @@ class NoteRepository {
         bool hasChanges = false;
         final newNotesToAdd = <NoteModel>[];
         for (final note in newNotes) {
+          // Skip muted users' notes
+          if (_isNoteFromMutedUser(note)) {
+            debugPrint('[NoteRepository] Skipping note from muted user: ${note.author}');
+            continue;
+          }
+
           if (!_notesCache.containsKey(note.id)) {
             _notesCache[note.id] = note;
             newNotesToAdd.add(note);
@@ -666,6 +684,12 @@ class NoteRepository {
       final List<NoteModel> newNotes = [];
       
       for (final updatedNote in updatedNotes) {
+        // Skip muted users' notes
+        if (_isNoteFromMutedUser(updatedNote)) {
+          debugPrint('[NoteRepository] Skipping note from muted user: ${updatedNote.author}');
+          continue;
+        }
+
         final existingNote = _notesCache[updatedNote.id];
         if (existingNote != null) {
           if (existingNote.reactionCount != updatedNote.reactionCount ||
@@ -706,6 +730,70 @@ class NoteRepository {
         });
       }
     });
+  }
+
+  bool _isNoteFromMutedUser(NoteModel note) {
+    try {
+      final currentUserNpub = _nostrDataService.currentUserNpub;
+      if (currentUserNpub.isEmpty) {
+        debugPrint('[NoteRepository] Current user npub is empty, skipping mute check');
+        return false;
+      }
+
+      final currentUserHex = _npubToHex(currentUserNpub);
+      if (currentUserHex == null) {
+        debugPrint('[NoteRepository] Failed to convert current user npub to hex: $currentUserNpub');
+        return false;
+      }
+
+      final muteCacheService = MuteCacheService.instance;
+      final mutedList = muteCacheService.getSync(currentUserHex);
+      if (mutedList == null || mutedList.isEmpty) {
+        debugPrint('[NoteRepository] No muted users found in cache for user: $currentUserHex');
+        return false;
+      }
+
+      final mutedSet = mutedList.toSet();
+      debugPrint('[NoteRepository] Checking note ${note.id.substring(0, 8)}... against ${mutedSet.length} muted users');
+
+      // Check repost author
+      if (note.isRepost && note.repostedBy != null) {
+        final reposterHex = _npubToHex(note.repostedBy!);
+        if (reposterHex != null && mutedSet.contains(reposterHex)) {
+          debugPrint('[NoteRepository] ✓ Note is repost by muted user: ${note.repostedBy} (hex: $reposterHex)');
+          return true;
+        } else {
+          debugPrint('[NoteRepository] Repost by ${note.repostedBy} (hex: $reposterHex) is NOT muted');
+        }
+      }
+
+      // Check note author
+      final noteAuthorHex = _npubToHex(note.author);
+      if (noteAuthorHex != null && mutedSet.contains(noteAuthorHex)) {
+        debugPrint('[NoteRepository] ✓ Note is from muted user: ${note.author} (hex: $noteAuthorHex)');
+        return true;
+      } else {
+        debugPrint('[NoteRepository] Note author ${note.author} (hex: $noteAuthorHex) is NOT muted');
+      }
+
+      return false;
+    } catch (e) {
+      debugPrint('[NoteRepository] Error checking if note is from muted user: $e');
+      return false;
+    }
+  }
+
+  String? _npubToHex(String npub) {
+    try {
+      if (npub.startsWith('npub1')) {
+        return decodeBasicBech32(npub, 'npub');
+      } else if (npub.length == 64) {
+        return npub;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
   }
 
   void _preloadMentionsForNotes(List<NoteModel> notes) {

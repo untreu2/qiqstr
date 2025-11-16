@@ -12,6 +12,7 @@ import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/services/user_batch_fetcher.dart';
 import '../../data/services/nostr_data_service.dart';
+import '../../data/services/mute_cache_service.dart';
 import '../../models/note_model.dart';
 import '../../models/user_model.dart';
 
@@ -20,6 +21,8 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   final AuthRepository _authRepository;
   final UserRepository _userRepository;
 
+  final NostrDataService _nostrDataService;
+
   FeedViewModel({
     required NoteRepository noteRepository,
     required AuthRepository authRepository,
@@ -27,7 +30,8 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     required NostrDataService nostrDataService,
   })  : _noteRepository = noteRepository,
         _authRepository = authRepository,
-        _userRepository = userRepository;
+        _userRepository = userRepository,
+        _nostrDataService = nostrDataService;
 
   UIState<List<NoteModel>> _feedState = const InitialState();
   UIState<List<NoteModel>> get feedState => _feedState;
@@ -99,12 +103,16 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     _hashtag = hashtag;
     _isInitialized = true;
 
+    _feedState = const LoadingState();
+    safeNotifyListeners();
+
     _loadFeed();
   }
 
   Future<void> _loadCurrentUser() async {
     await executeOperation('loadCurrentUser', () async {
       _currentUserState = const LoadingState();
+      _feedState = const LoadingState();
       safeNotifyListeners();
 
       final result = await _authRepository.getCurrentUserNpub();
@@ -132,15 +140,31 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             _subscribeToRealTimeUpdates();
           } else {
             _currentUserState = const ErrorState('User not authenticated');
+            _feedState = const ErrorState('User not authenticated');
           }
         },
         (error) async {
           _currentUserState = ErrorState(error);
+          _feedState = ErrorState(error);
         },
       );
 
       safeNotifyListeners();
     }, showLoading: false);
+  }
+
+  Future<void> _ensureMuteListLoaded() async {
+    try {
+      final currentUserHex = _nostrDataService.authService.npubToHex(_currentUserNpub) ?? _currentUserNpub;
+      final muteCacheService = MuteCacheService.instance;
+      
+      await muteCacheService.getOrFetch(currentUserHex, () async {
+        final result = await _nostrDataService.getMuteList(currentUserHex);
+        return result.isSuccess ? result.data : null;
+      });
+    } catch (e) {
+      debugPrint('[FeedViewModel] Error ensuring mute list loaded: $e');
+    }
   }
 
   void _subscribeToCurrentUserStream() {
@@ -177,27 +201,10 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     _isLoadingFeed = true;
 
     try {
-      
-      if (!isHashtagMode) {
-        try {
-          final cachedNotes = _noteRepository.currentNotes;
-          if (cachedNotes.isNotEmpty) {
-            debugPrint('[FeedViewModel] Found ${cachedNotes.length} cached notes, preloading profiles');
-            final sortedNotes = _sortNotes(List.from(cachedNotes));
-            _preloadCachedUserProfilesForNotesSync(sortedNotes);
-            await _preloadCachedUserProfilesForNotes(sortedNotes);
-            _feedState = LoadedState(sortedNotes);
-            safeNotifyListeners();
-            
-            _loadUserProfilesForNotes(sortedNotes).catchError((e) {
-              debugPrint('[FeedViewModel] Error loading user profiles in background: $e');
-            });
-            _subscribeToRealTimeUpdates();
-          }
-        } catch (e) {
-          debugPrint('[FeedViewModel] Error checking cached notes: $e');
-        }
+      if (!isHashtagMode && _currentUserNpub.isNotEmpty) {
+        await _ensureMuteListLoaded();
       }
+      
 
       if (isHashtagMode) {
         await _loadHashtagFeed();
@@ -428,14 +435,14 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             _preloadCachedUserProfilesForNotes(sortedNotes).then((_) {
               _feedState = LoadedState(sortedNotes);
               safeNotifyListeners();
-              _loadUserProfilesForNotes(notes).catchError((e) {
+              _loadUserProfilesForNotes(sortedNotes).catchError((e) {
                 debugPrint('[FeedViewModel] Error loading user profiles in background: $e');
               });
             }).catchError((e) {
               debugPrint('[FeedViewModel] Error preloading profiles: $e');
               _feedState = LoadedState(sortedNotes);
               safeNotifyListeners();
-              _loadUserProfilesForNotes(notes).catchError((err) {
+              _loadUserProfilesForNotes(sortedNotes).catchError((err) {
                 debugPrint('[FeedViewModel] Error loading user profiles in background: $err');
               });
             });
@@ -554,6 +561,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     return notes;
   }
 
+
   int _lastNoteCount = 0;
 
   void _subscribeToRealTimeUpdates() {
@@ -574,13 +582,13 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           
           if (currentNotes.isEmpty) {
             if (notes.isNotEmpty) {
-              _preloadCachedUserProfilesForNotesSync(notes);
-              _feedState = LoadedState(notes);
+              _preloadCachedUserProfilesForNotesSync(List<NoteModel>.from(notes));
+              _feedState = LoadedState(List<NoteModel>.from(notes));
               safeNotifyListeners();
-              _preloadCachedUserProfilesForNotes(notes).then((_) {
+              _preloadCachedUserProfilesForNotes(List<NoteModel>.from(notes)).then((_) {
                 safeNotifyListeners();
               });
-              _loadUserProfilesForNotes(notes).catchError((e) {
+              _loadUserProfilesForNotes(List<NoteModel>.from(notes)).catchError((e) {
                 debugPrint('[FeedViewModel] Error loading user profiles in background: $e');
               });
             }
@@ -599,28 +607,25 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           final hasNewNotes = newerNotes.isNotEmpty;
 
           if (hasRemovals) {
-            final filteredNotes = currentNotes.where((n) => !removedNoteIds.contains(n.id)).toList();
+            final filteredCurrentNotes = List<NoteModel>.from(currentNotes.where((n) => !removedNoteIds.contains(n.id)));
             
             for (final updatedNote in updatedNotes) {
-              final index = filteredNotes.indexWhere((n) => n.id == updatedNote.id);
+              final index = filteredCurrentNotes.indexWhere((n) => n.id == updatedNote.id);
               if (index != -1) {
-                filteredNotes[index] = updatedNote;
+                filteredCurrentNotes[index] = updatedNote;
               }
             }
 
             if (newerNotes.isNotEmpty) {
-              final latestTimestamp = filteredNotes.isNotEmpty ? filteredNotes.first.timestamp : DateTime.now();
-              final timestampNewerNotes = newerNotes.where((n) => n.timestamp.isAfter(latestTimestamp)).toList();
+              final latestTimestamp = filteredCurrentNotes.isNotEmpty ? filteredCurrentNotes.first.timestamp : DateTime.now();
+              final timestampNewerNotes = List<NoteModel>.from(newerNotes.where((n) => n.timestamp.isAfter(latestTimestamp)));
               
               if (timestampNewerNotes.isNotEmpty) {
-                final userNotes = timestampNewerNotes.where((n) => n.author == _currentUserNpub).toList();
-                if (userNotes.isNotEmpty) {
-                  filteredNotes.addAll(userNotes);
-                }
+                filteredCurrentNotes.addAll(timestampNewerNotes);
               }
             }
 
-            final sortedNotes = _sortNotes(filteredNotes);
+            final sortedNotes = _sortNotes(filteredCurrentNotes);
             _feedState = LoadedState(sortedNotes);
             _lastNoteCount = sortedNotes.length;
             safeNotifyListeners();
@@ -631,7 +636,18 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             _lastNoteCount = notes.length;
 
             final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
-            final latestTimestamp = currentNotes.first.timestamp;
+            final filteredCurrentNotes = List<NoteModel>.from(currentNotes);
+            
+            if (hasUpdates) {
+              for (final updatedNote in updatedNotes) {
+                final index = filteredCurrentNotes.indexWhere((n) => n.id == updatedNote.id);
+                if (index != -1) {
+                  filteredCurrentNotes[index] = updatedNote;
+                }
+              }
+            }
+
+            final latestTimestamp = filteredCurrentNotes.isNotEmpty ? filteredCurrentNotes.first.timestamp : DateTime.now();
             final newerNotes = <NoteModel>[];
             for (final note in notes) {
               if (note.timestamp.isAfter(latestTimestamp)) {
@@ -639,7 +655,15 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
               }
             }
 
-            if (newerNotes.isEmpty) return;
+            if (newerNotes.isEmpty) {
+              if (hasUpdates) {
+                final sortedNotes = _sortNotes(filteredCurrentNotes);
+                _feedState = LoadedState(sortedNotes);
+                _lastNoteCount = sortedNotes.length;
+                safeNotifyListeners();
+              }
+              return;
+            }
 
             final userNotes = <NoteModel>[];
             final otherNotes = <NoteModel>[];
@@ -654,7 +678,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             }
 
             if (userNotes.isNotEmpty) {
-              final allNotes = [...userNotes, ...currentNotes];
+              final allNotes = [...userNotes, ...filteredCurrentNotes];
               final sortedNotes = _sortNotes(allNotes);
               _preloadCachedUserProfilesForNotesSync(userNotes);
               _feedState = LoadedState(sortedNotes);
@@ -665,6 +689,11 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
               _loadUserProfilesForNotes(userNotes).catchError((e) {
                 debugPrint('[FeedViewModel] Error loading user profiles in background: $e');
               });
+            } else if (hasUpdates) {
+              final sortedNotes = _sortNotes(filteredCurrentNotes);
+              _feedState = LoadedState(sortedNotes);
+              _lastNoteCount = sortedNotes.length;
+              safeNotifyListeners();
             }
 
             if (otherNotes.isNotEmpty) {
