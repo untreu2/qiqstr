@@ -29,6 +29,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
   int _currentIndex = 0;
   final GlobalKey<FeedPageState> _feedPageKey = GlobalKey<FeedPageState>();
   late AnimationController _iconAnimationController;
+  late PageController _pageController;
   bool _isFirstBuild = true;
 
   late final List<Widget> _pages = [
@@ -41,6 +42,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(initialPage: _currentIndex);
     _iconAnimationController = AnimationController(
       duration: const Duration(milliseconds: 200),
       vsync: this,
@@ -49,6 +51,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
 
   @override
   void dispose() {
+    _pageController.dispose();
     _iconAnimationController.dispose();
     super.dispose();
   }
@@ -276,7 +279,11 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
       if (mounted) {
         _iconAnimationController.reset();
         _iconAnimationController.forward();
-        setState(() => _currentIndex = index);
+        _pageController.animateToPage(
+          index,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
       }
     } else if (index == 0) {
       if (_currentIndex == 0) {
@@ -285,14 +292,22 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
         if (mounted) {
           _iconAnimationController.reset();
           _iconAnimationController.forward();
-          setState(() => _currentIndex = index);
+          _pageController.animateToPage(
+            index,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
         }
       }
     } else {
       if (mounted) {
         _iconAnimationController.reset();
         _iconAnimationController.forward();
-        setState(() => _currentIndex = index);
+        _pageController.animateToPage(
+          index,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeInOut,
+        );
       }
     }
   }
@@ -315,8 +330,15 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
           extendBody: true,
           body: PageStorage(
             bucket: PageStorageBucket(),
-            child: IndexedStack(
-              index: _currentIndex,
+            child: PageView(
+              controller: _pageController,
+              onPageChanged: (index) {
+                if (mounted) {
+                  setState(() {
+                    _currentIndex = index;
+                  });
+                }
+              },
               children: _pages,
             ),
           ),

@@ -307,10 +307,10 @@ class _UserTileState extends State<UserTile> {
                       const SizedBox(width: 12),
                       Builder(
                         builder: (context) {
-                          final followBgColor = context.colors.accent;
-                          final followIconColor = context.colors.background;
+                          final followBgColor = context.colors.buttonPrimary;
+                          final followIconColor = context.colors.buttonText;
                           final unfollowBgColor = context.colors.background;
-                          final unfollowIconColor = context.colors.accent;
+                          final unfollowIconColor = context.colors.textPrimary;
 
                           return GestureDetector(
                             onTap: _isLoading ? null : _toggleFollow,

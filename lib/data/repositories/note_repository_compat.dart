@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/base/result.dart';
 import '../../models/note_model.dart';
 import '../filters/feed_filters.dart';
+import '../services/follow_cache_service.dart';
 import 'note_repository.dart';
 
 extension NoteRepositoryCompat on NoteRepository {
@@ -16,22 +17,54 @@ extension NoteRepositoryCompat on NoteRepository {
     try {
       debugPrint('[NoteRepository] getFeedNotesFromFollowList for user: $currentUserNpub');
       
-      await fetchNotesFromRelays(
+      final nostrService = nostrDataService;
+      final currentUserHex = nostrService.authService.npubToHex(currentUserNpub) ?? currentUserNpub;
+      
+      final followCacheService = FollowCacheService.instance;
+      final cachedFollowList = followCacheService.getSync(currentUserHex);
+      
+      if (cachedFollowList == null || cachedFollowList.isEmpty) {
+        debugPrint('[NoteRepository] No cached following list, fetching from relays');
+        await fetchNotesFromRelays(
+          authorNpubs: [currentUserNpub],
+          limit: limit,
+          until: until,
+          since: since,
+        );
+        
+        final followingResult = await nostrService.getFollowingList(currentUserNpub);
+        
+        if (followingResult.isError || followingResult.data == null || followingResult.data!.isEmpty) {
+          debugPrint('[NoteRepository] No following list, returning empty');
+          return Result.success([]);
+        }
+        
+        final followedHexKeys = followingResult.data!;
+        final followedNpubs = followedHexKeys
+            .map((hex) => nostrService.authService.hexToNpub(hex))
+            .where((npub) => npub != null)
+            .cast<String>()
+            .toSet();
+        
+        final filter = HomeFeedFilter(
+          currentUserNpub: currentUserNpub,
+          followedUsers: followedNpubs,
+          showReplies: false,
+        );
+        
+        return await getFilteredNotes(filter);
+      }
+      
+      fetchNotesFromRelays(
         authorNpubs: [currentUserNpub],
         limit: limit,
         until: until,
         since: since,
-      );
+      ).then((_) {}).catchError((e) {
+        debugPrint('[NoteRepository] Error fetching notes in background: $e');
+      });
       
-      final nostrService = nostrDataService;
-      final followingResult = await nostrService.getFollowingList(currentUserNpub);
-      
-      if (followingResult.isError || followingResult.data == null || followingResult.data!.isEmpty) {
-        debugPrint('[NoteRepository] No following list, returning empty');
-        return Result.success([]);
-      }
-      
-      final followedHexKeys = followingResult.data!;
+      final followedHexKeys = cachedFollowList;
       final followedNpubs = followedHexKeys
           .map((hex) => nostrService.authService.hexToNpub(hex))
           .where((npub) => npub != null)

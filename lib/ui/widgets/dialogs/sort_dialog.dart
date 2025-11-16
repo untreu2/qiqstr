@@ -28,7 +28,7 @@ Future<void> showSortDialog({
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
-                color: context.colors.overlayLight,
+                color: context.colors.buttonPrimary,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: Row(
@@ -39,14 +39,14 @@ Future<void> showSortDialog({
                     children: [
                       Icon(
                         Icons.access_time,
-                        color: context.colors.textPrimary,
+                        color: context.colors.buttonText,
                         size: 20,
                       ),
                       const SizedBox(width: 8),
                       Text(
                         'Latest',
                         style: TextStyle(
-                          color: context.colors.textPrimary,
+                          color: context.colors.buttonText,
                           fontSize: 17,
                           fontWeight: FontWeight.w600,
                         ),
@@ -91,7 +91,7 @@ Future<void> showSortDialog({
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
-                color: context.colors.overlayLight,
+                color: context.colors.buttonPrimary,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: Row(
@@ -102,14 +102,14 @@ Future<void> showSortDialog({
                     children: [
                       Icon(
                         Icons.trending_up,
-                        color: context.colors.textPrimary,
+                        color: context.colors.buttonText,
                         size: 20,
                       ),
                       const SizedBox(width: 8),
                       Text(
                         'Popular',
                         style: TextStyle(
-                          color: context.colors.textPrimary,
+                          color: context.colors.buttonText,
                           fontSize: 17,
                           fontWeight: FontWeight.w600,
                         ),
@@ -153,7 +153,7 @@ Future<void> showSortDialog({
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
-                color: context.colors.overlayLight,
+                color: context.colors.buttonPrimary,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: Row(
@@ -164,14 +164,14 @@ Future<void> showSortDialog({
                     children: [
                       Icon(
                         Icons.tag,
-                        color: context.colors.textPrimary,
+                        color: context.colors.buttonText,
                         size: 20,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         'bitcoin',
                         style: TextStyle(
-                          color: context.colors.textPrimary,
+                          color: context.colors.buttonText,
                           fontSize: 17,
                           fontWeight: FontWeight.w600,
                         ),
@@ -211,7 +211,7 @@ Future<void> showSortDialog({
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
-                color: context.colors.overlayLight,
+                color: context.colors.buttonPrimary,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: Row(
@@ -222,14 +222,14 @@ Future<void> showSortDialog({
                     children: [
                       Icon(
                         Icons.tag,
-                        color: context.colors.textPrimary,
+                        color: context.colors.buttonText,
                         size: 20,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         'nostr',
                         style: TextStyle(
-                          color: context.colors.textPrimary,
+                          color: context.colors.buttonText,
                           fontSize: 17,
                           fontWeight: FontWeight.w600,
                         ),
@@ -269,7 +269,7 @@ Future<void> showSortDialog({
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
-                color: context.colors.overlayLight,
+                color: context.colors.buttonPrimary,
                 borderRadius: BorderRadius.circular(40),
               ),
               child: Row(
@@ -280,14 +280,14 @@ Future<void> showSortDialog({
                     children: [
                       Icon(
                         Icons.tag,
-                        color: context.colors.textPrimary,
+                        color: context.colors.buttonText,
                         size: 20,
                       ),
                       const SizedBox(width: 6),
                       Text(
                         'foodstr',
                         style: TextStyle(
-                          color: context.colors.textPrimary,
+                          color: context.colors.buttonText,
                           fontSize: 17,
                           fontWeight: FontWeight.w600,
                         ),

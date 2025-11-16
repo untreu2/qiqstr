@@ -1288,8 +1288,8 @@ class NostrDataService {
       bool isFeedMode = false;
 
       if (authorHexKeys.isEmpty) {
-        debugPrint('[NostrDataService] Fetching global timeline');
-        targetAuthors = [];
+        debugPrint('[NostrDataService] No authors provided - returning empty result');
+        return Result.success([]);
       } else if (authorHexKeys.length == 1 && authorHexKeys.first == _authService.npubToHex(_currentUserNpub)) {
         debugPrint('[NostrDataService] Feed mode - fetching follow list first (NIP-02)');
         isFeedMode = true;
@@ -1330,8 +1330,13 @@ class NostrDataService {
         debugPrint('[NostrDataService] Profile authors (hex): $targetAuthors');
       }
 
+      if (targetAuthors.isEmpty) {
+        debugPrint('[NostrDataService] No target authors - returning empty result');
+        return Result.success([]);
+      }
+
       final filter = NostrService.createNotesFilter(
-        authors: targetAuthors.isEmpty ? null : targetAuthors,
+        authors: targetAuthors,
         kinds: [1, 6],
         limit: limit,
         since: since != null ? since.millisecondsSinceEpoch ~/ 1000 : null,

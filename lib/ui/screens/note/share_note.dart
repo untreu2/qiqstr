@@ -1126,23 +1126,23 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
     return Column(
       children: [
-        Material(
-          elevation: 4.0,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(12),
-            topRight: Radius.circular(12),
-          ),
-          color: context.colors.surface,
-          child: Container(
-            constraints: const BoxConstraints(maxHeight: _userSuggestionsMaxHeight),
-            child: ListView.builder(
-              padding: EdgeInsets.zero,
-              shrinkWrap: true,
-              itemCount: _filteredUsers.length,
-              itemBuilder: (context, index) {
-                final user = _filteredUsers[index];
-                return _buildUserSuggestionItem(user);
-              },
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Material(
+            elevation: 4.0,
+            borderRadius: BorderRadius.circular(40),
+            color: context.colors.buttonPrimary,
+            child: Container(
+              constraints: const BoxConstraints(maxHeight: _userSuggestionsMaxHeight),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: _filteredUsers.length,
+                itemBuilder: (context, index) {
+                  final user = _filteredUsers[index];
+                  return _buildUserSuggestionItem(user);
+                },
+              ),
             ),
           ),
         ),
@@ -1153,24 +1153,52 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   Widget _buildUserSuggestionItem(UserModel user) {
     return Semantics(
-      label: 'Mention ${user.name}, ${user.nip05}',
+      label: 'Mention ${user.name}, ${user.about}',
       button: true,
-      child: ListTile(
-        leading: CircleAvatar(
-          radius: _avatarRadius,
-          backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
-          backgroundColor: context.colors.surfaceTransparent,
-          child: user.profileImage.isEmpty ? Icon(Icons.person, color: context.colors.textPrimary, size: 20) : null,
-        ),
-        title: Text(
-          user.name,
-          style: TextStyle(color: context.colors.textPrimary),
-        ),
-        subtitle: Text(
-          user.nip05,
-          style: TextStyle(color: context.colors.textSecondary),
-        ),
+      child: GestureDetector(
         onTap: () => _onUserSelected(user),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: _avatarRadius,
+                backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
+                backgroundColor: context.colors.surfaceTransparent,
+                child: user.profileImage.isEmpty ? Icon(Icons.person, color: context.colors.buttonText, size: 20) : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      user.name,
+                      style: TextStyle(
+                        color: context.colors.buttonText,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (user.about.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        user.about,
+                        style: TextStyle(
+                          color: context.colors.buttonText.withOpacity(0.7),
+                          fontSize: 14,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

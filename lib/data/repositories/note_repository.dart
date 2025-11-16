@@ -126,14 +126,8 @@ class NoteRepository {
         return result.isSuccess ? const Result.success(null) : Result.error(result.error!);
       }
       
-      debugPrint('[NoteRepository] Fetching global notes');
-      final result = await _nostrDataService.fetchFeedNotes(
-        authorNpubs: [],
-        limit: limit,
-        until: until,
-        since: since,
-      );
-      return result.isSuccess ? const Result.success(null) : Result.error(result.error!);
+      debugPrint('[NoteRepository] No authorNpubs or hashtag provided - skipping fetch');
+      return const Result.success(null);
     } catch (e) {
       debugPrint('[NoteRepository] Exception in fetchNotesFromRelays: $e');
       return Result.error('Failed to fetch notes: ${e.toString()}');
@@ -610,6 +604,11 @@ class NoteRepository {
 
   Future<Result<void>> startRealTimeFeed(List<String> authorNpubs) async {
     try {
+      if (authorNpubs.isEmpty) {
+        debugPrint('[NoteRepository] Cannot start real-time feed: no authors provided');
+        return const Result.error('No authors provided for real-time feed');
+      }
+      
       debugPrint('[NoteRepository] Starting real-time feed for ${authorNpubs.length} authors');
 
       final fetchResult = await fetchNotesFromRelays(authorNpubs: authorNpubs);

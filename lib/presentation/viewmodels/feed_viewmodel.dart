@@ -12,7 +12,6 @@ import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/services/user_batch_fetcher.dart';
 import '../../data/services/nostr_data_service.dart';
-import '../../data/services/mute_cache_service.dart';
 import '../../models/note_model.dart';
 import '../../models/user_model.dart';
 
@@ -21,8 +20,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   final AuthRepository _authRepository;
   final UserRepository _userRepository;
 
-  final NostrDataService _nostrDataService;
-
   FeedViewModel({
     required NoteRepository noteRepository,
     required AuthRepository authRepository,
@@ -30,8 +27,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     required NostrDataService nostrDataService,
   })  : _noteRepository = noteRepository,
         _authRepository = authRepository,
-        _userRepository = userRepository,
-        _nostrDataService = nostrDataService;
+        _userRepository = userRepository;
 
   UIState<List<NoteModel>> _feedState = const InitialState();
   UIState<List<NoteModel>> get feedState => _feedState;
@@ -153,19 +149,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     }, showLoading: false);
   }
 
-  Future<void> _ensureMuteListLoaded() async {
-    try {
-      final currentUserHex = _nostrDataService.authService.npubToHex(_currentUserNpub) ?? _currentUserNpub;
-      final muteCacheService = MuteCacheService.instance;
-      
-      await muteCacheService.getOrFetch(currentUserHex, () async {
-        final result = await _nostrDataService.getMuteList(currentUserHex);
-        return result.isSuccess ? result.data : null;
-      });
-    } catch (e) {
-      debugPrint('[FeedViewModel] Error ensuring mute list loaded: $e');
-    }
-  }
 
   void _subscribeToCurrentUserStream() {
     addSubscription(
@@ -201,11 +184,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     _isLoadingFeed = true;
 
     try {
-      if (!isHashtagMode && _currentUserNpub.isNotEmpty) {
-        await _ensureMuteListLoaded();
-      }
-      
-
       if (isHashtagMode) {
         await _loadHashtagFeed();
       } else {
