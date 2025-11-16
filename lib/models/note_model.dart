@@ -26,6 +26,7 @@ class NoteModel {
   List<String> replyIds;
   List<Map<String, String>> eTags;
   List<Map<String, String>> pTags;
+  List<String> tTags;
   String? replyMarker;
 
   static final Map<String, Map<String, dynamic>> _globalParseCache = {};
@@ -74,10 +75,12 @@ class NoteModel {
     List<String>? replyIds,
     List<Map<String, String>>? eTags,
     List<Map<String, String>>? pTags,
+    List<String>? tTags,
     this.replyMarker,
   })  : replyIds = replyIds ?? [],
         eTags = eTags ?? [],
-        pTags = pTags ?? [];
+        pTags = pTags ?? [],
+        tTags = tTags ?? [];
 
   void addReply(NoteModel reply) {
     if (!_replies.any((r) => r.id == reply.id)) {
@@ -251,6 +254,7 @@ class NoteModel {
       replyIds: json['replyIds'] != null ? List<String>.from(json['replyIds']) : null,
       eTags: json['eTags'] != null ? List<Map<String, String>>.from(json['eTags'].map((tag) => Map<String, String>.from(tag))) : null,
       pTags: json['pTags'] != null ? List<Map<String, String>>.from(json['pTags'].map((tag) => Map<String, String>.from(tag))) : null,
+      tTags: json['tTags'] != null ? List<String>.from(json['tTags']) : null,
       replyMarker: json['replyMarker'] as String?,
     );
   }
@@ -279,6 +283,7 @@ class NoteModel {
       'replyIds': replyIds,
       'eTags': eTags,
       'pTags': pTags,
+      'tTags': tTags,
       'replyMarker': replyMarker,
     };
   }

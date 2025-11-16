@@ -159,10 +159,24 @@ class HashtagFilter extends BaseFeedFilter {
   
   @override
   bool accepts(NoteModel note) {
-    final content = note.content.toLowerCase();
-    final targetHashtag = '#${hashtag.toLowerCase()}';
+    final targetHashtag = hashtag.toLowerCase();
     
-    return content.contains(targetHashtag);
+    if (note.tTags.isNotEmpty) {
+      return note.tTags.contains(targetHashtag);
+    }
+    
+    final content = note.content.toLowerCase();
+    final hashtagRegex = RegExp(r'#(\w+)');
+    final matches = hashtagRegex.allMatches(content);
+    
+    for (final match in matches) {
+      final extractedHashtag = match.group(1)?.toLowerCase();
+      if (extractedHashtag == targetHashtag) {
+        return true;
+      }
+    }
+    
+    return false;
   }
   
   @override

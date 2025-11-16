@@ -389,6 +389,7 @@ class NostrDataService {
       bool isReply = false;
       final List<Map<String, String>> eTags = [];
       final List<Map<String, String>> pTags = [];
+      final List<String> tTags = [];
 
       for (final tag in tags) {
         if (tag is List && tag.isNotEmpty) {
@@ -426,6 +427,11 @@ class NostrDataService {
               'relayUrl': relayUrl,
               'petname': petname,
             });
+          } else if (tagType == 't' && tag.length >= 2) {
+            final hashtag = (tag[1] as String).toLowerCase();
+            if (!tTags.contains(hashtag)) {
+              tTags.add(hashtag);
+            }
           }
         }
       }
@@ -447,6 +453,7 @@ class NostrDataService {
         rawWs: jsonEncode(eventData),
         eTags: eTags,
         pTags: pTags,
+        tTags: tTags,
       );
 
       _noteCache[id] = note;
@@ -503,6 +510,7 @@ class NostrDataService {
       String? replyMarker;
       final List<Map<String, String>> eTags = [];
       final List<Map<String, String>> pTags = [];
+      final List<String> tTags = [];
 
       for (var tag in tags) {
         if (tag is List && tag.isNotEmpty) {
@@ -529,6 +537,11 @@ class NostrDataService {
               'petname': tag.length > 3 ? (tag[3] as String? ?? '') : '',
             };
             pTags.add(pTag);
+          } else if (tag[0] == 't' && tag.length >= 2) {
+            final hashtag = (tag[1] as String).toLowerCase();
+            if (!tTags.contains(hashtag)) {
+              tTags.add(hashtag);
+            }
           }
         }
       }
@@ -547,6 +560,7 @@ class NostrDataService {
         rawWs: jsonEncode(eventData),
         eTags: eTags,
         pTags: pTags,
+        tTags: tTags,
         replyMarker: replyMarker,
         reactionCount: 0,
         replyCount: 0,
@@ -1809,13 +1823,34 @@ class NostrDataService {
       );
 
       final hashtagNotes = hashtagNotesMap.values.toList();
-      final filteredHashtagNotes = await filterNotesByMuteList(hashtagNotes);
+      final targetHashtag = hashtag.toLowerCase();
+      
+      final validatedHashtagNotes = hashtagNotes.where((note) {
+        if (note.tTags.isNotEmpty) {
+          return note.tTags.contains(targetHashtag);
+        }
+        
+        final content = note.content.toLowerCase();
+        final hashtagRegex = RegExp(r'#(\w+)');
+        final matches = hashtagRegex.allMatches(content);
+        
+        for (final match in matches) {
+          final extractedHashtag = match.group(1)?.toLowerCase();
+          if (extractedHashtag == targetHashtag) {
+            return true;
+          }
+        }
+        
+        return false;
+      }).toList();
+      
+      final filteredHashtagNotes = await filterNotesByMuteList(validatedHashtagNotes);
 
       filteredHashtagNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
       final limitedNotes = filteredHashtagNotes.take(limit).toList();
 
-      debugPrint('[NostrDataService] HASHTAG: Returning ${limitedNotes.length} notes for #$hashtag (found ${hashtagNotes.length} total)');
+      debugPrint('[NostrDataService] HASHTAG: Returning ${limitedNotes.length} notes for #$hashtag (found ${validatedHashtagNotes.length} validated, ${hashtagNotes.length} total from relays)');
 
       _scheduleUIUpdate();
 
@@ -1842,6 +1877,7 @@ class NostrDataService {
       bool isReply = false;
       final List<Map<String, String>> eTags = [];
       final List<Map<String, String>> pTags = [];
+      final List<String> tTags = [];
 
       for (final tag in tags) {
         if (tag is List && tag.isNotEmpty) {
@@ -1874,6 +1910,11 @@ class NostrDataService {
               'relayUrl': tag.length > 2 ? (tag[2] as String? ?? '') : '',
               'petname': tag.length > 3 ? (tag[3] as String? ?? '') : '',
             });
+          } else if (tag[0] == 't' && tag.length >= 2) {
+            final hashtag = (tag[1] as String).toLowerCase();
+            if (!tTags.contains(hashtag)) {
+              tTags.add(hashtag);
+            }
           }
         }
       }
@@ -1895,6 +1936,7 @@ class NostrDataService {
         rawWs: jsonEncode(eventData),
         eTags: eTags,
         pTags: pTags,
+        tTags: tTags,
       );
     } catch (e) {
       debugPrint('[NostrDataService] HASHTAG: Error processing event: $e');

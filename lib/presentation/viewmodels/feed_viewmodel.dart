@@ -131,7 +131,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             
             _subscribeToCurrentUserStream();
             _loadFeed();
-            _subscribeToRealTimeUpdates();
           } else {
             _currentUserState = const ErrorState('User not authenticated');
             _feedState = const ErrorState('User not authenticated');
@@ -237,7 +236,9 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           });
         }
 
-        _subscribeToRealTimeUpdates();
+        if (!isHashtagMode) {
+          _subscribeToRealTimeUpdates();
+        }
       } else {
         if (_feedState is! LoadedState<List<NoteModel>> ||
             (_feedState as LoadedState<List<NoteModel>>).data.isEmpty) {
@@ -468,7 +469,31 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     addSubscription(
       stream.listen((notes) {
         if (!isDisposed && _feedState.isLoaded) {
-          if (notes.length == _lastNoteCount) {
+          List<NoteModel> filteredNotes = notes;
+          
+          if (isHashtagMode && _hashtag != null) {
+            final targetHashtag = _hashtag!.toLowerCase();
+            filteredNotes = notes.where((note) {
+              if (note.tTags.isNotEmpty) {
+                return note.tTags.contains(targetHashtag);
+              }
+              
+              final content = note.content.toLowerCase();
+              final hashtagRegex = RegExp(r'#(\w+)');
+              final matches = hashtagRegex.allMatches(content);
+              
+              for (final match in matches) {
+                final extractedHashtag = match.group(1)?.toLowerCase();
+                if (extractedHashtag == targetHashtag) {
+                  return true;
+                }
+              }
+              
+              return false;
+            }).toList();
+          }
+          
+          if (filteredNotes.length == _lastNoteCount) {
             debugPrint('[FeedViewModel] Note count unchanged ($_lastNoteCount), skipping update');
             return;
           }
@@ -476,19 +501,19 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
 
           if (currentNotes.isEmpty) {
-            if (notes.isNotEmpty) {
+            if (filteredNotes.isNotEmpty) {
               _feedLoader.preloadCachedUserProfilesSync(
-                List<NoteModel>.from(notes),
+                List<NoteModel>.from(filteredNotes),
                 _profiles,
                 (profiles) {
                   _profilesController.add(Map.from(profiles));
                   safeNotifyListeners();
                 },
               );
-              _feedState = LoadedState(List<NoteModel>.from(notes));
+              _feedState = LoadedState(List<NoteModel>.from(filteredNotes));
               safeNotifyListeners();
               _feedLoader.preloadCachedUserProfiles(
-                List<NoteModel>.from(notes),
+                List<NoteModel>.from(filteredNotes),
                 _profiles,
                 (profiles) {
                   _profilesController.add(Map.from(profiles));
@@ -498,7 +523,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
                 safeNotifyListeners();
               });
               _feedLoader.loadUserProfilesForNotes(
-                List<NoteModel>.from(notes),
+                List<NoteModel>.from(filteredNotes),
                 _profiles,
                 (profiles) {
                   _profilesController.add(Map.from(profiles));
@@ -513,13 +538,13 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
           final mergedNotes = _feedLoader.mergeNotesWithUpdates(
             currentNotes,
-            notes,
+            filteredNotes,
             _sortMode,
           );
 
           if (mergedNotes != currentNotes) {
             final userNotes = <NoteModel>[];
-            for (final note in notes) {
+            for (final note in filteredNotes) {
               if (note.author == _currentUserNpub && !currentNotes.any((n) => n.id == note.id)) {
                 userNotes.add(note);
               }

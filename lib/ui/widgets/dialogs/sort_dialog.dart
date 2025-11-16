@@ -53,29 +53,24 @@ Future<void> showSortDialog({
                       ),
                     ],
                   ),
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: viewModel.sortMode == FeedSortMode.latest && viewModel.hashtag == null
-                          ? context.colors.accent
-                          : Colors.transparent,
-                      border: Border.all(
-                        color: viewModel.sortMode == FeedSortMode.latest && viewModel.hashtag == null
-                            ? context.colors.accent
-                            : context.colors.border,
-                        width: 2,
+                  if (viewModel.sortMode == FeedSortMode.latest && viewModel.hashtag == null)
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: context.colors.accent,
+                        border: Border.all(
+                          color: context.colors.accent,
+                          width: 2,
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.check,
+                        color: context.colors.background,
+                        size: 16,
                       ),
                     ),
-                    child: viewModel.sortMode == FeedSortMode.latest && viewModel.hashtag == null
-                        ? Icon(
-                            Icons.check,
-                            color: context.colors.background,
-                            size: 16,
-                          )
-                        : null,
-                  ),
                 ],
               ),
             ),
@@ -116,203 +111,24 @@ Future<void> showSortDialog({
                       ),
                     ],
                   ),
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: viewModel.sortMode == FeedSortMode.mostInteracted && viewModel.hashtag == null
-                          ? context.colors.accent
-                          : Colors.transparent,
-                      border: Border.all(
-                        color: viewModel.sortMode == FeedSortMode.mostInteracted && viewModel.hashtag == null
-                            ? context.colors.accent
-                            : context.colors.border,
-                        width: 2,
-                      ),
-                    ),
-                    child: viewModel.sortMode == FeedSortMode.mostInteracted && viewModel.hashtag == null
-                        ? Icon(
-                            Icons.check,
-                            color: context.colors.background,
-                            size: 16,
-                          )
-                        : null,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          GestureDetector(
-            onTap: () {
-              Navigator.pop(modalContext);
-              viewModel.setHashtag('bitcoin');
-            },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: context.colors.buttonPrimary,
-                borderRadius: BorderRadius.circular(40),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.tag,
-                        color: context.colors.buttonText,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'bitcoin',
-                        style: TextStyle(
-                          color: context.colors.buttonText,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
+                  if (viewModel.sortMode == FeedSortMode.mostInteracted && viewModel.hashtag == null)
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: context.colors.accent,
+                        border: Border.all(
+                          color: context.colors.accent,
+                          width: 2,
                         ),
                       ),
-                    ],
-                  ),
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: viewModel.hashtag == 'bitcoin' ? context.colors.accent : Colors.transparent,
-                      border: Border.all(
-                        color: viewModel.hashtag == 'bitcoin' ? context.colors.accent : context.colors.border,
-                        width: 2,
+                      child: Icon(
+                        Icons.check,
+                        color: context.colors.background,
+                        size: 16,
                       ),
                     ),
-                    child: viewModel.hashtag == 'bitcoin'
-                        ? Icon(
-                            Icons.check,
-                            color: context.colors.background,
-                            size: 16,
-                          )
-                        : null,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          GestureDetector(
-            onTap: () {
-              Navigator.pop(modalContext);
-              viewModel.setHashtag('nostr');
-            },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: context.colors.buttonPrimary,
-                borderRadius: BorderRadius.circular(40),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.tag,
-                        color: context.colors.buttonText,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'nostr',
-                        style: TextStyle(
-                          color: context.colors.buttonText,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: viewModel.hashtag == 'nostr' ? context.colors.accent : Colors.transparent,
-                      border: Border.all(
-                        color: viewModel.hashtag == 'nostr' ? context.colors.accent : context.colors.border,
-                        width: 2,
-                      ),
-                    ),
-                    child: viewModel.hashtag == 'nostr'
-                        ? Icon(
-                            Icons.check,
-                            color: context.colors.background,
-                            size: 16,
-                          )
-                        : null,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          GestureDetector(
-            onTap: () {
-              Navigator.pop(modalContext);
-              viewModel.setHashtag('foodstr');
-            },
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                color: context.colors.buttonPrimary,
-                borderRadius: BorderRadius.circular(40),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.tag,
-                        color: context.colors.buttonText,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'foodstr',
-                        style: TextStyle(
-                          color: context.colors.buttonText,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: viewModel.hashtag == 'foodstr' ? context.colors.accent : Colors.transparent,
-                      border: Border.all(
-                        color: viewModel.hashtag == 'foodstr' ? context.colors.accent : context.colors.border,
-                        width: 2,
-                      ),
-                    ),
-                    child: viewModel.hashtag == 'foodstr'
-                        ? Icon(
-                            Icons.check,
-                            color: context.colors.background,
-                            size: 16,
-                          )
-                        : null,
-                  ),
                 ],
               ),
             ),

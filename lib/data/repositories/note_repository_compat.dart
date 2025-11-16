@@ -123,19 +123,14 @@ extension NoteRepositoryCompat on NoteRepository {
     try {
       debugPrint('[NoteRepository] getHashtagNotes for #$hashtag');
       
-      await fetchNotesFromRelays(
+      final result = await nostrDataService.fetchHashtagNotes(
         hashtag: hashtag,
         limit: limit,
         until: until,
         since: since,
       );
       
-      final filter = HashtagFilter(
-        hashtag: hashtag,
-        currentUserNpub: '',
-      );
-      
-      return await getFilteredNotes(filter);
+      return result;
     } catch (e) {
       debugPrint('[NoteRepository] Exception in getHashtagNotes: $e');
       return Result.error('Failed to get hashtag notes: ${e.toString()}');

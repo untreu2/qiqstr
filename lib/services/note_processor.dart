@@ -41,6 +41,7 @@ class NoteProcessor {
         rawWs: rawWs ?? jsonEncode(eventData),
         eTags: replyInfo.eTags,
         pTags: replyInfo.pTags,
+        tTags: replyInfo.tTags,
         replyMarker: replyInfo.replyMarker,
       );
 
@@ -74,6 +75,7 @@ class NoteProcessor {
     bool isReply = false;
     List<Map<String, String>> eTags = [];
     List<Map<String, String>> pTags = [];
+    List<String> tTags = [];
 
     for (var tag in tags) {
       if (tag is List && tag.isNotEmpty) {
@@ -112,6 +114,11 @@ class NoteProcessor {
             'petname': tag.length > 3 ? (tag[3] as String? ?? '') : '',
           };
           pTags.add(pTag);
+        } else if (tag[0] == 't' && tag.length >= 2) {
+          final hashtag = (tag[1] as String).toLowerCase();
+          if (!tTags.contains(hashtag)) {
+            tTags.add(hashtag);
+          }
         }
       }
     }
@@ -127,6 +134,7 @@ class NoteProcessor {
       parentId: parentId,
       eTags: eTags,
       pTags: pTags,
+      tTags: tTags,
       replyMarker: replyMarker,
     );
   }
@@ -158,6 +166,7 @@ class ReplyInfo {
   final String? parentId;
   final List<Map<String, String>> eTags;
   final List<Map<String, String>> pTags;
+  final List<String> tTags;
   final String? replyMarker;
 
   ReplyInfo({
@@ -166,6 +175,7 @@ class ReplyInfo {
     this.parentId,
     required this.eTags,
     required this.pTags,
+    required this.tTags,
     this.replyMarker,
   });
 }
