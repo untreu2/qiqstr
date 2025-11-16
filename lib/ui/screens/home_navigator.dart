@@ -190,21 +190,115 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
     required int index,
     String? iconType,
     bool isHome = false,
+    bool isSearch = false,
+    bool isWallet = false,
+    bool isNotification = false,
   }) {
     final iconSize = isHome
         ? (isSelected ? _homeIconSizeSelected : _homeIconSizeUnselected)
         : (isSelected ? _iconSizeSelected : _iconSizeUnselected);
     
     if (_isFirstBuild) {
+      final themeManager = context.themeManager;
+      final isDarkMode = themeManager?.isDarkMode ?? false;
+      
       return SizedBox(
         width: iconSize,
         height: iconSize,
         child: isSelected
-            ? Icon(
-                carbonIcon,
-                size: iconSize,
-                color: context.colors.accent,
-              )
+            ? (isHome
+                ? isDarkMode
+                    ? ColorFiltered(
+                        colorFilter: const ColorFilter.matrix([
+                          -1, 0, 0, 0, 255,
+                          0, -1, 0, 0, 255,
+                          0, 0, -1, 0, 255,
+                          0, 0, 0, 1, 0,
+                        ]),
+                        child: Image.asset(
+                          'assets/home_filled.png',
+                          width: iconSize,
+                          height: iconSize,
+                          fit: BoxFit.contain,
+                        ),
+                      )
+                    : Image.asset(
+                        'assets/home_filled.png',
+                        width: iconSize,
+                        height: iconSize,
+                        fit: BoxFit.contain,
+                      )
+                : isSearch
+                    ? isDarkMode
+                        ? ColorFiltered(
+                            colorFilter: const ColorFilter.matrix([
+                              -1, 0, 0, 0, 255,
+                              0, -1, 0, 0, 255,
+                              0, 0, -1, 0, 255,
+                              0, 0, 0, 1, 0,
+                            ]),
+                            child: Image.asset(
+                              'assets/search_filled.png',
+                              width: iconSize,
+                              height: iconSize,
+                              fit: BoxFit.contain,
+                            ),
+                          )
+                        : Image.asset(
+                            'assets/search_filled.png',
+                            width: iconSize,
+                            height: iconSize,
+                            fit: BoxFit.contain,
+                          )
+                    : isWallet
+                        ? isDarkMode
+                            ? ColorFiltered(
+                                colorFilter: const ColorFilter.matrix([
+                                  -1, 0, 0, 0, 255,
+                                  0, -1, 0, 0, 255,
+                                  0, 0, -1, 0, 255,
+                                  0, 0, 0, 1, 0,
+                                ]),
+                                child: Image.asset(
+                                  'assets/wallet_filled.png',
+                                  width: iconSize,
+                                  height: iconSize,
+                                  fit: BoxFit.contain,
+                                ),
+                              )
+                            : Image.asset(
+                                'assets/wallet_filled.png',
+                                width: iconSize,
+                                height: iconSize,
+                                fit: BoxFit.contain,
+                              )
+                        : isNotification
+                            ? isDarkMode
+                                ? ColorFiltered(
+                                    colorFilter: const ColorFilter.matrix([
+                                      -1, 0, 0, 0, 255,
+                                      0, -1, 0, 0, 255,
+                                      0, 0, -1, 0, 255,
+                                      0, 0, 0, 1, 0,
+                                    ]),
+                                    child: Image.asset(
+                                      'assets/notification_filled.png',
+                                      width: iconSize,
+                                      height: iconSize,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  )
+                                : Image.asset(
+                                    'assets/notification_filled.png',
+                                    width: iconSize,
+                                    height: iconSize,
+                                    fit: BoxFit.contain,
+                                  )
+                            : Icon(
+                                carbonIcon,
+                                size: iconSize,
+                                color: context.colors.accent,
+                              ))
             : SvgPicture.asset(
                 iconPath,
                 width: iconSize,
@@ -231,26 +325,121 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
           ),
         );
       },
-      child: SizedBox(
-        key: ValueKey('${isSelected ? 'carbon' : 'svg'}_${iconType ?? index}'),
-        width: iconSize,
-        height: iconSize,
-        child: isSelected
-            ? Icon(
-                carbonIcon,
-                size: iconSize,
-                color: context.colors.accent,
-              )
-            : SvgPicture.asset(
-                iconPath,
-                width: iconSize,
-                height: iconSize,
-                fit: BoxFit.contain,
-                colorFilter: ColorFilter.mode(
-                  context.colors.textPrimary,
-                  BlendMode.srcIn,
-                ),
-              ),
+      child: Builder(
+        builder: (context) {
+          final themeManager = context.themeManager;
+          final isDarkMode = themeManager?.isDarkMode ?? false;
+          
+          return SizedBox(
+            key: ValueKey('${isSelected ? (isHome ? 'home_filled' : isSearch ? 'search_filled' : isWallet ? 'wallet_filled' : isNotification ? 'notification_filled' : 'carbon') : 'svg'}_${iconType ?? index}_${isDarkMode ? 'dark' : 'light'}'),
+            width: iconSize,
+            height: iconSize,
+            child: isSelected
+                ? (isHome
+                    ? isDarkMode
+                        ? ColorFiltered(
+                            colorFilter: const ColorFilter.matrix([
+                              -1, 0, 0, 0, 255,
+                              0, -1, 0, 0, 255,
+                              0, 0, -1, 0, 255,
+                              0, 0, 0, 1, 0,
+                            ]),
+                            child: Image.asset(
+                              'assets/home_filled.png',
+                              width: iconSize,
+                              height: iconSize,
+                              fit: BoxFit.contain,
+                            ),
+                          )
+                        : Image.asset(
+                            'assets/home_filled.png',
+                            width: iconSize,
+                            height: iconSize,
+                            fit: BoxFit.contain,
+                          )
+                    : isSearch
+                        ? isDarkMode
+                            ? ColorFiltered(
+                                colorFilter: const ColorFilter.matrix([
+                                  -1, 0, 0, 0, 255,
+                                  0, -1, 0, 0, 255,
+                                  0, 0, -1, 0, 255,
+                                  0, 0, 0, 1, 0,
+                                ]),
+                                child: Image.asset(
+                                  'assets/search_filled.png',
+                                  width: iconSize,
+                                  height: iconSize,
+                                  fit: BoxFit.contain,
+                                ),
+                              )
+                            : Image.asset(
+                                'assets/search_filled.png',
+                                width: iconSize,
+                                height: iconSize,
+                                fit: BoxFit.contain,
+                              )
+                        : isWallet
+                            ? isDarkMode
+                                ? ColorFiltered(
+                                    colorFilter: const ColorFilter.matrix([
+                                      -1, 0, 0, 0, 255,
+                                      0, -1, 0, 0, 255,
+                                      0, 0, -1, 0, 255,
+                                      0, 0, 0, 1, 0,
+                                    ]),
+                                    child: Image.asset(
+                                      'assets/wallet_filled.png',
+                                      width: iconSize,
+                                      height: iconSize,
+                                      fit: BoxFit.contain,
+                                    ),
+                                  )
+                                : Image.asset(
+                                    'assets/wallet_filled.png',
+                                    width: iconSize,
+                                    height: iconSize,
+                                    fit: BoxFit.contain,
+                                  )
+                            : isNotification
+                                ? isDarkMode
+                                    ? ColorFiltered(
+                                        colorFilter: const ColorFilter.matrix([
+                                          -1, 0, 0, 0, 255,
+                                          0, -1, 0, 0, 255,
+                                          0, 0, -1, 0, 255,
+                                          0, 0, 0, 1, 0,
+                                        ]),
+                                        child: Image.asset(
+                                          'assets/notification_filled.png',
+                                          width: iconSize,
+                                          height: iconSize,
+                                          fit: BoxFit.contain,
+                                        ),
+                                      )
+                                    : Image.asset(
+                                        'assets/notification_filled.png',
+                                        width: iconSize,
+                                        height: iconSize,
+                                        fit: BoxFit.contain,
+                                      )
+                                : Icon(
+                                    carbonIcon,
+                                    size: iconSize,
+                                    color: context.colors.accent,
+                                  ))
+                : SvgPicture.asset(
+                    iconPath,
+                    width: iconSize,
+                    height: iconSize,
+                    fit: BoxFit.contain,
+                    colorFilter: ColorFilter.mode(
+                      context.colors.textPrimary,
+                      BlendMode.srcIn,
+                    ),
+                  ),
+          );
+        },
       ),
     );
   }
@@ -262,6 +451,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
       carbonIcon: CarbonIcons.notification,
       index: 3,
       iconType: 'notification',
+      isNotification: true,
     );
   }
 
@@ -272,6 +462,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
       carbonIcon: CarbonIcons.wallet,
       index: 2,
       iconType: 'wallet',
+      isWallet: true,
     );
   }
 
@@ -294,6 +485,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
       carbonIcon: carbonIcon,
       index: index,
       isHome: index == 0,
+      isSearch: index == 1,
     );
   }
 
