@@ -1129,19 +1129,19 @@ class _ShareNotePageState extends State<ShareNotePage> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Material(
-            elevation: 4.0,
+          elevation: 4.0,
             borderRadius: BorderRadius.circular(40),
             color: context.colors.buttonPrimary,
-            child: Container(
-              constraints: const BoxConstraints(maxHeight: _userSuggestionsMaxHeight),
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true,
-                itemCount: _filteredUsers.length,
-                itemBuilder: (context, index) {
-                  final user = _filteredUsers[index];
-                  return _buildUserSuggestionItem(user);
-                },
+          child: Container(
+            constraints: const BoxConstraints(maxHeight: _userSuggestionsMaxHeight),
+            child: ListView.builder(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              itemCount: _filteredUsers.length,
+              itemBuilder: (context, index) {
+                final user = _filteredUsers[index];
+                return _buildUserSuggestionItem(user);
+              },
               ),
             ),
           ),
@@ -1162,23 +1162,23 @@ class _ShareNotePageState extends State<ShareNotePage> {
           child: Row(
             children: [
               CircleAvatar(
-                radius: _avatarRadius,
-                backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
-                backgroundColor: context.colors.surfaceTransparent,
+          radius: _avatarRadius,
+          backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
+          backgroundColor: context.colors.surfaceTransparent,
                 child: user.profileImage.isEmpty ? Icon(Icons.person, color: context.colors.buttonText, size: 20) : null,
-              ),
+        ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      user.name,
+          user.name,
                       style: TextStyle(
                         color: context.colors.buttonText,
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
-                      ),
+        ),
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (user.about.isNotEmpty) ...[

@@ -6,8 +6,10 @@ import 'colors.dart';
 class ThemeManager extends ChangeNotifier {
   static const String _themeKey = 'theme_mode';
   static const String _expandedNoteModeKey = 'expanded_note_mode';
+  static const String _bottomNavOrderKey = 'bottom_nav_order';
   bool? _isDarkMode;
   bool _isExpandedNoteMode = false;
+  List<int> _bottomNavOrder = [0, 1, 2, 3];
 
   bool get isDarkMode {
     if (_isDarkMode != null) {
@@ -19,10 +21,12 @@ class ThemeManager extends ChangeNotifier {
 
   bool get isSystemTheme => _isDarkMode == null;
   bool get isExpandedNoteMode => _isExpandedNoteMode;
+  List<int> get bottomNavOrder => List.unmodifiable(_bottomNavOrder);
 
   ThemeManager() {
     _loadTheme();
     _loadExpandedNoteMode();
+    _loadBottomNavOrder();
   }
 
   Future<void> _loadTheme() async {
@@ -82,6 +86,24 @@ class ThemeManager extends ChangeNotifier {
       _isExpandedNoteMode = isExpanded;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_expandedNoteModeKey, _isExpandedNoteMode);
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadBottomNavOrder() async {
+    final prefs = await SharedPreferences.getInstance();
+    final orderList = prefs.getStringList(_bottomNavOrderKey);
+    if (orderList != null && orderList.length == 4) {
+      _bottomNavOrder = orderList.map((e) => int.parse(e)).toList();
+      notifyListeners();
+    }
+  }
+
+  Future<void> setBottomNavOrder(List<int> order) async {
+    if (order.length == 4 && order.toSet().length == 4) {
+      _bottomNavOrder = List.from(order);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_bottomNavOrderKey, order.map((e) => e.toString()).toList());
       notifyListeners();
     }
   }

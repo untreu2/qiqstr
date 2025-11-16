@@ -57,6 +57,8 @@ class _DisplayPageState extends State<DisplayPage> {
           _buildExpandedNoteModeToggleItem(context, themeManager),
           const SizedBox(height: 8),
           _buildThemeToggleItem(context, themeManager),
+          const SizedBox(height: 8),
+          _buildBottomNavOrderSection(context, themeManager),
           const SizedBox(height: 32),
         ],
       ),
@@ -143,6 +145,120 @@ class _DisplayPageState extends State<DisplayPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildBottomNavOrderSection(BuildContext context, ThemeManager themeManager) {
+    final navItems = [
+      {'index': 0, 'name': 'Home', 'icon': CarbonIcons.home},
+      {'index': 1, 'name': 'Search', 'icon': CarbonIcons.search},
+      {'index': 2, 'name': 'Wallet', 'icon': CarbonIcons.wallet},
+      {'index': 3, 'name': 'Notifications', 'icon': CarbonIcons.notification},
+    ];
+
+    final currentOrder = themeManager.bottomNavOrder;
+    final orderedItems = currentOrder.map((index) => navItems[index]).toList();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+      decoration: BoxDecoration(
+        color: context.colors.overlayLight,
+        borderRadius: BorderRadius.circular(40),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                CarbonIcons.list,
+                size: 22,
+                color: context.colors.textPrimary,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Navigation Bar Order',
+                style: TextStyle(
+                  color: context.colors.textPrimary,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Press and hold to drag and reorder items',
+            style: TextStyle(
+              color: context.colors.textSecondary,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: orderedItems.map((item) {
+              final originalIndex = item['index'] as int;
+              
+              return Expanded(
+                child: LongPressDraggable<int>(
+                  data: originalIndex,
+                  feedback: Material(
+                    color: Colors.transparent,
+                    child: Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: context.colors.background,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        item['icon'] as IconData,
+                        size: 24,
+                        color: context.colors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  child: DragTarget<int>(
+                    onAccept: (draggedIndex) {
+                      if (draggedIndex != originalIndex) {
+                        final newOrder = List<int>.from(currentOrder);
+                        final oldPos = newOrder.indexOf(draggedIndex);
+                        final newPos = newOrder.indexOf(originalIndex);
+                        newOrder.removeAt(oldPos);
+                        newOrder.insert(newPos, draggedIndex);
+                        themeManager.setBottomNavOrder(newOrder);
+                      }
+                    },
+                    builder: (context, candidateData, rejectedData) {
+                      return Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        width: 56,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: context.colors.background,
+                          shape: BoxShape.circle,
+                          border: candidateData.isNotEmpty
+                              ? Border.all(
+                                  color: context.colors.accent,
+                                  width: 2,
+                                )
+                              : null,
+                        ),
+                        child: Icon(
+                          item['icon'] as IconData,
+                          size: 24,
+                          color: context.colors.textPrimary,
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
       ),
     );
   }

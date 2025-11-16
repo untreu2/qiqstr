@@ -29,20 +29,25 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
   int _currentIndex = 0;
   final GlobalKey<FeedPageState> _feedPageKey = GlobalKey<FeedPageState>();
   late AnimationController _iconAnimationController;
-  late PageController _pageController;
   bool _isFirstBuild = true;
 
-  late final List<Widget> _pages = [
-    FeedPage(key: _feedPageKey, npub: widget.npub),
-    const UserSearchPage(),
-    const WalletPage(),
-    const NotificationPage(),
-  ];
+  List<Widget> _buildPages() {
+    final themeManager = context.themeManager;
+    final navOrder = themeManager?.bottomNavOrder ?? [0, 1, 2, 3];
+    
+    final allPages = [
+      FeedPage(key: _feedPageKey, npub: widget.npub),
+      const UserSearchPage(),
+      const WalletPage(),
+      const NotificationPage(),
+    ];
+    
+    return navOrder.map((index) => allPages[index]).toList();
+  }
 
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: _currentIndex);
     _iconAnimationController = AnimationController(
       duration: const Duration(milliseconds: 200),
       vsync: this,
@@ -51,18 +56,29 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
 
   @override
   void dispose() {
-    _pageController.dispose();
     _iconAnimationController.dispose();
     super.dispose();
   }
 
   Widget _buildCustomBottomBar() {
-    const items = [
+    final themeManager = context.themeManager;
+    final navOrder = themeManager?.bottomNavOrder ?? [0, 1, 2, 3];
+    
+    final navItems = [
       {'icon': 'assets/home_gap.svg', 'index': 0, 'type': 'svg'},
       {'icon': 'assets/search_button.svg', 'index': 1, 'type': 'svg'},
-      {'icon': 'add', 'index': -1, 'type': 'add'},
       {'icon': 'assets/wallet_icon.svg', 'index': 2, 'type': 'svg'},
       {'icon': 'assets/notification_button.svg', 'index': 3, 'type': 'svg'},
+    ];
+    
+    final orderedNavItems = navOrder.map((index) => navItems[index]).toList();
+    
+    final items = [
+      orderedNavItems[0],
+      orderedNavItems[1],
+      {'icon': 'add', 'index': -1, 'type': 'add'},
+      orderedNavItems[2],
+      orderedNavItems[3],
     ];
 
     return Container(
@@ -109,23 +125,30 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                 );
               }
 
-              final bool isSelected = _currentIndex == index;
+              final originalIndex = index;
+              final themeManager = context.themeManager;
+              final navOrder = themeManager?.bottomNavOrder ?? [0, 1, 2, 3];
+              final pageViewIndex = navOrder.indexOf(originalIndex);
+              final bool isSelected = _currentIndex == pageViewIndex;
 
               return Expanded(
                 child: Bounce(
                   scaleFactor: 0.85,
                   onTap: () {
                     HapticFeedback.lightImpact();
-                    _handleNavigation(index);
+                    final themeManager = context.themeManager;
+                    final navOrder = themeManager?.bottomNavOrder ?? [0, 1, 2, 3];
+                    final pageViewIndex = navOrder.indexOf(originalIndex);
+                    _handleNavigation(pageViewIndex);
                   },
                   behavior: HitTestBehavior.opaque,
                   child: Stack(
                     alignment: Alignment.center,
                     clipBehavior: Clip.none,
                     children: [
-                      index == 3
+                      originalIndex == 3
                           ? _buildNotificationIcon(item['icon'] as String, isSelected)
-                          : index == 2
+                          : originalIndex == 2
                               ? _buildWalletIcon(item['icon'] as String, isSelected)
                               : _buildRegularIcon(item, isSelected),
                       Positioned(
@@ -274,40 +297,30 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
     );
   }
 
-  void _handleNavigation(int index) {
-    if (index == 3) {
-      if (mounted) {
-        _iconAnimationController.reset();
-        _iconAnimationController.forward();
-        _pageController.animateToPage(
-          index,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
-      }
-    } else if (index == 0) {
-      if (_currentIndex == 0) {
+  void _handleNavigation(int pageViewIndex) {
+    final themeManager = context.themeManager;
+    final navOrder = themeManager?.bottomNavOrder ?? [0, 1, 2, 3];
+    final originalIndex = navOrder[pageViewIndex];
+    
+    if (originalIndex == 0) {
+      if (_currentIndex == pageViewIndex) {
         _feedPageKey.currentState?.scrollToTop();
       } else {
         if (mounted) {
           _iconAnimationController.reset();
           _iconAnimationController.forward();
-          _pageController.animateToPage(
-            index,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
+          setState(() {
+            _currentIndex = pageViewIndex;
+          });
         }
       }
     } else {
       if (mounted) {
         _iconAnimationController.reset();
         _iconAnimationController.forward();
-        _pageController.animateToPage(
-          index,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeInOut,
-        );
+        setState(() {
+          _currentIndex = pageViewIndex;
+        });
       }
     }
   }
@@ -330,20 +343,22 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
           extendBody: true,
           body: PageStorage(
             bucket: PageStorageBucket(),
-            child: PageView(
-              controller: _pageController,
-              onPageChanged: (index) {
-                if (mounted) {
-                  setState(() {
-                    _currentIndex = index;
-                  });
-                }
+            child: Consumer<ThemeManager>(
+              builder: (context, themeManager, child) {
+                final pages = _buildPages();
+                return IndexedStack(
+                  index: _currentIndex,
+                  children: pages,
+                );
               },
-              children: _pages,
             ),
           ),
           bottomNavigationBar: RepaintBoundary(
-            child: _buildCustomBottomBar(),
+            child: Consumer<ThemeManager>(
+              builder: (context, themeManager, child) {
+                return _buildCustomBottomBar();
+              },
+            ),
           ),
         );
       },

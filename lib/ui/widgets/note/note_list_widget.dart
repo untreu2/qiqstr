@@ -598,29 +598,29 @@ class _NoteItemWidgetState extends State<_NoteItemWidget> with AutomaticKeepAliv
     final renderObject = _widgetKey.currentContext?.findRenderObject();
     if (renderObject is RenderBox && renderObject.attached && renderObject.hasSize) {
       try {
-        final position = renderObject.localToGlobal(Offset.zero);
-        final size = renderObject.size;
-        final screenHeight = MediaQuery.of(context).size.height;
-        final screenWidth = MediaQuery.of(context).size.width;
-        
-        final isVisible = position.dy < screenHeight && 
-                         position.dy + size.height > 0 &&
-                         position.dx < screenWidth &&
-                         position.dx + size.width > 0;
-        
-        if (isVisible && !_hasReportedVisibility) {
-          _hasReportedVisibility = true;
-          final noteId = widget.note.isRepost && widget.note.rootId != null 
-              ? widget.note.rootId! 
-              : widget.note.id;
-          widget.visibilityViewModel.updateVisibility(noteId, true);
-          widget.onNoteVisible(noteId);
-        } else if (!isVisible && _hasReportedVisibility) {
-          _hasReportedVisibility = false;
-          final noteId = widget.note.isRepost && widget.note.rootId != null 
-              ? widget.note.rootId! 
-              : widget.note.id;
-          widget.visibilityViewModel.updateVisibility(noteId, false);
+      final position = renderObject.localToGlobal(Offset.zero);
+      final size = renderObject.size;
+      final screenHeight = MediaQuery.of(context).size.height;
+      final screenWidth = MediaQuery.of(context).size.width;
+      
+      final isVisible = position.dy < screenHeight && 
+                       position.dy + size.height > 0 &&
+                       position.dx < screenWidth &&
+                       position.dx + size.width > 0;
+      
+      if (isVisible && !_hasReportedVisibility) {
+        _hasReportedVisibility = true;
+        final noteId = widget.note.isRepost && widget.note.rootId != null 
+            ? widget.note.rootId! 
+            : widget.note.id;
+        widget.visibilityViewModel.updateVisibility(noteId, true);
+        widget.onNoteVisible(noteId);
+      } else if (!isVisible && _hasReportedVisibility) {
+        _hasReportedVisibility = false;
+        final noteId = widget.note.isRepost && widget.note.rootId != null 
+            ? widget.note.rootId! 
+            : widget.note.id;
+        widget.visibilityViewModel.updateVisibility(noteId, false);
         }
       } catch (e) {
         debugPrint('[NoteItemWidget] Error checking visibility: $e');

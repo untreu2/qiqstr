@@ -25,21 +25,21 @@ extension NoteRepositoryCompat on NoteRepository {
       
       if (cachedFollowList == null || cachedFollowList.isEmpty) {
         debugPrint('[NoteRepository] No cached following list, fetching from relays');
-        await fetchNotesFromRelays(
-          authorNpubs: [currentUserNpub],
-          limit: limit,
-          until: until,
-          since: since,
-        );
-        
-        final followingResult = await nostrService.getFollowingList(currentUserNpub);
-        
-        if (followingResult.isError || followingResult.data == null || followingResult.data!.isEmpty) {
-          debugPrint('[NoteRepository] No following list, returning empty');
-          return Result.success([]);
-        }
-        
-        final followedHexKeys = followingResult.data!;
+      await fetchNotesFromRelays(
+        authorNpubs: [currentUserNpub],
+        limit: limit,
+        until: until,
+        since: since,
+      );
+      
+      final followingResult = await nostrService.getFollowingList(currentUserNpub);
+      
+      if (followingResult.isError || followingResult.data == null || followingResult.data!.isEmpty) {
+        debugPrint('[NoteRepository] No following list, returning empty');
+        return Result.success([]);
+      }
+      
+      final followedHexKeys = followingResult.data!;
         final followedNpubs = followedHexKeys
             .map((hex) => nostrService.authService.hexToNpub(hex))
             .where((npub) => npub != null)

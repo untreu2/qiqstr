@@ -150,7 +150,7 @@ Future<bool> _loadInitialFeedWithSplash(String npub) async {
   try {
     final nostrDataService = AppDI.get<NostrDataService>();
     final noteRepository = AppDI.get<NoteRepository>();
-
+    
     try {
       final serviceCachedNotes = nostrDataService.cachedNotes;
       if (serviceCachedNotes.isNotEmpty) {
@@ -161,7 +161,7 @@ Future<bool> _loadInitialFeedWithSplash(String npub) async {
     } catch (e) {
       debugPrint('[Main] Error checking service cached notes: $e');
     }
-
+    
     try {
       final repoCachedNotes = noteRepository.currentNotes;
       if (repoCachedNotes.isNotEmpty) {
@@ -191,11 +191,11 @@ Future<bool> _loadInitialFeedWithSplash(String npub) async {
       );
 
       await Future.wait([realTimeFeedFuture, feedFuture]).then((results) {
-        if (!completer.isCompleted) {
+      if (!completer.isCompleted) {
           final feedResult = results[1] as Result<List<NoteModel>>;
           final success = feedResult.isSuccess && feedResult.data != null && feedResult.data!.isNotEmpty;
-          completer.complete(success);
-          if (success) {
+        completer.complete(success);
+        if (success) {
             debugPrint('[Main] Feed preload successful: ${feedResult.data!.length} notes');
           }
         }
@@ -203,7 +203,7 @@ Future<bool> _loadInitialFeedWithSplash(String npub) async {
         debugPrint('[Main] Error in parallel feed loading: $e');
         if (!completer.isCompleted) {
           completer.complete(false);
-        }
+      }
       });
 
       return await completer.future;
