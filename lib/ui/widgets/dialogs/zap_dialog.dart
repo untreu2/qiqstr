@@ -306,23 +306,26 @@ Future<Map<String, dynamic>> showZapDialog({
                 ),
               ),
               const SizedBox(height: 24),
-              SecondaryButton(
-                label: 'Send',
-                onPressed: () {
-                  final sats = int.tryParse(amountController.text.trim());
-                  if (sats == null || sats <= 0) {
-                    AppSnackbar.error(modalContext, 'Enter a valid amount', duration: const Duration(seconds: 1));
-                    return;
-                  }
+              SizedBox(
+                width: double.infinity,
+                child: SecondaryButton(
+                  label: 'Send',
+                  onPressed: () {
+                    final sats = int.tryParse(amountController.text.trim());
+                    if (sats == null || sats <= 0) {
+                      AppSnackbar.error(modalContext, 'Enter a valid amount', duration: const Duration(seconds: 1));
+                      return;
+                    }
 
-                  Navigator.pop(modalContext, {
-                    'success': true,
-                    'amount': sats,
-                  });
+                    Navigator.pop(modalContext, {
+                      'success': true,
+                      'amount': sats,
+                    });
 
-                  unawaited(_processZapPayment(context, note, sats, noteController.text.trim()));
-                },
-                size: ButtonSize.large,
+                    unawaited(_processZapPayment(context, note, sats, noteController.text.trim()));
+                  },
+                  size: ButtonSize.large,
+                ),
               ),
             ],
           ),
