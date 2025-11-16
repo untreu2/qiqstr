@@ -7,22 +7,23 @@ import '../../core/base/app_error.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/note_repository.dart';
-import '../../data/repositories/note_repository_compat.dart';
+import '../../data/services/feed_loader_service.dart';
 import '../../models/user_model.dart';
 import '../../models/note_model.dart';
 
 class ProfileViewModel extends BaseViewModel with CommandMixin {
   final UserRepository _userRepository;
   final AuthRepository _authRepository;
-  final NoteRepository _noteRepository;
+  final FeedLoaderService _feedLoader;
 
   ProfileViewModel({
     required UserRepository userRepository,
     required AuthRepository authRepository,
     required NoteRepository noteRepository,
+    required FeedLoaderService feedLoader,
   })  : _userRepository = userRepository,
         _authRepository = authRepository,
-        _noteRepository = noteRepository;
+        _feedLoader = feedLoader;
 
   UIState<UserModel> _profileState = const InitialState();
   UIState<UserModel> get profileState => _profileState;
@@ -198,59 +199,25 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
       _profileNotesState = const LoadingState();
       safeNotifyListeners();
 
-      debugPrint('[ProfileViewModel] PROFILE MODE: Loading notes for $userNpub (bypassing feed filters)');
-
       try {
-        final result = await _noteRepository.getProfileNotes(
-          authorNpub: userNpub,
+        final params = FeedLoadParams(
+          type: FeedType.profile,
+          targetUserNpub: userNpub,
           limit: _currentLimit,
         );
 
-        result.fold(
-          (notes) {
-            debugPrint('[ProfileViewModel] PROFILE MODE: Loaded ${notes.length} profile notes');
-            debugPrint(
-                '[ProfileViewModel] PROFILE MODE: Notes breakdown - Posts: ${notes.where((n) => !n.isReply && !n.isRepost).length}, Replies: ${notes.where((n) => n.isReply && !n.isRepost).length}, Reposts: ${notes.where((n) => n.isRepost).length}');
+        final result = await _feedLoader.loadFeed(params);
 
-            final seenIds = <String>{};
-            final deduplicatedNotes = <NoteModel>[];
-            for (final note in notes) {
-              if (!seenIds.contains(note.id)) {
-                seenIds.add(note.id);
-                deduplicatedNotes.add(note);
-              }
-            }
-
-            final filteredNotes = deduplicatedNotes.where((note) {
-              if (!note.isReply && !note.isRepost) {
-                return true;
-              }
-
-              if (note.isRepost) {
-                return true;
-              }
-
-              if (note.isReply && !note.isRepost) {
-                return false;
-              }
-
-              return true;
-            }).toList();
-
-            debugPrint(
-                '[ProfileViewModel] PROFILE MODE: After deduplication and filtering - ${filteredNotes.length} notes (${notes.length - filteredNotes.length} duplicates/replies removed)');
-            debugPrint(
-                '[ProfileViewModel] PROFILE MODE: Filtered breakdown - Posts: ${filteredNotes.where((n) => !n.isReply && !n.isRepost).length}, Reposts: ${filteredNotes.where((n) => n.isRepost).length}');
-
-            _profileNotesState = filteredNotes.isEmpty ? const EmptyState('No notes from this user yet') : LoadedState(filteredNotes);
-          },
-          (error) {
-            debugPrint('[ProfileViewModel] PROFILE MODE: Failed to load profile notes: $error');
-            _profileNotesState = ErrorState('Failed to load notes: $error');
-          },
-        );
+        if (result.isSuccess) {
+          final filteredNotes = _feedLoader.filterProfileNotes(result.notes);
+          _profileNotesState = filteredNotes.isEmpty
+              ? const EmptyState('No notes from this user yet')
+              : LoadedState(filteredNotes);
+        } else {
+          _profileNotesState = ErrorState(result.error ?? 'Failed to load notes');
+        }
       } catch (e) {
-        debugPrint('[ProfileViewModel] PROFILE MODE: Exception loading profile notes: $e');
+        debugPrint('[ProfileViewModel] Exception loading profile notes: $e');
         _profileNotesState = ErrorState('Exception loading notes: $e');
       }
 
@@ -266,71 +233,46 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
 
     try {
       _currentLimit += 50;
-      debugPrint('[ProfileViewModel] Loading more profile notes with new limit: $_currentLimit');
 
-      final result = await _noteRepository.getProfileNotes(
-        authorNpub: _currentProfileNpub,
+      final params = FeedLoadParams(
+        type: FeedType.profile,
+        targetUserNpub: _currentProfileNpub,
         limit: _currentLimit,
       );
 
-      result.fold(
-        (notes) {
-          if (notes.isNotEmpty) {
-            final currentNotes = _profileNotesState is LoadedState<List<NoteModel>>
-                ? (_profileNotesState as LoadedState<List<NoteModel>>).data
-                : <NoteModel>[];
-            
-            final currentNoteIds = currentNotes.map((n) => n.id).toSet();
-            final seenIds = <String>{};
-            final deduplicatedNotes = <NoteModel>[];
-            
-            for (final note in notes) {
-              if (!seenIds.contains(note.id) && !currentNoteIds.contains(note.id)) {
-                seenIds.add(note.id);
-                deduplicatedNotes.add(note);
-              }
+      final result = await _feedLoader.loadFeed(params);
+
+      if (result.isSuccess && result.notes.isNotEmpty) {
+        final currentNotes = _profileNotesState is LoadedState<List<NoteModel>>
+            ? (_profileNotesState as LoadedState<List<NoteModel>>).data
+            : <NoteModel>[];
+
+        final currentNoteIds = currentNotes.map((n) => n.id).toSet();
+        final newNotes = result.notes.where((n) => !currentNoteIds.contains(n.id)).toList();
+
+        if (newNotes.isNotEmpty || currentNotes.isEmpty) {
+          final allNotes = [...currentNotes, ...newNotes];
+          final allSeenIds = <String>{};
+          final finalDeduplicatedNotes = <NoteModel>[];
+
+          for (final note in allNotes) {
+            if (!allSeenIds.contains(note.id)) {
+              allSeenIds.add(note.id);
+              finalDeduplicatedNotes.add(note);
             }
-
-            final filteredNotes = deduplicatedNotes.where((note) {
-              if (!note.isReply && !note.isRepost) {
-                return true;
-              }
-
-              if (note.isRepost) {
-                return true;
-              }
-
-              if (note.isReply && !note.isRepost) {
-                return false;
-              }
-
-              return true;
-            }).toList();
-
-            if (filteredNotes.isNotEmpty || currentNotes.isEmpty) {
-              final allNotes = [...currentNotes, ...filteredNotes];
-              final allSeenIds = <String>{};
-              final finalDeduplicatedNotes = <NoteModel>[];
-              
-              for (final note in allNotes) {
-                if (!allSeenIds.contains(note.id)) {
-                  allSeenIds.add(note.id);
-                  finalDeduplicatedNotes.add(note);
-                }
-              }
-
-              _profileNotesState = finalDeduplicatedNotes.isEmpty ? const EmptyState('No notes from this user yet') : LoadedState(finalDeduplicatedNotes);
-            }
-            
-            safeNotifyListeners();
           }
-        },
-        (error) {
-          debugPrint('[ProfileViewModel] Error loading more profile notes: $error');
-          _profileNotesState = ErrorState('Failed to load more notes: $error');
-          safeNotifyListeners();
-        },
-      );
+
+          final filteredNotes = _feedLoader.filterProfileNotes(finalDeduplicatedNotes);
+          _profileNotesState = filteredNotes.isEmpty
+              ? const EmptyState('No notes from this user yet')
+              : LoadedState(filteredNotes);
+        }
+
+        safeNotifyListeners();
+      } else if (result.error != null) {
+        _profileNotesState = ErrorState('Failed to load more notes: ${result.error}');
+        safeNotifyListeners();
+      }
     } finally {
       _isLoadingMore = false;
       safeNotifyListeners();
@@ -370,83 +312,24 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
 
 
   void _subscribeToNotesUpdates() {
+    final stream = _feedLoader.getNotesStream(FeedType.profile);
+
     addSubscription(
-      _noteRepository.notesStream.listen((updatedNotes) {
+      stream.listen((updatedNotes) {
         if (isDisposed || _profileNotesState is! LoadedState<List<NoteModel>>) return;
 
         final currentNotes = (_profileNotesState as LoadedState<List<NoteModel>>).data;
         if (currentNotes.isEmpty) return;
 
-        final updatedNoteIds = updatedNotes.map((n) => n.id).toSet();
-        final currentNoteIds = currentNotes.map((n) => n.id).toSet();
-        
-        final removedNoteIds = currentNoteIds.difference(updatedNoteIds);
-        
-        if (removedNoteIds.isNotEmpty) {
-          final filteredNotes = currentNotes.where((note) => !removedNoteIds.contains(note.id)).toList();
-          
-          for (final updatedNote in updatedNotes) {
-            if (currentNoteIds.contains(updatedNote.id)) {
-              final index = filteredNotes.indexWhere((n) => n.id == updatedNote.id);
-              if (index != -1) {
-                filteredNotes[index] = updatedNote;
-              }
-            }
-          }
+        final mergedNotes = _feedLoader.mergeProfileNotesWithUpdates(
+          currentNotes,
+          updatedNotes,
+        );
 
-          _profileNotesState = filteredNotes.isEmpty 
-              ? const EmptyState('No notes from this user yet') 
-              : LoadedState(filteredNotes);
-          
-          safeNotifyListeners();
-          return;
-        }
-
-        bool hasUpdates = false;
-        for (final updatedNote in updatedNotes) {
-          if (currentNoteIds.contains(updatedNote.id)) {
-            final index = currentNotes.indexWhere((n) => n.id == updatedNote.id);
-            if (index != -1) {
-              final existingNote = currentNotes[index];
-              if (existingNote.reactionCount != updatedNote.reactionCount ||
-                  existingNote.repostCount != updatedNote.repostCount ||
-                  existingNote.replyCount != updatedNote.replyCount ||
-                  existingNote.zapAmount != updatedNote.zapAmount) {
-                hasUpdates = true;
-                break;
-              }
-            }
-          }
-        }
-
-        if (hasUpdates) {
-          final updatedNotesList = List<NoteModel>.from(currentNotes);
-          for (final updatedNote in updatedNotes) {
-            if (currentNoteIds.contains(updatedNote.id)) {
-              final index = updatedNotesList.indexWhere((n) => n.id == updatedNote.id);
-              if (index != -1) {
-                updatedNotesList[index] = updatedNote;
-              }
-            }
-          }
-
-          final filteredNotes = updatedNotesList.where((note) {
-            if (!note.isReply && !note.isRepost) {
-              return true;
-            }
-            if (note.isRepost) {
-              return true;
-            }
-            if (note.isReply && !note.isRepost) {
-              return false;
-            }
-            return true;
-          }).toList();
-
-          _profileNotesState = filteredNotes.isEmpty 
-              ? const EmptyState('No notes from this user yet') 
-              : LoadedState(filteredNotes);
-          
+        if (mergedNotes != currentNotes) {
+          _profileNotesState = mergedNotes.isEmpty
+              ? const EmptyState('No notes from this user yet')
+              : LoadedState(mergedNotes);
           safeNotifyListeners();
         }
       }),

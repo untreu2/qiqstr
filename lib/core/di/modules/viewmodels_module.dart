@@ -12,6 +12,7 @@ import '../../../data/repositories/user_repository.dart';
 import '../../../data/repositories/notification_repository.dart';
 import '../../../data/services/validation_service.dart';
 import '../../../data/services/nostr_data_service.dart';
+import '../../../data/services/feed_loader_service.dart';
 
 class ViewModelsModule extends DIModule {
   @override
@@ -25,13 +26,14 @@ class ViewModelsModule extends DIModule {
           noteRepository: AppDI.get<NoteRepository>(),
           authRepository: AppDI.get<AuthRepository>(),
           userRepository: AppDI.get<UserRepository>(),
-          nostrDataService: AppDI.get<NostrDataService>(),
+          feedLoader: AppDI.get<FeedLoaderService>(),
         ));
 
     AppDI.registerFactory<ProfileViewModel>(() => ProfileViewModel(
           userRepository: AppDI.get<UserRepository>(),
           authRepository: AppDI.get<AuthRepository>(),
           noteRepository: AppDI.get<NoteRepository>(),
+          feedLoader: AppDI.get<FeedLoaderService>(),
         ));
 
     AppDI.registerFactory<NotificationViewModel>(() => NotificationViewModel(
