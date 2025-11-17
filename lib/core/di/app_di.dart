@@ -9,20 +9,6 @@ class AppDI {
 
   static T get<T extends Object>() => _getIt.get<T>();
 
-  static T? getOrNull<T extends Object>() {
-    try {
-      return _getIt.get<T>();
-    } catch (e) {
-      return null;
-    }
-  }
-
-  static bool isRegistered<T extends Object>() => _getIt.isRegistered<T>();
-
-  static void registerSingleton<T extends Object>(T instance) {
-    _getIt.registerSingleton<T>(instance);
-  }
-
   static void registerLazySingleton<T extends Object>(T Function() factory) {
     _getIt.registerLazySingleton<T>(factory);
   }
@@ -37,14 +23,6 @@ class AppDI {
     await ViewModelsModule().register();
 
     await _getIt.allReady();
-  }
-
-  static Future<void> reset() async {
-    await _getIt.reset();
-  }
-
-  static Future<void> unregister<T extends Object>() async {
-    await _getIt.unregister<T>();
   }
 }
 

@@ -6,13 +6,8 @@ class StringOptimizer {
 
   StringOptimizer._();
 
-  static final Map<String, RegExp> _regexpCache = {};
-
   static final Map<String, dynamic> _jsonCache = {};
   static const int _maxJsonCacheSize = 500;
-
-  static final Map<String, String> _stringPool = {};
-  static const int _maxStringPoolSize = 1000;
 
   static final RegExp _mediaUrlRegExp = RegExp(
     r'(https?:\/\/\S+\.(?:jpg|jpeg|png|webp|gif|mp4|mov))',
@@ -35,13 +30,6 @@ class StringOptimizer {
   );
 
   static final RegExp _hexRegExp = RegExp(r'^[0-9a-fA-F]+$');
-
-  static final RegExp _validPattern = RegExp(r'^[a-zA-Z0-9._-]+$');
-
-  RegExp getCachedRegExp(String pattern, {bool caseSensitive = true}) {
-    final key = '$pattern:$caseSensitive';
-    return _regexpCache.putIfAbsent(key, () => RegExp(pattern, caseSensitive: caseSensitive));
-  }
 
   dynamic decodeJsonOptimized(String jsonString) {
     if (jsonString.length < 1000) {
@@ -74,20 +62,6 @@ class StringOptimizer {
     } catch (e) {
       return '{}';
     }
-  }
-
-  String internString(String str) {
-    if (str.length > 100) return str;
-
-    final cached = _stringPool[str];
-    if (cached != null) return cached;
-
-    if (_stringPool.length < _maxStringPoolSize) {
-      _stringPool[str] = str;
-      return str;
-    }
-
-    return str;
   }
 
   Map<String, dynamic> parseContentOptimized(String content) {
@@ -148,33 +122,6 @@ class StringOptimizer {
     return value.length == 64 && _hexRegExp.hasMatch(value);
   }
 
-  bool isValidUsername(String username) {
-    return _validPattern.hasMatch(username);
-  }
-
-  String cleanUrl(String url) {
-    return url.replaceAll(_getCachedRegExp(r'/+$'), '');
-  }
-
-  List<String> splitOptimized(String text, String pattern) {
-    if (pattern == '@') {
-      return text.split('@');
-    }
-
-    return text.split(pattern);
-  }
-
-  String substringOptimized(String text, int start, [int? end]) {
-    if (start < 0 || start >= text.length) return '';
-
-    final actualEnd = end ?? text.length;
-    if (actualEnd <= start || actualEnd > text.length) {
-      return text.substring(start);
-    }
-
-    return text.substring(start, actualEnd);
-  }
-
   String truncateOptimized(String text, int maxLength, [String suffix = '...']) {
     if (text.length <= maxLength) return text;
 
@@ -184,58 +131,12 @@ class StringOptimizer {
     return '${text.substring(0, truncatedLength)}$suffix';
   }
 
-  String formatUsername(String username) {
-    return username.replaceAll(' ', '_');
-  }
-
-  String generateDisplayName(String identifier, {int maxLength = 25}) {
-    if (identifier.isEmpty) return 'Anonymous';
-
-    if (identifier.length <= maxLength) return identifier;
-
-    return '${identifier.substring(0, maxLength)}...';
-  }
-
-  String formatCount(int count) {
-    if (count < 1000) return count.toString();
-
-    if (count < 1000000) {
-      final formatted = (count / 1000).toStringAsFixed(1);
-      return formatted.endsWith('.0') ? '${formatted.substring(0, formatted.length - 2)}K' : '${formatted}K';
-    }
-
-    final formatted = (count / 1000000).toStringAsFixed(1);
-    return formatted.endsWith('.0') ? '${formatted.substring(0, formatted.length - 2)}M' : '${formatted}M';
-  }
-
-  RegExp _getCachedRegExp(String pattern) {
-    return _regexpCache.putIfAbsent(pattern, () => RegExp(pattern));
-  }
-
-  void clearCaches() {
-    _jsonCache.clear();
-    _stringPool.clear();
-    _regexpCache.clear();
-  }
-
-  Map<String, int> getCacheStats() {
-    return {
-      'regexpCache': _regexpCache.length,
-      'jsonCache': _jsonCache.length,
-      'stringPool': _stringPool.length,
-    };
-  }
 }
 
 final stringOptimizer = StringOptimizer.instance;
 
 String optimizedJsonEncode(dynamic object) => stringOptimizer.encodeJsonOptimized(object);
 dynamic optimizedJsonDecode(String json) => stringOptimizer.decodeJsonOptimized(json);
-String optimizedSubstring(String text, int start, [int? end]) => stringOptimizer.substringOptimized(text, start, end);
-String optimizedTruncate(String text, int maxLength, [String suffix = '...']) => stringOptimizer.truncateOptimized(text, maxLength, suffix);
-bool isValidHexString(String value) => stringOptimizer.isValidHex(value);
-String formatDisplayName(String name, {int maxLength = 25}) => stringOptimizer.generateDisplayName(name, maxLength: maxLength);
-String formatCountOptimized(int count) => stringOptimizer.formatCount(count);
 
 extension OptimizedStringOperations on String {
   Map<String, dynamic> parseContentOptimized() {
@@ -246,11 +147,5 @@ extension OptimizedStringOperations on String {
 
   String truncateOptimized(int maxLength, [String suffix = '...']) {
     return stringOptimizer.truncateOptimized(this, maxLength, suffix);
-  }
-
-  String get formatUsername => stringOptimizer.formatUsername(this);
-
-  List<String> splitOptimized(String pattern) {
-    return stringOptimizer.splitOptimized(this, pattern);
   }
 }

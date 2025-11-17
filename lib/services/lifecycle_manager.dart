@@ -68,32 +68,12 @@ class LifecycleManager with WidgetsBindingObserver {
     }
   }
 
-  void addOnInactiveCallback(VoidCallback callback) {
-    if (!_onInactiveCallbacks.contains(callback)) {
-      _onInactiveCallbacks.add(callback);
-    }
-  }
-
-  void addOnDetachedCallback(VoidCallback callback) {
-    if (!_onDetachedCallbacks.contains(callback)) {
-      _onDetachedCallbacks.add(callback);
-    }
-  }
-
   void removeOnResumeCallback(VoidCallback callback) {
     _onResumeCallbacks.remove(callback);
   }
 
   void removeOnPauseCallback(VoidCallback callback) {
     _onPauseCallbacks.remove(callback);
-  }
-
-  void removeOnInactiveCallback(VoidCallback callback) {
-    _onInactiveCallbacks.remove(callback);
-  }
-
-  void removeOnDetachedCallback(VoidCallback callback) {
-    _onDetachedCallbacks.remove(callback);
   }
 
   bool get isAppInForeground => _isAppInForeground;

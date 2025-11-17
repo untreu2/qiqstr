@@ -1,11 +1,8 @@
 import 'dart:developer' as developer;
 
 enum LogLevel {
-  debug(0),
-  info(1),
   warning(2),
-  error(3),
-  none(4);
+  error(3);
 
   const LogLevel(this.value);
   final int value;
@@ -30,10 +27,6 @@ class LoggingService {
     _currentLevel = level;
     _isEnabled = enabled;
   }
-
-  void debug(String message, [String? tag]) {}
-
-  void info(String message, [String? tag]) {}
 
   void warning(String message, [String? tag]) {
     if (_isEnabled && _currentLevel.value <= LogLevel.warning.value) {
@@ -61,23 +54,9 @@ class LoggingService {
     developer.log(tag != null ? '[$tag] $message' : message, level: 1000);
   }
 
-  void flush() {
-    _lastLogTime.clear();
-  }
-
-  Map<String, dynamic> getConfig() {
-    return {
-      'enabled': _isEnabled,
-      'level': _currentLevel.name,
-    };
-  }
 }
 
 final loggingService = LoggingService.instance;
 
-void logDebug(String message, [String? tag]) {}
-void logInfo(String message, [String? tag]) {}
 void logWarning(String message, [String? tag]) => loggingService.warning(message, tag);
 void logError(String message, [String? tag, Object? error]) => loggingService.error(message, tag, error);
-
-void optimizedPrint(String message, [String? tag]) {}

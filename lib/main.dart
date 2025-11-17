@@ -1,11 +1,10 @@
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as provider;
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-import 'ui/theme/colors.dart';
 import 'ui/theme/theme_manager.dart' as theme;
 import 'ui/screens/home_navigator.dart';
 import 'ui/screens/auth/login_page.dart';
@@ -328,35 +327,3 @@ class QiqstrApp extends ConsumerWidget {
   }
 }
 
-class HiveErrorApp extends StatelessWidget {
-  const HiveErrorApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: AppColors.background,
-        textTheme: ThemeData.dark().textTheme.copyWith(
-              bodyLarge: const TextStyle(height: 2.1),
-              bodyMedium: const TextStyle(height: 2.1),
-            ),
-      ),
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text('Initialization Error'),
-        ),
-        body: const Center(
-          child: Text(
-            'An error occurred while initializing the application.',
-            style: TextStyle(
-              fontSize: 18,
-              color: AppColors.textPrimary,
-              height: 2.1,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ),
-    );
-  }
-}
