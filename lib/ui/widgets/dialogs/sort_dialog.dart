@@ -59,15 +59,15 @@ Future<void> showSortDialog({
                       height: 24,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: context.colors.accent,
+                        color: context.colors.buttonPrimary,
                         border: Border.all(
-                          color: context.colors.accent,
+                          color: context.colors.background,
                           width: 2,
                         ),
                       ),
                       child: Icon(
                         Icons.check,
-                        color: context.colors.background,
+                        color: context.colors.buttonText,
                         size: 16,
                       ),
                     ),
@@ -117,15 +117,15 @@ Future<void> showSortDialog({
                       height: 24,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: context.colors.accent,
+                        color: context.colors.buttonPrimary,
                         border: Border.all(
-                          color: context.colors.accent,
+                          color: context.colors.background,
                           width: 2,
                         ),
                       ),
                       child: Icon(
                         Icons.check,
-                        color: context.colors.background,
+                        color: context.colors.buttonText,
                         size: 16,
                       ),
                     ),

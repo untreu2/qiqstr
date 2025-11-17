@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
@@ -423,7 +422,6 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         _gestureRecognizers.add(recognizer);
 
         final fontSize = _fontSize(context);
-        final avatarSize = fontSize * 1.1;
 
         spans.add(TextSpan(
           text: displayText,
@@ -434,79 +432,6 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
           ),
           recognizer: recognizer,
         ));
-
-        if (user != null && user.profileImage.isNotEmpty) {
-          spans.add(WidgetSpan(
-            alignment: PlaceholderAlignment.middle,
-            child: SizedBox(
-              width: avatarSize + 4,
-              height: avatarSize,
-              child: Padding(
-                padding: EdgeInsets.only(left: 4),
-                child: ClipOval(
-                  clipBehavior: Clip.antiAlias,
-                  child: SizedBox(
-                    width: avatarSize,
-                    height: avatarSize,
-                    child: CachedNetworkImage(
-                      imageUrl: user.profileImage,
-                      fit: BoxFit.cover,
-                      fadeInDuration: Duration.zero,
-                      fadeOutDuration: Duration.zero,
-                      memCacheWidth: (avatarSize * 2.5).toInt(),
-                      maxWidthDiskCache: (avatarSize * 2.5).toInt(),
-                      maxHeightDiskCache: (avatarSize * 2.5).toInt(),
-                      placeholder: (context, url) => SizedBox(
-                        width: avatarSize,
-                        height: avatarSize,
-                        child: Container(
-                          color: colors.surfaceTransparent,
-                          child: Icon(
-                            Icons.person,
-                            size: avatarSize * 0.6,
-                            color: colors.textSecondary,
-                          ),
-                        ),
-                      ),
-                      errorWidget: (context, url, error) => SizedBox(
-                        width: avatarSize,
-                        height: avatarSize,
-                        child: Container(
-                          color: colors.surfaceTransparent,
-                          child: Icon(
-                            Icons.person,
-                            size: avatarSize * 0.6,
-                            color: colors.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ));
-        } else if (user != null) {
-          spans.add(WidgetSpan(
-            alignment: PlaceholderAlignment.middle,
-            child: SizedBox(
-              width: avatarSize + 4,
-              height: avatarSize,
-              child: Padding(
-                padding: EdgeInsets.only(left: 4),
-                child: CircleAvatar(
-                  radius: avatarSize / 2,
-                  backgroundColor: colors.surfaceTransparent,
-                  child: Icon(
-                    Icons.person,
-                    size: avatarSize * 0.6,
-                    color: colors.textSecondary,
-                  ),
-                ),
-              ),
-            ),
-          ));
-        }
       } else if (p['type'] == 'show_more') {
         final recognizer = TapGestureRecognizer()..onTap = () => widget.onShowMoreTap?.call(widget.noteId);
         _gestureRecognizers.add(recognizer);

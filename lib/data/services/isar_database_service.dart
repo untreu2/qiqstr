@@ -109,15 +109,18 @@ class IsarDatabaseService {
 
   Future<Map<String, Map<String, String>>> getUserProfiles(List<String> pubkeyHexList) async {
     try {
+      if (pubkeyHexList.isEmpty) return {};
+
       final db = await isar;
       final results = <String, Map<String, String>>{};
 
-      for (final pubkeyHex in pubkeyHexList) {
-        final user = await db.userModelIsars.where().pubkeyHexEqualTo(pubkeyHex).findFirst();
+      final userModels = await db.userModelIsars
+          .where()
+          .anyOf(pubkeyHexList, (q, String pubkeyHex) => q.pubkeyHexEqualTo(pubkeyHex))
+          .findAll();
 
-        if (user != null) {
-          results[pubkeyHex] = user.toProfileData();
-        }
+      for (final model in userModels) {
+        results[model.pubkeyHex] = model.toProfileData();
       }
 
       debugPrint('[IsarDatabaseService]  Batch retrieved ${results.length}/${pubkeyHexList.length} profiles from Isar');
