@@ -33,6 +33,8 @@ class _ProfilePageState extends State<ProfilePage> {
   final ValueNotifier<bool> _showUsernameBubbleNotifier = ValueNotifier<bool>(false);
   Timer? _scrollDebounceTimer;
 
+  StreamSubscription<Map<String, UserModel>>? _profilesSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +45,14 @@ class _ProfilePageState extends State<ProfilePage> {
     _profileViewModel.initialize();
 
     _profiles[widget.user.npub] = widget.user;
+
+    _profilesSubscription = _profileViewModel.profilesStream.listen((updatedProfiles) {
+      if (mounted) {
+        setState(() {
+          _profiles.addAll(updatedProfiles);
+        });
+      }
+    });
 
     _profileViewModel.initializeWithUser(widget.user.npub);
   }
@@ -64,6 +74,7 @@ class _ProfilePageState extends State<ProfilePage> {
   @override
   void dispose() {
     _scrollDebounceTimer?.cancel();
+    _profilesSubscription?.cancel();
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     _notesNotifier.dispose();

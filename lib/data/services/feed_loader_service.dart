@@ -158,12 +158,22 @@ class FeedLoaderService {
   }
 
   List<NoteModel> sortNotes(List<NoteModel> notes, FeedSortMode sortMode) {
+    if (notes.length <= 1) return notes;
+    
     final sortedNotes = List<NoteModel>.from(notes);
 
     if (sortMode == FeedSortMode.mostInteracted) {
+      final scoreCache = <String, int>{};
+      int getScore(NoteModel note) {
+        return scoreCache.putIfAbsent(
+          note.id,
+          () => note.reactionCount + note.repostCount + note.replyCount + (note.zapAmount ~/ 1000),
+        );
+      }
+      
       sortedNotes.sort((a, b) {
-        final scoreA = a.reactionCount + a.repostCount + a.replyCount + (a.zapAmount ~/ 1000);
-        final scoreB = b.reactionCount + b.repostCount + b.replyCount + (b.zapAmount ~/ 1000);
+        final scoreA = getScore(a);
+        final scoreB = getScore(b);
 
         if (scoreA == scoreB) {
           return b.timestamp.compareTo(a.timestamp);
@@ -196,33 +206,41 @@ class FeedLoaderService {
     }).toList();
   }
 
+  Set<String> _extractAuthorIds(List<NoteModel> notes) {
+    final authorIds = <String>{};
+    for (final note in notes) {
+      authorIds.add(note.author);
+      if (note.repostedBy != null) {
+        authorIds.add(note.repostedBy!);
+      }
+    }
+    return authorIds;
+  }
+
   void preloadCachedUserProfilesSync(
     List<NoteModel> notes,
     Map<String, UserModel> profiles,
     Function(Map<String, UserModel>) onProfilesUpdated,
   ) {
     try {
-      final authorIds = <String>{};
-      for (final note in notes) {
-        authorIds.add(note.author);
-        if (note.repostedBy != null) {
-          authorIds.add(note.repostedBy!);
-        }
+      final authorIds = _extractAuthorIds(notes);
+      final missingIds = authorIds.where((id) => !profiles.containsKey(id)).toList();
+      
+      if (missingIds.isEmpty) {
+        return;
       }
 
       bool hasUpdates = false;
-      for (final authorId in authorIds) {
-        if (!profiles.containsKey(authorId)) {
-          final cachedUser = _userRepository.getCachedUserSync(authorId);
-          if (cachedUser != null) {
-            profiles[authorId] = cachedUser;
-            hasUpdates = true;
-          }
+      for (final authorId in missingIds) {
+        final cachedUser = _userRepository.getCachedUserSync(authorId);
+        if (cachedUser != null) {
+          profiles[authorId] = cachedUser;
+          hasUpdates = true;
         }
       }
 
       if (hasUpdates) {
-        onProfilesUpdated(Map.from(profiles));
+        onProfilesUpdated(profiles);
       }
     } catch (e) {
       debugPrint('[FeedLoaderService] Error preloading cached user profiles: $e');
@@ -235,15 +253,9 @@ class FeedLoaderService {
     Function(Map<String, UserModel>) onProfilesUpdated,
   ) async {
     try {
-      final authorIds = <String>{};
-      for (final note in notes) {
-        authorIds.add(note.author);
-        if (note.repostedBy != null) {
-          authorIds.add(note.repostedBy!);
-        }
-      }
-
+      final authorIds = _extractAuthorIds(notes);
       final missingAuthorIds = authorIds.where((id) => !profiles.containsKey(id)).toList();
+      
       if (missingAuthorIds.isEmpty) {
         return;
       }
@@ -265,7 +277,7 @@ class FeedLoaderService {
       }
 
       if (hasUpdates) {
-        onProfilesUpdated(Map.from(profiles));
+        onProfilesUpdated(profiles);
       }
     } catch (e) {
       debugPrint('[FeedLoaderService] Error preloading cached user profiles: $e');
@@ -278,14 +290,7 @@ class FeedLoaderService {
     Function(Map<String, UserModel>) onProfilesUpdated,
   ) async {
     try {
-      final authorIds = <String>{};
-      for (final note in notes) {
-        authorIds.add(note.author);
-        if (note.repostedBy != null) {
-          authorIds.add(note.repostedBy!);
-        }
-      }
-
+      final authorIds = _extractAuthorIds(notes);
       final missingAuthorIds = authorIds.where((id) {
         final cachedProfile = profiles[id];
         return cachedProfile == null || cachedProfile.profileImage.isEmpty;
@@ -330,7 +335,7 @@ class FeedLoaderService {
       }
 
       if (hasUpdates) {
-        onProfilesUpdated(Map.from(profiles));
+        onProfilesUpdated(profiles);
       }
     } catch (e) {
       debugPrint('[FeedLoaderService] Error loading user profiles: $e');

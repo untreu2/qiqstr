@@ -55,6 +55,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   bool _hasPendingUpdate = false;
   final Set<String> _fetchedInteractionNoteIds = {};
   final Set<String> _fetchedUserIds = {};
+  Timer? _setStateDebounceTimer;
 
   @override
   void initState() {
@@ -124,15 +125,25 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       }
 
       if (mounted && hasNewUsers) {
-        setState(() {});
+        _debouncedSetState();
       }
     }).catchError((e) {
       debugPrint('[NoteListWidget] Error preloading users: $e');
     });
   }
 
+  void _debouncedSetState() {
+    _setStateDebounceTimer?.cancel();
+    _setStateDebounceTimer = Timer(const Duration(milliseconds: 50), () {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _setStateDebounceTimer?.cancel();
     if (widget.scrollController != null) {
       widget.scrollController!.removeListener(_onScrollChanged);
     }
@@ -303,7 +314,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         }
         
         if (mounted && hasNewUsers) {
-          setState(() {});
+          _debouncedSetState();
         }
       }).catchError((e) {
         debugPrint('[NoteListWidget] Error fetching users for visible notes: $e');
@@ -332,7 +343,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     _hasPendingUpdate = false;
     
     if (!_isScrolling && mounted) {
-      setState(() {});
+      _debouncedSetState();
     }
   }
 

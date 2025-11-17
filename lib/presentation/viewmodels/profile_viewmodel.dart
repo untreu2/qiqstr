@@ -34,6 +34,12 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
   UIState<List<NoteModel>> _profileNotesState = const InitialState();
   UIState<List<NoteModel>> get profileNotesState => _profileNotesState;
 
+  final Map<String, UserModel> _profiles = {};
+  Map<String, UserModel> get profiles => Map.unmodifiable(_profiles);
+
+  final StreamController<Map<String, UserModel>> _profilesController = StreamController<Map<String, UserModel>>.broadcast();
+  Stream<Map<String, UserModel>> get profilesStream => _profilesController.stream;
+
   bool _isCurrentUser = false;
   bool get isCurrentUser => _isCurrentUser;
 
@@ -84,6 +90,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
   void initializeWithUser(String npub) {
     _currentProfileNpub = npub;
     _checkIfCurrentUser();
+    
     loadProfileCommand.execute(npub);
     loadProfileNotes(npub);
   }
@@ -210,9 +217,41 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
 
         if (result.isSuccess) {
           final filteredNotes = _feedLoader.filterProfileNotes(result.notes);
+          
+          _feedLoader.preloadCachedUserProfilesSync(
+            filteredNotes,
+            _profiles,
+            (profiles) {
+              _profilesController.add(Map.from(profiles));
+              safeNotifyListeners();
+            },
+          );
+          
+          await _feedLoader.preloadCachedUserProfiles(
+            filteredNotes,
+            _profiles,
+            (profiles) {
+              _profilesController.add(Map.from(profiles));
+              safeNotifyListeners();
+            },
+          );
+          
           _profileNotesState = filteredNotes.isEmpty
               ? const EmptyState('No notes from this user yet')
               : LoadedState(filteredNotes);
+          
+          safeNotifyListeners();
+
+          _feedLoader.loadUserProfilesForNotes(
+            filteredNotes,
+            _profiles,
+            (profiles) {
+              _profilesController.add(Map.from(profiles));
+              safeNotifyListeners();
+            },
+          ).catchError((e) {
+            debugPrint('[ProfileViewModel] Error loading user profiles in background: $e');
+          });
         } else {
           _profileNotesState = ErrorState(result.error ?? 'Failed to load notes');
         }
@@ -263,9 +302,40 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
           }
 
           final filteredNotes = _feedLoader.filterProfileNotes(finalDeduplicatedNotes);
-          _profileNotesState = filteredNotes.isEmpty
-              ? const EmptyState('No notes from this user yet')
-              : LoadedState(filteredNotes);
+          
+          _feedLoader.preloadCachedUserProfilesSync(
+            filteredNotes,
+            _profiles,
+            (profiles) {
+              _profilesController.add(Map.from(profiles));
+              safeNotifyListeners();
+            },
+          );
+          
+          _feedLoader.preloadCachedUserProfiles(
+            filteredNotes,
+            _profiles,
+            (profiles) {
+              _profilesController.add(Map.from(profiles));
+              safeNotifyListeners();
+            },
+          ).then((_) {
+            _profileNotesState = filteredNotes.isEmpty
+                ? const EmptyState('No notes from this user yet')
+                : LoadedState(filteredNotes);
+            safeNotifyListeners();
+            
+            _feedLoader.loadUserProfilesForNotes(
+              filteredNotes,
+              _profiles,
+              (profiles) {
+                _profilesController.add(Map.from(profiles));
+                safeNotifyListeners();
+              },
+            ).catchError((e) {
+              debugPrint('[ProfileViewModel] Error loading user profiles in background: $e');
+            });
+          });
         }
 
         safeNotifyListeners();

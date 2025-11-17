@@ -83,8 +83,10 @@ class UserCacheService {
       } else {
         memoryEntry.recordAccess();
 
-        _memoryCache.remove(pubkeyHex);
-        _memoryCache[pubkeyHex] = memoryEntry;
+        if (_memoryCache.length > 1 && _memoryCache.keys.last != pubkeyHex) {
+          _memoryCache.remove(pubkeyHex);
+          _memoryCache[pubkeyHex] = memoryEntry;
+        }
 
         _l1CacheHits++;
         debugPrint('[UserCacheService] L1 Cache HIT: ${memoryEntry.user.name}');
@@ -128,9 +130,11 @@ class UserCacheService {
     }
 
     entry.recordAccess();
-
-    _memoryCache.remove(pubkeyHex);
-    _memoryCache[pubkeyHex] = entry;
+    
+    if (_memoryCache.length > 1 && _memoryCache.keys.last != pubkeyHex) {
+      _memoryCache.remove(pubkeyHex);
+      _memoryCache[pubkeyHex] = entry;
+    }
 
     _l1CacheHits++;
     return entry.user;

@@ -21,6 +21,7 @@ import 'auth_service.dart';
 import 'user_cache_service.dart';
 import 'follow_cache_service.dart';
 import 'mute_cache_service.dart';
+import 'relay_query_helper.dart';
 
 class NostrDataService {
   final AuthService _authService;
@@ -1435,77 +1436,38 @@ class NostrDataService {
         until: until != null ? until.millisecondsSinceEpoch ~/ 1000 : null,
       );
 
-      final fetchedNotes = <String, NoteModel>{};
-      final limitedRelays = _relayManager.relayUrls.take(5).toList();
+      final request = NostrService.createRequest(filter);
+      final subscriptionId = request.subscriptionId;
+      final serializedRequest = NostrService.serializeRequest(request);
+      final allRelays = _relayManager.relayUrls.toList();
 
-      debugPrint('[NostrDataService] PROFILE: Fetching from ${limitedRelays.length} relays');
+      debugPrint('[NostrDataService] PROFILE: Fetching from ${allRelays.length} relays');
 
-      await Future.wait(limitedRelays.map((relayUrl) async {
-        WebSocket? ws;
-        StreamSubscription? sub;
-        try {
-          debugPrint('[NostrDataService] PROFILE: Connecting to relay: $relayUrl');
-          ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
-          if (_isClosed) {
-            await ws.close();
-            return;
+      final queryResult = await RelayQueryHelper.queryRelaysParallel<NoteModel>(
+        relayUrls: allRelays,
+        request: serializedRequest,
+        subscriptionId: subscriptionId,
+        eventProcessor: (eventData, relayUrl) {
+          final eventAuthor = eventData['pubkey'] as String? ?? '';
+          final eventKind = eventData['kind'] as int? ?? 0;
+
+          if (eventAuthor == pubkeyHex && (eventKind == 1 || eventKind == 6)) {
+            return _processProfileEventDirectly(eventData, userNpub);
           }
+          return null;
+        },
+        eventValidator: (eventData) {
+          final eventAuthor = eventData['pubkey'] as String? ?? '';
+          final eventKind = eventData['kind'] as int? ?? 0;
+          return eventAuthor == pubkeyHex && (eventKind == 1 || eventKind == 6);
+        },
+        timeout: const Duration(seconds: 4),
+        connectTimeout: const Duration(seconds: 3),
+        shouldStop: () => _isClosed,
+        debugPrefix: 'NostrDataService PROFILE',
+      );
 
-          final completer = Completer<void>();
-          final request = NostrService.createRequest(filter);
-          final subscriptionId = request.subscriptionId;
-          int eventCount = 0;
-
-          sub = ws.listen((event) {
-            try {
-              final decoded = jsonDecode(event);
-
-              if (decoded[0] == 'EVENT' && decoded[1] == subscriptionId) {
-                final eventData = decoded[2] as Map<String, dynamic>;
-                final eventId = eventData['id'] as String;
-                final eventAuthor = eventData['pubkey'] as String;
-                final eventKind = eventData['kind'] as int;
-
-                if (eventAuthor == pubkeyHex && (eventKind == 1 || eventKind == 6)) {
-                  final note = _processProfileEventDirectly(eventData, userNpub);
-                  if (note != null && !fetchedNotes.containsKey(eventId)) {
-                    fetchedNotes[eventId] = note;
-                    eventCount++;
-                    debugPrint('[NostrDataService] PROFILE: ✓ Received note ${eventId.substring(0, 8)}... from $relayUrl (total: $eventCount)');
-                  }
-                }
-              } else if (decoded[0] == 'EOSE' && decoded[1] == subscriptionId) {
-                debugPrint('[NostrDataService] PROFILE: EOSE from $relayUrl (received $eventCount notes)');
-                if (!completer.isCompleted) completer.complete();
-              }
-            } catch (e) {
-              debugPrint('[NostrDataService] PROFILE: Error processing event: $e');
-            }
-          }, onDone: () {
-            debugPrint('[NostrDataService] PROFILE: Connection closed: $relayUrl');
-            if (!completer.isCompleted) completer.complete();
-          }, onError: (error) {
-            debugPrint('[NostrDataService] PROFILE: Connection error: $relayUrl - $error');
-            if (!completer.isCompleted) completer.complete();
-          }, cancelOnError: true);
-
-          if (ws.readyState == WebSocket.open) {
-            ws.add(NostrService.serializeRequest(request));
-            debugPrint('[NostrDataService] PROFILE: Request sent to $relayUrl');
-          }
-
-          await completer.future.timeout(const Duration(seconds: 4), onTimeout: () {
-            debugPrint('[NostrDataService] PROFILE: Timeout for $relayUrl (received $eventCount notes)');
-          });
-
-          await sub.cancel();
-          await ws.close();
-        } catch (e) {
-          debugPrint('[NostrDataService] PROFILE: Exception with relay $relayUrl: $e');
-          await sub?.cancel();
-          await ws?.close();
-        }
-      }));
+      final fetchedNotes = queryResult.results;
 
       debugPrint('[NostrDataService] PROFILE: Fetched ${fetchedNotes.length} notes from relays');
 
@@ -1733,12 +1695,12 @@ class NostrDataService {
       debugPrint('[NostrDataService] HASHTAG MODE: Fetching GLOBAL notes for #$hashtag with server-side filtering');
 
       final Map<String, NoteModel> hashtagNotesMap = {};
-      final limitedRelays = _relayManager.relayUrls.take(3).toList();
+      final allRelays = _relayManager.relayUrls.toList();
 
-      debugPrint('[NostrDataService] HASHTAG: Using ${limitedRelays.length} relays for PARALLEL fetch');
+      debugPrint('[NostrDataService] HASHTAG: Using ${allRelays.length} relays for PARALLEL fetch');
 
       await Future.wait(
-        limitedRelays.map((relayUrl) async {
+        allRelays.map((relayUrl) async {
           if (_isClosed) return;
 
           WebSocket? ws;
@@ -2529,10 +2491,10 @@ class NostrDataService {
       debugPrint('[NostrDataService] Request: $serializedRequest');
 
       final following = <String>[];
-      final limitedRelays = _relayManager.relayUrls.take(3).toList();
-      debugPrint('[NostrDataService] Using ${limitedRelays.length} relays: $limitedRelays');
+      final allRelays = _relayManager.relayUrls.toList();
+      debugPrint('[NostrDataService] Using ${allRelays.length} relays: $allRelays');
 
-      await Future.wait(limitedRelays.map((relayUrl) async {
+      await Future.wait(allRelays.map((relayUrl) async {
         WebSocket? ws;
         StreamSubscription? sub;
         try {
@@ -2637,12 +2599,12 @@ class NostrDataService {
         return true;
       }
 
-      final limitedRelays = _relayManager.relayUrls.take(5).toList();
+      final allRelays = _relayManager.relayUrls.toList();
       bool noteFound = false;
 
-      debugPrint('[NostrDataService] THREAD: Using ${limitedRelays.length} relays for direct fetch');
+      debugPrint('[NostrDataService] THREAD: Using ${allRelays.length} relays for direct fetch');
 
-      await Future.wait(limitedRelays.map((relayUrl) async {
+      await Future.wait(allRelays.map((relayUrl) async {
         WebSocket? ws;
         StreamSubscription? sub;
         try {
@@ -3388,10 +3350,10 @@ class NostrDataService {
       debugPrint('[NostrDataService] Request: $serializedRequest');
 
       final muted = <String>[];
-      final limitedRelays = _relayManager.relayUrls.take(3).toList();
-      debugPrint('[NostrDataService] Using ${limitedRelays.length} relays: $limitedRelays');
+      final allRelays = _relayManager.relayUrls.toList();
+      debugPrint('[NostrDataService] Using ${allRelays.length} relays: $allRelays');
 
-      await Future.wait(limitedRelays.map((relayUrl) async {
+      await Future.wait(allRelays.map((relayUrl) async {
         WebSocket? ws;
         StreamSubscription? sub;
         try {

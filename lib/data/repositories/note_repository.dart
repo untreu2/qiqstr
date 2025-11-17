@@ -139,19 +139,25 @@ class NoteRepository {
     allNotes.addAll(_allNotes);
     
     final serviceNotes = _nostrDataService.cachedNotes;
+    if (serviceNotes.isEmpty) return allNotes;
+    
     final existingIds = _notesCache.keys.toSet();
+    final newNotes = <NoteModel>[];
     
     for (final note in serviceNotes) {
-      // Skip muted users' notes
       if (_isNoteFromMutedUser(note)) {
         continue;
       }
 
       if (!existingIds.contains(note.id)) {
-        allNotes.add(note);
+        newNotes.add(note);
         _notesCache[note.id] = note;
-        _allNotes.add(note);
       }
+    }
+    
+    if (newNotes.isNotEmpty) {
+      _allNotes.addAll(newNotes);
+      allNotes.addAll(newNotes);
     }
     
     return allNotes;
