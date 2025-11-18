@@ -50,7 +50,7 @@ class UserBatchFetcher {
 
   static const int maxBatchSize = 30;
   static const Duration batchTimeout = Duration(milliseconds: 500);
-  static const Duration requestTimeout = Duration(seconds: 8);
+  static const Duration requestTimeout = Duration(seconds: 3);
   static const int maxConcurrentBatches = 2;
 
   final PriorityQueue<UserFetchRequest> _requestQueue = PriorityQueue<UserFetchRequest>(

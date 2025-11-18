@@ -56,6 +56,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   final Set<String> _fetchedInteractionNoteIds = {};
   final Set<String> _fetchedUserIds = {};
   Timer? _setStateDebounceTimer;
+  bool _isLoadingMore = false;
 
   @override
   void initState() {
@@ -362,6 +363,32 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       _isScrolling = true;
     }
     
+    if (widget.canLoadMore && 
+        widget.onLoadMore != null && 
+        !_isLoadingMore && 
+        !widget.isLoading) {
+      final scrollController = widget.scrollController!;
+      final position = scrollController.position;
+      
+      // Only check if position is valid and not infinite
+      if (position.hasContentDimensions && 
+          position.maxScrollExtent != double.infinity) {
+        final maxScrollExtent = position.maxScrollExtent;
+        final currentScrollPosition = position.pixels;
+        final threshold = 200.0; // Load more when 200px from bottom
+        
+        if (maxScrollExtent - currentScrollPosition < threshold) {
+          _isLoadingMore = true;
+          widget.onLoadMore!();
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) {
+              _isLoadingMore = false;
+            }
+          });
+        }
+      }
+    }
+    
     final timeSinceLastFetch = now.difference(_lastInteractionFetchTime).inMilliseconds;
     if (timeSinceLastFetch >= 100) {
       _fetchInteractionsForVisibleNotes();
@@ -463,7 +490,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
     return ChangeNotifierProvider(
       create: (_) => NoteVisibilityViewModel(),
-      child: Consumer<NoteVisibilityViewModel>(
+        child: Consumer<NoteVisibilityViewModel>(
         builder: (context, visibilityViewModel, _) {
           return _NoteListWithVisibility(
             notes: widget.notes,
@@ -473,7 +500,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
             notesListProvider: widget.notesListProvider,
             canLoadMore: widget.canLoadMore,
             isLoading: widget.isLoading,
-            onLoadMore: widget.onLoadMore,
             visibilityViewModel: visibilityViewModel,
             onNoteVisible: _onNoteBecameVisible,
           );
@@ -491,7 +517,6 @@ class _NoteListWithVisibility extends StatelessWidget {
   final dynamic notesListProvider;
   final bool canLoadMore;
   final bool isLoading;
-  final VoidCallback? onLoadMore;
   final NoteVisibilityViewModel visibilityViewModel;
   final Function(String) onNoteVisible;
 
@@ -503,7 +528,6 @@ class _NoteListWithVisibility extends StatelessWidget {
     this.notesListProvider,
     required this.canLoadMore,
     required this.isLoading,
-    this.onLoadMore,
     required this.visibilityViewModel,
     required this.onNoteVisible,
   });
@@ -514,9 +538,7 @@ class _NoteListWithVisibility extends StatelessWidget {
       delegate: SliverChildBuilderDelegate(
         (context, index) {
           if (index == notes.length) {
-            if (canLoadMore && onLoadMore != null) {
-              return _LoadMoreButton(onPressed: onLoadMore!);
-            } else if (isLoading) {
+            if (isLoading || canLoadMore) {
               return const _LoadMoreIndicator();
             }
             return const SizedBox.shrink();
@@ -680,31 +702,6 @@ class _NoteItemWidgetState extends State<_NoteItemWidget> with AutomaticKeepAliv
   }
 }
 
-class _LoadMoreButton extends StatelessWidget {
-  final VoidCallback onPressed;
-
-  const _LoadMoreButton({required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 20.0),
-      child: Column(
-        children: [
-          PrimaryButton(
-            label: 'Load more notes',
-            onPressed: onPressed,
-            backgroundColor: theme.colorScheme.surface,
-            foregroundColor: theme.colorScheme.onSurface,
-          ),
-          const SizedBox(height: 200),
-        ],
-      ),
-    );
-  }
-}
 
 class _LoadingState extends StatelessWidget {
   const _LoadingState();

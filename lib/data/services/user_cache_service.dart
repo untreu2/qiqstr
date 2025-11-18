@@ -33,13 +33,11 @@ class UserCacheService {
 
   UserCacheService._internal() {
     _initializeIsar();
-    _startCacheCleanup();
   }
 
   static const int maxCacheSize = 5000;
   static const Duration defaultTTL = Duration(minutes: 30);
   static const Duration persistentTTL = Duration(days: 7);
-  static const Duration cleanupInterval = Duration(minutes: 5);
 
   final LinkedHashMap<String, CachedUserEntry> _memoryCache = LinkedHashMap();
 
@@ -56,7 +54,6 @@ class UserCacheService {
   int _persistentWrites = 0;
   int _persistentReads = 0;
 
-  bool _isCleanupRunning = false;
   bool _isIsarInitialized = false;
 
   IsarDatabaseService get isarService => _isarService;
@@ -77,21 +74,16 @@ class UserCacheService {
     final memoryEntry = _memoryCache[pubkeyHex];
 
     if (memoryEntry != null) {
-      if (memoryEntry.isExpired) {
+      memoryEntry.recordAccess();
+
+      if (_memoryCache.length > 1 && _memoryCache.keys.last != pubkeyHex) {
         _memoryCache.remove(pubkeyHex);
-        _cacheExpiries++;
-      } else {
-        memoryEntry.recordAccess();
-
-        if (_memoryCache.length > 1 && _memoryCache.keys.last != pubkeyHex) {
-          _memoryCache.remove(pubkeyHex);
-          _memoryCache[pubkeyHex] = memoryEntry;
-        }
-
-        _l1CacheHits++;
-        debugPrint('[UserCacheService] L1 Cache HIT: ${memoryEntry.user.name}');
-        return memoryEntry.user;
+        _memoryCache[pubkeyHex] = memoryEntry;
       }
+
+      _l1CacheHits++;
+      debugPrint('[UserCacheService] L1 Cache HIT: ${memoryEntry.user.name}');
+      return memoryEntry.user;
     }
 
     if (_isIsarInitialized) {
@@ -120,12 +112,6 @@ class UserCacheService {
     final entry = _memoryCache[pubkeyHex];
 
     if (entry == null) {
-      return null;
-    }
-
-    if (entry.isExpired) {
-      _memoryCache.remove(pubkeyHex);
-      _cacheExpiries++;
       return null;
     }
 
@@ -291,12 +277,7 @@ class UserCacheService {
   Future<bool> contains(String pubkeyHex) async {
     final entry = _memoryCache[pubkeyHex];
     if (entry != null) {
-      if (entry.isExpired) {
-        _memoryCache.remove(pubkeyHex);
-        _cacheExpiries++;
-      } else {
-        return true;
-      }
+      return true;
     }
 
     if (_isIsarInitialized) {
@@ -323,39 +304,6 @@ class UserCacheService {
     final firstKey = _memoryCache.keys.first;
     _memoryCache.remove(firstKey);
     _cacheEvictions++;
-  }
-
-  void _startCacheCleanup() {
-    if (_isCleanupRunning) return;
-    _isCleanupRunning = true;
-    _runCleanupLoop();
-  }
-
-  Future<void> _runCleanupLoop() async {
-    while (_isCleanupRunning) {
-      await Future.delayed(cleanupInterval);
-      if (!_isCleanupRunning) break;
-      _cleanupExpiredEntries();
-    }
-  }
-
-  void _cleanupExpiredEntries() {
-    final keysToRemove = <String>[];
-
-    for (final entry in _memoryCache.entries) {
-      if (entry.value.isExpired) {
-        keysToRemove.add(entry.key);
-      }
-    }
-
-    for (final key in keysToRemove) {
-      _memoryCache.remove(key);
-      _cacheExpiries++;
-    }
-
-    if (keysToRemove.isNotEmpty) {
-      debugPrint('[UserCacheService] Cleaned up ${keysToRemove.length} expired L1 entries');
-    }
   }
 
   Future<Map<String, dynamic>> getStats() async {
@@ -424,7 +372,6 @@ class UserCacheService {
   }
 
   Future<void> dispose() async {
-    _isCleanupRunning = false;
     _memoryCache.clear();
     _pendingRequests.clear();
 
