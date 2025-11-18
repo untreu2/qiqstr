@@ -77,15 +77,6 @@ class FeedLoaderService {
             limit: params.limit,
             until: params.until,
             since: params.since,
-          ).timeout(
-            const Duration(seconds: 8),
-            onTimeout: () {
-              final cachedNotes = _noteRepository.currentNotes;
-              if (cachedNotes.isNotEmpty) {
-                return Future.value(Result.success(cachedNotes));
-              }
-              return Future.value(const Result.success(<NoteModel>[]));
-            },
           );
           break;
 
@@ -110,9 +101,6 @@ class FeedLoaderService {
             limit: params.limit,
             until: params.until,
             since: params.since,
-          ).timeout(
-            const Duration(seconds: 8),
-            onTimeout: () => Future.value(const Result.success(<NoteModel>[])),
           );
           break;
       }
@@ -159,7 +147,7 @@ class FeedLoaderService {
 
   List<NoteModel> sortNotes(List<NoteModel> notes, FeedSortMode sortMode) {
     if (notes.length <= 1) return notes;
-    
+
     final sortedNotes = List<NoteModel>.from(notes);
 
     if (sortMode == FeedSortMode.mostInteracted) {
@@ -170,7 +158,7 @@ class FeedLoaderService {
           () => note.reactionCount + note.repostCount + note.replyCount + (note.zapAmount ~/ 1000),
         );
       }
-      
+
       sortedNotes.sort((a, b) {
         final scoreA = getScore(a);
         final scoreB = getScore(b);
@@ -225,7 +213,7 @@ class FeedLoaderService {
     try {
       final authorIds = _extractAuthorIds(notes);
       final missingIds = authorIds.where((id) => !profiles.containsKey(id)).toList();
-      
+
       if (missingIds.isEmpty) {
         return;
       }
@@ -255,7 +243,7 @@ class FeedLoaderService {
     try {
       final authorIds = _extractAuthorIds(notes);
       final missingAuthorIds = authorIds.where((id) => !profiles.containsKey(id)).toList();
-      
+
       if (missingAuthorIds.isEmpty) {
         return;
       }
@@ -385,9 +373,7 @@ class FeedLoaderService {
       }
 
       if (newerNotes.isNotEmpty) {
-        final latestTimestamp = filteredCurrentNotes.isNotEmpty
-            ? filteredCurrentNotes.first.timestamp
-            : DateTime.now();
+        final latestTimestamp = filteredCurrentNotes.isNotEmpty ? filteredCurrentNotes.first.timestamp : DateTime.now();
         final timestampNewerNotes = List<NoteModel>.from(
           newerNotes.where((n) => n.timestamp.isAfter(latestTimestamp)),
         );
@@ -412,9 +398,7 @@ class FeedLoaderService {
         }
       }
 
-      final latestTimestamp = filteredCurrentNotes.isNotEmpty
-          ? filteredCurrentNotes.first.timestamp
-          : DateTime.now();
+      final latestTimestamp = filteredCurrentNotes.isNotEmpty ? filteredCurrentNotes.first.timestamp : DateTime.now();
       final timestampNewerNotes = <NoteModel>[];
       for (final note in updatedNotes) {
         if (note.timestamp.isAfter(latestTimestamp)) {
@@ -514,4 +498,3 @@ class FeedLoaderService {
     return currentNotes;
   }
 }
-
