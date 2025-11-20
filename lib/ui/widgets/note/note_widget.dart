@@ -3,6 +3,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../../models/note_model.dart';
 import '../../../models/user_model.dart';
+import '../../../core/di/app_di.dart';
+import '../../../data/repositories/user_repository.dart';
 import '../../../services/time_service.dart';
 import '../../theme/theme_manager.dart';
 import '../../screens/note/thread_page.dart';
@@ -60,11 +62,13 @@ class _NoteWidgetState extends State<NoteWidget> {
 
   bool _isDisposed = false;
   bool _isInitialized = false;
+  late final UserRepository _userRepository;
 
   @override
   void initState() {
     super.initState();
     try {
+      _userRepository = AppDI.get<UserRepository>();
       _precomputeImmutableData();
       _setupUserListener();
       _loadInitialUserDataSync();
@@ -160,7 +164,90 @@ class _NoteWidgetState extends State<NoteWidget> {
     }
   }
 
-  void _initializeAsync() {}
+  void _initializeAsync() {
+    Future.microtask(() {
+      if (_isDisposed || !mounted) return;
+
+      try {
+        _loadUsersAsync();
+      } catch (e) {
+        debugPrint('[NoteWidget] Async init error: $e');
+      }
+    });
+  }
+
+  Future<void> _loadUsersAsync() async {
+    if (_isDisposed || !mounted) return;
+
+    try {
+      // Check if user profile is already loaded and has valid data
+      final currentAuthor = widget.profiles[_authorId];
+      final currentReposter = _reposterId != null ? widget.profiles[_reposterId] : null;
+      
+      // Only load if profile is missing or has empty profileImage
+      final shouldLoadAuthor = currentAuthor == null || 
+          currentAuthor.profileImage.isEmpty || 
+          currentAuthor.name.isEmpty ||
+          currentAuthor.name == _authorId.substring(0, _authorId.length > 8 ? 8 : _authorId.length);
+      
+      if (shouldLoadAuthor) {
+        final authorResult = await _userRepository.getUserProfile(_authorId);
+        authorResult.fold(
+          (user) {
+            if (mounted && !_isDisposed) {
+              widget.profiles[_authorId] = user;
+              _updateUserData();
+            }
+          },
+          (error) => debugPrint('[NoteWidget] Failed to load author: $error'),
+        );
+      }
+
+      if (_reposterId != null) {
+        final reposterId = _reposterId;
+        final shouldLoadReposter = currentReposter == null || 
+            currentReposter.profileImage.isEmpty || 
+            currentReposter.name.isEmpty ||
+            currentReposter.name == reposterId.substring(0, reposterId.length > 8 ? 8 : reposterId.length);
+        
+        if (shouldLoadReposter) {
+          final reposterResult = await _userRepository.getUserProfile(reposterId);
+          reposterResult.fold(
+            (user) {
+              if (mounted && !_isDisposed) {
+                widget.profiles[reposterId] = user;
+                _updateUserData();
+              }
+            },
+            (error) => debugPrint('[NoteWidget] Failed to load reposter: $error'),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[NoteWidget] Load users async error: $e');
+    }
+  }
+
+  @override
+  void didUpdateWidget(NoteWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // Check if profiles map has been updated
+    if (oldWidget.profiles != widget.profiles) {
+      // Profiles map reference changed, update user data
+      _updateUserData();
+    } else {
+      // Even if reference is same, check if author or reposter profiles changed
+      final oldAuthor = oldWidget.profiles[_authorId];
+      final newAuthor = widget.profiles[_authorId];
+      final oldReposter = _reposterId != null ? oldWidget.profiles[_reposterId] : null;
+      final newReposter = _reposterId != null ? widget.profiles[_reposterId] : null;
+      
+      if (oldAuthor != newAuthor || oldReposter != newReposter) {
+        _updateUserData();
+      }
+    }
+  }
 
   void _setupUserListener() {
     try {
@@ -450,11 +537,13 @@ class _NoteWidgetState extends State<NoteWidget> {
           padding: const EdgeInsets.only(bottom: 2),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     if (_isRepost && _reposterId != null)
                       ValueListenableBuilder<_NoteState>(
@@ -525,6 +614,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               _SafeUserInfoSection(
                                 stateNotifier: _stateNotifier,
@@ -582,11 +672,13 @@ class _NoteWidgetState extends State<NoteWidget> {
           padding: const EdgeInsets.only(bottom: 2),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     ValueListenableBuilder<_NoteState>(
                       valueListenable: _stateNotifier,
@@ -596,6 +688,7 @@ class _NoteWidgetState extends State<NoteWidget> {
 
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             if (hasRepost)
                               Padding(
