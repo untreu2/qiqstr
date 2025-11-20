@@ -139,7 +139,7 @@ class FollowCacheService {
 
     if (_isIsarInitialized) {
       try {
-        await _isarService.deleteFollowingList(userPubkeyHex);
+        // Directly save/update - Isar's put() handles updates automatically
         await _isarService.saveFollowingList(userPubkeyHex, followingList);
       } catch (e) {
         // Handle error silently
@@ -302,9 +302,8 @@ class FollowCacheService {
       _memoryCache.remove(key);
     }
 
-    if (_isIsarInitialized) {
-      _isarService.cleanupExpiredFollowingLists(ttl: defaultTTL);
-    }
+    // Never delete follow lists from Isar - they should persist permanently
+    // Only clean memory cache, keep Isar data intact
   }
 
   Future<void> dispose() async {

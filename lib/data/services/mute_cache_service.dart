@@ -138,7 +138,7 @@ class MuteCacheService {
 
     if (_isIsarInitialized) {
       try {
-        await _isarService.deleteMuteList(userPubkeyHex);
+        // Directly save/update - Isar's put() handles updates automatically
         await _isarService.saveMuteList(userPubkeyHex, muteList);
       } catch (e) {
       }
@@ -298,9 +298,8 @@ class MuteCacheService {
       _memoryCache.remove(key);
     }
 
-    if (_isIsarInitialized) {
-      _isarService.cleanupExpiredMuteLists(ttl: defaultTTL);
-    }
+    // Never delete mute lists from Isar - they should persist permanently
+    // Only clean memory cache, keep Isar data intact
   }
 
   Future<void> dispose() async {

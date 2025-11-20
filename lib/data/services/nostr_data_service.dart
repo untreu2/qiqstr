@@ -111,50 +111,102 @@ class NostrDataService {
         final cachedFollowing = await _followCacheService.get(currentUserHex);
         final cachedMuted = await _muteCacheService.get(currentUserHex);
 
-        bool hasCachedData = false;
+        // Check if we have valid cached data (not null and not empty)
+        final hasValidFollowing = cachedFollowing != null && cachedFollowing.isNotEmpty;
+        final hasValidMuted = cachedMuted != null && cachedMuted.isNotEmpty;
 
-        if (cachedFollowing != null && cachedFollowing.isNotEmpty) {
+        if (hasValidFollowing) {
           debugPrint('[NostrDataService] Using cached follow list from Isar: ${cachedFollowing.length} users');
-          hasCachedData = true;
         }
 
-        if (cachedMuted != null && cachedMuted.isNotEmpty) {
+        if (hasValidMuted) {
           debugPrint('[NostrDataService] Using cached mute list from Isar: ${cachedMuted.length} users');
-          hasCachedData = true;
-          
           // Clean muted notes from cache if we have cached mute list
           _cleanMutedNotesFromCache(cachedMuted);
         }
 
-        // Fetch from network in the background to update the lists
-        unawaited(_fetchAndUpdateUserLists(currentUserHex));
-
-        // If we have cached data, proceed immediately; otherwise wait for network fetch
-        if (!hasCachedData) {
+        // If we don't have both lists in Isar, we MUST fetch from network
+        // Don't proceed with empty lists - always fetch if missing
+        if (!hasValidFollowing || !hasValidMuted) {
+          debugPrint('[NostrDataService] Missing lists in Isar, fetching from network...');
           final result = await _fetchUserListsCombined(currentUserHex);
 
           if (result['following'] != null) {
             await _followCacheService.put(currentUserHex, result['following']!);
-            debugPrint('[NostrDataService] Follow list fetched: ${result['following']!.length} users');
+            debugPrint('[NostrDataService] Follow list fetched from network: ${result['following']!.length} users');
           }
 
           if (result['muted'] != null) {
             await _muteCacheService.put(currentUserHex, result['muted']!);
-            debugPrint('[NostrDataService] Mute list fetched: ${result['muted']!.length} users');
+            debugPrint('[NostrDataService] Mute list fetched from network: ${result['muted']!.length} users');
 
             if (result['muted']!.isNotEmpty) {
               _cleanMutedNotesFromCache(result['muted']!);
             }
           }
+        } else {
+          // Both lists are in Isar, update from network in background
+          debugPrint('[NostrDataService] Both lists found in Isar, updating from network in background...');
+          unawaited(_fetchAndUpdateUserLists(currentUserHex));
         }
 
-        _fetchInitialGlobalContent();
+        // Fetch feed notes using follow list pubkeys directly (not global content)
+        await _fetchFeedNotesFromFollowList();
       } else {
-        _fetchInitialGlobalContent();
+        // No user logged in, skip feed fetch
+        debugPrint('[NostrDataService] No user logged in, skipping feed fetch');
       }
     } catch (e) {
       debugPrint('[NostrDataService] Error initializing lists: $e');
-      _fetchInitialGlobalContent();
+      // Try to fetch feed notes even if there was an error
+      try {
+        await _fetchFeedNotesFromFollowList();
+      } catch (feedError) {
+        debugPrint('[NostrDataService] Error fetching feed notes: $feedError');
+      }
+    }
+  }
+
+  Future<void> _fetchFeedNotesFromFollowList() async {
+    try {
+      final currentUser = await _authService.getCurrentUserNpub();
+      if (currentUser.isSuccess && currentUser.data != null && currentUser.data!.isNotEmpty) {
+        final currentUserNpub = currentUser.data!;
+        final currentUserHex = _authService.npubToHex(currentUserNpub);
+        
+        if (currentUserHex == null) {
+          debugPrint('[NostrDataService] Cannot convert npub to hex, skipping feed fetch');
+          return;
+        }
+
+        // Get follow list from cache (already in hex format)
+        final followList = await _followCacheService.get(currentUserHex);
+        
+        if (followList == null || followList.isEmpty) {
+          debugPrint('[NostrDataService] No follow list available, skipping feed fetch');
+          return;
+        }
+
+        // Use hex pubkeys directly - no conversion needed
+        final targetAuthors = List<String>.from(followList);
+        targetAuthors.add(currentUserHex);
+
+        debugPrint('[NostrDataService] Fetching feed notes for ${targetAuthors.length} authors (hex pubkeys, including self)');
+        
+        // Create filter directly with hex pubkeys and send to relays
+        final filter = NostrService.createNotesFilter(
+          authors: targetAuthors,
+          kinds: [1, 6],
+          limit: 30,
+        );
+
+        final request = NostrService.createRequest(filter);
+        await _relayManager.broadcast(NostrService.serializeRequest(request));
+
+        debugPrint('[NostrDataService] Feed notes request sent to relays with ${targetAuthors.length} authors');
+      }
+    } catch (e) {
+      debugPrint('[NostrDataService] Error in _fetchFeedNotesFromFollowList: $e');
     }
   }
 
@@ -291,25 +343,6 @@ class NostrDataService {
     };
   }
 
-  Future<void> _fetchInitialGlobalContent() async {
-    try {
-      debugPrint('[NostrDataService] Fetching initial global content...');
-
-      final filter = NostrService.createNotesFilter(
-        authors: null,
-        kinds: [1],
-        limit: 30,
-        since: (DateTime.now().subtract(const Duration(hours: 24))).millisecondsSinceEpoch ~/ 1000,
-      );
-
-      final request = NostrService.createRequest(filter);
-      await _relayManager.broadcast(NostrService.serializeRequest(request));
-
-      debugPrint('[NostrDataService] Initial content request sent to relays');
-    } catch (e) {
-      debugPrint('[NostrDataService] Error fetching initial content: $e');
-    }
-  }
 
   void _handleRelayEvent(dynamic rawEvent, String relayUrl) {
     try {
