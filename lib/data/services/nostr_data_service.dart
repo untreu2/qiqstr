@@ -107,19 +107,44 @@ class NostrDataService {
         _currentUserNpub = currentUser.data!;
         final currentUserHex = _authService.npubToHex(_currentUserNpub) ?? _currentUserNpub;
 
-        final result = await _fetchUserListsCombined(currentUserHex);
+        // First, check if follow/mute lists exist in Isar
+        final cachedFollowing = await _followCacheService.get(currentUserHex);
+        final cachedMuted = await _muteCacheService.get(currentUserHex);
 
-        if (result['following'] != null) {
-          await _followCacheService.put(currentUserHex, result['following']!);
-          debugPrint('[NostrDataService] Follow list: ${result['following']!.length} users');
+        bool hasCachedData = false;
+
+        if (cachedFollowing != null && cachedFollowing.isNotEmpty) {
+          debugPrint('[NostrDataService] Using cached follow list from Isar: ${cachedFollowing.length} users');
+          hasCachedData = true;
         }
 
-        if (result['muted'] != null) {
-          await _muteCacheService.put(currentUserHex, result['muted']!);
-          debugPrint('[NostrDataService] Mute list: ${result['muted']!.length} users');
+        if (cachedMuted != null && cachedMuted.isNotEmpty) {
+          debugPrint('[NostrDataService] Using cached mute list from Isar: ${cachedMuted.length} users');
+          hasCachedData = true;
+          
+          // Clean muted notes from cache if we have cached mute list
+          _cleanMutedNotesFromCache(cachedMuted);
+        }
 
-          if (result['muted']!.isNotEmpty) {
-            _cleanMutedNotesFromCache(result['muted']!);
+        // Fetch from network in the background to update the lists
+        unawaited(_fetchAndUpdateUserLists(currentUserHex));
+
+        // If we have cached data, proceed immediately; otherwise wait for network fetch
+        if (!hasCachedData) {
+          final result = await _fetchUserListsCombined(currentUserHex);
+
+          if (result['following'] != null) {
+            await _followCacheService.put(currentUserHex, result['following']!);
+            debugPrint('[NostrDataService] Follow list fetched: ${result['following']!.length} users');
+          }
+
+          if (result['muted'] != null) {
+            await _muteCacheService.put(currentUserHex, result['muted']!);
+            debugPrint('[NostrDataService] Mute list fetched: ${result['muted']!.length} users');
+
+            if (result['muted']!.isNotEmpty) {
+              _cleanMutedNotesFromCache(result['muted']!);
+            }
           }
         }
 
@@ -130,6 +155,28 @@ class NostrDataService {
     } catch (e) {
       debugPrint('[NostrDataService] Error initializing lists: $e');
       _fetchInitialGlobalContent();
+    }
+  }
+
+  Future<void> _fetchAndUpdateUserLists(String currentUserHex) async {
+    try {
+      final result = await _fetchUserListsCombined(currentUserHex);
+
+      if (result['following'] != null) {
+        await _followCacheService.put(currentUserHex, result['following']!);
+        debugPrint('[NostrDataService] Follow list updated from network: ${result['following']!.length} users');
+      }
+
+      if (result['muted'] != null) {
+        await _muteCacheService.put(currentUserHex, result['muted']!);
+        debugPrint('[NostrDataService] Mute list updated from network: ${result['muted']!.length} users');
+
+        if (result['muted']!.isNotEmpty) {
+          _cleanMutedNotesFromCache(result['muted']!);
+        }
+      }
+    } catch (e) {
+      debugPrint('[NostrDataService] Error updating lists from network: $e');
     }
   }
 
