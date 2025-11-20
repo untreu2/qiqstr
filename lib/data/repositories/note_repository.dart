@@ -20,9 +20,9 @@ class NoteRepository {
   DateTime? _lastNotesUpdate;
   final Map<String, NoteModel> _notesCache = {};
   final List<NoteModel> _allNotes = [];
-  
+
   NostrDataService get nostrDataService => _nostrDataService;
-  
+
   final Map<String, List<ReactionModel>> _reactions = {};
   final Map<String, List<ZapModel>> _zaps = {};
 
@@ -31,14 +31,15 @@ class NoteRepository {
       StreamController<Map<String, List<ReactionModel>>>.broadcast();
 
   StreamSubscription<List<NoteModel>>? _dataServiceSubscription;
+  StreamSubscription<String>? _deletionSubscription;
   bool _isPaused = false;
 
   NoteRepository({
     required NetworkService networkService,
     required NostrDataService nostrDataService,
     UserRepository? userRepository,
-  }) : _nostrDataService = nostrDataService,
-       _userRepository = userRepository {
+  })  : _nostrDataService = nostrDataService,
+        _userRepository = userRepository {
     _setupNostrDataServiceForwarding();
     _setupLifecycleCallbacks();
   }
@@ -62,10 +63,10 @@ class NoteRepository {
   Future<Result<List<NoteModel>>> getFilteredNotes(BaseFeedFilter filter) async {
     try {
       debugPrint('[NoteRepository] Applying filter: ${filter.filterKey}');
-      
+
       final allCachedNotes = _getAllCachedNotes();
       final filtered = filter.apply(allCachedNotes);
-      
+
       final seenIds = <String>{};
       final deduplicatedNotes = <NoteModel>[];
       for (final note in filtered) {
@@ -74,9 +75,9 @@ class NoteRepository {
           deduplicatedNotes.add(note);
         }
       }
-      
+
       debugPrint('[NoteRepository] Filter returned ${filtered.length} notes, after deduplication: ${deduplicatedNotes.length}');
-      
+
       return Result.success(deduplicatedNotes);
     } catch (e) {
       debugPrint('[NoteRepository] Exception in getFilteredNotes: $e');
@@ -95,7 +96,7 @@ class NoteRepository {
     try {
       if (authorNpubs != null && authorNpubs.isNotEmpty) {
         debugPrint('[NoteRepository] Fetching notes for ${authorNpubs.length} authors (profile mode: $isProfileMode)');
-        
+
         if (isProfileMode && authorNpubs.length == 1) {
           final result = await _nostrDataService.fetchProfileNotes(
             userNpub: authorNpubs.first,
@@ -105,7 +106,7 @@ class NoteRepository {
           );
           return result.isSuccess ? const Result.success(null) : Result.error(result.error!);
         }
-        
+
         final result = await _nostrDataService.fetchFeedNotes(
           authorNpubs: authorNpubs,
           limit: limit,
@@ -114,7 +115,7 @@ class NoteRepository {
         );
         return result.isSuccess ? const Result.success(null) : Result.error(result.error!);
       }
-      
+
       if (hashtag != null && hashtag.isNotEmpty) {
         debugPrint('[NoteRepository] Fetching notes for hashtag: $hashtag');
         final result = await _nostrDataService.fetchHashtagNotes(
@@ -125,7 +126,7 @@ class NoteRepository {
         );
         return result.isSuccess ? const Result.success(null) : Result.error(result.error!);
       }
-      
+
       debugPrint('[NoteRepository] No authorNpubs or hashtag provided - skipping fetch');
       return const Result.success(null);
     } catch (e) {
@@ -137,13 +138,13 @@ class NoteRepository {
   List<NoteModel> _getAllCachedNotes() {
     final allNotes = <NoteModel>[];
     allNotes.addAll(_allNotes);
-    
+
     final serviceNotes = _nostrDataService.cachedNotes;
     if (serviceNotes.isEmpty) return allNotes;
-    
+
     final existingIds = _notesCache.keys.toSet();
     final newNotes = <NoteModel>[];
-    
+
     for (final note in serviceNotes) {
       if (_isNoteFromMutedUser(note)) {
         continue;
@@ -154,12 +155,12 @@ class NoteRepository {
         _notesCache[note.id] = note;
       }
     }
-    
+
     if (newNotes.isNotEmpty) {
       _allNotes.addAll(newNotes);
       allNotes.addAll(newNotes);
     }
-    
+
     return allNotes;
   }
 
@@ -418,7 +419,7 @@ class NoteRepository {
       }
 
       _allNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      
+
       final notesToRemove = _allNotes.sublist(maxNotes);
       final removedCount = notesToRemove.length;
 
@@ -614,7 +615,7 @@ class NoteRepository {
         debugPrint('[NoteRepository] Cannot start real-time feed: no authors provided');
         return const Result.error('No authors provided for real-time feed');
       }
-      
+
       debugPrint('[NoteRepository] Starting real-time feed for ${authorNpubs.length} authors');
 
       final fetchResult = await fetchNotesFromRelays(authorNpubs: authorNpubs);
@@ -644,20 +645,20 @@ class NoteRepository {
           }
         }
 
-      if (!hasChanges) return;
+        if (!hasChanges) return;
 
-      for (final note in newNotesToAdd) {
-        _insertSorted(note);
-      }
-
-      final updateTime = DateTime.now();
-      _lastNotesUpdate = updateTime;
-      
-      Future.delayed(const Duration(milliseconds: 2000), () {
-        if (_lastNotesUpdate == updateTime && !_isPaused) {
-          _notesController.add(List.unmodifiable(_allNotes));
+        for (final note in newNotesToAdd) {
+          _insertSorted(note);
         }
-      });
+
+        final updateTime = DateTime.now();
+        _lastNotesUpdate = updateTime;
+
+        Future.delayed(const Duration(milliseconds: 2000), () {
+          if (_lastNotesUpdate == updateTime && !_isPaused) {
+            _notesController.add(List.unmodifiable(_allNotes));
+          }
+        });
       });
 
       return const Result.success(null);
@@ -668,6 +669,13 @@ class NoteRepository {
   }
 
   void _setupNostrDataServiceForwarding() {
+    _deletionSubscription = _nostrDataService.noteDeletedStream.listen((deletedNoteId) {
+      if (_isPaused) return;
+
+      _allNotes.removeWhere((n) => n.id == deletedNoteId);
+      _notesCache.remove(deletedNoteId);
+    });
+
     _dataServiceSubscription = _nostrDataService.notesStream.listen((updatedNotes) {
       if (_isPaused) {
         debugPrint('[NoteRepository] Skipping update while paused');
@@ -676,7 +684,7 @@ class NoteRepository {
 
       final updatedNoteIds = updatedNotes.map((n) => n.id).toSet();
       final currentNoteIds = _allNotes.map((n) => n.id).toSet();
-      
+
       final removedNoteIds = currentNoteIds.difference(updatedNoteIds);
       if (removedNoteIds.isNotEmpty) {
         _allNotes.removeWhere((n) => removedNoteIds.contains(n.id));
@@ -687,7 +695,7 @@ class NoteRepository {
 
       bool hasChanges = removedNoteIds.isNotEmpty;
       final List<NoteModel> newNotes = [];
-      
+
       for (final updatedNote in updatedNotes) {
         // Skip muted users' notes
         if (_isNoteFromMutedUser(updatedNote)) {
@@ -727,7 +735,7 @@ class NoteRepository {
       } else {
         final updateTime = DateTime.now();
         _lastNotesUpdate = updateTime;
-        
+
         Future.delayed(const Duration(milliseconds: 3000), () {
           if (_lastNotesUpdate == updateTime && !_isPaused) {
             _notesController.add(List.unmodifiable(_allNotes));
@@ -832,10 +840,13 @@ class NoteRepository {
 
     if (authorIds.isEmpty) return;
 
-    _userRepository.getUserProfiles(
-      authorIds.toList(),
-      priority: FetchPriority.high,
-    ).then((_) {}).catchError((e) {
+    _userRepository
+        .getUserProfiles(
+          authorIds.toList(),
+          priority: FetchPriority.high,
+        )
+        .then((_) {})
+        .catchError((e) {
       debugPrint('[NoteRepository] Error preloading mentions: $e');
     });
   }
@@ -936,6 +947,7 @@ class NoteRepository {
     LifecycleManager().removeOnPauseCallback(_onAppPaused);
     LifecycleManager().removeOnResumeCallback(_onAppResumed);
     _dataServiceSubscription?.cancel();
+    _deletionSubscription?.cancel();
     _notesController.close();
     _reactionsController.close();
   }

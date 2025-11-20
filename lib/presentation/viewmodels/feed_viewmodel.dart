@@ -28,7 +28,9 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   })  : _noteRepository = noteRepository,
         _authRepository = authRepository,
         _userRepository = userRepository,
-        _feedLoader = feedLoader;
+        _feedLoader = feedLoader {
+    _subscribeToDeletions();
+  }
 
   UIState<List<NoteModel>> _feedState = const InitialState();
   UIState<List<NoteModel>> get feedState => _feedState;
@@ -116,7 +118,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           if (npub != null && npub.isNotEmpty) {
             _currentUserNpub = npub;
             _currentUserState = LoadedState(npub);
-            
+
             final userResult = await _userRepository.getCurrentUser();
             userResult.fold(
               (user) {
@@ -128,7 +130,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
                 debugPrint('[FeedViewModel] Error loading current user profile: $error');
               },
             );
-            
+
             _subscribeToCurrentUserStream();
             _loadFeed();
           } else {
@@ -145,7 +147,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
       safeNotifyListeners();
     }, showLoading: false);
   }
-
 
   void _subscribeToCurrentUserStream() {
     addSubscription(
@@ -189,8 +190,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
         limit: _currentLimit,
       );
 
-      if (_feedState is! LoadedState<List<NoteModel>> ||
-          (_feedState as LoadedState<List<NoteModel>>).data.isEmpty) {
+      if (_feedState is! LoadedState<List<NoteModel>> || (_feedState as LoadedState<List<NoteModel>>).data.isEmpty) {
         _feedState = const LoadingState();
         safeNotifyListeners();
       }
@@ -199,8 +199,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
       if (result.isSuccess) {
         if (result.notes.isEmpty) {
-          if (_feedState is! LoadedState<List<NoteModel>> ||
-              (_feedState as LoadedState<List<NoteModel>>).data.isEmpty) {
+          if (_feedState is! LoadedState<List<NoteModel>> || (_feedState as LoadedState<List<NoteModel>>).data.isEmpty) {
             _feedState = const LoadedState(<NoteModel>[]);
           }
         } else {
@@ -240,8 +239,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           _subscribeToRealTimeUpdates();
         }
       } else {
-        if (_feedState is! LoadedState<List<NoteModel>> ||
-            (_feedState as LoadedState<List<NoteModel>>).data.isEmpty) {
+        if (_feedState is! LoadedState<List<NoteModel>> || (_feedState as LoadedState<List<NoteModel>>).data.isEmpty) {
           _feedState = ErrorState(result.error ?? 'Failed to load feed');
         } else {
           debugPrint('[FeedViewModel] Feed load error but showing cached notes: ${result.error}');
@@ -274,9 +272,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     _isLoadingFeed = true;
 
     try {
-      final currentNotes = _feedState is LoadedState<List<NoteModel>>
-          ? (_feedState as LoadedState<List<NoteModel>>).data
-          : <NoteModel>[];
+      final currentNotes = _feedState is LoadedState<List<NoteModel>> ? (_feedState as LoadedState<List<NoteModel>>).data : <NoteModel>[];
 
       if (currentNotes.isEmpty) {
         _feedState = const LoadingState();
@@ -286,9 +282,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
       await _loadFeed();
     } catch (e) {
       debugPrint('[FeedViewModel] Error in refreshFeed: $e');
-      final currentNotes = _feedState is LoadedState<List<NoteModel>>
-          ? (_feedState as LoadedState<List<NoteModel>>).data
-          : <NoteModel>[];
+      final currentNotes = _feedState is LoadedState<List<NoteModel>> ? (_feedState as LoadedState<List<NoteModel>>).data : <NoteModel>[];
       if (currentNotes.isNotEmpty) {
         _feedState = LoadedState(currentNotes);
       } else {
@@ -321,48 +315,34 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
       if (result.isSuccess && result.notes.isNotEmpty) {
         final sortedNotes = _feedLoader.sortNotes(result.notes, _sortMode);
+
+        _feedState = LoadedState(sortedNotes);
+        safeNotifyListeners();
+
         _feedLoader.preloadCachedUserProfilesSync(
           sortedNotes,
           _profiles,
           (profiles) {
             _profilesController.add(Map.from(profiles));
-            safeNotifyListeners();
           },
         );
+
         _feedLoader.preloadCachedUserProfiles(
           sortedNotes,
           _profiles,
           (profiles) {
             _profilesController.add(Map.from(profiles));
-            safeNotifyListeners();
           },
-        ).then((_) {
-          _feedState = LoadedState(sortedNotes);
-          safeNotifyListeners();
-          _feedLoader.loadUserProfilesForNotes(
-            sortedNotes,
-            _profiles,
-            (profiles) {
-              _profilesController.add(Map.from(profiles));
-              safeNotifyListeners();
-            },
-          ).catchError((e) {
-            debugPrint('[FeedViewModel] Error loading user profiles in background: $e');
-          });
-        }).catchError((e) {
-          debugPrint('[FeedViewModel] Error preloading profiles: $e');
-          _feedState = LoadedState(sortedNotes);
-          safeNotifyListeners();
-          _feedLoader.loadUserProfilesForNotes(
-            sortedNotes,
-            _profiles,
-            (profiles) {
-              _profilesController.add(Map.from(profiles));
-              safeNotifyListeners();
-            },
-          ).catchError((err) {
-            debugPrint('[FeedViewModel] Error loading user profiles in background: $err');
-          });
+        );
+
+        _feedLoader.loadUserProfilesForNotes(
+          sortedNotes,
+          _profiles,
+          (profiles) {
+            _profilesController.add(Map.from(profiles));
+          },
+        ).catchError((e) {
+          debugPrint('[FeedViewModel] Error loading user profiles: $e');
         });
       } else if (result.error != null) {
         setError(NetworkError(message: 'Failed to load more notes: ${result.error}'));
@@ -395,7 +375,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   void setSortMode(FeedSortMode mode) async {
     if (_sortMode == mode) return;
 
-    final previousMode = _sortMode;
     _sortMode = mode;
 
     List<NoteModel>? notesToSort;
@@ -410,19 +389,9 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     }
 
     if (notesToSort != null && notesToSort.isNotEmpty) {
-      _feedState = const LoadingState();
+      final sortedNotes = _feedLoader.sortNotes(List.from(notesToSort), _sortMode);
+      _feedState = LoadedState(sortedNotes);
       safeNotifyListeners();
-
-      await Future.delayed(const Duration(seconds: 1));
-
-      if (_sortMode == mode) {
-        final sortedNotes = _feedLoader.sortNotes(List.from(notesToSort), _sortMode);
-        _feedState = LoadedState(sortedNotes);
-        safeNotifyListeners();
-      } else {
-        _sortMode = previousMode;
-        safeNotifyListeners();
-      }
     } else {
       safeNotifyListeners();
       if (!_isLoadingFeed) {
@@ -434,33 +403,32 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
   void setHashtag(String? hashtag) async {
     if (_hashtag == hashtag) return;
 
-    final previousHashtag = _hashtag;
     _hashtag = hashtag;
     _currentLimit = 50;
-    
+
     _feedState = const LoadingState();
     safeNotifyListeners();
 
-    await Future.delayed(const Duration(seconds: 1));
-
-    if (_hashtag == hashtag) {
-      if (_isLoadingFeed) {
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-      
-      if (_hashtag == hashtag) {
-        await _loadFeed();
-      } else {
-        _hashtag = previousHashtag;
-        safeNotifyListeners();
-      }
-    } else {
-      _hashtag = previousHashtag;
-      safeNotifyListeners();
-    }
+    await _loadFeed();
   }
 
   int _lastNoteCount = 0;
+
+  void _subscribeToDeletions() {
+    addSubscription(
+      _noteRepository.nostrDataService.noteDeletedStream.listen((deletedNoteId) {
+        if (_feedState is LoadedState<List<NoteModel>>) {
+          final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
+          final updatedNotes = currentNotes.where((n) => n.id != deletedNoteId).toList();
+
+          if (updatedNotes.length != currentNotes.length) {
+            _feedState = LoadedState(updatedNotes);
+            safeNotifyListeners();
+          }
+        }
+      }),
+    );
+  }
 
   void _subscribeToRealTimeUpdates() {
     final feedType = isHashtagMode ? FeedType.hashtag : FeedType.feed;
@@ -470,31 +438,30 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
       stream.listen((notes) {
         if (!isDisposed && _feedState.isLoaded) {
           List<NoteModel> filteredNotes = notes;
-          
+
           if (isHashtagMode && _hashtag != null) {
             final targetHashtag = _hashtag!.toLowerCase();
             filteredNotes = notes.where((note) {
               if (note.tTags.isNotEmpty) {
                 return note.tTags.contains(targetHashtag);
               }
-              
+
               final content = note.content.toLowerCase();
               final hashtagRegex = RegExp(r'#(\w+)');
               final matches = hashtagRegex.allMatches(content);
-              
+
               for (final match in matches) {
                 final extractedHashtag = match.group(1)?.toLowerCase();
                 if (extractedHashtag == targetHashtag) {
                   return true;
                 }
               }
-              
+
               return false;
             }).toList();
           }
-          
+
           if (filteredNotes.length == _lastNoteCount) {
-            debugPrint('[FeedViewModel] Note count unchanged ($_lastNoteCount), skipping update');
             return;
           }
 
@@ -502,36 +469,32 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
           if (currentNotes.isEmpty) {
             if (filteredNotes.isNotEmpty) {
-              _feedLoader.preloadCachedUserProfilesSync(
-                List<NoteModel>.from(filteredNotes),
-                _profiles,
-                (profiles) {
-                  _profilesController.add(Map.from(profiles));
-                  safeNotifyListeners();
-                },
-              );
               _feedState = LoadedState(List<NoteModel>.from(filteredNotes));
               safeNotifyListeners();
+
+              _feedLoader.preloadCachedUserProfilesSync(
+                filteredNotes,
+                _profiles,
+                (profiles) {
+                  _profilesController.add(Map.from(profiles));
+                },
+              );
+
               _feedLoader.preloadCachedUserProfiles(
-                List<NoteModel>.from(filteredNotes),
+                filteredNotes,
                 _profiles,
                 (profiles) {
                   _profilesController.add(Map.from(profiles));
-                  safeNotifyListeners();
                 },
-              ).then((_) {
-                safeNotifyListeners();
-              });
+              );
+
               _feedLoader.loadUserProfilesForNotes(
-                List<NoteModel>.from(filteredNotes),
+                filteredNotes,
                 _profiles,
                 (profiles) {
                   _profilesController.add(Map.from(profiles));
-                  safeNotifyListeners();
                 },
-              ).catchError((e) {
-                debugPrint('[FeedViewModel] Error loading user profiles in background: $e');
-              });
+              ).catchError((e) {});
             }
             return;
           }
@@ -543,53 +506,41 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           );
 
           if (mergedNotes != currentNotes) {
-            final userNotes = <NoteModel>[];
-            for (final note in filteredNotes) {
-              if (note.author == _currentUserNpub && !currentNotes.any((n) => n.id == note.id)) {
-                userNotes.add(note);
-              }
-            }
-
-            if (userNotes.isNotEmpty) {
-              _feedLoader.preloadCachedUserProfilesSync(
-                userNotes,
-                _profiles,
-                (profiles) {
-                  _profilesController.add(Map.from(profiles));
-                  safeNotifyListeners();
-                },
-              );
-              _feedLoader.preloadCachedUserProfiles(
-                userNotes,
-                _profiles,
-                (profiles) {
-                  _profilesController.add(Map.from(profiles));
-                  safeNotifyListeners();
-                },
-              ).then((_) {
-                safeNotifyListeners();
-              });
-              _feedLoader.loadUserProfilesForNotes(
-                userNotes,
-                _profiles,
-                (profiles) {
-                  _profilesController.add(Map.from(profiles));
-                  safeNotifyListeners();
-                },
-              ).catchError((e) {
-                debugPrint('[FeedViewModel] Error loading user profiles in background: $e');
-              });
-            }
-
             _feedState = LoadedState(mergedNotes);
             _lastNoteCount = mergedNotes.length;
             safeNotifyListeners();
+
+            final newNotes = mergedNotes.where((n) => !currentNotes.any((c) => c.id == n.id)).toList();
+            if (newNotes.isNotEmpty) {
+              _feedLoader.preloadCachedUserProfilesSync(
+                newNotes,
+                _profiles,
+                (profiles) {
+                  _profilesController.add(Map.from(profiles));
+                },
+              );
+
+              _feedLoader.preloadCachedUserProfiles(
+                newNotes,
+                _profiles,
+                (profiles) {
+                  _profilesController.add(Map.from(profiles));
+                },
+              );
+
+              _feedLoader.loadUserProfilesForNotes(
+                newNotes,
+                _profiles,
+                (profiles) {
+                  _profilesController.add(Map.from(profiles));
+                },
+              ).catchError((e) {});
+            }
           }
         }
       }),
     );
   }
-
 
   List<NoteModel> get currentNotes {
     return _feedState.data ?? [];
@@ -624,7 +575,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
       safeNotifyListeners();
     }
   }
-
 
   @override
   void onRetry() {

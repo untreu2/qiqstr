@@ -33,6 +33,7 @@ class NostrDataService {
   final StreamController<List<NoteModel>> _notesController = StreamController<List<NoteModel>>.broadcast();
   final StreamController<List<UserModel>> _usersController = StreamController<List<UserModel>>.broadcast();
   final StreamController<List<NotificationModel>> _notificationsController = StreamController<List<NotificationModel>>.broadcast();
+  final StreamController<String> _noteDeletedController = StreamController<String>.broadcast();
 
   final Map<String, NoteModel> _noteCache = {};
   final Map<String, CachedProfile> _profileCache = {};
@@ -49,15 +50,15 @@ class NostrDataService {
 
   final List<Map<String, dynamic>> _eventQueue = [];
   Timer? _batchProcessingTimer;
-  static const int _maxBatchSize = 25;
-  static const Duration _batchTimeout = Duration(milliseconds: 100);
+  static const int _maxBatchSize = 5;
+  static const Duration _batchTimeout = Duration(milliseconds: 8);
 
   bool _isClosed = false;
   String _currentUserNpub = '';
 
   Timer? _uiUpdateThrottleTimer;
   bool _uiUpdatePending = false;
-  static const Duration _uiUpdateThrottle = Duration(milliseconds: 200);
+  static const Duration _uiUpdateThrottle = Duration(milliseconds: 16);
 
   final Map<String, DateTime> _lastInteractionFetch = {};
   final Duration _interactionFetchCooldown = Duration(seconds: 5);
@@ -77,16 +78,14 @@ class NostrDataService {
   Stream<List<NoteModel>> get notesStream => _notesController.stream;
   Stream<List<UserModel>> get usersStream => _usersController.stream;
   Stream<List<NotificationModel>> get notificationsStream => _notificationsController.stream;
+  Stream<String> get noteDeletedStream => _noteDeletedController.stream;
 
   AuthService get authService => _authService;
   String get currentUserNpub => _currentUserNpub;
 
-  
-
   bool _shouldIncludeNoteInFeed(String authorHexPubkey, bool isRepost) {
     return true;
   }
-
 
   void _setupRelayEventHandling() {
     _relayManager.connectRelays(
@@ -106,34 +105,143 @@ class NostrDataService {
       final currentUser = await _authService.getCurrentUserNpub();
       if (currentUser.isSuccess && currentUser.data != null) {
         _currentUserNpub = currentUser.data!;
-        debugPrint('[NostrDataService] Initializing follow list cache for: $_currentUserNpub');
-
         final currentUserHex = _authService.npubToHex(_currentUserNpub) ?? _currentUserNpub;
-        
-        await _followCacheService.getOrFetch(currentUserHex, () async {
-          final result = await getFollowingList(_currentUserNpub);
-          return result.isSuccess ? result.data : null;
-        });
-        debugPrint('[NostrDataService] Follow list cache initialized via FollowCacheService');
 
-        final muteList = await _muteCacheService.getOrFetch(currentUserHex, () async {
-          final result = await getMuteList(currentUserHex);
-          return result.isSuccess ? result.data : null;
-        });
-        debugPrint('[NostrDataService] Mute list cache initialized via MuteCacheService: ${muteList?.length ?? 0} muted users');
-        
-        if (muteList != null && muteList.isNotEmpty) {
-          _cleanMutedNotesFromCache(muteList);
+        final result = await _fetchUserListsCombined(currentUserHex);
+
+        if (result['following'] != null) {
+          await _followCacheService.put(currentUserHex, result['following']!);
+          debugPrint('[NostrDataService] Follow list: ${result['following']!.length} users');
         }
-        
+
+        if (result['muted'] != null) {
+          await _muteCacheService.put(currentUserHex, result['muted']!);
+          debugPrint('[NostrDataService] Mute list: ${result['muted']!.length} users');
+
+          if (result['muted']!.isNotEmpty) {
+            _cleanMutedNotesFromCache(result['muted']!);
+          }
+        }
+
         _fetchInitialGlobalContent();
       } else {
         _fetchInitialGlobalContent();
       }
     } catch (e) {
-      debugPrint('[NostrDataService]  Error initializing follow list cache: $e');
+      debugPrint('[NostrDataService] Error initializing lists: $e');
       _fetchInitialGlobalContent();
     }
+  }
+
+  Future<Map<String, dynamic>> _fetchUserListsCombined(String pubkeyHex) async {
+    final following = <String>{};
+    final muted = <String>{};
+    final processedEventIds = <String>{};
+    Map<String, dynamic>? userProfile;
+
+    final filter = {
+      'authors': [pubkeyHex],
+      'kinds': [0, 3, 10000],
+      'limit': 3,
+    };
+
+    final subscriptionId = NostrService.generateUUID();
+    final request = jsonEncode(['REQ', subscriptionId, filter]);
+    final allRelays = _relayManager.relayUrls.toList();
+
+    await Future.wait(allRelays.map((relayUrl) async {
+      WebSocket? ws;
+      StreamSubscription? sub;
+      try {
+        ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 3));
+        if (_isClosed) {
+          await ws.close();
+          return;
+        }
+
+        final completer = Completer<void>();
+
+        sub = ws.listen((event) {
+          try {
+            final decoded = jsonDecode(event);
+
+            if (decoded[0] == 'EVENT') {
+              final eventData = decoded[2] as Map<String, dynamic>;
+              final eventId = eventData['id'] as String;
+              final eventKind = eventData['kind'] as int;
+              final eventAuthor = eventData['pubkey'] as String;
+
+              if (eventAuthor == pubkeyHex && !processedEventIds.contains(eventId)) {
+                processedEventIds.add(eventId);
+
+                if (eventKind == 0) {
+                  final content = eventData['content'] as String;
+                  if (content.isNotEmpty && userProfile == null) {
+                    try {
+                      userProfile = jsonDecode(content) as Map<String, dynamic>;
+                      userProfile!['pubkey'] = pubkeyHex;
+                      userProfile!['created_at'] = eventData['created_at'];
+                    } catch (e) {
+                      debugPrint('[NostrDataService] Error parsing profile: $e');
+                    }
+                  }
+                } else if (eventKind == 3) {
+                  final tags = eventData['tags'] as List<dynamic>;
+                  for (var tag in tags) {
+                    if (tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length >= 2) {
+                      following.add(tag[1] as String);
+                    }
+                  }
+                } else if (eventKind == 10000) {
+                  final tags = eventData['tags'] as List<dynamic>;
+                  for (var tag in tags) {
+                    if (tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length >= 2) {
+                      muted.add(tag[1] as String);
+                    }
+                  }
+                }
+              }
+            } else if (decoded[0] == 'EOSE') {
+              if (!completer.isCompleted) completer.complete();
+            }
+          } catch (e) {
+            debugPrint('[NostrDataService] Error processing combined data: $e');
+          }
+        }, onDone: () {
+          if (!completer.isCompleted) completer.complete();
+        }, onError: (error) {
+          if (!completer.isCompleted) completer.complete();
+        }, cancelOnError: true);
+
+        if (ws.readyState == WebSocket.open) {
+          ws.add(request);
+        }
+
+        await completer.future.timeout(const Duration(seconds: 3), onTimeout: () {});
+
+        await sub.cancel();
+        await ws.close();
+      } catch (e) {
+        await sub?.cancel();
+        await ws?.close();
+      }
+    }));
+
+    if (userProfile != null) {
+      final createdAt = userProfile!['created_at'] as int? ?? (DateTime.now().millisecondsSinceEpoch ~/ 1000);
+      _processProfileEvent({
+        'pubkey': pubkeyHex,
+        'content': jsonEncode(userProfile),
+        'created_at': createdAt,
+        'kind': 0,
+      });
+    }
+
+    return {
+      'following': following.toList(),
+      'muted': muted.toList(),
+      'profile': userProfile,
+    };
   }
 
   Future<void> _fetchInitialGlobalContent() async {
@@ -187,7 +295,6 @@ class NostrDataService {
     }
   }
 
-
   void _flushEventQueue() {
     if (_eventQueue.isEmpty) return;
 
@@ -197,11 +304,13 @@ class NostrDataService {
     final batch = List<Map<String, dynamic>>.from(_eventQueue);
     _eventQueue.clear();
 
-    for (final eventData in batch) {
-      _processNostrEvent(eventData['eventData'] as Map<String, dynamic>).catchError((e) {
-        debugPrint('[NostrDataService] Error in batch event processing: $e');
-      });
-    }
+    Future.microtask(() async {
+      for (final eventData in batch) {
+        await _processNostrEvent(eventData['eventData'] as Map<String, dynamic>).catchError((e) {
+          debugPrint('[NostrDataService] Error in batch event processing: $e');
+        });
+      }
+    });
   }
 
   Future<void> _processNostrEvent(Map<String, dynamic> eventData) async {
@@ -222,6 +331,9 @@ class NostrDataService {
           break;
         case 3:
           await _processFollowEvent(eventData);
+          break;
+        case 5:
+          await _processDeletionEvent(eventData);
           break;
         case 6:
           await _processRepostEvent(eventData);
@@ -358,7 +470,6 @@ class NostrDataService {
       final tags = eventData['tags'] as List<dynamic>;
 
       if (_eventIds.contains(id) || _noteCache.containsKey(id)) {
-        debugPrint(' [NostrDataService] Duplicate note detected, skipping: $id');
         return;
       }
 
@@ -374,7 +485,6 @@ class NostrDataService {
       }
 
       if (!_shouldIncludeNoteInFeed(pubkey, false)) {
-        debugPrint(' [NostrDataService] Note filtered out - author not in follow list: $pubkey');
         return;
       }
 
@@ -382,8 +492,6 @@ class NostrDataService {
       final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
 
       _ensureProfileExists(pubkey, authorNpub);
-
-      debugPrint('[NostrDataService] Processing note from followed author: $authorNpub');
 
       String? rootId;
       String? parentId;
@@ -460,11 +568,7 @@ class NostrDataService {
       _noteCache[id] = note;
       _eventIds.add(id);
 
-      debugPrint('Note added to cache. Total cached notes: ${_noteCache.length}');
-
       _fetchInteractionCountsForNotesImmediately([id]);
-
-      debugPrint('[NostrDataService] Note processed and interaction counts requested: $id');
 
       if (isReply && parentId != null) {
         final parentNote = _noteCache[parentId];
@@ -472,7 +576,7 @@ class NostrDataService {
           parentNote.addReply(note);
         }
       }
-      
+
       if (isReply && rootId != null && rootId != parentId) {
         final rootNote = _noteCache[rootId];
         if (rootNote != null) {
@@ -483,8 +587,6 @@ class NostrDataService {
       _updateAllReplyCountsForNote(id);
 
       _scheduleUIUpdate();
-
-      debugPrint('[NostrDataService] New note processed: ${note.content.substring(0, 30)}...');
     } catch (e) {
       debugPrint('[NostrDataService] Error processing note event: $e');
     }
@@ -499,7 +601,6 @@ class NostrDataService {
       final tags = eventData['tags'] as List<dynamic>;
 
       if (_eventIds.contains(id) || _noteCache.containsKey(id)) {
-        debugPrint(' [NostrDataService] Duplicate reply detected, skipping: $id');
         return;
       }
 
@@ -578,11 +679,7 @@ class NostrDataService {
 
       _fetchInteractionCountsForNotesImmediately([id]);
 
-      debugPrint('[NostrDataService] Reply processed and interaction counts requested: $id');
-
       _scheduleUIUpdate();
-
-      debugPrint('[NostrDataService] Reply processed: ${content.substring(0, 30)}...');
     } catch (e) {
       debugPrint('[NostrDataService] Error processing reply event: $e');
     }
@@ -624,7 +721,7 @@ class NostrDataService {
           targetNote.addReaction(reaction);
           _scheduleUIUpdate();
         }
-        
+
         _reactionsMap.putIfAbsent(targetEventId, () => []);
         if (!_reactionsMap[targetEventId]!.any((r) => r.id == reaction.id)) {
           _reactionsMap[targetEventId]!.add(reaction);
@@ -648,7 +745,6 @@ class NostrDataService {
       _trackRepostForCount(eventData);
 
       if (_eventIds.contains(id) || _noteCache.containsKey(id)) {
-        debugPrint(' [NostrDataService] Duplicate repost detected, skipping: $id');
         return;
       }
 
@@ -665,11 +761,8 @@ class NostrDataService {
       }
 
       if (!_shouldIncludeNoteInFeed(pubkey, true)) {
-        debugPrint(' [NostrDataService] Repost filtered out - reposter not in follow list: $pubkey');
         return;
       }
-
-      debugPrint('[NostrDataService] Processing repost from followed user: $pubkey');
 
       String? originalEventId;
       String? originalAuthorHex;
@@ -960,6 +1053,32 @@ class NostrDataService {
     }
   }
 
+  Future<void> _processDeletionEvent(Map<String, dynamic> eventData) async {
+    try {
+      final tags = eventData['tags'] as List<dynamic>;
+
+      for (final tag in tags) {
+        if (tag is List && tag.isNotEmpty && tag[0] == 'e' && tag.length >= 2) {
+          final deletedNoteId = tag[1] as String;
+
+          if (_noteCache.containsKey(deletedNoteId)) {
+            _noteCache.remove(deletedNoteId);
+            _eventIds.remove(deletedNoteId);
+            _reactionsMap.remove(deletedNoteId);
+            _repostsMap.remove(deletedNoteId);
+            _zapsMap.remove(deletedNoteId);
+
+            if (!_isClosed && !_noteDeletedController.isClosed) {
+              _noteDeletedController.add(deletedNoteId);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[NostrDataService] Error processing deletion event: $e');
+    }
+  }
+
   void markZapAsUserPublished(String zapEventId) {
     _userPublishedZapIds.add(zapEventId);
   }
@@ -1062,7 +1181,7 @@ class NostrDataService {
           targetNote.addZap(zap);
           _scheduleUIUpdate();
         }
-        
+
         _zapsMap.putIfAbsent(targetEventId, () => []);
         if (!_zapsMap[targetEventId]!.any((z) => z.id == zap.id)) {
           _zapsMap[targetEventId]!.add(zap);
@@ -1162,8 +1281,7 @@ class NostrDataService {
     debugPrint('[NostrDataService] Relay disconnected: $relayUrl');
   }
 
-  void _startCacheCleanup() {
-  }
+  void _startCacheCleanup() {}
 
   void _cleanupCacheIfNeeded() {
     if (_profileCache.length > 500) {
@@ -1217,22 +1335,20 @@ class NostrDataService {
   List<NoteModel> _getFilteredNotesList() {
     final allNotes = _noteCache.values.toList();
 
-    final filteredNotes = allNotes.where((note) {
+    final replyFilteredNotes = allNotes.where((note) {
       if (!note.isReply) return true;
       if (note.isReply && note.isRepost) return true;
       return false;
     }).toList();
 
-    filteredNotes.sort((a, b) {
+    replyFilteredNotes.sort((a, b) {
       final aTime = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
       final bTime = b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
       final result = bTime.compareTo(aTime);
       return result == 0 ? a.id.compareTo(b.id) : result;
     });
 
-    debugPrint('[NostrDataService] FILTERING RESULT: ${allNotes.length} → ${filteredNotes.length} notes');
-
-    return filteredNotes;
+    return replyFilteredNotes;
   }
 
   void _ensureProfileExists(String pubkeyHex, String npub) {
@@ -1278,7 +1394,6 @@ class NostrDataService {
       );
 
       final request = NostrService.createRequest(filter);
-
       await _relayManager.broadcast(NostrService.serializeRequest(request));
     } catch (e) {
       debugPrint('[NostrDataService] Error fetching user profile: $e');
@@ -1300,14 +1415,12 @@ class NostrDataService {
       final authorHexKeys = authorNpubs.map((npub) => _authService.npubToHex(npub)).where((hex) => hex != null).cast<String>().toList();
 
       List<String> targetAuthors = [];
-      bool isFeedMode = false;
 
       if (authorHexKeys.isEmpty) {
         debugPrint('[NostrDataService] No authors provided - returning empty result');
         return Result.success([]);
       } else if (authorHexKeys.length == 1 && authorHexKeys.first == _authService.npubToHex(_currentUserNpub)) {
         debugPrint('[NostrDataService] Feed mode - fetching follow list first (NIP-02)');
-        isFeedMode = true;
 
         final currentUserHex = _authService.npubToHex(_currentUserNpub);
         if (currentUserHex == null) {
@@ -1346,7 +1459,6 @@ class NostrDataService {
       }
 
       if (targetAuthors.isEmpty) {
-        debugPrint('[NostrDataService] No target authors - returning empty result');
         return Result.success([]);
       }
 
@@ -1361,54 +1473,7 @@ class NostrDataService {
       final request = NostrService.createRequest(filter);
       await _relayManager.broadcast(NostrService.serializeRequest(request));
 
-      final cachedNotes = _getNotesList();
-      if (cachedNotes.isEmpty) {
-        debugPrint('[NostrDataService] Cache empty, waiting for relay responses...');
-
-        final completer = Completer<List<NoteModel>>();
-        late StreamSubscription subscription;
-
-        subscription = _notesController.stream.listen((notes) {
-          if (notes.isNotEmpty && !completer.isCompleted) {
-            debugPrint('[NostrDataService] Received ${notes.length} notes from relays');
-            completer.complete(notes);
-          }
-        });
-
-        Timer(const Duration(seconds: 3), () {
-          if (!completer.isCompleted) {
-            debugPrint('[NostrDataService] Timeout waiting for relay responses');
-            completer.complete([]);
-          }
-        });
-
-        try {
-          final notes = await completer.future;
-          await subscription.cancel();
-          return Result.success(notes.take(limit).toList());
-        } catch (e) {
-          await subscription.cancel();
-          return Result.success([]);
-        }
-      }
-
-      debugPrint('[NostrDataService] Returning ${cachedNotes.length} cached notes');
-
-      List<NoteModel> notesToReturn;
-      if (isFeedMode && targetAuthors.isNotEmpty) {
-        notesToReturn = _filterNotesByFollowList(cachedNotes, targetAuthors).take(limit).toList();
-        debugPrint('[NostrDataService] Feed mode: Filtered to ${notesToReturn.length} notes from followed authors');
-      } else {
-        notesToReturn = cachedNotes.take(limit).toList();
-        debugPrint('[NostrDataService] Non-feed mode: Returning ${notesToReturn.length} notes without follow filtering');
-      }
-
-      notesToReturn = await filterNotesByMuteList(notesToReturn);
-      notesToReturn = notesToReturn.take(limit).toList();
-
-      debugPrint('[NostrDataService] Returning ${notesToReturn.length} feed notes without automatic interaction fetch');
-
-      return Result.success(notesToReturn);
+      return Result.success([]);
     } catch (e) {
       return Result.error('Failed to fetch feed notes: $e');
     }
@@ -1491,7 +1556,8 @@ class NostrDataService {
       }).toList();
 
       debugPrint('[NostrDataService] PROFILE: Total ${allProfileNotes.length} notes in cache for $userNpub');
-      debugPrint('[NostrDataService] PROFILE: Note IDs: ${allProfileNotes.take(3).map((n) => n.id.substring(0, 8)).join(", ")}${allProfileNotes.length > 3 ? "..." : ""}');
+      debugPrint(
+          '[NostrDataService] PROFILE: Note IDs: ${allProfileNotes.take(3).map((n) => n.id.substring(0, 8)).join(", ")}${allProfileNotes.length > 3 ? "..." : ""}');
 
       final filteredProfileNotes = await filterNotesByMuteList(allProfileNotes);
 
@@ -1786,33 +1852,34 @@ class NostrDataService {
 
       final hashtagNotes = hashtagNotesMap.values.toList();
       final targetHashtag = hashtag.toLowerCase();
-      
+
       final validatedHashtagNotes = hashtagNotes.where((note) {
         if (note.tTags.isNotEmpty) {
           return note.tTags.contains(targetHashtag);
         }
-        
+
         final content = note.content.toLowerCase();
         final hashtagRegex = RegExp(r'#(\w+)');
         final matches = hashtagRegex.allMatches(content);
-        
+
         for (final match in matches) {
           final extractedHashtag = match.group(1)?.toLowerCase();
           if (extractedHashtag == targetHashtag) {
             return true;
           }
         }
-        
+
         return false;
       }).toList();
-      
+
       final filteredHashtagNotes = await filterNotesByMuteList(validatedHashtagNotes);
 
       filteredHashtagNotes.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
       final limitedNotes = filteredHashtagNotes.take(limit).toList();
 
-      debugPrint('[NostrDataService] HASHTAG: Returning ${limitedNotes.length} notes for #$hashtag (found ${validatedHashtagNotes.length} validated, ${hashtagNotes.length} total from relays)');
+      debugPrint(
+          '[NostrDataService] HASHTAG: Returning ${limitedNotes.length} notes for #$hashtag (found ${validatedHashtagNotes.length} validated, ${hashtagNotes.length} total from relays)');
 
       _scheduleUIUpdate();
 
@@ -1921,12 +1988,46 @@ class NostrDataService {
         return Result.success(user);
       }
 
-      await _fetchUserProfile(npub);
+      final filter = NostrService.createProfileFilter(
+        authors: [pubkeyHex],
+        limit: 1,
+      );
+
+      final request = NostrService.createRequest(filter);
+      final serializedRequest = NostrService.serializeRequest(request);
+
+      final completer = Completer<UserModel?>();
+      late StreamSubscription subscription;
+
+      subscription = _usersController.stream.listen((users) {
+        if (!completer.isCompleted) {
+          for (final user in users) {
+            if (user.pubkeyHex == pubkeyHex) {
+              completer.complete(user);
+              subscription.cancel();
+              return;
+            }
+          }
+        }
+      });
+
+      await _relayManager.broadcast(serializedRequest);
+
+      final user = await completer.future.timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => null,
+      );
+
+      await subscription.cancel();
+
+      if (user != null) {
+        return Result.success(user);
+      }
 
       final updatedProfile = _profileCache[pubkeyHex];
       if (updatedProfile != null) {
-        final user = UserModel.fromCachedProfile(pubkeyHex, updatedProfile.data);
-        return Result.success(user);
+        final cachedUser = UserModel.fromCachedProfile(pubkeyHex, updatedProfile.data);
+        return Result.success(cachedUser);
       }
 
       final basicUser = UserModel(
@@ -2476,116 +2577,85 @@ class NostrDataService {
   Future<Result<List<String>>> getFollowingList(String npub) async {
     try {
       final pubkeyHex = _authService.npubToHex(npub) ?? npub;
-      debugPrint('[NostrDataService] Getting follow list for npub: $npub');
-      debugPrint('[NostrDataService] Converted to hex: $pubkeyHex');
 
       final filter = NostrService.createFollowingFilter(
         authors: [pubkeyHex],
-        limit: 1000,
+        limit: 1,
       );
 
       final request = NostrService.createRequest(filter);
       final serializedRequest = NostrService.serializeRequest(request);
 
-      debugPrint('[NostrDataService] Sending follow list request to relays...');
-      debugPrint('[NostrDataService] Request: $serializedRequest');
-
-      final following = <String>[];
+      final following = <String>{};
       final allRelays = _relayManager.relayUrls.toList();
-      debugPrint('[NostrDataService] Using ${allRelays.length} relays: $allRelays');
+      final processedEventIds = <String>{};
 
       await Future.wait(allRelays.map((relayUrl) async {
         WebSocket? ws;
         StreamSubscription? sub;
         try {
-          debugPrint('[NostrDataService] Connecting to relay: $relayUrl');
-          ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
+          ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 3));
           if (_isClosed) {
             await ws.close();
             return;
           }
 
           final completer = Completer<void>();
-          bool hasReceivedEvent = false;
 
           sub = ws.listen((event) {
             try {
               final decoded = jsonDecode(event);
-              debugPrint('[NostrDataService] Raw event from $relayUrl: $decoded');
 
               if (decoded[0] == 'EVENT') {
-                hasReceivedEvent = true;
-                debugPrint('[NostrDataService] Received follow list EVENT from $relayUrl');
                 final eventData = decoded[2] as Map<String, dynamic>;
+                final eventId = eventData['id'] as String;
                 final eventAuthor = eventData['pubkey'] as String;
                 final eventKind = eventData['kind'] as int;
-                final tags = eventData['tags'] as List<dynamic>;
 
-                debugPrint('[NostrDataService] Event author: $eventAuthor (expected: $pubkeyHex)');
-                debugPrint('[NostrDataService] Event kind: $eventKind (expected: 3)');
-                debugPrint('[NostrDataService] Event tags count: ${tags.length}');
+                if (eventAuthor == pubkeyHex && eventKind == 3 && !processedEventIds.contains(eventId)) {
+                  processedEventIds.add(eventId);
 
-                if (eventAuthor == pubkeyHex && eventKind == 3) {
+                  final tags = eventData['tags'] as List<dynamic>;
                   for (var tag in tags) {
                     if (tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length >= 2) {
-                      final followedHexPubkey = tag[1] as String;
-                      if (!following.contains(followedHexPubkey)) {
-                        following.add(followedHexPubkey);
-                        debugPrint('[NostrDataService] Found followed user (hex): $followedHexPubkey');
-                      }
+                      following.add(tag[1] as String);
                     }
                   }
-                  debugPrint('[NostrDataService] Follow list now has: ${following.length} users');
+
+                  if (!completer.isCompleted) completer.complete();
                 }
               } else if (decoded[0] == 'EOSE') {
-                debugPrint('[NostrDataService] EOSE received from $relayUrl');
                 if (!completer.isCompleted) completer.complete();
               }
             } catch (e) {
-              debugPrint('[NostrDataService] Error processing follow list event from $relayUrl: $e');
+              debugPrint('[NostrDataService] Error processing follow list: $e');
             }
           }, onDone: () {
-            debugPrint('[NostrDataService] Connection to $relayUrl closed');
             if (!completer.isCompleted) completer.complete();
           }, onError: (error) {
-            debugPrint('[NostrDataService] Connection error to $relayUrl: $error');
             if (!completer.isCompleted) completer.complete();
           }, cancelOnError: true);
 
           if (ws.readyState == WebSocket.open) {
-            debugPrint('[NostrDataService] Sending follow list request to $relayUrl');
             ws.add(serializedRequest);
-          } else {
-            debugPrint('[NostrDataService] WebSocket not open for $relayUrl, state: ${ws.readyState}');
           }
 
-          await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
-            debugPrint('[NostrDataService] Timeout waiting for follow list from $relayUrl');
-          });
+          await completer.future.timeout(const Duration(seconds: 3), onTimeout: () {});
 
           await sub.cancel();
           await ws.close();
-
-          debugPrint('[NostrDataService]  Finished processing $relayUrl, got ${hasReceivedEvent ? 'events' : 'no events'}');
         } catch (e) {
-          debugPrint('[NostrDataService]  Exception with relay $relayUrl: $e');
           await sub?.cancel();
           await ws?.close();
         }
       }));
 
-      final uniqueFollowing = following.toSet().toList();
-      debugPrint('[NostrDataService]Finalfollowlist:${uniqueFollowing.length} unique users');
-
-      for (int i = 0; i < uniqueFollowing.length && i < 10; i++) {
-        final hexPubkey = uniqueFollowing[i];
-        final npub = _authService.hexToNpub(hexPubkey) ?? 'unknown';
-        debugPrint('[NostrDataService]   Final[$i]: $hexPubkey -> $npub');
-      }
+      final uniqueFollowing = following.toList();
+      debugPrint('[NostrDataService] Follow list: ${uniqueFollowing.length} users');
 
       return Result.success(uniqueFollowing);
     } catch (e) {
-      debugPrint('[NostrDataService] Exception in getFollowingList: $e');
+      debugPrint('[NostrDataService] Error in getFollowingList: $e');
       return Result.error('Failed to get following list: $e');
     }
   }
@@ -2789,7 +2859,7 @@ class NostrDataService {
 
       if (_pendingCountRequests.containsKey(subscriptionId)) {
         final requestData = _pendingCountRequests[subscriptionId]!;
-        
+
         if (requestData['type'] == 'follower') {
           final completer = requestData['completer'] as Completer<int>;
           final pubkey = requestData['pubkey'] as String;
@@ -2813,7 +2883,7 @@ class NostrDataService {
 
       if (_pendingCountRequests.containsKey(subscriptionId)) {
         final requestData = _pendingCountRequests[subscriptionId]!;
-        
+
         if (requestData['type'] == 'follower') {
           final completer = requestData['completer'] as Completer<int>;
           final pubkey = requestData['pubkey'] as String;
@@ -2824,14 +2894,13 @@ class NostrDataService {
           _pendingCountRequests.remove(subscriptionId);
           return;
         }
-        
+
         _pendingCountRequests.remove(subscriptionId);
       }
     } catch (e) {
       debugPrint('[NostrDataService] Error handling CLOSED message: $e');
     }
   }
-
 
   Future<int> fetchFollowerCount(String pubkeyHex, {int maxRetries = 3, int attempt = 1}) async {
     try {
@@ -2840,28 +2909,28 @@ class NostrDataService {
         '#p': [pubkeyHex],
       };
       final subscriptionId = NostrService.generateUUID();
-      
+
       final completer = Completer<int>();
-      
+
       _pendingCountRequests[subscriptionId] = {
         'type': 'follower',
         'pubkey': pubkeyHex,
         'completer': completer,
         'attempt': attempt,
       };
-      
+
       final countRequest = jsonEncode(['COUNT', subscriptionId, filterMap]);
-      
+
       final ws = _relayManager.webSockets[countRelayUrl];
       if (ws != null && ws.readyState == WebSocket.open) {
         ws.add(countRequest);
-        
+
         if (attempt == 1) {
           debugPrint('[NostrDataService] COUNT → follower count for $pubkeyHex');
         } else {
           debugPrint('[NostrDataService] COUNT → follower count for $pubkeyHex - retry $attempt/$maxRetries');
         }
-        
+
         try {
           return await completer.future.timeout(
             const Duration(seconds: 5),
@@ -2907,24 +2976,23 @@ class NostrDataService {
     if (_isClosed || noteIds.isEmpty) return;
 
     const maxNotesPerFetch = 15;
-    final cappedNoteIds = noteIds.length > maxNotesPerFetch 
-        ? noteIds.take(maxNotesPerFetch).toList() 
-        : noteIds;
-    
+    final cappedNoteIds = noteIds.length > maxNotesPerFetch ? noteIds.take(maxNotesPerFetch).toList() : noteIds;
+
     if (noteIds.length > maxNotesPerFetch) {
       debugPrint('[NostrDataService] Capped interaction fetch from ${noteIds.length} to $maxNotesPerFetch notes');
     }
 
-    debugPrint('[NostrDataService] ${forceLoad ? 'Manual' : 'Automatic'} interaction fetching for ${cappedNoteIds.length} notes (useCount: $useCount)');
+    debugPrint(
+        '[NostrDataService] ${forceLoad ? 'Manual' : 'Automatic'} interaction fetching for ${cappedNoteIds.length} notes (useCount: $useCount)');
 
     final now = DateTime.now();
     final noteIdsToFetch = <String>[];
 
     for (final eventId in cappedNoteIds) {
       if (!forceLoad) {
-      final lastFetch = _lastInteractionFetch[eventId];
-      if (lastFetch != null && now.difference(lastFetch) < _interactionFetchCooldown) {
-        continue;
+        final lastFetch = _lastInteractionFetch[eventId];
+        if (lastFetch != null && now.difference(lastFetch) < _interactionFetchCooldown) {
+          continue;
         }
       }
 
@@ -2937,7 +3005,7 @@ class NostrDataService {
       if (useCount) {
         await _fetchInteractionCountsForNotes(noteIdsToFetch);
       } else {
-      await _fetchInteractionsForNotes(noteIdsToFetch);
+        await _fetchInteractionsForNotes(noteIdsToFetch);
       }
 
       int updatedCount = 0;
@@ -2948,16 +3016,17 @@ class NostrDataService {
           final oldReactionCount = note.reactionCount;
           final oldZapAmount = note.zapAmount;
           final oldRepostCount = note.repostCount;
-          
+
           note.reactionCount = _reactionsMap[eventId]?.length ?? 0;
           note.replyCount = 0;
           note.repostCount = _repostsMap[eventId]?.length ?? 0;
           note.zapAmount = _zapsMap[eventId]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
-          
+
           if (oldReactionCount != note.reactionCount || oldZapAmount != note.zapAmount || oldRepostCount != note.repostCount) {
             updatedCount++;
             if (updatedCount <= 3) {
-              debugPrint('[NostrDataService] Note ${eventId.substring(0, 8)}: reactions $oldReactionCount→${note.reactionCount}, zaps $oldZapAmount→${note.zapAmount}, reposts $oldRepostCount→${note.repostCount}');
+              debugPrint(
+                  '[NostrDataService] Note ${eventId.substring(0, 8)}: reactions $oldReactionCount→${note.reactionCount}, zaps $oldZapAmount→${note.zapAmount}, reposts $oldRepostCount→${note.repostCount}');
             }
           }
         } else {
@@ -2968,7 +3037,8 @@ class NostrDataService {
         }
       }
 
-      debugPrint('[NostrDataService] Updated interaction counts for $updatedCount/${noteIdsToFetch.length} notes ($notFoundCount not in cache)');
+      debugPrint(
+          '[NostrDataService] Updated interaction counts for $updatedCount/${noteIdsToFetch.length} notes ($notFoundCount not in cache)');
 
       _scheduleUIUpdate();
 
@@ -3165,13 +3235,12 @@ class NostrDataService {
       _reactionsMap.remove(noteId);
       _repostsMap.remove(noteId);
       _zapsMap.remove(noteId);
-      
-      if (!_isClosed && !_notesController.isClosed) {
-        final notesList = _getFilteredNotesList();
-        _notesController.add(notesList);
+
+      if (!_isClosed && !_noteDeletedController.isClosed) {
+        _noteDeletedController.add(noteId);
       }
 
-      debugPrint('[NostrDataService] Note deleted successfully: $noteId');
+      debugPrint('[NostrDataService] Note deleted: $noteId');
       return const Result.success(null);
     } catch (e) {
       debugPrint('[NostrDataService ERROR] Error deleting note: $e');
@@ -3335,106 +3404,81 @@ class NostrDataService {
   Future<Result<List<String>>> getMuteList(String npub) async {
     try {
       final pubkeyHex = _authService.npubToHex(npub) ?? npub;
-      debugPrint('[NostrDataService] Getting mute list for npub: $npub');
-      debugPrint('[NostrDataService] Converted to hex: $pubkeyHex');
 
       final filter = NostrService.createMuteFilter(
         authors: [pubkeyHex],
-        limit: 1000,
+        limit: 1,
       );
 
       final request = NostrService.createRequest(filter);
       final serializedRequest = NostrService.serializeRequest(request);
 
-      debugPrint('[NostrDataService] Sending mute list request to relays...');
-      debugPrint('[NostrDataService] Request: $serializedRequest');
-
-      final muted = <String>[];
+      final muted = <String>{};
       final allRelays = _relayManager.relayUrls.toList();
-      debugPrint('[NostrDataService] Using ${allRelays.length} relays: $allRelays');
+      final processedEventIds = <String>{};
 
       await Future.wait(allRelays.map((relayUrl) async {
         WebSocket? ws;
         StreamSubscription? sub;
         try {
-          debugPrint('[NostrDataService] Connecting to relay: $relayUrl');
-          ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
+          ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 3));
           if (_isClosed) {
             await ws.close();
             return;
           }
 
           final completer = Completer<void>();
-          bool hasReceivedEvent = false;
 
           sub = ws.listen((event) {
             try {
               final decoded = jsonDecode(event);
-              debugPrint('[NostrDataService] Raw event from $relayUrl: $decoded');
 
               if (decoded[0] == 'EVENT') {
-                hasReceivedEvent = true;
-                debugPrint('[NostrDataService] Received mute list EVENT from $relayUrl');
                 final eventData = decoded[2] as Map<String, dynamic>;
+                final eventId = eventData['id'] as String;
                 final eventAuthor = eventData['pubkey'] as String;
                 final eventKind = eventData['kind'] as int;
-                final tags = eventData['tags'] as List<dynamic>;
 
-                debugPrint('[NostrDataService] Event author: $eventAuthor (expected: $pubkeyHex)');
-                debugPrint('[NostrDataService] Event kind: $eventKind (expected: 10000)');
-                debugPrint('[NostrDataService] Event tags count: ${tags.length}');
+                if (eventAuthor == pubkeyHex && eventKind == 10000 && !processedEventIds.contains(eventId)) {
+                  processedEventIds.add(eventId);
 
-                if (eventAuthor == pubkeyHex && eventKind == 10000) {
+                  final tags = eventData['tags'] as List<dynamic>;
                   for (var tag in tags) {
                     if (tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length >= 2) {
-                      final mutedHexPubkey = tag[1] as String;
-                      if (!muted.contains(mutedHexPubkey)) {
-                        muted.add(mutedHexPubkey);
-                        debugPrint('[NostrDataService] Found muted user (hex): $mutedHexPubkey');
-                      }
+                      muted.add(tag[1] as String);
                     }
                   }
-                  debugPrint('[NostrDataService] Mute list now has: ${muted.length} users');
+
+                  if (!completer.isCompleted) completer.complete();
                 }
               } else if (decoded[0] == 'EOSE') {
-                debugPrint('[NostrDataService] EOSE received from $relayUrl');
                 if (!completer.isCompleted) completer.complete();
               }
             } catch (e) {
-              debugPrint('[NostrDataService] Error processing mute list event from $relayUrl: $e');
+              debugPrint('[NostrDataService] Error processing mute list: $e');
             }
           }, onDone: () {
-            debugPrint('[NostrDataService] Connection to $relayUrl closed');
             if (!completer.isCompleted) completer.complete();
           }, onError: (error) {
-            debugPrint('[NostrDataService] Connection error to $relayUrl: $error');
             if (!completer.isCompleted) completer.complete();
           }, cancelOnError: true);
 
           if (ws.readyState == WebSocket.open) {
-            debugPrint('[NostrDataService] Sending mute list request to $relayUrl');
             ws.add(serializedRequest);
-          } else {
-            debugPrint('[NostrDataService] WebSocket not open for $relayUrl, state: ${ws.readyState}');
           }
 
-          await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
-            debugPrint('[NostrDataService] Timeout waiting for mute list from $relayUrl');
-          });
+          await completer.future.timeout(const Duration(seconds: 3), onTimeout: () {});
 
           await sub.cancel();
           await ws.close();
-
-          debugPrint('[NostrDataService] Finished processing $relayUrl, got ${hasReceivedEvent ? 'events' : 'no events'}');
         } catch (e) {
-          debugPrint('[NostrDataService] Exception with relay $relayUrl: $e');
           await sub?.cancel();
           await ws?.close();
         }
       }));
 
-      final uniqueMuted = muted.toSet().toList();
-      debugPrint('[NostrDataService] Final mute list: ${uniqueMuted.length} unique users');
+      final uniqueMuted = muted.toList();
+      debugPrint('[NostrDataService] Mute list: ${uniqueMuted.length} users');
 
       if (uniqueMuted.isNotEmpty) {
         await _muteCacheService.put(pubkeyHex, uniqueMuted);
@@ -3515,7 +3559,7 @@ class NostrDataService {
     try {
       final mutedSet = mutedHexList.toSet();
       int removedCount = 0;
-      
+
       final notesToRemove = <String>[];
       for (final note in _noteCache.values) {
         final noteAuthorHex = _authService.npubToHex(note.author);
@@ -3530,12 +3574,12 @@ class NostrDataService {
           }
         }
       }
-      
+
       for (final noteId in notesToRemove) {
         _noteCache.remove(noteId);
         _eventIds.remove(noteId);
       }
-      
+
       if (removedCount > 0) {
         debugPrint('[NostrDataService] Cleaned $removedCount muted notes from cache');
         _scheduleUIUpdate();
@@ -3604,34 +3648,6 @@ class NostrDataService {
   Map<String, List<ReactionModel>> get repostsMap => Map.unmodifiable(_repostsMap);
   Map<String, List<ZapModel>> get zapsMap => Map.unmodifiable(_zapsMap);
 
-  List<NoteModel> _filterNotesByFollowList(List<NoteModel> notes, List<String> followedHexPubkeys) {
-    debugPrint('[NostrDataService] Filtering ${notes.length} notes by follow list with ${followedHexPubkeys.length} followed users');
-
-    final filteredNotes = notes.where((note) {
-      if (note.isRepost && note.repostedBy != null) {
-        final reposterHex = _authService.npubToHex(note.repostedBy!) ?? note.repostedBy!;
-        final isReposterFollowed = followedHexPubkeys.contains(reposterHex);
-
-        debugPrint(
-            '[NostrDataService] Repost${note.isReply ? " (reply)" : ""} by ${note.repostedBy} (hex: $reposterHex), followed: $isReposterFollowed');
-        return isReposterFollowed;
-      }
-
-      if (note.isReply) {
-        debugPrint('[NostrDataService] Excluding standalone reply: ${note.id}');
-        return false;
-      }
-
-      final noteAuthorHex = _authService.npubToHex(note.author) ?? note.author;
-      final isAuthorFollowed = followedHexPubkeys.contains(noteAuthorHex);
-
-      debugPrint('[NostrDataService] Original post by ${note.author} (hex: $noteAuthorHex), followed: $isAuthorFollowed');
-      return isAuthorFollowed;
-    }).toList();
-
-    debugPrint('[NostrDataService] Filtered result: ${filteredNotes.length} notes (${notes.length - filteredNotes.length} excluded)');
-    return filteredNotes;
-  }
 
   Future<List<NoteModel>> filterNotesByMuteList(List<NoteModel> notes) async {
     try {
@@ -3669,7 +3685,8 @@ class NostrDataService {
         return true;
       }).toList();
 
-      debugPrint('[NostrDataService] Mute filtered result: ${filteredNotes.length} notes (${notes.length - filteredNotes.length} excluded)');
+      debugPrint(
+          '[NostrDataService] Mute filtered result: ${filteredNotes.length} notes (${notes.length - filteredNotes.length} excluded)');
       return filteredNotes;
     } catch (e) {
       debugPrint('[NostrDataService] Error filtering notes by mute list: $e');
@@ -3685,6 +3702,7 @@ class NostrDataService {
     _notesController.close();
     _usersController.close();
     _notificationsController.close();
+    _noteDeletedController.close();
     clearCaches();
   }
 }

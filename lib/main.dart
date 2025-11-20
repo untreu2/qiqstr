@@ -12,12 +12,8 @@ import 'services/logging_service.dart';
 import 'core/di/app_di.dart';
 import 'data/services/nostr_data_service.dart';
 import 'data/services/auth_service.dart';
-import 'data/services/follow_cache_service.dart';
-import 'data/services/mute_cache_service.dart';
 import 'data/repositories/notification_repository.dart';
 import 'data/repositories/note_repository.dart';
-import 'core/base/result.dart';
-import 'models/note_model.dart';
 import 'services/memory_trimming_service.dart';
 import 'services/lifecycle_manager.dart';
 import 'services/event_parser_isolate.dart';
@@ -31,12 +27,12 @@ void main() {
     PaintingBinding.instance.imageCache.maximumSize = 600;
 
     await AppDI.initialize();
-    
+
     await EventParserIsolate.instance.initialize();
-    
+
     LifecycleManager().initialize();
     MemoryTrimmingService().startPeriodicTrimming();
-    
+
     debugProfileBuildsEnabled = false;
     debugPrintRebuildDirtyWidgets = false;
 
@@ -100,17 +96,11 @@ Future<Widget> _determineInitialHomeWithPreloading() async {
 
       if (npubResult.isSuccess && npubResult.data != null && npubResult.data!.isNotEmpty) {
         final npub = npubResult.data!;
-        
-        unawaited(_initializeNotifications());
-
-        final nostrDataService = AppDI.get<NostrDataService>();
-        final currentUserHex = authService.npubToHex(npub) ?? npub;
-        
-        await _preloadFollowAndMuteLists(nostrDataService, npub, currentUserHex);
-        
-        await _loadInitialFeedWithSplash(npub);
 
         FlutterNativeSplash.remove();
+
+        unawaited(_initializeNotifications());
+        unawaited(_loadInitialFeedInBackground(npub));
 
         return HomeNavigator(npub: npub);
       }
@@ -124,101 +114,34 @@ Future<Widget> _determineInitialHomeWithPreloading() async {
   }
 }
 
-Future<void> _preloadFollowAndMuteLists(NostrDataService nostrDataService, String npub, String currentUserHex) async {
+Future<void> _loadInitialFeedInBackground(String npub) async {
   try {
-    final followCacheService = FollowCacheService.instance;
-    final muteCacheService = MuteCacheService.instance;
-
-    final followListFuture = followCacheService.getOrFetch(currentUserHex, () async {
-      final result = await nostrDataService.getFollowingList(npub);
-      return result.isSuccess ? result.data : null;
-    });
-
-    final muteListFuture = muteCacheService.getOrFetch(currentUserHex, () async {
-      final result = await nostrDataService.getMuteList(currentUserHex);
-      return result.isSuccess ? result.data : null;
-    });
-
-    await Future.wait([followListFuture, muteListFuture]);
-  } catch (e) {
-    debugPrint('[Main] Error preloading follow/mute lists: $e');
-  }
-}
-
-Future<bool> _loadInitialFeedWithSplash(String npub) async {
-  try {
-    final nostrDataService = AppDI.get<NostrDataService>();
     final noteRepository = AppDI.get<NoteRepository>();
-    
-    try {
-      final serviceCachedNotes = nostrDataService.cachedNotes;
-      if (serviceCachedNotes.isNotEmpty) {
-        debugPrint('[Main] Found ${serviceCachedNotes.length} cached notes in service, skipping preload');
-        unawaited(noteRepository.startRealTimeFeed([npub]));
-        return true;
-      }
-    } catch (e) {
-      debugPrint('[Main] Error checking service cached notes: $e');
-    }
-    
-    try {
-      final repoCachedNotes = noteRepository.currentNotes;
-      if (repoCachedNotes.isNotEmpty) {
-        debugPrint('[Main] Found ${repoCachedNotes.length} cached notes in repository, skipping preload');
-        unawaited(noteRepository.startRealTimeFeed([npub]));
-        return true;
-      }
-    } catch (e) {
-      debugPrint('[Main] Error checking repository cached notes: $e');
+    final nostrDataService = AppDI.get<NostrDataService>();
+
+    final cachedNotes = noteRepository.currentNotes;
+    if (cachedNotes.isNotEmpty) {
+      debugPrint('[Main] Using cached notes, starting real-time feed');
+      unawaited(noteRepository.startRealTimeFeed([npub]));
+      return;
     }
 
-    final realTimeFeedFuture = noteRepository.startRealTimeFeed([npub]);
-    
-    final completer = Completer<bool>();
-    
-    Future.delayed(const Duration(seconds: 2), () {
-      if (!completer.isCompleted) {
-        debugPrint('[Main] Feed preload timeout (2s), continuing anyway');
-        completer.complete(false);
+    noteRepository.startRealTimeFeed([npub]);
+
+    nostrDataService.fetchFeedNotes(
+      authorNpubs: [npub],
+      limit: 30,
+    ).then((result) {
+      if (result.isSuccess && result.data != null) {
+        debugPrint('[Main] Feed loaded: ${result.data!.length} notes');
       }
+    }).catchError((e) {
+      debugPrint('[Main] Error loading feed: $e');
     });
-
-    try {
-      final feedFuture = nostrDataService.fetchFeedNotes(
-        authorNpubs: [npub],
-        limit: 30,
-      );
-
-      await Future.wait([realTimeFeedFuture, feedFuture]).then((results) {
-      if (!completer.isCompleted) {
-          final feedResult = results[1] as Result<List<NoteModel>>;
-          final success = feedResult.isSuccess && feedResult.data != null && feedResult.data!.isNotEmpty;
-        completer.complete(success);
-        if (success) {
-            debugPrint('[Main] Feed preload successful: ${feedResult.data!.length} notes');
-          }
-        }
-      }).catchError((e) {
-        debugPrint('[Main] Error in parallel feed loading: $e');
-        if (!completer.isCompleted) {
-          completer.complete(false);
-      }
-      });
-
-      return await completer.future;
-    } catch (e) {
-      debugPrint('[Main] Error preloading feed: $e');
-      if (!completer.isCompleted) {
-        completer.complete(false);
-      }
-      return await completer.future;
-    }
   } catch (e) {
-    debugPrint('[Main] Error in _loadInitialFeedWithSplash: $e');
-    return false;
+    debugPrint('[Main] Error in background feed loading: $e');
   }
 }
-
 
 void unawaited(Future<void> future) {
   future.catchError((error) {});
@@ -326,4 +249,3 @@ class QiqstrApp extends ConsumerWidget {
     );
   }
 }
-

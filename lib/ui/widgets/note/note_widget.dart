@@ -3,8 +3,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../../models/note_model.dart';
 import '../../../models/user_model.dart';
-import '../../../core/di/app_di.dart';
-import '../../../data/repositories/user_repository.dart';
 import '../../../services/time_service.dart';
 import '../../theme/theme_manager.dart';
 import '../../screens/note/thread_page.dart';
@@ -43,7 +41,6 @@ class NoteWidget extends StatefulWidget {
 }
 
 class _NoteWidgetState extends State<NoteWidget> {
-
   late final String _noteId;
   late final String _authorId;
   late final String? _reposterId;
@@ -63,13 +60,11 @@ class _NoteWidgetState extends State<NoteWidget> {
 
   bool _isDisposed = false;
   bool _isInitialized = false;
-  late final UserRepository _userRepository;
 
   @override
   void initState() {
     super.initState();
     try {
-      _userRepository = AppDI.get<UserRepository>();
       _precomputeImmutableData();
       _setupUserListener();
       _loadInitialUserDataSync();
@@ -90,7 +85,6 @@ class _NoteWidgetState extends State<NoteWidget> {
     _timestamp = widget.note.timestamp;
     _content = widget.note.content;
     _widgetKey = '${_noteId}_$_authorId';
-
 
     _formattedTimestamp = _calculateTimestamp(_timestamp);
 
@@ -166,18 +160,7 @@ class _NoteWidgetState extends State<NoteWidget> {
     }
   }
 
-  void _initializeAsync() {
-    Future.microtask(() {
-      if (_isDisposed || !mounted) return;
-
-      try {
-        _loadUsersAsync();
-        _loadInteractionsAsync();
-      } catch (e) {
-        debugPrint('[NoteWidget] Async init error: $e');
-      }
-    });
-  }
+  void _initializeAsync() {}
 
   void _setupUserListener() {
     try {
@@ -194,17 +177,13 @@ class _NoteWidgetState extends State<NoteWidget> {
       final notes = widget.notesNotifier.value;
       if (notes.isEmpty) return;
 
-      bool hasRelevantChange = notes.any((note) =>
-        note.id == _noteId ||
-        (_isRepost && note.id == widget.note.rootId) ||
-        (_isReply && note.id == _parentId)
-      );
+      bool hasRelevantChange =
+          notes.any((note) => note.id == _noteId || (_isRepost && note.id == widget.note.rootId) || (_isReply && note.id == _parentId));
 
       if (hasRelevantChange) {
         _updateUserData();
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   void _updateUserData() {
@@ -258,76 +237,10 @@ class _NoteWidgetState extends State<NoteWidget> {
           _stateNotifier.value = newState;
         }
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
-  Future<void> _loadUsersAsync() async {
-    if (_isDisposed || !mounted) return;
 
-    try {
-      final authorUser = widget.profiles[_authorId];
-      final reposterUser = _reposterId != null ? widget.profiles[_reposterId] : null;
-
-      bool isProfileComplete(UserModel? user, String userId) {
-        if (user == null) return false;
-        if (user.name == 'Anonymous') return false;
-        if (user.name == userId.substring(0, 8)) return false;
-        if (user.profileImage.isEmpty) return false;
-        return true;
-      }
-
-      final reposterId = _reposterId;
-      if (isProfileComplete(authorUser, _authorId) && (reposterId == null || isProfileComplete(reposterUser, reposterId))) {
-        return;
-      }
-
-      if (widget.notesListProvider != null) {
-        final authorPreloaded = widget.notesListProvider.getPreloadedUser(_authorId);
-        final reposterPreloaded = reposterId != null ? widget.notesListProvider.getPreloadedUser(reposterId) : null;
-
-        if (isProfileComplete(authorPreloaded, _authorId) && (reposterId == null || isProfileComplete(reposterPreloaded, reposterId))) {
-          return;
-        }
-      }
-
-      if (!isProfileComplete(authorUser, _authorId)) {
-        final authorResult = await _userRepository.getUserProfile(_authorId);
-        authorResult.fold(
-          (user) {
-            if (mounted && !_isDisposed) {
-              widget.profiles[_authorId] = user;
-              _updateUserData();
-            }
-          },
-          (_) {},
-        );
-      }
-
-      if (_reposterId != null) {
-        final reposterId = _reposterId;
-        final currentReposterUser = widget.profiles[reposterId];
-
-        if (!isProfileComplete(currentReposterUser, reposterId)) {
-          final reposterResult = await _userRepository.getUserProfile(reposterId);
-          reposterResult.fold(
-            (user) {
-              if (mounted && !_isDisposed) {
-                widget.profiles[reposterId] = user;
-                _updateUserData();
-              }
-            },
-            (_) {},
-          );
-        }
-      }
-    } catch (e) {
-    }
-  }
-
-  Future<void> _loadInteractionsAsync() async {
-    if (_isDisposed || !mounted) return;
-  }
 
   String _calculateTimestamp(DateTime timestamp) {
     try {
@@ -454,8 +367,7 @@ class _NoteWidgetState extends State<NoteWidget> {
           ),
         );
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   void _navigateToMentionProfile(String id) {
@@ -463,8 +375,7 @@ class _NoteWidgetState extends State<NoteWidget> {
       if (mounted && !_isDisposed) {
         _navigateToProfile(id);
       }
-    } catch (e) {
-    }
+    } catch (e) {}
   }
 
   void _navigateToThreadPage() {
@@ -505,7 +416,6 @@ class _NoteWidgetState extends State<NoteWidget> {
     }
     return _noteId;
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -848,26 +758,21 @@ class _NoteState {
           authorUser?.pubkeyHex == other.authorUser?.pubkeyHex &&
           authorUser?.name == other.authorUser?.name &&
           authorUser?.profileImage == other.authorUser?.profileImage &&
-          authorUser?.nip05 == other.authorUser?.nip05 &&
-          authorUser?.nip05Verified == other.authorUser?.nip05Verified &&
           reposterUser?.pubkeyHex == other.reposterUser?.pubkeyHex &&
           reposterUser?.name == other.reposterUser?.name &&
           reposterUser?.profileImage == other.reposterUser?.profileImage &&
           replyText == other.replyText;
 
   @override
-  int get hashCode => 
-    Object.hash(
-      authorUser?.pubkeyHex,
-      authorUser?.name,
-      authorUser?.profileImage,
-      authorUser?.nip05,
-      authorUser?.nip05Verified,
-      reposterUser?.pubkeyHex,
-      reposterUser?.name,
-      reposterUser?.profileImage,
-      replyText,
-    );
+  int get hashCode => Object.hash(
+        authorUser?.pubkeyHex,
+        authorUser?.name,
+        authorUser?.profileImage,
+        reposterUser?.pubkeyHex,
+        reposterUser?.name,
+        reposterUser?.profileImage,
+        replyText,
+      );
 }
 
 class _SafeProfileSection extends StatelessWidget {
@@ -912,7 +817,7 @@ class _SafeProfileSection extends StatelessWidget {
 
   Widget _buildNormalProfile(_NoteState state) {
     final authorImageUrl = state.authorUser?.profileImage ?? '';
-    
+
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: GestureDetector(
@@ -928,7 +833,7 @@ class _SafeProfileSection extends StatelessWidget {
 
   Widget _buildExpandedProfile(_NoteState state) {
     final authorImageUrl = state.authorUser?.profileImage ?? '';
-    
+
     return GestureDetector(
       onTap: onAuthorTap,
       child: Row(
@@ -948,44 +853,18 @@ class _SafeProfileSection extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Flexible(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          state.authorUser?.name.isNotEmpty == true
-                              ? state.authorUser!.name
-                              : (state.authorUser?.pubkeyHex.substring(0, 8) ?? 'Anonymous'),
-                          style: TextStyle(
-                            fontSize: 15,
-                            color: colors.textPrimary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (state.authorUser?.nip05.isNotEmpty == true && state.authorUser?.nip05Verified == true) ...[
-                        const SizedBox(width: 4),
-                        Icon(
-                          Icons.verified,
-                          size: 16,
-                          color: colors.accent,
-                        ),
-                      ],
-                    ],
+                  child: Text(
+                    state.authorUser?.name.isNotEmpty == true
+                        ? state.authorUser!.name
+                        : (state.authorUser?.pubkeyHex.substring(0, 8) ?? 'Anonymous'),
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: colors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (state.authorUser?.nip05.isNotEmpty == true)
-                  Flexible(
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 6),
-                      child: Text(
-                        '• ${state.authorUser!.nip05}',
-                        style: TextStyle(fontSize: 12.5, color: colors.secondary),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
                 Padding(
                   padding: const EdgeInsets.only(left: 6),
                   child: Text('• $formattedTimestamp', style: TextStyle(fontSize: 12.5, color: colors.secondary)),
@@ -1095,43 +974,16 @@ class _SafeUserInfoSection extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   Flexible(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            user.name.length > 25 ? '${user.name.substring(0, 25)}...' : user.name,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: colors.textPrimary,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (user.nip05.isNotEmpty && user.nip05Verified) ...[
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.verified,
-                            size: 16,
-                            color: colors.accent,
-                          ),
-                        ],
-                      ],
+                    child: Text(
+                      user.name.length > 25 ? '${user.name.substring(0, 25)}...' : user.name,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: colors.textPrimary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (user.nip05.isNotEmpty) ...[
-                    Flexible(
-                      child: Padding(
-                        padding: const EdgeInsets.only(left: 6),
-                        child: Text(
-                          '• ${user.nip05}',
-                          style: TextStyle(fontSize: 12.5, color: colors.secondary),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                  ],
                   Padding(
                     padding: const EdgeInsets.only(left: 6),
                     child: Text(

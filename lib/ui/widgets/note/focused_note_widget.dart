@@ -521,44 +521,18 @@ class _FocusedProfileSection extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Flexible(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                state.authorUser?.name.isNotEmpty == true
-                                    ? state.authorUser!.name
-                                    : (state.authorUser?.npub.substring(0, 8) ?? 'Anonymous'),
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  color: colors.textPrimary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            if (state.authorUser?.nip05.isNotEmpty == true && state.authorUser?.nip05Verified == true) ...[
-                              const SizedBox(width: 4),
-                              Icon(
-                                Icons.verified,
-                                size: 16,
-                                color: colors.accent,
-                              ),
-                            ],
-                          ],
+                        child: Text(
+                          state.authorUser?.name.isNotEmpty == true
+                              ? state.authorUser!.name
+                              : (state.authorUser?.npub.substring(0, 8) ?? 'Anonymous'),
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: colors.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      if (state.authorUser?.nip05.isNotEmpty == true)
-                        Flexible(
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: 6),
-                            child: Text(
-                              '• ${state.authorUser!.nip05}',
-                              style: TextStyle(fontSize: 13, color: colors.secondary),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ),
                       Padding(
                         padding: const EdgeInsets.only(left: 6),
                         child: Text('• $formattedTimestamp', style: TextStyle(fontSize: 12.5, color: colors.secondary)),
