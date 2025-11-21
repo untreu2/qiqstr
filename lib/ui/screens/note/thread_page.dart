@@ -43,6 +43,8 @@ class _ThreadPageState extends State<ThreadPage> {
   static const int _maxNestedReplies = 1;
 
   bool _isRefreshing = false;
+  bool _isInitialized = false;
+  Timer? _cacheCheckTimer;
 
   @override
   void initState() {
@@ -58,6 +60,7 @@ class _ThreadPageState extends State<ThreadPage> {
 
   @override
   void dispose() {
+    _cacheCheckTimer?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
@@ -67,13 +70,19 @@ class _ThreadPageState extends State<ThreadPage> {
   Widget build(BuildContext context) {
     return ViewModelBuilder<ThreadViewModel>(
       create: () => AppDI.get<ThreadViewModel>(),
-      onModelReady: (viewModel) {
-        viewModel.initializeWithThread(
-          rootNoteId: widget.rootNoteId,
-          focusedNoteId: widget.focusedNoteId,
-        );
-      },
       builder: (context, viewModel) {
+        if (!_isInitialized) {
+          _isInitialized = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              viewModel.initializeWithThread(
+                rootNoteId: widget.rootNoteId,
+                focusedNoteId: widget.focusedNoteId,
+              );
+            }
+          });
+        }
+        
         return Scaffold(
           backgroundColor: context.colors.background,
           body: Consumer<ThreadViewModel>(
@@ -334,6 +343,7 @@ class _ThreadPageState extends State<ThreadPage> {
           ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
         if (directReplies.isEmpty) {
+          _startCacheCheckTimer(viewModel);
           return SliverToBoxAdapter(
             child: Center(
               child: Padding(
@@ -349,6 +359,8 @@ class _ThreadPageState extends State<ThreadPage> {
             ),
           );
         }
+        
+        _startCacheCheckTimer(viewModel);
 
         final maxVisible = math.min(_visibleRepliesCount, _maxInitialReplies);
         final visibleReplies = directReplies.take(maxVisible).toList();
@@ -401,27 +413,35 @@ class _ThreadPageState extends State<ThreadPage> {
           ),
         ),
       ),
-      empty: (message) => SliverToBoxAdapter(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32.0),
-            child: Text(
-              'No replies yet',
-              style: TextStyle(
-                color: context.colors.textSecondary,
-                fontSize: 16,
+      empty: (message) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _startCacheCheckTimer(viewModel);
+          }
+        });
+        return SliverToBoxAdapter(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32.0),
+              child: Text(
+                'No replies yet',
+                style: TextStyle(
+                  color: context.colors.textSecondary,
+                  fontSize: 16,
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
   Widget _buildLoadMoreButton(BuildContext context, int totalReplies) {
     return Center(
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16.0),
+        margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        constraints: const BoxConstraints(minHeight: 56),
         child: SecondaryButton(
           label: 'Load more (${totalReplies - _visibleRepliesCount} remaining)',
           onPressed: () {
@@ -712,6 +732,23 @@ class _ThreadPageState extends State<ThreadPage> {
       }
     }
   }
+
+  void _startCacheCheckTimer(ThreadViewModel viewModel) {
+    if (_cacheCheckTimer != null && _cacheCheckTimer!.isActive) {
+      return;
+    }
+    
+    _cacheCheckTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        _cacheCheckTimer = null;
+        return;
+      }
+      
+      viewModel.checkRepliesFromCache();
+    });
+  }
+
 
   Widget _buildShareButton(BuildContext context, double topPadding, ThreadViewModel viewModel) {
     return Positioned(

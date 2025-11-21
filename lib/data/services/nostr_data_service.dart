@@ -107,11 +107,9 @@ class NostrDataService {
         _currentUserNpub = currentUser.data!;
         final currentUserHex = _authService.npubToHex(_currentUserNpub) ?? _currentUserNpub;
 
-        // First, check if follow/mute lists exist in Isar
         final cachedFollowing = await _followCacheService.get(currentUserHex);
         final cachedMuted = await _muteCacheService.get(currentUserHex);
 
-        // Check if we have valid cached data (not null and not empty)
         final hasValidFollowing = cachedFollowing != null && cachedFollowing.isNotEmpty;
         final hasValidMuted = cachedMuted != null && cachedMuted.isNotEmpty;
 
@@ -121,12 +119,9 @@ class NostrDataService {
 
         if (hasValidMuted) {
           debugPrint('[NostrDataService] Using cached mute list from Isar: ${cachedMuted.length} users');
-          // Clean muted notes from cache if we have cached mute list
           _cleanMutedNotesFromCache(cachedMuted);
         }
 
-        // If we don't have both lists in Isar, we MUST fetch from network
-        // Don't proceed with empty lists - always fetch if missing
         if (!hasValidFollowing || !hasValidMuted) {
           debugPrint('[NostrDataService] Missing lists in Isar, fetching from network...');
           final result = await _fetchUserListsCombined(currentUserHex);
@@ -145,20 +140,16 @@ class NostrDataService {
             }
           }
         } else {
-          // Both lists are in Isar, update from network in background
           debugPrint('[NostrDataService] Both lists found in Isar, updating from network in background...');
           unawaited(_fetchAndUpdateUserLists(currentUserHex));
         }
 
-        // Fetch feed notes using follow list pubkeys directly (not global content)
         await _fetchFeedNotesFromFollowList();
       } else {
-        // No user logged in, skip feed fetch
         debugPrint('[NostrDataService] No user logged in, skipping feed fetch');
       }
     } catch (e) {
       debugPrint('[NostrDataService] Error initializing lists: $e');
-      // Try to fetch feed notes even if there was an error
       try {
         await _fetchFeedNotesFromFollowList();
       } catch (feedError) {
@@ -179,7 +170,6 @@ class NostrDataService {
           return;
         }
 
-        // Get follow list from cache (already in hex format)
         final followList = await _followCacheService.get(currentUserHex);
         
         if (followList == null || followList.isEmpty) {
@@ -187,13 +177,11 @@ class NostrDataService {
           return;
         }
 
-        // Use hex pubkeys directly - no conversion needed
         final targetAuthors = List<String>.from(followList);
         targetAuthors.add(currentUserHex);
 
         debugPrint('[NostrDataService] Fetching feed notes for ${targetAuthors.length} authors (hex pubkeys, including self)');
         
-        // Create filter directly with hex pubkeys and send to relays
         final filter = NostrService.createNotesFilter(
           authors: targetAuthors,
           kinds: [1, 6],
@@ -648,8 +636,6 @@ class NostrDataService {
       _noteCache[id] = note;
       _eventIds.add(id);
 
-      _fetchInteractionCountsForNotesImmediately([id]);
-
       if (isReply && parentId != null) {
         final parentNote = _noteCache[parentId];
         if (parentNote != null) {
@@ -757,8 +743,6 @@ class NostrDataService {
 
       _updateParentNoteReplyCount(actualParentId ?? parentEventId);
 
-      _fetchInteractionCountsForNotesImmediately([id]);
-
       _scheduleUIUpdate();
     } catch (e) {
       debugPrint('[NostrDataService] Error processing reply event: $e');
@@ -828,7 +812,6 @@ class NostrDataService {
         return;
       }
 
-      // Check if reposter is muted
       final currentUserResult = await _authService.getCurrentUserNpub();
       if (currentUserResult.isSuccess && currentUserResult.data != null) {
         final currentUserNpub = currentUserResult.data!;
@@ -1021,8 +1004,6 @@ class NostrDataService {
 
         _noteCache[id] = repostNote;
         _eventIds.add(id);
-
-        _fetchInteractionCountsForNotesImmediately([originalEventId]);
 
         final targetNote = _noteCache[originalEventId];
         if (targetNote != null) {
@@ -2902,19 +2883,6 @@ class NostrDataService {
   }
 
   final Map<String, Map<String, dynamic>> _pendingCountRequests = {};
-
-  Future<void> _fetchInteractionCountsForNotesImmediately(List<String> noteIds) async {
-    if (noteIds.isEmpty) return;
-
-    debugPrint('[NostrDataService] Fetching interaction counts IMMEDIATELY for ${noteIds.length} notes using normal events...');
-
-    try {
-      await _fetchInteractionsForNotes(noteIds);
-      debugPrint('[NostrDataService] Interaction counts fetched IMMEDIATELY for ${noteIds.length} notes');
-    } catch (e) {
-      debugPrint('[NostrDataService] Error fetching interaction counts: $e');
-    }
-  }
 
   Future<void> _fetchInteractionCountsForNotes(List<String> noteIds) async {
     if (noteIds.isEmpty) return;

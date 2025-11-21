@@ -82,7 +82,6 @@ class FollowCacheService {
           return followingData;
         }
       } catch (e) {
-        // Handle error silently
       }
     }
 
@@ -139,7 +138,6 @@ class FollowCacheService {
 
     if (_isIsarInitialized) {
       try {
-        // Directly save/update - Isar's put() handles updates automatically
         await _isarService.saveFollowingList(userPubkeyHex, followingList);
       } catch (e) {
         // Handle error silently
@@ -202,7 +200,6 @@ class FollowCacheService {
           result[entry.key] = entry.value;
         }
       } catch (e) {
-        // Handle error silently
       }
     }
 
@@ -301,9 +298,6 @@ class FollowCacheService {
     for (final key in keysToRemove) {
       _memoryCache.remove(key);
     }
-
-    // Never delete follow lists from Isar - they should persist permanently
-    // Only clean memory cache, keep Isar data intact
   }
 
   Future<void> dispose() async {

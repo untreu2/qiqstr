@@ -50,10 +50,8 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   StreamSubscription<List<NoteModel>>? _notesStreamSubscription;
   bool _isScrolling = false;
   DateTime _lastScrollTime = DateTime.now();
-  DateTime _lastInteractionFetchTime = DateTime.now();
   DateTime _lastUserFetchTime = DateTime.now();
   bool _hasPendingUpdate = false;
-  final Set<String> _fetchedInteractionNoteIds = {};
   final Set<String> _fetchedUserIds = {};
   Timer? _setStateDebounceTimer;
   bool _isLoadingMore = false;
@@ -73,7 +71,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          _fetchInteractionsForVisibleNotes();
           _fetchUsersForVisibleNotes();
         }
       });
@@ -166,76 +163,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     });
   }
 
-  void _fetchInteractionsForVisibleNotes() {
-    if (!mounted || widget.scrollController == null || !widget.scrollController!.hasClients) {
-      return;
-    }
-
-    final now = DateTime.now();
-    final timeSinceLastFetch = now.difference(_lastInteractionFetchTime);
-    if (timeSinceLastFetch.inMilliseconds < 100) {
-      return;
-    }
-
-    try {
-      final scrollController = widget.scrollController!;
-      final viewportHeight = scrollController.position.viewportDimension;
-      final scrollOffset = scrollController.offset;
-      
-      final estimatedItemHeight = 350.0;
-      final startIndex = (scrollOffset / estimatedItemHeight).floor().clamp(0, widget.notes.length - 1);
-      final endIndex = ((scrollOffset + viewportHeight) / estimatedItemHeight).ceil().clamp(0, widget.notes.length);
-      
-      final buffer = 5;
-      final bufferedStartIndex = (startIndex - buffer).clamp(0, widget.notes.length - 1);
-      final bufferedEndIndex = (endIndex + buffer).clamp(0, widget.notes.length);
-      
-      final maxVisibleNotes = 20;
-      final actualEndIndex = bufferedEndIndex > bufferedStartIndex + maxVisibleNotes 
-          ? bufferedStartIndex + maxVisibleNotes 
-          : bufferedEndIndex;
-      
-      if (bufferedStartIndex >= actualEndIndex || bufferedStartIndex >= widget.notes.length) {
-        return;
-      }
-      
-      final visibleNotes = widget.notes.sublist(bufferedStartIndex, actualEndIndex.clamp(0, widget.notes.length));
-      
-      if (visibleNotes.isEmpty) return;
-      
-      final noteIdsToFetch = <String>{};
-      for (final note in visibleNotes) {
-        final noteId = note.isRepost && note.rootId != null ? note.rootId! : note.id;
-        if (!_fetchedInteractionNoteIds.contains(noteId)) {
-          noteIdsToFetch.add(noteId);
-          _fetchedInteractionNoteIds.add(noteId);
-        }
-      }
-      
-      if (noteIdsToFetch.isEmpty) return;
-      
-      _lastInteractionFetchTime = now;
-      
-      _noteRepository.fetchInteractionsForNotes(
-        noteIdsToFetch.toList(),
-        useCount: false,
-        forceLoad: true,
-      );
-      
-      if (_fetchedInteractionNoteIds.length > 200) {
-        final cutoff = bufferedStartIndex - 20;
-        if (cutoff > 0) {
-          for (int i = 0; i < cutoff && i < widget.notes.length; i++) {
-            final note = widget.notes[i];
-            final noteId = note.isRepost && note.rootId != null ? note.rootId! : note.id;
-            _fetchedInteractionNoteIds.remove(noteId);
-          }
-        }
-      }
-    } catch (e) {
-      debugPrint('[NoteListWidget] Error fetching interactions for visible notes: $e');
-    }
-  }
 
   void _fetchUsersForVisibleNotes() {
     if (!mounted || widget.scrollController == null || !widget.scrollController!.hasClients) {
@@ -370,7 +297,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       final scrollController = widget.scrollController!;
       final position = scrollController.position;
       
-      // Only check if position is valid and not infinite
       if (position.hasContentDimensions && 
           position.maxScrollExtent != double.infinity) {
         final maxScrollExtent = position.maxScrollExtent;
@@ -389,11 +315,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       }
     }
     
-    final timeSinceLastFetch = now.difference(_lastInteractionFetchTime).inMilliseconds;
-    if (timeSinceLastFetch >= 100) {
-      _fetchInteractionsForVisibleNotes();
-      _fetchUsersForVisibleNotes();
-    }
+    _fetchUsersForVisibleNotes();
     
     _startScrollDebounce();
   }
@@ -422,25 +344,11 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       _scheduleUpdate();
     }
     
-    _fetchInteractionsForVisibleNotes();
     _fetchUsersForVisibleNotes();
   }
 
   void _onNoteBecameVisible(String noteId) {
     if (!mounted) return;
-    
-    try {
-      final note = widget.notes.firstWhere(
-        (n) => (n.isRepost && n.rootId == noteId) || n.id == noteId,
-        orElse: () => widget.notes.firstWhere((n) => n.id == noteId),
-      );
-      final interactionNoteId = note.isRepost && note.rootId != null ? note.rootId! : note.id;
-      if (!_fetchedInteractionNoteIds.contains(interactionNoteId)) {
-        _fetchedInteractionNoteIds.add(interactionNoteId);
-        _noteRepository.fetchInteractionsForNotes([interactionNoteId], useCount: false, forceLoad: true);
-      }
-    } catch (e) {
-    }
   }
 
 
@@ -453,7 +361,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          _fetchInteractionsForVisibleNotes();
           _fetchUsersForVisibleNotes();
         }
       });
@@ -725,8 +632,9 @@ class _LoadMoreIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
       alignment: Alignment.center,
+      constraints: const BoxConstraints(minHeight: 56),
       child: SizedBox(
         width: 20,
         height: 20,

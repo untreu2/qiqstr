@@ -180,11 +180,9 @@ class _NoteWidgetState extends State<NoteWidget> {
     if (_isDisposed || !mounted) return;
 
     try {
-      // Check if user profile is already loaded and has valid data
       final currentAuthor = widget.profiles[_authorId];
       final currentReposter = _reposterId != null ? widget.profiles[_reposterId] : null;
       
-      // Only load if profile is missing or has empty profileImage
       final shouldLoadAuthor = currentAuthor == null || 
           currentAuthor.profileImage.isEmpty || 
           currentAuthor.name.isEmpty ||
@@ -232,12 +230,9 @@ class _NoteWidgetState extends State<NoteWidget> {
   void didUpdateWidget(NoteWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     
-    // Check if profiles map has been updated
     if (oldWidget.profiles != widget.profiles) {
-      // Profiles map reference changed, update user data
       _updateUserData();
     } else {
-      // Even if reference is same, check if author or reposter profiles changed
       final oldAuthor = oldWidget.profiles[_authorId];
       final newAuthor = widget.profiles[_authorId];
       final oldReposter = _reposterId != null ? oldWidget.profiles[_reposterId] : null;
@@ -432,29 +427,31 @@ class _NoteWidgetState extends State<NoteWidget> {
 
   void _navigateToProfile(String npub) {
     try {
-      if (mounted && !_isDisposed) {
-        final user = widget.profiles[npub] ??
-            UserModel(
-              pubkeyHex: npub,
-              name: npub.length > 8 ? npub.substring(0, 8) : npub,
-              about: '',
-              profileImage: '',
-              banner: '',
-              website: '',
-              nip05: '',
-              lud16: '',
-              updatedAt: DateTime.now(),
-              nip05Verified: false,
-            );
+      if (!mounted || _isDisposed || !_isInitialized) return;
+      
+      final user = widget.profiles[npub] ??
+          UserModel(
+            pubkeyHex: npub,
+            name: npub.length > 8 ? npub.substring(0, 8) : npub,
+            about: '',
+            profileImage: '',
+            banner: '',
+            website: '',
+            nip05: '',
+            lud16: '',
+            updatedAt: DateTime.now(),
+            nip05Verified: false,
+          );
 
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ProfilePage(user: user),
-          ),
-        );
-      }
-    } catch (e) {}
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProfilePage(user: user),
+        ),
+      );
+    } catch (e) {
+      debugPrint('[NoteWidget] Navigate to profile error: $e');
+    }
   }
 
   void _navigateToMentionProfile(String id) {
@@ -467,7 +464,7 @@ class _NoteWidgetState extends State<NoteWidget> {
 
   void _navigateToThreadPage() {
     try {
-      if (!mounted || _isDisposed) return;
+      if (!mounted || _isDisposed || !_isInitialized) return;
 
       String rootId;
       String? focusedId;
@@ -529,10 +526,15 @@ class _NoteWidgetState extends State<NoteWidget> {
   Widget _buildNormalLayout(dynamic colors) {
     return RepaintBoundary(
       key: ValueKey(_widgetKey),
-      child: GestureDetector(
-        onTap: _navigateToThreadPage,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxHeight == 0 || constraints.maxWidth == 0) {
+            return const SizedBox.shrink();
+          }
+          return GestureDetector(
+            onTap: _navigateToThreadPage,
+            behavior: HitTestBehavior.opaque,
+            child: Container(
           color: widget.containerColor ?? colors.background,
           padding: const EdgeInsets.only(bottom: 2),
           child: Column(
@@ -657,6 +659,8 @@ class _NoteWidgetState extends State<NoteWidget> {
             ],
           ),
         ),
+          );
+        },
       ),
     );
   }
@@ -664,10 +668,15 @@ class _NoteWidgetState extends State<NoteWidget> {
   Widget _buildExpandedLayout(dynamic colors) {
     return RepaintBoundary(
       key: ValueKey(_widgetKey),
-      child: GestureDetector(
-        onTap: _navigateToThreadPage,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxHeight == 0 || constraints.maxWidth == 0) {
+            return const SizedBox.shrink();
+          }
+          return GestureDetector(
+            onTap: _navigateToThreadPage,
+            behavior: HitTestBehavior.opaque,
+            child: Container(
           color: widget.containerColor ?? colors.background,
           padding: const EdgeInsets.only(bottom: 2),
           child: Column(
@@ -819,6 +828,8 @@ class _NoteWidgetState extends State<NoteWidget> {
             ],
           ),
         ),
+          );
+        },
       ),
     );
   }

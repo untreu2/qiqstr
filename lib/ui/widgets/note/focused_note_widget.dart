@@ -307,7 +307,6 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
   }
 
   String _getInteractionNoteId() {
-    // For reposts, always use rootId
     if (_isRepost && widget.note.rootId != null && widget.note.rootId!.isNotEmpty) {
       return widget.note.rootId!;
     }

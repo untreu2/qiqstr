@@ -284,7 +284,6 @@ class NoteRepository {
 
   Future<Result<void>> addNote(NoteModel note) async {
     try {
-      // Skip muted users' notes
       if (_isNoteFromMutedUser(note)) {
         debugPrint('[NoteRepository] Skipping note from muted user in addNote: ${note.author}');
         return const Result.success(null);
@@ -632,7 +631,6 @@ class NoteRepository {
         bool hasChanges = false;
         final newNotesToAdd = <NoteModel>[];
         for (final note in newNotes) {
-          // Skip muted users' notes
           if (_isNoteFromMutedUser(note)) {
             debugPrint('[NoteRepository] Skipping note from muted user: ${note.author}');
             continue;
@@ -697,7 +695,6 @@ class NoteRepository {
       final List<NoteModel> newNotes = [];
 
       for (final updatedNote in updatedNotes) {
-        // Skip muted users' notes
         if (_isNoteFromMutedUser(updatedNote)) {
           debugPrint('[NoteRepository] Skipping note from muted user: ${updatedNote.author}');
           continue;
@@ -769,7 +766,6 @@ class NoteRepository {
       final mutedSet = mutedList.toSet();
       debugPrint('[NoteRepository] Checking note ${note.id.substring(0, 8)}... against ${mutedSet.length} muted users');
 
-      // Check repost author
       if (note.isRepost && note.repostedBy != null) {
         final reposterHex = _npubToHex(note.repostedBy!);
         if (reposterHex != null && mutedSet.contains(reposterHex)) {
@@ -780,7 +776,6 @@ class NoteRepository {
         }
       }
 
-      // Check note author
       final noteAuthorHex = _npubToHex(note.author);
       if (noteAuthorHex != null && mutedSet.contains(noteAuthorHex)) {
         debugPrint('[NoteRepository] ✓ Note is from muted user: ${note.author} (hex: $noteAuthorHex)');

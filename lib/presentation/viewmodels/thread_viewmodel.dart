@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 import '../../core/base/base_view_model.dart';
 import '../../core/base/ui_state.dart';
@@ -79,7 +80,12 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     _loadCurrentUser();
     _loadExistingProfileCache();
     _subscribeToThreadUpdates();
-    loadThread();
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!isDisposed) {
+        loadThread();
+      }
+    });
   }
 
   Future<void> _loadCurrentUser() async {
@@ -183,10 +189,19 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
             final allThreadNotes = [rootNote, ...replies];
             _loadUserProfiles(allThreadNotes);
-            _loadInteractionsForThread(allThreadNotes);
             safeNotifyListeners();
+            
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!isDisposed) {
+                _loadInteractionsForThread(allThreadNotes);
+              }
+            });
           } else {
-            _loadInteractionsForThread([rootNote, ...replies]);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!isDisposed) {
+                _loadInteractionsForThread([rootNote, ...replies]);
+              }
+            });
           }
         } else {
           _repliesState = ErrorState(repliesResult.error!);
@@ -220,6 +235,43 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
   Future<void> refreshThread() async {
     await loadThread();
+  }
+
+  Future<void> checkRepliesFromCache() async {
+    try {
+      final cachedRepliesResult = await _noteRepository.getThreadReplies(_rootNoteId);
+      
+      if (cachedRepliesResult.isSuccess && cachedRepliesResult.data != null) {
+        final replies = cachedRepliesResult.data!;
+        final currentReplies = _repliesState.data ?? [];
+        
+        if (replies.length != currentReplies.length || 
+            replies.any((r) => !currentReplies.any((cr) => cr.id == r.id))) {
+          final rootNote = _rootNoteState.data;
+          if (rootNote != null) {
+            final structure = _buildThreadStructure(rootNote, replies);
+            _threadStructureState = LoadedState(structure);
+            _repliesState = LoadedState(replies);
+            
+            final newReplies = replies.where((r) => !currentReplies.any((cr) => cr.id == r.id)).toList();
+            if (newReplies.isNotEmpty) {
+              final allThreadNotes = [rootNote, ...newReplies];
+              _loadUserProfiles(allThreadNotes);
+              
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!isDisposed) {
+                  _loadInteractionsForThread(newReplies);
+                }
+              });
+            }
+            
+            safeNotifyListeners();
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[ThreadViewModel] Error checking replies from cache: $e');
+    }
   }
 
   Future<void> addReply({
@@ -386,15 +438,64 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
             return false;
           }).toList();
 
-          if (newReplies.isNotEmpty) {
-            debugPrint('[ThreadViewModel] Detected ${newReplies.length} new replies, loading interactions');
-            _loadInteractionsForThread(newReplies).then((_) {
-              loadThread();
-            });
+          final updatedReplies = notes.where((note) {
+            if (!currentReplyIds.contains(note.id)) return false;
+            if (note.isReply && (note.rootId == _rootNoteId || note.parentId == _rootNoteId)) {
+              return true;
+            }
+            if (note.isReply && currentReplyIds.isNotEmpty) {
+              return note.parentId != null && currentReplyIds.contains(note.parentId);
+            }
+            return false;
+          }).toList();
+
+          if (newReplies.isNotEmpty || updatedReplies.isNotEmpty) {
+            debugPrint('[ThreadViewModel] Detected ${newReplies.length} new replies and ${updatedReplies.length} updated replies, updating UI');
+            _updateThreadWithReplies(newReplies, updatedReplies);
           }
         }
       }),
     );
+  }
+
+  Future<void> _updateThreadWithReplies(List<NoteModel> newReplies, List<NoteModel> updatedReplies) async {
+    try {
+      final currentReplies = _repliesState.data ?? [];
+      final updatedRepliesList = List<NoteModel>.from(currentReplies);
+      
+      for (final updatedReply in updatedReplies) {
+        final index = updatedRepliesList.indexWhere((r) => r.id == updatedReply.id);
+        if (index != -1) {
+          updatedRepliesList[index] = updatedReply;
+        }
+      }
+      
+      for (final newReply in newReplies) {
+        if (!updatedRepliesList.any((r) => r.id == newReply.id)) {
+          updatedRepliesList.add(newReply);
+        }
+      }
+
+      updatedRepliesList.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+
+      final rootNote = _rootNoteState.data;
+      if (rootNote != null) {
+        final structure = _buildThreadStructure(rootNote, updatedRepliesList);
+        _threadStructureState = LoadedState(structure);
+        _repliesState = LoadedState(updatedRepliesList);
+
+        final allNewNotes = [...newReplies, ...updatedReplies];
+        if (allNewNotes.isNotEmpty) {
+          _loadUserProfiles(allNewNotes);
+          await _loadInteractionsForThread(allNewNotes);
+        }
+        
+        safeNotifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[ThreadViewModel] Error updating thread with replies: $e');
+      loadThread();
+    }
   }
 
   Future<void> reactToNote(String noteId, String reaction) async {
