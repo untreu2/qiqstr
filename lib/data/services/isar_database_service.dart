@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../models/user_model_isar.dart';
 import '../../models/following_model_isar.dart';
 import '../../models/mute_model_isar.dart';
+import '../../models/note_count_model_isar.dart';
 
 class IsarDatabaseService {
   static IsarDatabaseService? _instance;
@@ -35,7 +36,7 @@ class IsarDatabaseService {
       final dir = await getApplicationDocumentsDirectory();
 
       _isar = await Isar.open(
-        [UserModelIsarSchema, FollowingModelIsarSchema, MuteModelIsarSchema],
+        [UserModelIsarSchema, FollowingModelIsarSchema, MuteModelIsarSchema, NoteCountModelIsarSchema],
         directory: dir.path,
         name: 'qiqstr_db',
         inspector: kDebugMode,

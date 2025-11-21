@@ -22,6 +22,7 @@ import 'user_cache_service.dart';
 import 'follow_cache_service.dart';
 import 'mute_cache_service.dart';
 import 'relay_query_helper.dart';
+import 'note_counter_service.dart';
 
 class NostrDataService {
   final AuthService _authService;
@@ -636,6 +637,19 @@ class NostrDataService {
       _noteCache[id] = note;
       _eventIds.add(id);
 
+      NoteCounterService.instance.getCounts(id).then((counts) {
+        if (counts != null && _noteCache.containsKey(id)) {
+          final cachedNote = _noteCache[id]!;
+          cachedNote.reactionCount = counts.reactionCount;
+          cachedNote.replyCount = counts.replyCount;
+          cachedNote.repostCount = counts.repostCount;
+          cachedNote.zapAmount = counts.zapAmount;
+          _scheduleUIUpdate();
+        }
+      }).catchError((e) {
+        debugPrint('[NostrDataService] Error updating counts for $id: $e');
+      });
+
       if (isReply && parentId != null) {
         final parentNote = _noteCache[parentId];
         if (parentNote != null) {
@@ -1011,6 +1025,19 @@ class NostrDataService {
           debugPrint(' [NostrDataService] Updated original note $originalEventId repost count: ${targetNote.repostCount}');
         }
 
+        NoteCounterService.instance.getCounts(originalEventId).then((counts) {
+          if (counts != null && _noteCache.containsKey(id)) {
+            final cachedRepost = _noteCache[id]!;
+            cachedRepost.reactionCount = counts.reactionCount;
+            cachedRepost.replyCount = counts.replyCount;
+            cachedRepost.repostCount = counts.repostCount;
+            cachedRepost.zapAmount = counts.zapAmount;
+            _scheduleUIUpdate();
+          }
+        }).catchError((e) {
+          debugPrint('[NostrDataService] Error updating counts for repost $id (original: $originalEventId): $e');
+        });
+      
         _scheduleUIUpdate();
       }
     } catch (e) {
@@ -1578,7 +1605,7 @@ class NostrDataService {
           final eventKind = eventData['kind'] as int? ?? 0;
 
           if (eventAuthor == pubkeyHex && (eventKind == 1 || eventKind == 6)) {
-            return _processProfileEventDirectly(eventData, userNpub);
+            return _processProfileEventDirectlySync(eventData, userNpub);
           }
           return null;
         },
@@ -1631,7 +1658,7 @@ class NostrDataService {
     }
   }
 
-  NoteModel? _processProfileEventDirectly(Map<String, dynamic> eventData, String userNpub) {
+  NoteModel? _processProfileEventDirectlySync(Map<String, dynamic> eventData, String userNpub) {
     try {
       final pubkey = eventData['pubkey'] as String;
       final createdAt = eventData['created_at'] as int;
@@ -1641,9 +1668,9 @@ class NostrDataService {
       final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
 
       if (kind == 1) {
-        return _processKind1ForProfile(eventData, authorNpub, timestamp);
+        return _processKind1ForProfileSync(eventData, authorNpub, timestamp);
       } else if (kind == 6) {
-        return _processKind6ForProfile(eventData, authorNpub, timestamp);
+        return _processKind6ForProfileSync(eventData, authorNpub, timestamp);
       }
 
       return null;
@@ -1653,7 +1680,8 @@ class NostrDataService {
     }
   }
 
-  NoteModel? _processKind1ForProfile(Map<String, dynamic> eventData, String authorNpub, DateTime timestamp) {
+
+  NoteModel? _processKind1ForProfileSync(Map<String, dynamic> eventData, String authorNpub, DateTime timestamp) {
     try {
       final id = eventData['id'] as String;
       final content = eventData['content'] as String;
@@ -1700,7 +1728,7 @@ class NostrDataService {
         }
       }
 
-      return NoteModel(
+      final note = NoteModel(
         id: id,
         content: content,
         author: authorNpub,
@@ -1718,13 +1746,27 @@ class NostrDataService {
         eTags: eTags,
         pTags: pTags,
       );
+
+      NoteCounterService.instance.getCounts(id).then((counts) {
+        if (counts != null) {
+          note.reactionCount = counts.reactionCount;
+          note.replyCount = counts.replyCount;
+          note.repostCount = counts.repostCount;
+          note.zapAmount = counts.zapAmount;
+        }
+      }).catchError((e) {
+        debugPrint('[NostrDataService] Error updating counts for $id: $e');
+      });
+
+      return note;
     } catch (e) {
       debugPrint('[NostrDataService] PROFILE: Error processing kind 1: $e');
       return null;
     }
   }
 
-  NoteModel? _processKind6ForProfile(Map<String, dynamic> eventData, String reposterNpub, DateTime timestamp) {
+
+  NoteModel? _processKind6ForProfileSync(Map<String, dynamic> eventData, String reposterNpub, DateTime timestamp) {
     try {
       final id = eventData['id'] as String;
       final content = eventData['content'] as String? ?? '';
@@ -1789,7 +1831,7 @@ class NostrDataService {
         }
       }
 
-      return NoteModel(
+      final note = NoteModel(
         id: id,
         content: displayContent,
         author: displayAuthor,
@@ -1806,11 +1848,25 @@ class NostrDataService {
         zapAmount: 0,
         rawWs: jsonEncode(eventData),
       );
+
+      NoteCounterService.instance.getCounts(originalEventId).then((counts) {
+        if (counts != null) {
+          note.reactionCount = counts.reactionCount;
+          note.replyCount = counts.replyCount;
+          note.repostCount = counts.repostCount;
+          note.zapAmount = counts.zapAmount;
+        }
+      }).catchError((e) {
+        debugPrint('[NostrDataService] Error updating counts for repost $id (original: $originalEventId): $e');
+      });
+    
+      return note;
     } catch (e) {
       debugPrint('[NostrDataService] PROFILE: Error processing kind 6: $e');
       return null;
     }
   }
+
 
   Future<Result<List<NoteModel>>> fetchHashtagNotes({
     required String hashtag,
@@ -1854,7 +1910,7 @@ class NostrDataService {
 
                   if (eventKind == 1) {
                     if (!hashtagNotesMap.containsKey(eventId)) {
-                      final note = _processHashtagEventDirectly(eventData);
+                      final note = _processHashtagEventDirectlySync(eventData);
                       if (note != null) {
                         hashtagNotesMap[eventId] = note;
                         eventCount++;
@@ -1951,7 +2007,7 @@ class NostrDataService {
     }
   }
 
-  NoteModel? _processHashtagEventDirectly(Map<String, dynamic> eventData) {
+  NoteModel? _processHashtagEventDirectlySync(Map<String, dynamic> eventData) {
     try {
       final id = eventData['id'] as String;
       final pubkey = eventData['pubkey'] as String;
@@ -2009,7 +2065,7 @@ class NostrDataService {
         }
       }
 
-      return NoteModel(
+      final note = NoteModel(
         id: id,
         content: content,
         author: authorNpub,
@@ -2028,11 +2084,25 @@ class NostrDataService {
         pTags: pTags,
         tTags: tTags,
       );
+
+      NoteCounterService.instance.getCounts(id).then((counts) {
+        if (counts != null) {
+          note.reactionCount = counts.reactionCount;
+          note.replyCount = counts.replyCount;
+          note.repostCount = counts.repostCount;
+          note.zapAmount = counts.zapAmount;
+        }
+      }).catchError((e) {
+        debugPrint('[NostrDataService] Error updating counts for $id: $e');
+      });
+
+      return note;
     } catch (e) {
       debugPrint('[NostrDataService] HASHTAG: Error processing event: $e');
       return null;
     }
   }
+
 
   Future<Result<UserModel>> fetchUserProfile(String npub) async {
     try {
@@ -2185,6 +2255,20 @@ class NostrDataService {
 
       _noteCache[note.id] = note;
       _eventIds.add(note.id);
+
+      NoteCounterService.instance.getCounts(note.id).then((counts) {
+        if (counts != null && _noteCache.containsKey(note.id)) {
+          final cachedNote = _noteCache[note.id]!;
+          cachedNote.reactionCount = counts.reactionCount;
+          cachedNote.replyCount = counts.replyCount;
+          cachedNote.repostCount = counts.repostCount;
+          cachedNote.zapAmount = counts.zapAmount;
+          _scheduleUIUpdate();
+        }
+      }).catchError((e) {
+        debugPrint('[NostrDataService] Error updating counts for posted note ${note.id}: $e');
+      });
+
       _scheduleUIUpdate();
 
       debugPrint('[NostrDataService] Note posted and cached successfully');
@@ -2768,7 +2852,7 @@ class NostrDataService {
                   if (kind == 1 || kind == 6) {
                     final pubkeyHex = eventData['pubkey'] as String;
                     final userNpub = _authService.hexToNpub(pubkeyHex) ?? pubkeyHex;
-                    final note = _processProfileEventDirectly(eventData, userNpub);
+                    final note = _processProfileEventDirectlySync(eventData, userNpub);
                     if (note != null) {
                       _noteCache[eventId] = note;
                       _eventIds.add(eventId);
