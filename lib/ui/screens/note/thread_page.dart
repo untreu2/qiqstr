@@ -439,19 +439,25 @@ class _ThreadPageState extends State<ThreadPage> {
 
   Widget _buildLoadMoreButton(BuildContext context, int totalReplies) {
     return Center(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-        constraints: const BoxConstraints(minHeight: 56),
-        child: SecondaryButton(
-          label: 'Load more (${totalReplies - _visibleRepliesCount} remaining)',
-          onPressed: () {
-            setState(() {
-              _visibleRepliesCount = math.min(
-                _visibleRepliesCount + _repliesPerPage,
-                totalReplies,
-              );
-            });
-          },
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _visibleRepliesCount = math.min(
+              _visibleRepliesCount + _repliesPerPage,
+              totalReplies,
+            );
+          });
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+          child: Text(
+            'Load more',
+            style: TextStyle(
+              color: context.colors.accent,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ),
       ),
     );
