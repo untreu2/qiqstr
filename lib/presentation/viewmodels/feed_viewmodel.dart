@@ -65,6 +65,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
   bool _isInitialized = false;
   bool _isLoadingFeed = false;
+  bool _isSubscribedToUserNotes = false;
 
   int _currentLimit = 50;
   int get currentLimit => _currentLimit;
@@ -103,6 +104,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     safeNotifyListeners();
 
     _loadFeed();
+    _subscribeToUserNotes();
   }
 
   Future<void> _loadCurrentUser() async {
@@ -133,6 +135,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
             _subscribeToCurrentUserStream();
             _loadFeed();
+            _subscribeToUserNotes();
           } else {
             _currentUserState = const ErrorState('User not authenticated');
             _feedState = const ErrorState('User not authenticated');
@@ -425,6 +428,92 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             _feedState = LoadedState(updatedNotes);
             safeNotifyListeners();
           }
+        }
+      }),
+    );
+  }
+
+  void _subscribeToUserNotes() {
+    if (_currentUserNpub.isEmpty || _isSubscribedToUserNotes) return;
+    
+    _isSubscribedToUserNotes = true;
+
+    final currentUserHex = _authRepository.npubToHex(_currentUserNpub);
+    if (currentUserHex == null) {
+      debugPrint('[FeedViewModel] Could not convert npub to hex: $_currentUserNpub');
+      return;
+    }
+
+    addSubscription(
+      _noteRepository.notesStream.listen((allNotes) {
+        if (isDisposed || _feedState is! LoadedState<List<NoteModel>>) return;
+
+        final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
+        final currentNoteIds = currentNotes.map((n) => n.id).toSet();
+
+        final userNewNotes = allNotes.where((note) {
+          final isUserNote = note.author == currentUserHex;
+          
+          final isUserRepost = note.isRepost && note.repostedBy != null;
+          String? repostedByHex;
+          if (isUserRepost) {
+            repostedByHex = note.repostedBy!.length == 64 
+                ? note.repostedBy 
+                : _authRepository.npubToHex(note.repostedBy!);
+            repostedByHex = repostedByHex ?? note.repostedBy;
+          }
+          final isUserRepostMatch = isUserRepost && repostedByHex == currentUserHex;
+          
+          final isNew = !currentNoteIds.contains(note.id);
+          
+          final matchesFeed = !isHashtagMode || 
+                             (_hashtag != null && note.tTags.contains(_hashtag!.toLowerCase()));
+          
+          return (isUserNote || isUserRepostMatch) && isNew && matchesFeed;
+        }).toList();
+
+        if (userNewNotes.isNotEmpty) {
+          final updatedNotes = [...userNewNotes, ...currentNotes];
+          
+          final seenIds = <String>{};
+          final deduplicatedNotes = <NoteModel>[];
+          for (final note in updatedNotes) {
+            if (!seenIds.contains(note.id)) {
+              seenIds.add(note.id);
+              deduplicatedNotes.add(note);
+            }
+          }
+
+          final sortedNotes = _feedLoader.sortNotes(deduplicatedNotes, _sortMode);
+          
+          _feedState = LoadedState(sortedNotes);
+          safeNotifyListeners();
+
+          _feedLoader.preloadCachedUserProfilesSync(
+            userNewNotes,
+            _profiles,
+            (profiles) {
+              _profilesController.add(Map.from(profiles));
+            },
+          );
+
+          _feedLoader.preloadCachedUserProfiles(
+            userNewNotes,
+            _profiles,
+            (profiles) {
+              _profilesController.add(Map.from(profiles));
+            },
+          );
+
+          _feedLoader.loadUserProfilesForNotes(
+            userNewNotes,
+            _profiles,
+            (profiles) {
+              _profilesController.add(Map.from(profiles));
+            },
+          ).catchError((e) {
+            debugPrint('[FeedViewModel] Error loading user profiles for new notes: $e');
+          });
         }
       }),
     );
