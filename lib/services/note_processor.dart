@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../models/note_model.dart';
 import 'time_service.dart';
+import 'note_widget_calculator.dart';
 
 class NoteProcessor {
   static final TimeService timeService = TimeService.instance;
@@ -46,6 +47,15 @@ class NoteProcessor {
       );
 
       noteModel.hasMedia = noteModel.hasMediaLazy;
+
+      try {
+        final calculator = NoteWidgetCalculator.instance;
+        final metrics = NoteWidgetCalculator.calculateMetrics(noteModel);
+        calculator.cacheMetrics(metrics);
+        NoteWidgetCalculator.updateNoteWithMetrics(noteModel, metrics);
+      } catch (e) {
+        debugPrint('[NoteProcessor] Error calculating widget metrics: $e');
+      }
 
       dataService.notes.add(noteModel);
       dataService.eventIds.add(noteModel.id);

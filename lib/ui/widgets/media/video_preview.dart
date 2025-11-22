@@ -133,12 +133,14 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return RepaintBoundary(
-      child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: _isInitialized && _controller != null && _controller!.value.aspectRatio > 0
-              ? AspectRatio(
-                  aspectRatio: _controller!.value.aspectRatio,
-                  child: Stack(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: _isInitialized && _controller != null && _controller!.value.aspectRatio > 0
+                ? AspectRatio(
+                    aspectRatio: _controller!.value.aspectRatio,
+                    child: Stack(
                     children: [
                       Positioned.fill(
                         child: GestureDetector(
@@ -228,44 +230,46 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
                     ],
                   ),
                 )
-              : AspectRatio(
-                  aspectRatio: 1,
-                  child: Stack(
-                    children: [
-                      if (widget.authorProfileImageUrl != null && widget.authorProfileImageUrl!.isNotEmpty)
-                        Positioned.fill(
-                          child: CachedNetworkImage(
-                            imageUrl: widget.authorProfileImageUrl!,
-                            fit: BoxFit.cover,
-                            fadeInDuration: Duration.zero,
-                            fadeOutDuration: Duration.zero,
-                            maxHeightDiskCache: 400,
-                            maxWidthDiskCache: 400,
-                            memCacheWidth: 400,
-                            errorWidget: (context, url, error) {
-                              return Container(color: Colors.grey.shade800);
-                            },
-                            placeholder: (context, url) {
-                              return Container(color: Colors.grey.shade800);
-                            },
-                          ),
-                        )
-                      else
-                        Container(color: Colors.grey.shade800),
-                      const Center(
-                        child: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
+                : AspectRatio(
+                    aspectRatio: 1,
+                    child: Stack(
+                      children: [
+                        if (widget.authorProfileImageUrl != null && widget.authorProfileImageUrl!.isNotEmpty)
+                          Positioned.fill(
+                            child: CachedNetworkImage(
+                              imageUrl: widget.authorProfileImageUrl!,
+                              fit: BoxFit.cover,
+                              fadeInDuration: Duration.zero,
+                              fadeOutDuration: Duration.zero,
+                              maxHeightDiskCache: 400,
+                              maxWidthDiskCache: 400,
+                              memCacheWidth: 400,
+                              errorWidget: (context, url, error) {
+                                return Container(color: Colors.grey.shade800);
+                              },
+                              placeholder: (context, url) {
+                                return Container(color: Colors.grey.shade800);
+                              },
+                            ),
+                          )
+                        else
+                          Container(color: Colors.grey.shade800),
+                        const Center(
+                          child: SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-        ),
+          );
+        },
+      ),
     );
   }
 }

@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:bounce/bounce.dart';
 import 'package:qiqstr/ui/widgets/note/note_list_widget.dart' as widgets;
 import 'package:qiqstr/ui/widgets/common/sidebar_widget.dart';
 import 'package:qiqstr/ui/widgets/common/back_button_widget.dart';
@@ -202,7 +203,8 @@ class FeedPageState extends State<FeedPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (!isHashtagMode) ...[
-                        GestureDetector(
+                        Bounce(
+                          scaleFactor: 0.85,
                           onTap: () => showSortDialog(
                             context: context,
                             viewModel: viewModel,
@@ -289,6 +291,12 @@ class FeedPageState extends State<FeedPage> {
               UIStateBuilder<List<NoteModel>>(
                 state: viewModel.feedState,
                 builder: (context, notes) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (_notesNotifier.value != notes) {
+                      _notesNotifier.value = notes;
+                    }
+                  });
+                  
                   return RefreshIndicator(
                     onRefresh: viewModel.refreshFeed,
                     child: CustomScrollView(
@@ -312,25 +320,15 @@ class FeedPageState extends State<FeedPage> {
                         SliverToBoxAdapter(
                           child: SizedBox(height: isHashtagMode ? topPadding + 85 : 8),
                         ),
-                        Builder(
-                          builder: (context) {
-                            WidgetsBinding.instance.addPostFrameCallback((_) {
-                              if (_notesNotifier.value != notes) {
-                                _notesNotifier.value = notes;
-                              }
-                            });
-
-                            return widgets.NoteListWidget(
-                              notes: notes,
-                              currentUserNpub: viewModel.currentUserNpub,
-                              notesNotifier: _notesNotifier,
-                              profiles: viewModel.profiles,
-                              isLoading: viewModel.isLoadingMore,
-                              canLoadMore: viewModel.canLoadMore,
-                              onLoadMore: viewModel.loadMoreNotes,
-                              scrollController: _scrollController,
-                            );
-                          },
+                        widgets.NoteListWidget(
+                          notes: notes,
+                          currentUserNpub: viewModel.currentUserNpub,
+                          notesNotifier: _notesNotifier,
+                          profiles: viewModel.profiles,
+                          isLoading: viewModel.isLoadingMore,
+                          canLoadMore: viewModel.canLoadMore,
+                          onLoadMore: viewModel.loadMoreNotes,
+                          scrollController: _scrollController,
                         ),
                       ],
                     ),

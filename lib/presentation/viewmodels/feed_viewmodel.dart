@@ -173,7 +173,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     );
   }
 
-  Future<void> _loadFeed() async {
+  Future<void> _loadFeed({bool skipCache = false}) async {
     if (_currentUserNpub.isEmpty && !isHashtagMode) {
       return;
     }
@@ -191,6 +191,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
         currentUserNpub: _currentUserNpub,
         hashtag: _hashtag,
         limit: _currentLimit,
+        skipCache: skipCache,
       );
 
       if (_feedState is! LoadedState<List<NoteModel>> || (_feedState as LoadedState<List<NoteModel>>).data.isEmpty) {
@@ -207,34 +208,38 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           }
         } else {
           final sortedNotes = _feedLoader.sortNotes(result.notes, _sortMode);
+          
+          _feedState = LoadedState(sortedNotes);
+          safeNotifyListeners();
+
           _feedLoader.preloadCachedUserProfilesSync(
             sortedNotes,
             _profiles,
             (profiles) {
               _profilesController.add(Map.from(profiles));
-              safeNotifyListeners();
             },
           );
-          await _feedLoader.preloadCachedUserProfiles(
-            sortedNotes,
-            _profiles,
-            (profiles) {
-              _profilesController.add(Map.from(profiles));
-              safeNotifyListeners();
-            },
-          );
-          _feedState = LoadedState(sortedNotes);
-          safeNotifyListeners();
 
-          _feedLoader.loadUserProfilesForNotes(
-            sortedNotes,
-            _profiles,
-            (profiles) {
-              _profilesController.add(Map.from(profiles));
-              safeNotifyListeners();
-            },
-          ).catchError((e) {
-            debugPrint('[FeedViewModel] Error loading user profiles in background: $e');
+          Future.microtask(() async {
+            await _feedLoader.preloadCachedUserProfiles(
+              sortedNotes,
+              _profiles,
+              (profiles) {
+                _profilesController.add(Map.from(profiles));
+                safeNotifyListeners();
+              },
+            );
+
+            _feedLoader.loadUserProfilesForNotes(
+              sortedNotes,
+              _profiles,
+              (profiles) {
+                _profilesController.add(Map.from(profiles));
+                safeNotifyListeners();
+              },
+            ).catchError((e) {
+              debugPrint('[FeedViewModel] Error loading user profiles in background: $e');
+            });
           });
         }
 
@@ -282,7 +287,7 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
         safeNotifyListeners();
       }
 
-      await _loadFeed();
+      await _loadFeed(skipCache: true);
     } catch (e) {
       debugPrint('[FeedViewModel] Error in refreshFeed: $e');
       final currentNotes = _feedState is LoadedState<List<NoteModel>> ? (_feedState as LoadedState<List<NoteModel>>).data : <NoteModel>[];
@@ -330,22 +335,26 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           },
         );
 
-        _feedLoader.preloadCachedUserProfiles(
-          sortedNotes,
-          _profiles,
-          (profiles) {
-            _profilesController.add(Map.from(profiles));
-          },
-        );
+        Future.microtask(() async {
+          await _feedLoader.preloadCachedUserProfiles(
+            sortedNotes,
+            _profiles,
+            (profiles) {
+              _profilesController.add(Map.from(profiles));
+              safeNotifyListeners();
+            },
+          );
 
-        _feedLoader.loadUserProfilesForNotes(
-          sortedNotes,
-          _profiles,
-          (profiles) {
-            _profilesController.add(Map.from(profiles));
-          },
-        ).catchError((e) {
-          debugPrint('[FeedViewModel] Error loading user profiles: $e');
+          _feedLoader.loadUserProfilesForNotes(
+            sortedNotes,
+            _profiles,
+            (profiles) {
+              _profilesController.add(Map.from(profiles));
+              safeNotifyListeners();
+            },
+          ).catchError((e) {
+            debugPrint('[FeedViewModel] Error loading user profiles: $e');
+          });
         });
       } else if (result.error != null) {
         setError(NetworkError(message: 'Failed to load more notes: ${result.error}'));

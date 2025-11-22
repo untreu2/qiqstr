@@ -458,6 +458,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
       key: ValueKey('content_${widget.noteId}'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
           if (_textParts.isNotEmpty)
             RepaintBoundary(
@@ -497,6 +498,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
               padding: const EdgeInsets.only(top: 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: _linkUrls.length > 1
                     ? _linkUrls
                         .map((url) => Padding(
@@ -510,6 +512,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
           if (_quoteIds.isNotEmpty)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: _quoteIds
                   .map((quoteId) => Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8),

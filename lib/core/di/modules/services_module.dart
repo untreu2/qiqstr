@@ -5,6 +5,7 @@ import '../../../data/services/network_service.dart';
 import '../../../data/services/nostr_data_service.dart';
 import '../../../data/services/coinos_service.dart';
 import '../../../data/services/follow_cache_service.dart';
+import '../../../services/note_widget_calculator.dart';
 
 class ServicesModule extends DIModule {
   @override
@@ -14,6 +15,7 @@ class ServicesModule extends DIModule {
     AppDI.registerLazySingleton<NetworkService>(() => NetworkService.instance);
     AppDI.registerLazySingleton<CoinosService>(() => CoinosService());
     AppDI.registerLazySingleton<FollowCacheService>(() => FollowCacheService.instance);
+    AppDI.registerLazySingleton<NoteWidgetCalculator>(() => NoteWidgetCalculator.instance);
     AppDI.registerLazySingleton<NostrDataService>(() => NostrDataService(
           authService: AppDI.get<AuthService>(),
         ));

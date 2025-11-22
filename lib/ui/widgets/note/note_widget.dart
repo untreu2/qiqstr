@@ -3,9 +3,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../../models/note_model.dart';
 import '../../../models/user_model.dart';
+import '../../../models/note_widget_metrics.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../services/time_service.dart';
+import '../../../services/note_widget_calculator.dart';
 import '../../theme/theme_manager.dart';
 import '../../screens/note/thread_page.dart';
 import '../../screens/profile/profile_page.dart';
@@ -50,13 +52,13 @@ class _NoteWidgetState extends State<NoteWidget> {
   late final bool _isReply;
   late final bool _isRepost;
   late final DateTime _timestamp;
-  late final String _content;
   late final String _widgetKey;
 
   late final String _formattedTimestamp;
   late final Map<String, dynamic> _parsedContent;
   late final bool _shouldTruncate;
   late final Map<String, dynamic>? _truncatedContent;
+  NoteWidgetMetrics? _metrics;
 
   final ValueNotifier<_NoteState> _stateNotifier = ValueNotifier(_NoteState.initial());
 
@@ -87,27 +89,28 @@ class _NoteWidgetState extends State<NoteWidget> {
     _isReply = widget.note.isReply;
     _isRepost = widget.note.isRepost;
     _timestamp = widget.note.timestamp;
-    _content = widget.note.content;
     _widgetKey = '${_noteId}_$_authorId';
 
     _formattedTimestamp = _calculateTimestamp(_timestamp);
 
     try {
-      _parsedContent = widget.note.parsedContentLazy;
+      final calculator = AppDI.get<NoteWidgetCalculator>();
+      _metrics = calculator.getMetrics(_noteId);
+      
+      if (_metrics == null) {
+        _metrics = NoteWidgetCalculator.calculateMetrics(widget.note);
+        calculator.cacheMetrics(_metrics!);
+      }
+
+      _parsedContent = _metrics!.parsedContent;
+      _shouldTruncate = _metrics!.shouldTruncate;
+      _truncatedContent = _metrics!.truncatedContent;
     } catch (e) {
       debugPrint('[NoteWidget] ParseContent error: $e');
-      _parsedContent = {
-        'textParts': [
-          {'type': 'text', 'text': _content}
-        ],
-        'mediaUrls': <String>[],
-        'linkUrls': <String>[],
-        'quoteIds': <String>[],
-      };
+      _parsedContent = widget.note.parsedContentLazy;
+      _shouldTruncate = _calculateTruncation(_parsedContent);
+      _truncatedContent = _shouldTruncate ? _createTruncatedContent() : null;
     }
-
-    _shouldTruncate = _calculateTruncation(_parsedContent);
-    _truncatedContent = _shouldTruncate ? _createTruncatedContent() : null;
 
     _isInitialized = true;
   }

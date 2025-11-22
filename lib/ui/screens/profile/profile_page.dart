@@ -178,7 +178,10 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildContent(BuildContext context) {
     return RefreshIndicator(
-      onRefresh: () async => _onRetry(),
+      onRefresh: () async {
+        _profileViewModel.onRetry();
+        await Future.delayed(const Duration(milliseconds: 500));
+      },
       child: CustomScrollView(
         controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(

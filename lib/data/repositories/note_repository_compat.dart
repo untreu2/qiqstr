@@ -15,23 +15,28 @@ extension NoteRepositoryCompat on NoteRepository {
     DateTime? until,
     DateTime? since,
     bool isProfileMode = false,
+    bool skipCache = false,
   }) async {
     try {
-      final cachedResult = await getFilteredNotes(filter);
-      if (cachedResult.isSuccess && cachedResult.data!.isNotEmpty) {
-        debugPrint('[NoteRepository] Found ${cachedResult.data!.length} cached notes');
-        
-        fetchNotesFromRelays(
-          authorNpubs: authorNpubs,
-          limit: limit,
-          until: until,
-          since: since,
-          isProfileMode: isProfileMode,
-        ).then((_) {}).catchError((e) {
-          debugPrint('[NoteRepository] Error fetching notes in background: $e');
-        });
-        
-        return cachedResult;
+      if (!skipCache) {
+        final cachedResult = await getFilteredNotes(filter);
+        if (cachedResult.isSuccess && cachedResult.data!.isNotEmpty) {
+          debugPrint('[NoteRepository] Found ${cachedResult.data!.length} cached notes');
+          
+          fetchNotesFromRelays(
+            authorNpubs: authorNpubs,
+            limit: limit,
+            until: until,
+            since: since,
+            isProfileMode: isProfileMode,
+          ).then((_) {}).catchError((e) {
+            debugPrint('[NoteRepository] Error fetching notes in background: $e');
+          });
+          
+          return cachedResult;
+        }
+      } else {
+        debugPrint('[NoteRepository] Skipping cache, fetching directly from relays');
       }
       
       await fetchNotesFromRelays(
@@ -42,7 +47,7 @@ extension NoteRepositoryCompat on NoteRepository {
         isProfileMode: isProfileMode,
       );
       
-      return await getFilteredNotes(filter);
+      return getFilteredNotes(filter);
     } catch (e) {
       debugPrint('[NoteRepository] Exception in _getFeedNotesForAuthors: $e');
       return Result.error('Failed to get feed notes: ${e.toString()}');
@@ -54,6 +59,7 @@ extension NoteRepositoryCompat on NoteRepository {
     int limit = 50,
     DateTime? until,
     DateTime? since,
+    bool skipCache = false,
   }) async {
     try {
       debugPrint('[NoteRepository] getFeedNotesFromFollowList for user: $currentUserNpub');
@@ -118,6 +124,7 @@ extension NoteRepositoryCompat on NoteRepository {
         limit: limit,
         until: until,
         since: since,
+        skipCache: skipCache,
       );
     } catch (e) {
       debugPrint('[NoteRepository] Exception in getFeedNotesFromFollowList: $e');
@@ -130,8 +137,9 @@ extension NoteRepositoryCompat on NoteRepository {
     int limit = 50,
     DateTime? until,
     DateTime? since,
+    bool skipCache = true,
   }) async {
-    debugPrint('[NoteRepository] getProfileNotes for $authorNpub');
+    debugPrint('[NoteRepository] getProfileNotes for $authorNpub (skipCache: $skipCache)');
     
     final filter = ProfileFeedFilter(
       targetUserNpub: authorNpub,
@@ -146,6 +154,7 @@ extension NoteRepositoryCompat on NoteRepository {
       until: until,
       since: since,
       isProfileMode: true,
+      skipCache: skipCache,
     );
   }
   

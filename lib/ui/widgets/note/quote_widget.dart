@@ -311,6 +311,7 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
         border: Border.all(color: context.colors.border, width: 0.8),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             Icons.error_outline,
@@ -348,6 +349,7 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             _buildHeader(user),
             if (_hasContent(parsedContent))

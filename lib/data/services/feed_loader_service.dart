@@ -27,6 +27,7 @@ class FeedLoadParams {
   final int limit;
   final DateTime? until;
   final DateTime? since;
+  final bool skipCache;
 
   const FeedLoadParams({
     required this.type,
@@ -36,6 +37,7 @@ class FeedLoadParams {
     this.limit = 50,
     this.until,
     this.since,
+    this.skipCache = false,
   });
 }
 
@@ -77,6 +79,7 @@ class FeedLoaderService {
             limit: params.limit,
             until: params.until,
             since: params.since,
+            skipCache: params.skipCache,
           );
           break;
 
@@ -89,6 +92,7 @@ class FeedLoaderService {
             limit: params.limit,
             until: params.until,
             since: params.since,
+            skipCache: params.skipCache,
           );
           break;
 
@@ -105,8 +109,8 @@ class FeedLoaderService {
           break;
       }
 
-      return await result.fold(
-        (notes) async {
+      return result.fold(
+        (notes) {
           if (notes.isEmpty) {
             return const FeedLoadResult(notes: []);
           }

@@ -150,6 +150,7 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
           Expanded(
             flex: 1,
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                     ClipRRect(
                       borderRadius: const BorderRadius.only(

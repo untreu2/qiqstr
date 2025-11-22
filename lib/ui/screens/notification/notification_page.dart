@@ -195,7 +195,7 @@ class _NotificationPageState extends State<NotificationPage> {
                               color: context.colors.textSecondary,
                             ),
                           ),
-                          if (first.content.trim().isNotEmpty) ...[
+                          if (first.content.trim().isNotEmpty && first.type != 'repost') ...[
                             const SizedBox(height: 8),
                             NoteContentWidget(
                               parsedContent: _parseContent(first.content),
@@ -363,7 +363,7 @@ class _NotificationPageState extends State<NotificationPage> {
                               color: context.colors.textSecondary,
                             ),
                           ),
-                          if (item.content.trim().isNotEmpty) ...[
+                          if (item.content.trim().isNotEmpty && item.type != 'repost') ...[
                             const SizedBox(height: 8),
                             NoteContentWidget(
                               parsedContent: _parseContent(item.content),
