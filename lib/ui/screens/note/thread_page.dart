@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:bounce/bounce.dart';
@@ -43,19 +42,13 @@ class _ThreadPageState extends State<ThreadPage> {
   static const int _maxNestedReplies = 1;
 
   bool _isRefreshing = false;
-  bool _isInitialized = false;
   Timer? _cacheCheckTimer;
+  bool _cacheTimerStarted = false;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
-    
-    if (widget.focusedNoteId != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _scheduleScrollToFocusedNote();
-      });
-    }
   }
 
   @override
@@ -69,64 +62,71 @@ class _ThreadPageState extends State<ThreadPage> {
   @override
   Widget build(BuildContext context) {
     return ViewModelBuilder<ThreadViewModel>(
-      create: () => AppDI.get<ThreadViewModel>(),
-      builder: (context, viewModel) {
-        if (!_isInitialized) {
-          _isInitialized = true;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              viewModel.initializeWithThread(
-                rootNoteId: widget.rootNoteId,
-                focusedNoteId: widget.focusedNoteId,
-              );
+      create: () {
+        final vm = AppDI.get<ThreadViewModel>();
+        Future.microtask(() {
+          if (mounted) {
+            vm.initializeWithThread(
+              rootNoteId: widget.rootNoteId,
+              focusedNoteId: widget.focusedNoteId,
+            );
+            if (widget.focusedNoteId != null) {
+              Future.delayed(const Duration(milliseconds: 300), () {
+                if (mounted) {
+                  _scheduleScrollToFocusedNote();
+                }
+              });
             }
-          });
-        }
-        
+            Future.delayed(const Duration(seconds: 1), () {
+              if (mounted) {
+                vm.checkRepliesFromCache();
+              }
+            });
+          }
+        });
+        return vm;
+      },
+      builder: (context, viewModel) {
+        final double topPadding = MediaQuery.of(context).padding.top;
         return Scaffold(
           backgroundColor: context.colors.background,
-          body: Consumer<ThreadViewModel>(
-            builder: (context, vm, child) {
-              final double topPadding = MediaQuery.of(context).padding.top;
-              return Stack(
-                children: [
-                  _buildContent(context, vm),
-                  const BackButtonWidget.floating(),
-                  _buildShareButton(context, topPadding, vm),
-                  Positioned(
-                    top: topPadding + 10,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: GestureDetector(
-                        onTap: () {
-                          _scrollController.animateTo(
-                            0,
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeOut,
-                          );
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: context.colors.buttonPrimary,
-                            borderRadius: BorderRadius.circular(40),
-                          ),
-                          child: Text(
-                            'Thread',
-                            style: TextStyle(
-                              color: context.colors.buttonText,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+          body: Stack(
+            children: [
+              _buildContent(context, viewModel),
+              const BackButtonWidget.floating(),
+              _buildShareButton(context, topPadding, viewModel),
+              Positioned(
+                top: topPadding + 10,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: GestureDetector(
+                    onTap: () {
+                      _scrollController.animateTo(
+                        0,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOut,
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: context.colors.buttonPrimary,
+                        borderRadius: BorderRadius.circular(40),
+                      ),
+                      child: Text(
+                        'Thread',
+                        style: TextStyle(
+                          color: context.colors.buttonText,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
                   ),
-                ],
-              );
-            },
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -146,9 +146,13 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Widget _buildThreadContent(BuildContext context, ThreadViewModel viewModel, NoteModel? rootNote) {
-    final displayNote = rootNote != null && widget.focusedNoteId != null
-        ? viewModel.threadStructureState.data?.getNote(widget.focusedNoteId!) ?? rootNote
-        : rootNote;
+    NoteModel? displayNote = rootNote;
+    if (rootNote != null && widget.focusedNoteId != null) {
+      final threadStructure = viewModel.threadStructureState.data;
+      if (threadStructure != null) {
+        displayNote = threadStructure.getNote(widget.focusedNoteId!) ?? rootNote;
+      }
+    }
 
     return RefreshIndicator(
       onRefresh: () => _debouncedRefresh(viewModel),
@@ -168,6 +172,35 @@ class _ThreadPageState extends State<ThreadPage> {
             SliverToBoxAdapter(
               child: _buildReplyInputSection(context, viewModel),
             ),
+            if (viewModel.isLoadingInteractions)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0),
+                  child: Center(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: context.colors.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Loading interactions...',
+                          style: TextStyle(
+                            color: context.colors.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             _buildThreadRepliesSliver(context, viewModel, displayNote),
           ] else ...[
             SliverToBoxAdapter(
@@ -338,12 +371,17 @@ class _ThreadPageState extends State<ThreadPage> {
         }
 
         final allDirectReplies = threadStructure.getChildren(displayNote.id);
+        final directReplies = <NoteModel>[];
+        for (final reply in allDirectReplies) {
+          if (!reply.isRepost) {
+            directReplies.add(reply);
+          }
+        }
+        directReplies.sort((a, b) => a.timestamp.compareTo(b.timestamp));
 
-        final directReplies = allDirectReplies.where((reply) => !reply.isRepost).toList()
-          ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        _ensureCacheTimerStarted(viewModel);
 
         if (directReplies.isEmpty) {
-          _startCacheCheckTimer(viewModel);
           return SliverToBoxAdapter(
             child: Center(
               child: Padding(
@@ -359,8 +397,6 @@ class _ThreadPageState extends State<ThreadPage> {
             ),
           );
         }
-        
-        _startCacheCheckTimer(viewModel);
 
         final maxVisible = math.min(_visibleRepliesCount, _maxInitialReplies);
         final visibleReplies = directReplies.take(maxVisible).toList();
@@ -414,11 +450,7 @@ class _ThreadPageState extends State<ThreadPage> {
         ),
       ),
       empty: (message) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _startCacheCheckTimer(viewModel);
-          }
-        });
+        _ensureCacheTimerStarted(viewModel);
         return SliverToBoxAdapter(
           child: Center(
             child: Padding(
@@ -476,7 +508,12 @@ class _ThreadPageState extends State<ThreadPage> {
 
     final isFocused = reply.id == widget.focusedNoteId;
     final allNestedReplies = threadStructure.getChildren(reply.id);
-    final nestedReplies = allNestedReplies.where((nestedReply) => !nestedReply.isRepost).toList();
+    final nestedReplies = <NoteModel>[];
+    for (final nestedReply in allNestedReplies) {
+      if (!nestedReply.isRepost) {
+        nestedReplies.add(nestedReply);
+      }
+    }
     final hasNestedReplies = nestedReplies.isNotEmpty;
 
     return Container(
@@ -696,10 +733,9 @@ class _ThreadPageState extends State<ThreadPage> {
   void _scheduleScrollToFocusedNote() {
     if (!mounted || widget.focusedNoteId == null) return;
 
-    Future.delayed(const Duration(milliseconds: 500), () {
+    Future.delayed(const Duration(milliseconds: 300), () {
       if (!mounted) return;
-
-      _attemptScrollToFocusedNote(retries: 5);
+      _attemptScrollToFocusedNote(retries: 3);
     });
   }
 
@@ -739,19 +775,21 @@ class _ThreadPageState extends State<ThreadPage> {
     }
   }
 
-  void _startCacheCheckTimer(ThreadViewModel viewModel) {
-    if (_cacheCheckTimer != null && _cacheCheckTimer!.isActive) {
-      return;
-    }
+  void _ensureCacheTimerStarted(ThreadViewModel viewModel) {
+    if (_cacheTimerStarted) return;
+    _cacheTimerStarted = true;
     
-    _cacheCheckTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        _cacheCheckTimer = null;
-        return;
-      }
+    Future.delayed(const Duration(seconds: 2), () {
+      if (!mounted) return;
       
-      viewModel.checkRepliesFromCache();
+      _cacheCheckTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+        if (!mounted) {
+          timer.cancel();
+          _cacheCheckTimer = null;
+          return;
+        }
+        viewModel.checkRepliesFromCache();
+      });
     });
   }
 

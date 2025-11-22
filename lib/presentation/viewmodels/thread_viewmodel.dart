@@ -53,6 +53,9 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
   UserModel? _currentUser;
   UserModel? get currentUser => _currentUser;
 
+  bool _isLoadingInteractions = false;
+  bool get isLoadingInteractions => _isLoadingInteractions;
+
   LoadThreadCommand? _loadThreadCommand;
   AddReplyCommand? _addReplyCommand;
   RefreshThreadCommand? _refreshThreadCommand;
@@ -371,6 +374,9 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
       
       if (noteIds.isEmpty) return;
 
+      _isLoadingInteractions = true;
+      safeNotifyListeners();
+
       debugPrint('[ThreadViewModel] Fetching interactions for ${noteIds.length} initially visible notes');
       
       await _noteRepository.fetchInteractionsForNotes(
@@ -379,8 +385,11 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         forceLoad: true,
       );
       
+      _isLoadingInteractions = false;
       safeNotifyListeners();
     } catch (e) {
+      _isLoadingInteractions = false;
+      safeNotifyListeners();
       debugPrint('[ThreadViewModel] Error loading interactions for thread: $e');
     }
   }
