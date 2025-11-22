@@ -62,7 +62,16 @@ class IsarDatabaseService {
   Future<void> saveUserProfile(String pubkeyHex, Map<String, String> profileData) async {
     try {
       final db = await isar;
+      
+      // Get existing user to preserve followerCount if not updating it
+      final existingUser = await db.userModelIsars.where().pubkeyHexEqualTo(pubkeyHex).findFirst();
+      
       final userModel = UserModelIsar.fromUserModel(pubkeyHex, profileData);
+      
+      // Preserve followerCount if it exists and is not being updated
+      if (existingUser != null && existingUser.followerCount != null && profileData['followerCount'] == null) {
+        userModel.followerCount = existingUser.followerCount;
+      }
 
       await db.writeTxn(() async {
         await db.userModelIsars.put(userModel);
@@ -77,8 +86,23 @@ class IsarDatabaseService {
   Future<void> saveUserProfiles(Map<String, Map<String, String>> profiles) async {
     try {
       final db = await isar;
+      
+      // Get existing users to preserve followerCount
+      final pubkeyHexList = profiles.keys.toList();
+      final existingUsers = await db.userModelIsars
+          .where()
+          .anyOf(pubkeyHexList, (q, String pubkeyHex) => q.pubkeyHexEqualTo(pubkeyHex))
+          .findAll();
+      final existingUsersMap = {for (var u in existingUsers) u.pubkeyHex: u};
+      
       final userModels = profiles.entries.map((entry) {
-        return UserModelIsar.fromUserModel(entry.key, entry.value);
+        final userModel = UserModelIsar.fromUserModel(entry.key, entry.value);
+        // Preserve followerCount if it exists and is not being updated
+        final existingUser = existingUsersMap[entry.key];
+        if (existingUser != null && existingUser.followerCount != null && entry.value['followerCount'] == null) {
+          userModel.followerCount = existingUser.followerCount;
+        }
+        return userModel;
       }).toList();
 
       await db.writeTxn(() async {
@@ -140,6 +164,30 @@ class IsarDatabaseService {
     } catch (e) {
       debugPrint('[IsarDatabaseService] Error checking profile existence: $e');
       return false;
+    }
+  }
+
+  Future<void> updateFollowerCount(String pubkeyHex, int followerCount) async {
+    try {
+      if (followerCount == 0) {
+        // Don't update if count is 0
+        return;
+      }
+
+      final db = await isar;
+      final user = await db.userModelIsars.where().pubkeyHexEqualTo(pubkeyHex).findFirst();
+
+      if (user != null) {
+        await db.writeTxn(() async {
+          user.followerCount = followerCount;
+          await db.userModelIsars.put(user);
+        });
+        debugPrint('[IsarDatabaseService] Updated follower count for $pubkeyHex: $followerCount');
+      } else {
+        debugPrint('[IsarDatabaseService] User not found for follower count update: $pubkeyHex');
+      }
+    } catch (e) {
+      debugPrint('[IsarDatabaseService] Error updating follower count: $e');
     }
   }
 

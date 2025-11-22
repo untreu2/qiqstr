@@ -522,6 +522,11 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           _followerCount = followerCount;
           _isLoadingCounts = false;
         });
+        
+        // Update follower count in Isar if it's not 0
+        if (followerCount > 0) {
+          await _userRepository.updateUserFollowerCount(_userNotifier.value.pubkeyHex, followerCount);
+        }
       }
     } catch (e) {
       debugPrint('[ProfileInfoWidget] Error loading follower counts: $e');

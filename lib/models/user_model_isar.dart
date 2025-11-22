@@ -19,6 +19,8 @@ class UserModelIsar {
   late String website;
   late bool nip05Verified;
 
+  int? followerCount;
+
   late DateTime cachedAt;
 
   static UserModelIsar fromUserModel(String pubkeyHex, Map<String, String> profileData) {
@@ -33,6 +35,7 @@ class UserModelIsar {
       ..website = profileData['website'] ?? ''
       ..updatedAt = DateTime.now()
       ..nip05Verified = profileData['nip05Verified'] == 'true'
+      ..followerCount = profileData['followerCount'] != null ? int.tryParse(profileData['followerCount']!) : null
       ..cachedAt = DateTime.now();
   }
 
@@ -46,6 +49,7 @@ class UserModelIsar {
       'lud16': lud16,
       'website': website,
       'nip05Verified': nip05Verified.toString(),
+      if (followerCount != null) 'followerCount': followerCount.toString(),
     };
   }
 

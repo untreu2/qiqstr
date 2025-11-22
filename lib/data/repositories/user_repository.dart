@@ -915,6 +915,22 @@ class UserRepository {
     }
   }
 
+  Future<void> updateUserFollowerCount(String pubkeyHex, int followerCount) async {
+    try {
+      if (followerCount == 0) {
+        // Don't update if count is 0
+        return;
+      }
+
+      final hex = _authService.npubToHex(pubkeyHex) ?? pubkeyHex;
+      await _cacheService.isarService.updateFollowerCount(hex, followerCount);
+      
+      debugPrint('[UserRepository] Updated follower count for $hex: $followerCount');
+    } catch (e) {
+      debugPrint('[UserRepository] Error updating follower count: $e');
+    }
+  }
+
   Future<void> dispose() async {
     _currentUserController.close();
     _followingListController.close();

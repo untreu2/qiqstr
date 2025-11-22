@@ -117,6 +117,11 @@ class _SidebarWidgetState extends State<SidebarWidget> {
           _followerCount = followerCount;
           _isLoadingCounts = false;
         });
+        
+        // Update follower count in Isar if it's not 0
+        if (followerCount > 0) {
+          await _userRepository.updateUserFollowerCount(_currentUser!.pubkeyHex, followerCount);
+        }
       }
     } catch (e) {
       debugPrint('[SidebarWidget] Error loading follower counts: $e');

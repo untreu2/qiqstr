@@ -32,43 +32,48 @@ const UserModelIsarSchema = CollectionSchema(
       name: r'cachedAt',
       type: IsarType.dateTime,
     ),
-    r'lud16': PropertySchema(
+    r'followerCount': PropertySchema(
       id: 3,
+      name: r'followerCount',
+      type: IsarType.long,
+    ),
+    r'lud16': PropertySchema(
+      id: 4,
       name: r'lud16',
       type: IsarType.string,
     ),
     r'name': PropertySchema(
-      id: 4,
+      id: 5,
       name: r'name',
       type: IsarType.string,
     ),
     r'nip05': PropertySchema(
-      id: 5,
+      id: 6,
       name: r'nip05',
       type: IsarType.string,
     ),
     r'nip05Verified': PropertySchema(
-      id: 6,
+      id: 7,
       name: r'nip05Verified',
       type: IsarType.bool,
     ),
     r'profileImage': PropertySchema(
-      id: 7,
+      id: 8,
       name: r'profileImage',
       type: IsarType.string,
     ),
     r'pubkeyHex': PropertySchema(
-      id: 8,
+      id: 9,
       name: r'pubkeyHex',
       type: IsarType.string,
     ),
     r'updatedAt': PropertySchema(
-      id: 9,
+      id: 10,
       name: r'updatedAt',
       type: IsarType.dateTime,
     ),
     r'website': PropertySchema(
-      id: 10,
+      id: 11,
       name: r'website',
       type: IsarType.string,
     )
@@ -127,14 +132,15 @@ void _userModelIsarSerialize(
   writer.writeString(offsets[0], object.about);
   writer.writeString(offsets[1], object.banner);
   writer.writeDateTime(offsets[2], object.cachedAt);
-  writer.writeString(offsets[3], object.lud16);
-  writer.writeString(offsets[4], object.name);
-  writer.writeString(offsets[5], object.nip05);
-  writer.writeBool(offsets[6], object.nip05Verified);
-  writer.writeString(offsets[7], object.profileImage);
-  writer.writeString(offsets[8], object.pubkeyHex);
-  writer.writeDateTime(offsets[9], object.updatedAt);
-  writer.writeString(offsets[10], object.website);
+  writer.writeLong(offsets[3], object.followerCount);
+  writer.writeString(offsets[4], object.lud16);
+  writer.writeString(offsets[5], object.name);
+  writer.writeString(offsets[6], object.nip05);
+  writer.writeBool(offsets[7], object.nip05Verified);
+  writer.writeString(offsets[8], object.profileImage);
+  writer.writeString(offsets[9], object.pubkeyHex);
+  writer.writeDateTime(offsets[10], object.updatedAt);
+  writer.writeString(offsets[11], object.website);
 }
 
 UserModelIsar _userModelIsarDeserialize(
@@ -147,15 +153,16 @@ UserModelIsar _userModelIsarDeserialize(
   object.about = reader.readString(offsets[0]);
   object.banner = reader.readString(offsets[1]);
   object.cachedAt = reader.readDateTime(offsets[2]);
+  object.followerCount = reader.readLongOrNull(offsets[3]);
   object.id = id;
-  object.lud16 = reader.readString(offsets[3]);
-  object.name = reader.readString(offsets[4]);
-  object.nip05 = reader.readString(offsets[5]);
-  object.nip05Verified = reader.readBool(offsets[6]);
-  object.profileImage = reader.readString(offsets[7]);
-  object.pubkeyHex = reader.readString(offsets[8]);
-  object.updatedAt = reader.readDateTime(offsets[9]);
-  object.website = reader.readString(offsets[10]);
+  object.lud16 = reader.readString(offsets[4]);
+  object.name = reader.readString(offsets[5]);
+  object.nip05 = reader.readString(offsets[6]);
+  object.nip05Verified = reader.readBool(offsets[7]);
+  object.profileImage = reader.readString(offsets[8]);
+  object.pubkeyHex = reader.readString(offsets[9]);
+  object.updatedAt = reader.readDateTime(offsets[10]);
+  object.website = reader.readString(offsets[11]);
   return object;
 }
 
@@ -173,20 +180,22 @@ P _userModelIsarDeserializeProp<P>(
     case 2:
       return (reader.readDateTime(offset)) as P;
     case 3:
-      return (reader.readString(offset)) as P;
+      return (reader.readLongOrNull(offset)) as P;
     case 4:
       return (reader.readString(offset)) as P;
     case 5:
       return (reader.readString(offset)) as P;
     case 6:
-      return (reader.readBool(offset)) as P;
-    case 7:
       return (reader.readString(offset)) as P;
+    case 7:
+      return (reader.readBool(offset)) as P;
     case 8:
       return (reader.readString(offset)) as P;
     case 9:
-      return (reader.readDateTime(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 10:
+      return (reader.readDateTime(offset)) as P;
+    case 11:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
@@ -709,6 +718,80 @@ extension UserModelIsarQueryFilter
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.between(
         property: r'cachedAt',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+      ));
+    });
+  }
+
+  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+      followerCountIsNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNull(
+        property: r'followerCount',
+      ));
+    });
+  }
+
+  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+      followerCountIsNotNull() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(const FilterCondition.isNotNull(
+        property: r'followerCount',
+      ));
+    });
+  }
+
+  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+      followerCountEqualTo(int? value) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'followerCount',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+      followerCountGreaterThan(
+    int? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'followerCount',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+      followerCountLessThan(
+    int? value, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'followerCount',
+        value: value,
+      ));
+    });
+  }
+
+  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+      followerCountBetween(
+    int? lower,
+    int? upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'followerCount',
         lower: lower,
         includeLower: includeLower,
         upper: upper,
@@ -1698,6 +1781,20 @@ extension UserModelIsarQuerySortBy
     });
   }
 
+  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
+      sortByFollowerCount() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'followerCount', Sort.asc);
+    });
+  }
+
+  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
+      sortByFollowerCountDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'followerCount', Sort.desc);
+    });
+  }
+
   QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> sortByLud16() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'lud16', Sort.asc);
@@ -1840,6 +1937,20 @@ extension UserModelIsarQuerySortThenBy
     });
   }
 
+  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
+      thenByFollowerCount() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'followerCount', Sort.asc);
+    });
+  }
+
+  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
+      thenByFollowerCountDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'followerCount', Sort.desc);
+    });
+  }
+
   QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> thenById() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.asc);
@@ -1977,6 +2088,13 @@ extension UserModelIsarQueryWhereDistinct
     });
   }
 
+  QueryBuilder<UserModelIsar, UserModelIsar, QDistinct>
+      distinctByFollowerCount() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'followerCount');
+    });
+  }
+
   QueryBuilder<UserModelIsar, UserModelIsar, QDistinct> distinctByLud16(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -2056,6 +2174,12 @@ extension UserModelIsarQueryProperty
   QueryBuilder<UserModelIsar, DateTime, QQueryOperations> cachedAtProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'cachedAt');
+    });
+  }
+
+  QueryBuilder<UserModelIsar, int?, QQueryOperations> followerCountProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'followerCount');
     });
   }
 
