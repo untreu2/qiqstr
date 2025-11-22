@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:nostr/nostr.dart';
+import 'package:ndk/ndk.dart';
 import '../../models/note_count_model_isar.dart';
 import '../../services/nostr_service.dart';
 import '../../constants/relays.dart';
@@ -112,12 +112,12 @@ class NoteCounterService {
 
       final filter = Filter(
         kinds: [1, 6, 7, 9735],
-        e: [noteId],
+        eTags: [noteId],
       );
 
-      final request = NostrService.createRequest(filter);
-      final subscriptionId = request.subscriptionId;
-      final serializedRequest = NostrService.serializeRequest(request);
+      final serializedRequest = NostrService.createRequest(filter);
+      final requestJson = jsonDecode(serializedRequest) as List;
+      final subscriptionId = requestJson[1] as String;
 
       final Map<String, Map<String, dynamic>> uniqueEvents = {};
 

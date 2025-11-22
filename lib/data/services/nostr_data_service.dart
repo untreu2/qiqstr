@@ -5,7 +5,10 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:crypto/crypto.dart';
+import 'package:ndk/ndk.dart';
+import 'package:ndk/entities.dart';
+import 'package:ndk/shared/nips/nip01/bip340.dart';
+import 'dart:typed_data';
 
 import '../../core/base/result.dart';
 import '../../models/note_model.dart';
@@ -1589,9 +1592,9 @@ class NostrDataService {
         until: until != null ? until.millisecondsSinceEpoch ~/ 1000 : null,
       );
 
-      final request = NostrService.createRequest(filter);
-      final subscriptionId = request.subscriptionId;
-      final serializedRequest = NostrService.serializeRequest(request);
+      final serializedRequest = NostrService.createRequest(filter);
+      final requestJson = jsonDecode(serializedRequest) as List;
+      final subscriptionId = requestJson[1] as String;
       final allRelays = _relayManager.relayUrls.toList();
 
       debugPrint('[NostrDataService] PROFILE: Fetching from ${allRelays.length} relays');
@@ -1615,9 +1618,9 @@ class NostrDataService {
           return eventAuthor == pubkeyHex && (eventKind == 1 || eventKind == 6);
         },
         timeout: const Duration(seconds: 4),
-        connectTimeout: const Duration(seconds: 3),
+        connectTimeout: const Duration(seconds: 2),
         shouldStop: () => _isClosed,
-        debugPrefix: 'NostrDataService PROFILE',
+        debugPrefix: 'PROFILE',
       );
 
       final fetchedNotes = queryResult.results;
@@ -1875,100 +1878,59 @@ class NostrDataService {
     DateTime? since,
   }) async {
     try {
-      debugPrint('[NostrDataService] HASHTAG MODE: Fetching GLOBAL notes for #$hashtag with server-side filtering');
+      debugPrint('[NostrDataService] HASHTAG MODE: Fetching GLOBAL notes for #$hashtag with optimized parallel fetch');
 
-      final Map<String, NoteModel> hashtagNotesMap = {};
+      final targetHashtag = hashtag.toLowerCase();
       final allRelays = _relayManager.relayUrls.toList();
+      final optimizedLimit = (limit * 1.5).round().clamp(limit, limit * 3);
 
-      debugPrint('[NostrDataService] HASHTAG: Using ${allRelays.length} relays for PARALLEL fetch');
+      debugPrint('[NostrDataService] HASHTAG: Using ${allRelays.length} relays for optimized PARALLEL fetch (limit: $optimizedLimit)');
 
-      await Future.wait(
-        allRelays.map((relayUrl) async {
-          if (_isClosed) return;
-
-          WebSocket? ws;
-          StreamSubscription? sub;
-          try {
-            debugPrint('[NostrDataService] HASHTAG: Connecting to $relayUrl');
-            ws = await WebSocket.connect(relayUrl);
-            if (_isClosed) {
-              await ws.close();
-              return;
-            }
-
-            final completer = Completer<void>();
-            int eventCount = 0;
-
-            sub = ws.listen((event) {
-              try {
-                final decoded = jsonDecode(event);
-
-                if (decoded[0] == 'EVENT') {
-                  final eventData = decoded[2] as Map<String, dynamic>;
-                  final eventId = eventData['id'] as String;
-                  final eventKind = eventData['kind'] as int;
-
-                  if (eventKind == 1) {
-                    if (!hashtagNotesMap.containsKey(eventId)) {
-                      final note = _processHashtagEventDirectlySync(eventData);
-                      if (note != null) {
-                        hashtagNotesMap[eventId] = note;
-                        eventCount++;
-                        if (!_noteCache.containsKey(eventId) && !_eventIds.contains(eventId)) {
-                          _noteCache[eventId] = note;
-                          _eventIds.add(eventId);
-                        }
-                      }
-                    }
-                  }
-                } else if (decoded[0] == 'EOSE') {
-                  debugPrint('[NostrDataService] HASHTAG: EOSE from $relayUrl - $eventCount notes');
-                  if (!completer.isCompleted) completer.complete();
-                }
-              } catch (e) {
-                debugPrint('[NostrDataService] HASHTAG: Error processing event: $e');
-              }
-            }, onDone: () {
-              if (!completer.isCompleted) completer.complete();
-            }, onError: (error) {
-              debugPrint('[NostrDataService] HASHTAG: Connection error on $relayUrl: $error');
-              if (!completer.isCompleted) completer.complete();
-            }, cancelOnError: true);
-
-            if (ws.readyState == WebSocket.open) {
-              final subscriptionId = NostrService.generateUUID();
-              final filterMap = {
-                'kinds': [1],
-                '#t': [hashtag.toLowerCase()],
-                'limit': limit,
-              };
-
-              if (since != null) {
-                filterMap['since'] = since.millisecondsSinceEpoch ~/ 1000;
-              }
-              if (until != null) {
-                filterMap['until'] = until.millisecondsSinceEpoch ~/ 1000;
-              }
-
-              final request = jsonEncode(['REQ', subscriptionId, filterMap]);
-              ws.add(request);
-              debugPrint('[NostrDataService] HASHTAG: Query sent to $relayUrl');
-            }
-
-            await completer.future;
-
-            await sub.cancel();
-            await ws.close();
-          } catch (e) {
-            debugPrint('[NostrDataService] HASHTAG: Exception with $relayUrl: $e');
-            await sub?.cancel();
-            await ws?.close();
-          }
-        }),
+      final filter = Filter(
+        kinds: [1],
+        tTags: [targetHashtag],
+        limit: optimizedLimit,
+        since: since != null ? since.millisecondsSinceEpoch ~/ 1000 : null,
+        until: until != null ? until.millisecondsSinceEpoch ~/ 1000 : null,
       );
 
-      final hashtagNotes = hashtagNotesMap.values.toList();
-      final targetHashtag = hashtag.toLowerCase();
+      final serializedRequest = NostrService.createRequest(filter);
+      final requestJson = jsonDecode(serializedRequest) as List;
+      final subscriptionId = requestJson[1] as String;
+
+      final queryResult = await RelayQueryHelper.queryRelaysParallel<NoteModel>(
+        relayUrls: allRelays,
+        request: serializedRequest,
+        subscriptionId: subscriptionId,
+        eventProcessor: (eventData, relayUrl) {
+          final eventId = eventData['id'] as String? ?? '';
+          final eventKind = eventData['kind'] as int? ?? 0;
+
+          if (eventKind == 1 && eventId.isNotEmpty) {
+            if (!_noteCache.containsKey(eventId) && !_eventIds.contains(eventId)) {
+              final note = _processHashtagEventDirectlySync(eventData);
+              if (note != null) {
+                _noteCache[eventId] = note;
+                _eventIds.add(eventId);
+                return note;
+              }
+            } else if (_noteCache.containsKey(eventId)) {
+              return _noteCache[eventId];
+            }
+          }
+          return null;
+        },
+        eventValidator: (eventData) {
+          final eventKind = eventData['kind'] as int? ?? 0;
+          return eventKind == 1;
+        },
+        timeout: const Duration(seconds: 4),
+        connectTimeout: const Duration(seconds: 2),
+        shouldStop: () => _isClosed,
+        debugPrefix: 'HASHTAG',
+      );
+
+      final hashtagNotes = queryResult.results.values.toList();
 
       final validatedHashtagNotes = hashtagNotes.where((note) {
         if (note.tTags.isNotEmpty) {
@@ -1996,7 +1958,7 @@ class NostrDataService {
       final limitedNotes = filteredHashtagNotes.take(limit).toList();
 
       debugPrint(
-          '[NostrDataService] HASHTAG: Returning ${limitedNotes.length} notes for #$hashtag (found ${validatedHashtagNotes.length} validated, ${hashtagNotes.length} total from relays)');
+          '[NostrDataService] HASHTAG: Returning ${limitedNotes.length} notes for #$hashtag (found ${validatedHashtagNotes.length} validated, ${hashtagNotes.length} total from ${allRelays.length} relays)');
 
       _scheduleUIUpdate();
 
@@ -3400,9 +3362,7 @@ class NostrDataService {
       }
 
       final fileBytes = await file.readAsBytes();
-      final sha256Hash = sha256.convert(fileBytes).toString();
-
-      debugPrint('[NostrDataService] File read: ${fileBytes.length} bytes, SHA256: $sha256Hash');
+      debugPrint('[NostrDataService] File read: ${fileBytes.length} bytes');
 
       String mimeType = 'application/octet-stream';
       final lowerPath = filePath.toLowerCase();
@@ -3418,51 +3378,48 @@ class NostrDataService {
 
       debugPrint('[NostrDataService] Detected MIME type: $mimeType');
 
-      final expiration = timeService.add(Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000;
+      final publicKey = Bip340.getPublicKey(privateKey);
 
-      final authEvent = NostrService.createBlossomAuthEvent(
-        content: 'Upload ${file.uri.pathSegments.last}',
-        sha256Hash: sha256Hash,
-        expiration: expiration,
-        privateKey: privateKey,
+      final ndk = Ndk(
+        NdkConfig(
+          eventVerifier: Bip340EventVerifier(),
+          cache: MemCacheManager(),
+          bootstrapRelays: [],
+        ),
       );
 
-      final encodedAuth = base64.encode(utf8.encode(jsonEncode(NostrService.eventToJson(authEvent))));
-      final authHeader = 'Nostr $encodedAuth';
+      ndk.accounts.loginPrivateKey(
+        pubkey: publicKey,
+        privkey: privateKey,
+      );
 
-      debugPrint('[NostrDataService] Blossom auth created, expiration: $expiration');
+      final ndkFile = NdkFile(
+        data: Uint8List.fromList(fileBytes),
+        mimeType: mimeType,
+      );
 
       final cleanedUrl = blossomUrl.replaceAll(RegExp(r'/+$'), '');
-      final uri = Uri.parse('$cleanedUrl/upload');
+      debugPrint('[NostrDataService] Uploading to: $cleanedUrl');
 
-      debugPrint('[NostrDataService] Uploading to: $uri');
+      final uploadResults = await ndk.files.upload(
+        file: ndkFile,
+        serverUrls: [cleanedUrl],
+      );
 
-      final httpClient = HttpClient();
-      final request = await httpClient.putUrl(uri);
+      debugPrint('[NostrDataService] Upload response: ${uploadResults.length} result(s)');
 
-      request.headers.set(HttpHeaders.authorizationHeader, authHeader);
-      request.headers.set(HttpHeaders.contentTypeHeader, mimeType);
-      request.headers.set(HttpHeaders.contentLengthHeader, fileBytes.length);
-
-      request.add(fileBytes);
-
-      final response = await request.close();
-      final responseBody = await response.transform(utf8.decoder).join();
-
-      debugPrint('[NostrDataService] Upload response: ${response.statusCode}');
-
-      if (response.statusCode != 200) {
-        return Result.error('Upload failed with status ${response.statusCode}: $responseBody');
+      if (uploadResults.isEmpty || !uploadResults.first.success) {
+        return Result.error('Upload failed: ${uploadResults.first.error ?? 'Unknown error'}');
       }
 
-      final decoded = jsonDecode(responseBody);
-      if (decoded is Map && decoded.containsKey('url')) {
-        final mediaUrl = decoded['url'] as String;
-        debugPrint('[NostrDataService] Media uploaded successfully: $mediaUrl');
-        return Result.success(mediaUrl);
+      final blobDescriptor = uploadResults.first.descriptor;
+      if (blobDescriptor == null) {
+        return const Result.error('Upload succeeded but no descriptor returned.');
       }
 
-      return const Result.error('Upload succeeded but response does not contain a valid URL.');
+      final url = blobDescriptor.url.isNotEmpty ? blobDescriptor.url : blobDescriptor.sha256;
+      debugPrint('[NostrDataService] Media uploaded successfully: $url');
+      return Result.success(url);
     } catch (e) {
       debugPrint('[NostrDataService ERROR] Error uploading media: $e');
       return Result.error('Failed to upload media: $e');

@@ -1,5 +1,4 @@
-import 'package:nostr/nostr.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
+import 'package:ndk/ndk.dart';
 
 import '../../core/base/result.dart';
 
@@ -24,7 +23,7 @@ class ValidationService {
     }
 
     try {
-      Nip19.decodePrivkey(nsec);
+      Nip19.decode(nsec);
       return const Result.success(null);
     } catch (e) {
       return const Result.error('Invalid NSEC format');
@@ -42,7 +41,7 @@ class ValidationService {
       }
 
       try {
-        decodeBasicBech32(npub, 'npub');
+        Nip19.decode(npub);
         return const Result.success(null);
       } catch (e) {
         return const Result.error('Invalid NPUB format');

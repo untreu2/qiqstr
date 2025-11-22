@@ -37,7 +37,6 @@ dependencies:
     isar: ^3.1.0+1
     isar_flutter_libs: ^3.1.0+1
     path_provider: ^2.1.5
-    nostr: ^1.5.0
     uuid: ^4.5.1
     cached_network_image: ^3.4.0
     flutter_secure_storage: ^9.2.4
@@ -75,6 +74,7 @@ dependencies:
     bip32: ^2.0.0
     flutter_native_splash: ^2.4.7
     google_fonts: ^6.2.1
+    ndk: ^0.6.0
 
 dev_dependencies:
     flutter_test:

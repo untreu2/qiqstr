@@ -4,7 +4,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
-import 'package:nostr/nostr.dart';
+import 'package:ndk/ndk.dart';
+import 'package:ndk/shared/nips/nip01/bip340.dart';
 
 import '../../core/base/result.dart';
 import '../../models/wallet_model.dart';
@@ -49,21 +50,23 @@ class CoinosService {
 
       debugPrint('[CoinosService] Got challenge: $challenge');
 
-      final authEvent = Event.from(
+      final publicKey = Bip340.getPublicKey(privateKey);
+      final authEvent = Nip01Event(
+        pubKey: publicKey,
         kind: 27235,
         tags: [
           ['challenge', challenge]
         ],
         content: '',
-        privkey: privateKey,
       );
+      authEvent.sig = Bip340.sign(authEvent.id, privateKey);
       final authResponse = await _httpClient.post(
         Uri.parse('$_baseUrl/nostrAuth'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'event': {
             'id': authEvent.id,
-            'pubkey': authEvent.pubkey,
+            'pubkey': authEvent.pubKey,
             'created_at': authEvent.createdAt,
             'kind': authEvent.kind,
             'tags': authEvent.tags,

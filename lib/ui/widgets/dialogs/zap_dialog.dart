@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'dart:async';
 import 'package:http/http.dart' as http;
-import 'package:nostr/nostr.dart';
+import 'package:ndk/ndk.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../models/note_model.dart';
@@ -15,6 +15,7 @@ import '../../../data/repositories/wallet_repository.dart';
 import '../../../data/services/nostr_data_service.dart';
 import '../../../services/nostr_service.dart';
 import '../../../services/relay_service.dart';
+import 'package:ndk/shared/nips/nip01/bip340.dart';
 import '../../../constants/relays.dart';
 import '../common/snackbar_widget.dart';
 import '../common/common_buttons.dart';
@@ -85,7 +86,7 @@ Future<bool> _payZapWithWallet(
     String recipientPubkeyHex = user.pubkeyHex;
     if (user.pubkeyHex.startsWith('npub1')) {
       try {
-        final keyData = Nip19.decodePubkey(user.pubkeyHex);
+        final keyData = Nip19.decode(user.pubkeyHex);
         recipientPubkeyHex = keyData;
       } catch (e) {
         if (kDebugMode) {
@@ -166,7 +167,7 @@ Future<bool> _payZapWithWallet(
 }
 
 Future<void> _publishZapEventsAsync(
-  Event zapRequest,
+  Nip01Event zapRequest,
   String invoice,
   String recipientPubkeyHex,
   NoteModel note,
@@ -185,17 +186,19 @@ Future<void> _publishZapEventsAsync(
       print('[ZapDialog] Zap request event (kind 9734) published for note: ${note.id}');
     }
 
-    final zapEvent = Event.from(
-      kind: 9735, // Zap event
+    final publicKey = Bip340.getPublicKey(privateKey);
+    final zapEvent = Nip01Event(
+      pubKey: publicKey,
+      kind: 9735,
       tags: [
         ['bolt11', invoice],
         ['description', jsonEncode(NostrService.eventToJson(zapRequest))],
         ['p', recipientPubkeyHex],
-        ['e', note.id], // Note reference
+        ['e', note.id],
       ],
-      content: comment, // Zap comment
-      privkey: privateKey,
+      content: comment,
     );
+    zapEvent.sig = Bip340.sign(zapEvent.id, privateKey);
 
     final serializedZapEvent = NostrService.serializeEvent(zapEvent);
     await webSocketManager.priorityBroadcast(serializedZapEvent);

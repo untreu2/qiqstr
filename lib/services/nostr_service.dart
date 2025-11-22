@@ -1,13 +1,14 @@
 import 'dart:convert';
 import 'dart:collection';
-import 'package:nostr/nostr.dart';
+import 'package:ndk/ndk.dart';
+import 'package:ndk/shared/nips/nip01/bip340.dart';
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
 
 class NostrService {
-  static final Map<String, Event> _eventCache = {};
+  static final Map<String, Nip01Event> _eventCache = {};
   static final Map<String, Filter> _filterCache = {};
-  static final Map<String, Request> _requestCache = {};
+  static final Map<String, String> _requestCache = {};
   static const int _maxCacheSize = 1000;
 
   static int _eventsCreated = 0;
@@ -19,7 +20,7 @@ class NostrService {
   static final Queue<Map<String, dynamic>> _batchQueue = Queue();
   static bool _isBatchProcessing = false;
 
-  static Event createNoteEvent({
+  static Nip01Event createNoteEvent({
     required String content,
     required String privateKey,
     List<List<String>>? tags,
@@ -34,18 +35,20 @@ class NostrService {
     _cacheMisses++;
     _eventsCreated++;
 
-    final event = Event.from(
+    final publicKey = Bip340.getPublicKey(privateKey);
+    final event = Nip01Event(
+      pubKey: publicKey,
       kind: 1,
       tags: tags ?? [],
       content: content,
-      privkey: privateKey,
     );
+    event.sig = Bip340.sign(event.id, privateKey);
 
     _addToEventCache(cacheKey, event);
     return event;
   }
 
-  static Event createReactionEvent({
+  static Nip01Event createReactionEvent({
     required String targetEventId,
     required String content,
     required String privateKey,
@@ -63,18 +66,20 @@ class NostrService {
     _cacheMisses++;
     _eventsCreated++;
 
-    final event = Event.from(
+    final publicKey = Bip340.getPublicKey(privateKey);
+    final event = Nip01Event(
+      pubKey: publicKey,
       kind: 7,
       tags: tags,
       content: content,
-      privkey: privateKey,
     );
+    event.sig = Bip340.sign(event.id, privateKey);
 
     _addToEventCache(cacheKey, event);
     return event;
   }
 
-  static Event createReplyEvent({
+  static Nip01Event createReplyEvent({
     required String content,
     required String privateKey,
     required List<List<String>> tags,
@@ -89,18 +94,20 @@ class NostrService {
     _cacheMisses++;
     _eventsCreated++;
 
-    final event = Event.from(
+    final publicKey = Bip340.getPublicKey(privateKey);
+    final event = Nip01Event(
+      pubKey: publicKey,
       kind: 1,
       tags: tags,
       content: content,
-      privkey: privateKey,
     );
+    event.sig = Bip340.sign(event.id, privateKey);
 
     _addToEventCache(cacheKey, event);
     return event;
   }
 
-  static Event createRepostEvent({
+  static Nip01Event createRepostEvent({
     required String noteId,
     required String noteAuthor,
     required String content,
@@ -121,18 +128,20 @@ class NostrService {
     _cacheMisses++;
     _eventsCreated++;
 
-    final event = Event.from(
+    final publicKey = Bip340.getPublicKey(privateKey);
+    final event = Nip01Event(
+      pubKey: publicKey,
       kind: 6,
       tags: tags,
       content: content,
-      privkey: privateKey,
     );
+    event.sig = Bip340.sign(event.id, privateKey);
 
     _addToEventCache(cacheKey, event);
     return event;
   }
 
-  static Event createDeletionEvent({
+  static Nip01Event createDeletionEvent({
     required List<String> eventIds,
     required String privateKey,
     String? reason,
@@ -150,18 +159,20 @@ class NostrService {
     _cacheMisses++;
     _eventsCreated++;
 
-    final event = Event.from(
+    final publicKey = Bip340.getPublicKey(privateKey);
+    final event = Nip01Event(
+      pubKey: publicKey,
       kind: 5,
       tags: tags,
       content: content,
-      privkey: privateKey,
     );
+    event.sig = Bip340.sign(event.id, privateKey);
 
     _addToEventCache(cacheKey, event);
     return event;
   }
 
-  static Event createProfileEvent({
+  static Nip01Event createProfileEvent({
     required Map<String, dynamic> profileContent,
     required String privateKey,
   }) {
@@ -176,18 +187,20 @@ class NostrService {
     _cacheMisses++;
     _eventsCreated++;
 
-    final event = Event.from(
+    final publicKey = Bip340.getPublicKey(privateKey);
+    final event = Nip01Event(
+      pubKey: publicKey,
       kind: 0,
       tags: [],
       content: content,
-      privkey: privateKey,
     );
+    event.sig = Bip340.sign(event.id, privateKey);
 
     _addToEventCache(cacheKey, event);
     return event;
   }
 
-  static Event createFollowEvent({
+  static Nip01Event createFollowEvent({
     required List<String> followingPubkeys,
     required String privateKey,
   }) {
@@ -202,18 +215,20 @@ class NostrService {
     _cacheMisses++;
     _eventsCreated++;
 
-    final event = Event.from(
+    final publicKey = Bip340.getPublicKey(privateKey);
+    final event = Nip01Event(
+      pubKey: publicKey,
       kind: 3,
       tags: tags,
       content: "",
-      privkey: privateKey,
     );
+    event.sig = Bip340.sign(event.id, privateKey);
 
     _addToEventCache(cacheKey, event);
     return event;
   }
 
-  static Event createMuteEvent({
+  static Nip01Event createMuteEvent({
     required List<String> mutedPubkeys,
     required String privateKey,
   }) {
@@ -228,18 +243,20 @@ class NostrService {
     _cacheMisses++;
     _eventsCreated++;
 
-    final event = Event.from(
+    final publicKey = Bip340.getPublicKey(privateKey);
+    final event = Nip01Event(
+      pubKey: publicKey,
       kind: 10000,
       tags: tags,
       content: "",
-      privkey: privateKey,
     );
+    event.sig = Bip340.sign(event.id, privateKey);
 
     _addToEventCache(cacheKey, event);
     return event;
   }
 
-  static Event createZapRequestEvent({
+  static Nip01Event createZapRequestEvent({
     required List<List<String>> tags,
     required String content,
     required String privateKey,
@@ -254,18 +271,20 @@ class NostrService {
     _cacheMisses++;
     _eventsCreated++;
 
-    final event = Event.from(
+    final publicKey = Bip340.getPublicKey(privateKey);
+    final event = Nip01Event(
+      pubKey: publicKey,
       kind: 9734,
       tags: tags,
       content: content,
-      privkey: privateKey,
     );
+    event.sig = Bip340.sign(event.id, privateKey);
 
     _addToEventCache(cacheKey, event);
     return event;
   }
 
-  static Event createQuoteEvent({
+  static Nip01Event createQuoteEvent({
     required String content,
     required String quotedEventId,
     String? quotedEventPubkey,
@@ -299,18 +318,20 @@ class NostrService {
     _cacheMisses++;
     _eventsCreated++;
 
-    final event = Event.from(
+    final publicKey = Bip340.getPublicKey(privateKey);
+    final event = Nip01Event(
+      pubKey: publicKey,
       kind: 1,
       tags: tags,
       content: content,
-      privkey: privateKey,
     );
+    event.sig = Bip340.sign(event.id, privateKey);
 
     _addToEventCache(cacheKey, event);
     return event;
   }
 
-  static Event createBlossomAuthEvent({
+  static Nip01Event createBlossomAuthEvent({
     required String content,
     required String sha256Hash,
     required int expiration,
@@ -332,12 +353,14 @@ class NostrService {
     _cacheMisses++;
     _eventsCreated++;
 
-    final event = Event.from(
+    final publicKey = Bip340.getPublicKey(privateKey);
+    final event = Nip01Event(
+      pubKey: publicKey,
       kind: 24242,
       tags: tags,
       content: content,
-      privkey: privateKey,
     );
+    event.sig = Bip340.sign(event.id, privateKey);
 
     _addToEventCache(cacheKey, event);
     return event;
@@ -419,7 +442,7 @@ class NostrService {
     int? limit,
   }) {
     return Filter(
-      p: pubkeys,
+      pTags: pubkeys,
       kinds: kinds ?? [1, 6, 7, 9735],
       since: since,
       limit: limit,
@@ -440,43 +463,42 @@ class NostrService {
   }) {
     return Filter(
       kinds: [7, 1, 6, 9735],
-      e: eventIds,
+      eTags: eventIds,
       limit: limit,
     );
   }
 
-  static Request createRequest(Filter filter) {
+  static String createRequest(Filter filter) {
     final uuid = generateUUID();
     final cacheKey = 'single_${filter.hashCode}';
 
     if (_requestCache.containsKey(cacheKey)) {
       _cacheHits++;
-
-      return Request(uuid, [filter]);
+      return _requestCache[cacheKey]!;
     }
 
     _cacheMisses++;
     _requestsCreated++;
 
-    final request = Request(uuid, [filter]);
+    final request = jsonEncode(['REQ', uuid, filter.toJson()]);
     _addToRequestCache(cacheKey, request);
     return request;
   }
 
-  static Request createMultiFilterRequest(List<Filter> filters) {
+  static String createMultiFilterRequest(List<Filter> filters) {
     final uuid = generateUUID();
     final cacheKey = 'multi_${filters.map((f) => f.hashCode).join('_')}';
 
     if (_requestCache.containsKey(cacheKey)) {
       _cacheHits++;
-
-      return Request(uuid, filters);
+      return _requestCache[cacheKey]!;
     }
 
     _cacheMisses++;
     _requestsCreated++;
 
-    final request = Request(uuid, filters);
+    final filterList = filters.map((f) => f.toJson()).toList();
+    final request = jsonEncode(['REQ', uuid, ...filterList]);
     _addToRequestCache(cacheKey, request);
     return request;
   }
@@ -485,43 +507,17 @@ class NostrService {
     return const Uuid().v4().replaceAll('-', '');
   }
 
-  static String serializeEvent(Event event) => event.serialize();
+  static String serializeEvent(Nip01Event event) => jsonEncode(['EVENT', event.toJson()]);
 
-  static String serializeRequest(Request request) => request.serialize();
+  static String serializeRequest(String request) => request;
 
 
   static String serializeCountRequest(String subscriptionId, Filter filter) {
-    final filterMap = <String, dynamic>{};
-    
-    if (filter.ids != null && filter.ids!.isNotEmpty) {
-      filterMap['ids'] = filter.ids;
-    }
-    if (filter.authors != null && filter.authors!.isNotEmpty) {
-      filterMap['authors'] = filter.authors;
-    }
-    if (filter.kinds != null && filter.kinds!.isNotEmpty) {
-      filterMap['kinds'] = filter.kinds;
-    }
-    if (filter.e != null && filter.e!.isNotEmpty) {
-      filterMap['#e'] = filter.e;
-    }
-    if (filter.p != null && filter.p!.isNotEmpty) {
-      filterMap['#p'] = filter.p;
-    }
-    if (filter.since != null) {
-      filterMap['since'] = filter.since;
-    }
-    if (filter.until != null) {
-      filterMap['until'] = filter.until;
-    }
-    if (filter.limit != null) {
-      filterMap['limit'] = filter.limit;
-    }
-    
+    final filterMap = filter.toJson();
     return jsonEncode(['COUNT', subscriptionId, filterMap]);
   }
 
-  static Map<String, dynamic> eventToJson(Event event) => event.toJson();
+  static Map<String, dynamic> eventToJson(Nip01Event event) => event.toJson();
 
   static List<List<String>> createZapRequestTags({
     required List<String> relays,
@@ -645,8 +641,8 @@ class NostrService {
   static String _generateEventCacheKey(int kind, String content, String privateKey, List<List<String>>? tags) {
     final tagsStr = tags?.map((tag) => tag.join(':')).join('|') ?? '';
 
-    final keychain = Keychain(privateKey);
-    final publicKeyHash = keychain.public.hashCode;
+    final publicKey = Bip340.getPublicKey(privateKey);
+    final publicKeyHash = publicKey.hashCode;
     return 'event_${kind}_${content.hashCode}_${publicKeyHash}_${tagsStr.hashCode}';
   }
 
@@ -654,7 +650,7 @@ class NostrService {
     return 'filter_${type}_${params.hashCode}';
   }
 
-  static void _addToEventCache(String key, Event event) {
+  static void _addToEventCache(String key, Nip01Event event) {
     if (_eventCache.length >= _maxCacheSize) {
       _evictOldestCacheEntry(_eventCache);
     }
@@ -668,7 +664,7 @@ class NostrService {
     _filterCache[key] = filter;
   }
 
-  static void _addToRequestCache(String key, Request request) {
+  static void _addToRequestCache(String key, String request) {
     if (_requestCache.length >= _maxCacheSize) {
       _evictOldestCacheEntry(_requestCache);
     }
@@ -719,7 +715,7 @@ class NostrService {
     _batchQueue.clear();
   }
 
-  static List<Event> createMultipleNoteEvents(List<Map<String, dynamic>> eventData) {
+  static List<Nip01Event> createMultipleNoteEvents(List<Map<String, dynamic>> eventData) {
     return eventData
         .map((data) => createNoteEvent(
               content: data['content'],

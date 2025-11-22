@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'dart:io';
-import 'package:crypto/crypto.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:nostr/nostr.dart';
+import 'package:ndk/ndk.dart';
+import 'package:ndk/entities.dart';
+import 'package:ndk/shared/nips/nip01/bip340.dart';
+import 'dart:typed_data';
 import '../models/note_model.dart';
 import 'time_service.dart';
 
@@ -473,7 +475,6 @@ class MediaService {
     }
 
     final fileBytes = await file.readAsBytes();
-    final sha256Hash = sha256.convert(fileBytes).toString();
 
     String mimeType = 'application/octet-stream';
     final lowerPath = filePath.toLowerCase();
@@ -487,47 +488,42 @@ class MediaService {
       mimeType = 'video/mp4';
     }
 
-    final expiration = timeService.add(Duration(minutes: 10)).millisecondsSinceEpoch ~/ 1000;
+      final publicKey = Bip340.getPublicKey(privateKey);
 
-    final authEvent = Event.from(
-      kind: 24242,
-      content: 'Upload ${file.uri.pathSegments.last}',
-      tags: [
-        ['t', 'upload'],
-        ['x', sha256Hash],
-        ['expiration', expiration.toString()],
-      ],
-      privkey: privateKey,
-    );
+      final ndk = Ndk(
+        NdkConfig(
+          eventVerifier: Bip340EventVerifier(),
+          cache: MemCacheManager(),
+          bootstrapRelays: [],
+        ),
+      );
 
-    final encodedAuth = base64.encode(utf8.encode(jsonEncode(authEvent.toJson())));
-    final authHeader = 'Nostr $encodedAuth';
+      ndk.accounts.loginPrivateKey(
+        pubkey: publicKey,
+        privkey: privateKey,
+      );
+
+      final ndkFile = NdkFile(
+        data: Uint8List.fromList(fileBytes),
+        mimeType: mimeType,
+      );
 
     final cleanedUrl = blossomUrl.replaceAll(RegExp(r'/+$'), '');
-    final uri = Uri.parse('$cleanedUrl/upload');
+    final uploadResults = await ndk.files.upload(
+      file: ndkFile,
+      serverUrls: [cleanedUrl],
+    );
 
-    final httpClient = HttpClient();
-    final request = await httpClient.putUrl(uri);
-
-    request.headers.set(HttpHeaders.authorizationHeader, authHeader);
-    request.headers.set(HttpHeaders.contentTypeHeader, mimeType);
-    request.headers.set(HttpHeaders.contentLengthHeader, fileBytes.length);
-
-    request.add(fileBytes);
-
-    final response = await request.close();
-    final responseBody = await response.transform(utf8.decoder).join();
-
-    if (response.statusCode != 200) {
-      throw Exception('Upload failed with status ${response.statusCode}: $responseBody');
+    if (uploadResults.isEmpty || !uploadResults.first.success) {
+      throw Exception('Upload failed: ${uploadResults.first.error ?? 'Unknown error'}');
     }
 
-    final decoded = jsonDecode(responseBody);
-    if (decoded is Map && decoded.containsKey('url')) {
-      return decoded['url'];
+    final blobDescriptor = uploadResults.first.descriptor;
+    if (blobDescriptor == null) {
+      throw Exception('Upload succeeded but no descriptor returned.');
     }
 
-    throw Exception('Upload succeeded but response does not contain a valid URL.');
+    return blobDescriptor.url.isNotEmpty ? blobDescriptor.url : blobDescriptor.sha256;
   }
 
   Future<void> dispose() async {

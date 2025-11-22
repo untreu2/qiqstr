@@ -1,5 +1,6 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:nostr/nostr.dart';
+import 'package:ndk/ndk.dart';
+import 'package:ndk/shared/nips/nip01/bip340.dart';
 import 'package:bip39/bip39.dart' as bip39;
 import 'package:bip32/bip32.dart' as bip32;
 
@@ -63,15 +64,15 @@ class AuthService {
 
       String privateKey;
       try {
-        privateKey = Nip19.decodePrivkey(nsec);
+        privateKey = Nip19.decode(nsec);
       } catch (e) {
         return const Result.error('Invalid NSEC format');
       }
 
       String npub;
       try {
-        final keychain = Keychain(privateKey);
-        npub = Nip19.encodePubkey(keychain.public);
+        final publicKey = Bip340.getPublicKey(privateKey);
+        npub = Nip19.encodePubKey(publicKey);
       } catch (e) {
         return const Result.error('Failed to generate public key from NSEC');
       }
@@ -89,11 +90,11 @@ class AuthService {
 
   Future<Result<String>> createNewAccount() async {
     try {
-      final keychain = Keychain.generate();
-      final privateKey = keychain.private;
-      final publicKey = keychain.public;
+      final keyPair = Bip340.generatePrivateKey();
+      final privateKey = keyPair.privateKey!;
+      final publicKey = keyPair.publicKey;
 
-      final npub = Nip19.encodePubkey(publicKey);
+      final npub = Nip19.encodePubKey(publicKey);
 
       await Future.wait([
         _secureStorage.write(key: 'npub', value: npub),
@@ -124,8 +125,8 @@ class AuthService {
 
       String npub;
       try {
-        final keychain = Keychain(privateKey);
-        npub = Nip19.encodePubkey(keychain.public);
+        final publicKey = Bip340.getPublicKey(privateKey);
+        npub = Nip19.encodePubKey(publicKey);
       } catch (e) {
         return const Result.error('Failed to generate public key from private key');
       }
@@ -219,7 +220,7 @@ class AuthService {
   String? hexToNpub(String hex) {
     try {
       if (hex.length == 64) {
-        return Nip19.encodePubkey(hex);
+        return Nip19.encodePubKey(hex);
       }
       return null;
     } catch (e) {
@@ -230,7 +231,7 @@ class AuthService {
   String? hexToNsec(String hexPrivateKey) {
     try {
       if (hexPrivateKey.length == 64) {
-        return Nip19.encodePrivkey(hexPrivateKey);
+        return Nip19.encodePrivateKey(hexPrivateKey);
       }
       return null;
     } catch (e) {
@@ -269,9 +270,9 @@ class AuthService {
   String? decodeBasicBech32(String bech32String, String expectedPrefix) {
     try {
       if (expectedPrefix == 'npub') {
-        return Nip19.decodePubkey(bech32String);
+        return Nip19.decode(bech32String);
       } else if (expectedPrefix == 'nsec') {
-        return Nip19.decodePrivkey(bech32String);
+        return Nip19.decode(bech32String);
       }
       return null;
     } catch (e) {
@@ -330,8 +331,8 @@ class AuthService {
 
       String npub;
       try {
-        final keychain = Keychain(privateKey);
-        npub = Nip19.encodePubkey(keychain.public);
+        final publicKey = Bip340.getPublicKey(privateKey);
+        npub = Nip19.encodePubKey(publicKey);
       } catch (e) {
         return const Result.error('Failed to generate public key from mnemonic');
       }

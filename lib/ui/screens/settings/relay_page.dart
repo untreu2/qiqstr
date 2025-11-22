@@ -1,7 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:nostr/nostr.dart';
+import 'package:ndk/ndk.dart';
+import 'package:ndk/shared/nips/nip01/bip340.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../../../constants/relays.dart';
@@ -130,12 +131,14 @@ class _RelayPageState extends State<RelayPage> {
         relayTags.add(['r', relay]);
       }
 
-      final event = Event.from(
+      final publicKey = Bip340.getPublicKey(privateKey);
+      final event = Nip01Event(
+        pubKey: publicKey,
         kind: 10002,
         tags: relayTags,
         content: '',
-        privkey: privateKey,
       );
+      event.sig = Bip340.sign(event.id, privateKey);
 
       final serializedEvent = NostrService.serializeEvent(event);
 

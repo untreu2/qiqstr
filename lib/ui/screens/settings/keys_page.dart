@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:nostr/nostr.dart';
+import 'package:ndk/ndk.dart';
 import 'package:qiqstr/ui/theme/theme_manager.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/snackbar_widget.dart';
@@ -39,7 +39,7 @@ class _KeysPageState extends State<KeysPage> {
       if (hexPrivateKey != null && npubBech32 != null) {
         String nsecBech32;
         try {
-          nsecBech32 = Nip19.encodePrivkey(hexPrivateKey);
+          nsecBech32 = Nip19.encodePrivateKey(hexPrivateKey);
         } catch (e) {
           nsecBech32 = 'Error encoding nsec';
         }
