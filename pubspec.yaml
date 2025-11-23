@@ -54,7 +54,6 @@ dependencies:
     bolt11_decoder: ^1.0.2
     dotted_border: ^3.1.0
     nostr_nip19: ^0.1.0
-    flutter_cache_manager: ^3.4.1
     auto_size_text: ^3.0.0
     collection: ^1.19.1
     http: ^1.4.0

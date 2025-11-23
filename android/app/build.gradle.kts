@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.example.qiqstr"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
