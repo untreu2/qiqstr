@@ -20,7 +20,7 @@ class MemoryTrimmingService {
   static const Duration noteRetentionPeriod = Duration(days: 7);
   static const Duration notificationRetentionPeriod = Duration(days: 14);
   static const int maxCachedUsers = 500;
-  static const int maxCachedNotes = 1000;
+  static const int maxCachedNotes = 150000;
 
   void startPeriodicTrimming() {
     if (_isRunning) return;

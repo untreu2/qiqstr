@@ -353,6 +353,26 @@ class FeedLoaderService {
       return sortNotes(updatedNotes, sortMode);
     }
 
+    if (updatedNotes.isEmpty) {
+      return currentNotes;
+    }
+
+    if (updatedNotes.length < currentNotes.length * 0.3) {
+      final currentNoteIds = currentNotes.map((n) => n.id).toSet();
+      final newNotes = updatedNotes.where((n) => !currentNoteIds.contains(n.id)).toList();
+      
+      if (newNotes.isNotEmpty) {
+        final updatedNoteMap = {for (var n in updatedNotes) n.id: n};
+        final mergedNotes = currentNotes.map((note) => updatedNoteMap[note.id] ?? note).toList();
+        mergedNotes.addAll(newNotes);
+        return sortNotes(mergedNotes, sortMode);
+      }
+      
+      final updatedNoteMap = {for (var n in updatedNotes) n.id: n};
+      final mergedNotes = currentNotes.map((note) => updatedNoteMap[note.id] ?? note).toList();
+      return mergedNotes;
+    }
+
     final noteIds = updatedNotes.map((n) => n.id).toSet();
     final currentNoteIds = currentNotes.map((n) => n.id).toSet();
 
@@ -364,7 +384,7 @@ class FeedLoaderService {
     final hasUpdates = updatedNoteList.isNotEmpty;
     final hasNewNotes = newerNotes.isNotEmpty;
 
-    if (hasRemovals) {
+    if (hasRemovals && noteIds.length >= currentNoteIds.length * 0.7) {
       final filteredCurrentNotes = List<NoteModel>.from(
         currentNotes.where((n) => !removedNoteIds.contains(n.id)),
       );
@@ -402,37 +422,15 @@ class FeedLoaderService {
         }
       }
 
-      final latestTimestamp = filteredCurrentNotes.isNotEmpty ? filteredCurrentNotes.first.timestamp : DateTime.now();
-      final timestampNewerNotes = <NoteModel>[];
-      for (final note in updatedNotes) {
-        if (note.timestamp.isAfter(latestTimestamp)) {
-          timestampNewerNotes.add(note);
-        }
+      final currentNoteIds = filteredCurrentNotes.map((n) => n.id).toSet();
+      final notesToAdd = newerNotes.where((n) => !currentNoteIds.contains(n.id)).toList();
+      
+      if (notesToAdd.isNotEmpty) {
+        filteredCurrentNotes.addAll(notesToAdd);
+        return sortNotes(filteredCurrentNotes, sortMode);
       }
 
-      if (timestampNewerNotes.isEmpty) {
-        if (hasUpdates) {
-          return sortNotes(filteredCurrentNotes, sortMode);
-        }
-        return currentNotes;
-      }
-
-      final userNotes = <NoteModel>[];
-      final otherNotes = <NoteModel>[];
-
-      for (final note in timestampNewerNotes) {
-        final currentUserNpub = _noteRepository.nostrDataService.currentUserNpub;
-        if (note.author == currentUserNpub) {
-          userNotes.add(note);
-        } else {
-          otherNotes.add(note);
-        }
-      }
-
-      if (userNotes.isNotEmpty) {
-        final allNotes = [...userNotes, ...filteredCurrentNotes];
-        return sortNotes(allNotes, sortMode);
-      } else if (hasUpdates) {
+      if (hasUpdates) {
         return sortNotes(filteredCurrentNotes, sortMode);
       }
     }

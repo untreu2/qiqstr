@@ -21,19 +21,30 @@ extension NoteRepositoryCompat on NoteRepository {
       if (!skipCache) {
         final cachedResult = await getFilteredNotes(filter);
         if (cachedResult.isSuccess && cachedResult.data!.isNotEmpty) {
-          debugPrint('[NoteRepository] Found ${cachedResult.data!.length} cached notes');
+          List<NoteModel> filteredCachedNotes = cachedResult.data!;
           
-          fetchNotesFromRelays(
-            authorNpubs: authorNpubs,
-            limit: limit,
-            until: until,
-            since: since,
-            isProfileMode: isProfileMode,
-          ).then((_) {}).catchError((e) {
-            debugPrint('[NoteRepository] Error fetching notes in background: $e');
-          });
+          if (until != null) {
+            filteredCachedNotes = filteredCachedNotes.where((note) {
+              final noteTime = note.isRepost ? (note.repostTimestamp ?? note.timestamp) : note.timestamp;
+              return noteTime.isBefore(until);
+            }).toList();
+          }
           
-          return cachedResult;
+          if (filteredCachedNotes.isNotEmpty) {
+            debugPrint('[NoteRepository] Found ${filteredCachedNotes.length} cached notes (after until filter: ${until != null})');
+            
+            fetchNotesFromRelays(
+              authorNpubs: authorNpubs,
+              limit: limit,
+              until: until,
+              since: since,
+              isProfileMode: isProfileMode,
+            ).then((_) {}).catchError((e) {
+              debugPrint('[NoteRepository] Error fetching notes in background: $e');
+            });
+            
+            return Result.success(filteredCachedNotes);
+          }
         }
       } else {
         debugPrint('[NoteRepository] Skipping cache, fetching directly from relays');
@@ -47,7 +58,17 @@ extension NoteRepositoryCompat on NoteRepository {
         isProfileMode: isProfileMode,
       );
       
-      return getFilteredNotes(filter);
+      final result = await getFilteredNotes(filter);
+      
+      if (result.isSuccess && until != null && result.data!.isNotEmpty) {
+        final filteredNotes = result.data!.where((note) {
+          final noteTime = note.isRepost ? (note.repostTimestamp ?? note.timestamp) : note.timestamp;
+          return noteTime.isBefore(until);
+        }).toList();
+        return Result.success(filteredNotes);
+      }
+      
+      return result;
     } catch (e) {
       debugPrint('[NoteRepository] Exception in _getFeedNotesForAuthors: $e');
       return Result.error('Failed to get feed notes: ${e.toString()}');

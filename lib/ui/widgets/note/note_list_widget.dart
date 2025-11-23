@@ -37,6 +37,37 @@ class NoteListWidget extends StatefulWidget {
 }
 
 class _NoteListWidgetState extends State<NoteListWidget> {
+  bool _hasTriggeredLoadMore = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.scrollController?.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    widget.scrollController?.removeListener(_onScroll);
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (widget.scrollController == null) return;
+    if (!widget.canLoadMore || widget.isLoading) return;
+    if (_hasTriggeredLoadMore) return;
+
+    final maxScroll = widget.scrollController!.position.maxScrollExtent;
+    final currentScroll = widget.scrollController!.position.pixels;
+    final threshold = maxScroll * 0.8;
+
+    if (currentScroll >= threshold) {
+      _hasTriggeredLoadMore = true;
+      widget.onLoadMore?.call();
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _hasTriggeredLoadMore = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -61,7 +92,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
       );
     }
 
-    return _NoteListWithVisibility(
+    return _NoteListContent(
       notes: widget.notes,
       currentUserNpub: widget.currentUserNpub ?? '',
       notesNotifier: widget.notesNotifier,
@@ -73,7 +104,7 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   }
 }
 
-class _NoteListWithVisibility extends StatelessWidget {
+class _NoteListContent extends StatelessWidget {
   final List<NoteModel> notes;
   final String currentUserNpub;
   final ValueNotifier<List<NoteModel>> notesNotifier;
@@ -82,7 +113,7 @@ class _NoteListWithVisibility extends StatelessWidget {
   final bool canLoadMore;
   final bool isLoading;
 
-  const _NoteListWithVisibility({
+  const _NoteListContent({
     required this.notes,
     required this.currentUserNpub,
     required this.notesNotifier,
@@ -97,13 +128,6 @@ class _NoteListWithVisibility extends StatelessWidget {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
         (context, index) {
-          if (index == notes.length) {
-            if (isLoading || canLoadMore) {
-              return const _LoadMoreIndicator();
-            }
-            return const SizedBox.shrink();
-          }
-
           if (index >= notes.length) {
             return const SizedBox.shrink();
           }
@@ -123,7 +147,7 @@ class _NoteListWithVisibility extends StatelessWidget {
             ),
           );
         },
-        childCount: notes.length + (canLoadMore || isLoading ? 1 : 0),
+        childCount: notes.length,
         addAutomaticKeepAlives: true,
         addRepaintBoundaries: false,
         addSemanticIndexes: false,
@@ -182,7 +206,6 @@ class _NoteItemWidgetState extends State<_NoteItemWidget> with AutomaticKeepAliv
   }
 }
 
-
 class _LoadingState extends StatelessWidget {
   const _LoadingState();
 
@@ -193,27 +216,6 @@ class _LoadingState extends StatelessWidget {
         padding: const EdgeInsets.all(32.0),
         child: CircularProgressIndicator(
           color: Theme.of(context).colorScheme.primary,
-        ),
-      ),
-    );
-  }
-}
-
-class _LoadMoreIndicator extends StatelessWidget {
-  const _LoadMoreIndicator();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-      alignment: Alignment.center,
-      constraints: const BoxConstraints(minHeight: 56),
-      child: SizedBox(
-        width: 20,
-        height: 20,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
         ),
       ),
     );
