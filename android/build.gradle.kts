@@ -32,27 +32,6 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-subprojects {
-    tasks.register("fixSqflite") {
-        doLast {
-            val sqfliteUtilsPath = file("${System.getProperty("user.home")}/.pub-cache/hosted/pub.dev/sqflite_android-2.4.2+2/android/src/main/java/com/tekartik/sqflite/Utils.java")
-            if (sqfliteUtilsPath.exists()) {
-                var content = sqfliteUtilsPath.readText()
-                // Replace BAKLAVA with numeric value 35
-                content = content.replace("Build.VERSION_CODES.BAKLAVA", "35")
-                sqfliteUtilsPath.writeText(content)
-                println("Fixed sqflite BAKLAVA issue")
-            }
-        }
-    }
-    
-    tasks.whenTaskAdded {
-        if (name == "preBuild") {
-            dependsOn("fixSqflite")
-        }
-    }
-}
-
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
