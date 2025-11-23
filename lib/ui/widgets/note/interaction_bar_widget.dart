@@ -82,6 +82,7 @@ class _InteractionBarState extends State<InteractionBar> {
   StreamSubscription<List<NoteModel>>? _streamSubscription;
   DateTime? _lastUpdateTime;
   final GlobalKey _repostButtonKey = GlobalKey();
+  final GlobalKey _moreButtonKey = GlobalKey();
 
   @override
   void initState() {
@@ -597,80 +598,99 @@ class _InteractionBarState extends State<InteractionBar> {
     );
   }
 
-  Widget _buildPopupMenu(dynamic colors) {
-    return PopupMenuButton<String>(
-      icon: Transform.translate(
-        offset: const Offset(-4, 0),
-        child: Icon(
-          Icons.more_horiz,
-          size: widget.isBigSize ? 20.0 : 18.0,
-          color: colors.secondary,
-        ),
-      ),
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
-      color: colors.buttonPrimary,
-      elevation: 0,
-      onSelected: (value) {
-        HapticFeedback.lightImpact();
-        if (value == 'interactions') {
-          _handleStatsTap();
-        } else if (value == 'delete') {
-          _handleDeleteTap();
-        }
-      },
-      itemBuilder: (context) {
-        final items = <PopupMenuItem<String>>[
-          PopupMenuItem(
-            value: 'interactions',
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              child: Row(
-                children: [
-                  Icon(CarbonIcons.chart_bar, size: 18, color: colors.buttonText),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Interactions',
-                    style: TextStyle(
-                      color: colors.buttonText,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ];
+  void _showMoreMenu() {
+    final RenderBox? renderBox = _moreButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
 
-        if (widget.note?.author == widget.currentUserNpub) {
-          items.add(
-            PopupMenuItem(
-              value: 'delete',
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                child: Row(
-                  children: [
-                    Icon(CarbonIcons.delete, size: 18, color: colors.buttonText),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Delete',
-                      style: TextStyle(
-                        color: colors.buttonText,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+    final offset = renderBox.localToGlobal(Offset.zero);
+    final size = renderBox.size;
+
+    final items = <PopupMenuItem<String>>[
+      PopupMenuItem(
+        value: 'interactions',
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Row(
+            children: [
+              Icon(CarbonIcons.chart_bar, size: 18, color: context.colors.buttonText),
+              const SizedBox(width: 12),
+              Text(
+                'Interactions',
+                style: TextStyle(
+                  color: context.colors.buttonText,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-            ),
-          );
-        }
+            ],
+          ),
+        ),
+      ),
+    ];
 
-        return items;
-      },
+    if (widget.note?.author == widget.currentUserNpub) {
+      items.add(
+        PopupMenuItem(
+          value: 'delete',
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Icon(CarbonIcons.delete, size: 18, color: context.colors.buttonText),
+                const SizedBox(width: 12),
+                Text(
+                  'Delete',
+                  style: TextStyle(
+                    color: context.colors.buttonText,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        offset.dx,
+        offset.dy + size.height,
+        offset.dx + size.width,
+        offset.dy + size.height + 200,
+      ),
+      color: context.colors.buttonPrimary,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
+      items: items,
+    ).then((value) {
+      if (value == null) return;
+      HapticFeedback.lightImpact();
+      if (value == 'interactions') {
+        _handleStatsTap();
+      } else if (value == 'delete') {
+        _handleDeleteTap();
+      }
+    });
+  }
+
+  Widget _buildPopupMenu(dynamic colors) {
+    return InkWell(
+      key: _moreButtonKey,
+      onTap: _showMoreMenu,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: Transform.translate(
+          offset: const Offset(-4, 0),
+          child: Icon(
+            Icons.more_horiz,
+            size: widget.isBigSize ? 20.0 : 18.0,
+            color: colors.secondary,
+          ),
+        ),
+      ),
     );
   }
 }

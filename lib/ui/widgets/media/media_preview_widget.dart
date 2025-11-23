@@ -275,13 +275,27 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
     return RepaintBoundary(
       child: GestureDetector(
         onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => PhotoViewerWidget(
+          Navigator.of(context).push(
+            PageRouteBuilder(
+              transitionDuration: const Duration(milliseconds: 300),
+              reverseTransitionDuration: const Duration(milliseconds: 200),
+              pageBuilder: (_, __, ___) => PhotoViewerWidget(
                 imageUrls: allUrls,
                 initialIndex: index,
               ),
+              transitionsBuilder: (_, animation, __, child) {
+                final curved = CurvedAnimation(
+                  parent: animation,
+                  curve: Curves.easeOutCubic,
+                );
+                return FadeTransition(
+                  opacity: curved,
+                  child: ScaleTransition(
+                    scale: Tween<double>(begin: 0.97, end: 1).animate(curved),
+                    child: child,
+                  ),
+                );
+              },
             ),
           );
         },

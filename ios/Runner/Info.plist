@@ -28,6 +28,8 @@
 		<true/>
 		<key>NSPhotoLibraryUsageDescription</key>
 		<string>We need access to your photo library to allow you to select and upload photos.</string>
+		<key>NSPhotoLibraryAddUsageDescription</key>
+		<string>This app needs access to your photo library to save images and videos to your gallery.</string>
 		<key>UIApplicationSupportsIndirectInputEvents</key>
 		<true/>
 		<key>UILaunchStoryboardName</key>
