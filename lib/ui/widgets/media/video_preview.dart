@@ -38,11 +38,15 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
     _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
       ..initialize().then((_) {
         if (mounted) {
-          setState(() {
-            _isInitialized = true;
-            _duration = _controller!.value.duration;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() {
+                _isInitialized = true;
+                _duration = _controller!.value.duration;
+              });
+              _controller!.addListener(_updatePosition);
+            }
           });
-          _controller!.addListener(_updatePosition);
         }
       });
   }
@@ -61,7 +65,11 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       if (_controller!.value.isPlaying) {
         _controller!.pause();
-        setState(() => _isPlaying = false);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() => _isPlaying = false);
+          }
+        });
       }
     }
   }
@@ -70,7 +78,11 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   void deactivate() {
     if (_controller != null && _controller!.value.isInitialized && _controller!.value.isPlaying) {
       _controller!.pause();
-      setState(() => _isPlaying = false);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() => _isPlaying = false);
+        }
+      });
     }
     super.deactivate();
   }
@@ -80,10 +92,14 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
     final newPosition = _controller!.value.position;
     final newDuration = _controller!.value.duration;
     if (mounted) {
-      setState(() {
-        _position = newPosition;
-        _duration = newDuration;
-        _isPlaying = _controller!.value.isPlaying;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _position = newPosition;
+            _duration = newDuration;
+            _isPlaying = _controller!.value.isPlaying;
+          });
+        }
       });
     }
   }
@@ -104,7 +120,11 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
   void _openFullScreen() {
     if (_controller != null && _controller!.value.isInitialized && _controller!.value.isPlaying) {
       _controller!.pause();
-      setState(() => _isPlaying = false);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() => _isPlaying = false);
+        }
+      });
     }
     
     Navigator.of(context).push(
