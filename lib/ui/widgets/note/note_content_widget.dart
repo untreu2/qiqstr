@@ -1,7 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
@@ -10,6 +9,7 @@ import '../../../data/repositories/auth_repository.dart';
 import '../../../data/services/user_batch_fetcher.dart';
 import '../../../models/user_model.dart';
 import '../../screens/note/feed_page.dart';
+import '../../screens/webview/webview_page.dart';
 import '../media/link_preview_widget.dart';
 import '../media/media_preview_widget.dart';
 import '../media/mini_link_preview_widget.dart';
@@ -244,12 +244,16 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
   Future<void> _onOpenLink(LinkableElement link) async {
     try {
       final url = Uri.parse(link.url);
-      if (await canLaunchUrl(url)) {
-        await launchUrl(url);
-      } else {
-        if (mounted) {
-          AppSnackbar.error(context, 'Could not launch ${link.url}');
-        }
+      if (mounted) {
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          enableDrag: false,
+          isDismissible: true,
+          useRootNavigator: false,
+          builder: (context) => WebViewPage(url: url.toString()),
+        );
       }
     } catch (e) {
       if (mounted) {

@@ -4,8 +4,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../theme/theme_manager.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
-import 'package:url_launcher/url_launcher.dart';
 import '../../../models/link_preview_model.dart';
+import '../../screens/webview/webview_page.dart';
 
 Future<LinkPreviewModel?> _fetchAndParseMiniLink(String url) async {
   try {
@@ -199,10 +199,17 @@ class _MiniLinkPreviewWidgetState extends State<MiniLinkPreviewWidget> {
     );
   }
 
-  void _launchUrl(String url) async {
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+  void _launchUrl(String url) {
+    if (mounted) {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        enableDrag: false,
+        isDismissible: true,
+        useRootNavigator: false,
+        builder: (context) => WebViewPage(url: url),
+      );
     }
   }
 }

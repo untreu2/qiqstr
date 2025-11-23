@@ -76,6 +76,7 @@ dependencies:
     flutter_native_splash: ^2.4.7
     google_fonts: ^6.2.1
     ndk: ^0.6.0
+    webview_flutter: ^4.13.0
 
 dev_dependencies:
     flutter_test:
