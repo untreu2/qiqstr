@@ -669,9 +669,116 @@ class NostrDataService {
 
       _updateAllReplyCountsForNote(id);
 
+      if (!isReply) {
+        Future.delayed(const Duration(milliseconds: 500), () {
+          if (!_isClosed) {
+            _fetchThreadRepliesForNote(id);
+          }
+        });
+      }
+
       _scheduleUIUpdate();
     } catch (e) {
       debugPrint('[NostrDataService] Error processing note event: $e');
+    }
+  }
+
+  final Set<String> _pendingThreadFetches = {};
+
+  Future<void> fetchThreadRepliesForNote(String rootNoteId) async {
+    return _fetchThreadRepliesForNote(rootNoteId);
+  }
+
+  Future<void> _fetchThreadRepliesForNote(String rootNoteId) async {
+    if (_pendingThreadFetches.contains(rootNoteId)) {
+      return;
+    }
+
+    _pendingThreadFetches.add(rootNoteId);
+
+    try {
+      final filter = Filter(
+        kinds: [1],
+        eTags: [rootNoteId],
+        limit: 100,
+      );
+
+      final request = NostrService.createRequest(filter);
+      final serializedRequest = NostrService.serializeRequest(request);
+      final requestJson = jsonDecode(serializedRequest) as List;
+      final actualSubscriptionId = requestJson[1] as String;
+
+      final allRelays = _relayManager.relayUrls.toList();
+      final processedReplyIds = <String>{};
+      int totalRepliesReceived = 0;
+
+      await Future.wait(allRelays.map((relayUrl) async {
+        WebSocket? ws;
+        StreamSubscription? sub;
+        try {
+          ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
+          if (_isClosed) {
+            await ws.close();
+            return;
+          }
+
+          final completer = Completer<void>();
+          int replyCount = 0;
+
+          sub = ws.listen((event) {
+            try {
+              final decoded = jsonDecode(event) as List<dynamic>;
+
+              if (decoded[0] == 'EVENT' && decoded[1] == actualSubscriptionId) {
+                final eventData = decoded[2] as Map<String, dynamic>;
+                final eventId = eventData['id'] as String;
+                final eventKind = eventData['kind'] as int;
+
+                if (eventKind == 1 && !processedReplyIds.contains(eventId)) {
+                  processedReplyIds.add(eventId);
+                  replyCount++;
+                  totalRepliesReceived++;
+
+                  _processNostrEvent(eventData).catchError((e) {
+                    debugPrint('[NostrDataService] Error processing thread reply: $e');
+                  });
+                }
+              } else if (decoded[0] == 'EOSE' && decoded[1] == actualSubscriptionId) {
+                debugPrint('[NostrDataService] EOSE received from $relayUrl for thread $rootNoteId (received $replyCount replies)');
+                if (!completer.isCompleted) completer.complete();
+              }
+            } catch (e) {
+              debugPrint('[NostrDataService] Error processing thread event from $relayUrl: $e');
+            }
+          }, onDone: () {
+            if (!completer.isCompleted) completer.complete();
+          }, onError: (error) {
+            debugPrint('[NostrDataService] Thread fetch error from $relayUrl: $error');
+            if (!completer.isCompleted) completer.complete();
+          }, cancelOnError: true);
+
+          if (ws.readyState == WebSocket.open) {
+            ws.add(serializedRequest);
+          }
+
+          await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
+            debugPrint('[NostrDataService] Thread fetch timeout from $relayUrl');
+          });
+
+          await sub.cancel();
+          await ws.close();
+        } catch (e) {
+          debugPrint('[NostrDataService] Error fetching thread from $relayUrl: $e');
+          await sub?.cancel();
+          await ws?.close();
+        }
+      }));
+
+      debugPrint('[NostrDataService] Thread replies fetch completed for root note: $rootNoteId (total: $totalRepliesReceived replies)');
+      _pendingThreadFetches.remove(rootNoteId);
+    } catch (e) {
+      debugPrint('[NostrDataService] Error fetching thread replies for $rootNoteId: $e');
+      _pendingThreadFetches.remove(rootNoteId);
     }
   }
 
@@ -2899,7 +3006,7 @@ class NostrDataService {
 
   List<UserModel> get cachedUsers => _getUsersList();
 
-  Future<void> _fetchInteractionsForNotes(List<String> noteIds) async {
+  Future<void> _fetchInteractionsForNotes(List<String> noteIds, {int limit = 2000}) async {
     if (noteIds.isEmpty) return;
 
     debugPrint('[NostrDataService] Fetching interactions for ${noteIds.length} notes...');
@@ -2912,7 +3019,7 @@ class NostrDataService {
 
         final filter = NostrService.createCombinedInteractionFilter(
           eventIds: batch,
-          limit: 2000,
+          limit: limit,
         );
         final request = NostrService.createRequest(filter);
         await _relayManager.broadcast(NostrService.serializeRequest(request));
@@ -2936,7 +3043,7 @@ class NostrDataService {
     debugPrint('[NostrDataService] Fetching interaction counts for ${noteIds.length} notes using normal events...');
 
     try {
-      await _fetchInteractionsForNotes(noteIds);
+      await _fetchInteractionsForNotes(noteIds, limit: 500);
       debugPrint('[NostrDataService] Interaction counts fetched for ${noteIds.length} notes');
     } catch (e) {
       debugPrint('[NostrDataService] Error fetching interaction counts: $e');
@@ -3066,6 +3173,101 @@ class NostrDataService {
     }
   }
 
+  Future<void> fetchInteractionsForNotesWithEOSE(String noteId) async {
+    if (_isClosed) return;
+
+    try {
+      final filter = NostrService.createCombinedInteractionFilter(
+        eventIds: [noteId],
+        limit: 2000,
+      );
+
+      final request = NostrService.createRequest(filter);
+      final serializedRequest = NostrService.serializeRequest(request);
+      final requestJson = jsonDecode(serializedRequest) as List;
+      final actualSubscriptionId = requestJson[1] as String;
+
+      final allRelays = _relayManager.relayUrls.toList();
+      final processedInteractionIds = <String>{};
+      int totalInteractionsReceived = 0;
+
+      await Future.wait(allRelays.map((relayUrl) async {
+        WebSocket? ws;
+        StreamSubscription? sub;
+        try {
+          ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
+          if (_isClosed) {
+            await ws.close();
+            return;
+          }
+
+          final completer = Completer<void>();
+          int interactionCount = 0;
+
+          sub = ws.listen((event) {
+            try {
+              final decoded = jsonDecode(event) as List<dynamic>;
+
+              if (decoded[0] == 'EVENT' && decoded[1] == actualSubscriptionId) {
+                final eventData = decoded[2] as Map<String, dynamic>;
+                final eventId = eventData['id'] as String;
+                final eventKind = eventData['kind'] as int;
+
+                if ([7, 1, 6, 9735].contains(eventKind) && !processedInteractionIds.contains(eventId)) {
+                  processedInteractionIds.add(eventId);
+                  interactionCount++;
+                  totalInteractionsReceived++;
+
+                  _processNostrEvent(eventData).catchError((e) {
+                    debugPrint('[NostrDataService] Error processing interaction: $e');
+                  });
+                }
+              } else if (decoded[0] == 'EOSE' && decoded[1] == actualSubscriptionId) {
+                debugPrint('[NostrDataService] EOSE received from $relayUrl for interactions $noteId (received $interactionCount interactions)');
+                if (!completer.isCompleted) completer.complete();
+              }
+            } catch (e) {
+              debugPrint('[NostrDataService] Error processing interaction event from $relayUrl: $e');
+            }
+          }, onDone: () {
+            if (!completer.isCompleted) completer.complete();
+          }, onError: (error) {
+            debugPrint('[NostrDataService] Interaction fetch error from $relayUrl: $error');
+            if (!completer.isCompleted) completer.complete();
+          }, cancelOnError: true);
+
+          if (ws.readyState == WebSocket.open) {
+            ws.add(serializedRequest);
+          }
+
+          await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {
+            debugPrint('[NostrDataService] Interaction fetch timeout from $relayUrl');
+          });
+
+          await sub.cancel();
+          await ws.close();
+        } catch (e) {
+          debugPrint('[NostrDataService] Error fetching interactions from $relayUrl: $e');
+          await sub?.cancel();
+          await ws?.close();
+        }
+      }));
+
+      final note = _noteCache[noteId];
+      if (note != null) {
+        note.reactionCount = _reactionsMap[noteId]?.length ?? 0;
+        note.repostCount = _repostsMap[noteId]?.length ?? 0;
+        note.zapAmount = _zapsMap[noteId]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
+        _updateNoteReplyCount(noteId);
+      }
+
+      _scheduleUIUpdate();
+      debugPrint('[NostrDataService] Interactions fetch with EOSE completed for note: $noteId (total: $totalInteractionsReceived interactions)');
+    } catch (e) {
+      debugPrint('[NostrDataService] Error fetching interactions with EOSE for $noteId: $e');
+    }
+  }
+
   Future<void> fetchInteractionsForNotes(List<String> noteIds, {bool forceLoad = false, bool useCount = false}) async {
     if (_isClosed || noteIds.isEmpty) return;
 
@@ -3094,12 +3296,12 @@ class NostrDataService {
       _lastInteractionFetch[eventId] = now;
     }
 
-    if (noteIdsToFetch.isNotEmpty) {
+      if (noteIdsToFetch.isNotEmpty) {
       debugPrint('[NostrDataService] Actually fetching for ${noteIdsToFetch.length} notes (after cooldown filter)');
       if (useCount) {
         await _fetchInteractionCountsForNotes(noteIdsToFetch);
       } else {
-        await _fetchInteractionsForNotes(noteIdsToFetch);
+        await _fetchInteractionsForNotes(noteIdsToFetch, limit: 2000);
       }
 
       int updatedCount = 0;

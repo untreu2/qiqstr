@@ -59,6 +59,8 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
 
+
+
   @override
   Widget build(BuildContext context) {
     return ViewModelBuilder<ThreadViewModel>(
@@ -147,10 +149,15 @@ class _ThreadPageState extends State<ThreadPage> {
 
   Widget _buildThreadContent(BuildContext context, ThreadViewModel viewModel, NoteModel? rootNote) {
     NoteModel? displayNote = rootNote;
-    if (rootNote != null && widget.focusedNoteId != null) {
-      final threadStructure = viewModel.threadStructureState.data;
-      if (threadStructure != null) {
-        displayNote = threadStructure.getNote(widget.focusedNoteId!) ?? rootNote;
+    if (widget.focusedNoteId != null) {
+      final focusedNoteState = viewModel.focusedNoteState;
+      if (focusedNoteState.isLoaded && focusedNoteState.data != null) {
+        displayNote = focusedNoteState.data;
+      } else if (rootNote != null) {
+        final threadStructure = viewModel.threadStructureState.data;
+        if (threadStructure != null) {
+          displayNote = threadStructure.getNote(widget.focusedNoteId!) ?? rootNote;
+        }
       }
     }
 
@@ -172,49 +179,31 @@ class _ThreadPageState extends State<ThreadPage> {
             SliverToBoxAdapter(
               child: _buildReplyInputSection(context, viewModel),
             ),
-            if (viewModel.isLoadingInteractions)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                  child: Center(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: context.colors.primary,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Loading interactions...',
-                          style: TextStyle(
-                            color: context.colors.textSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
             _buildThreadRepliesSliver(context, viewModel, displayNote),
           ] else ...[
-            SliverToBoxAdapter(
-              child: const SizedBox(height: 80),
-            ),
-            SliverToBoxAdapter(
+            SliverFillRemaining(
+              hasScrollBody: false,
               child: Center(
-                child: SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.grey,
-                  ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 32,
+                      height: 32,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 3,
+                        color: context.colors.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Loading thread...',
+                      style: TextStyle(
+                        color: context.colors.textSecondary,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -471,7 +460,7 @@ class _ThreadPageState extends State<ThreadPage> {
 
   Widget _buildLoadMoreButton(BuildContext context, int totalReplies) {
     return Center(
-      child: GestureDetector(
+        child: GestureDetector(
         onTap: () {
           setState(() {
             _visibleRepliesCount = math.min(
@@ -599,6 +588,7 @@ class _ThreadPageState extends State<ThreadPage> {
     NoteModel note,
     int depth,
   ) {
+
     return RepaintBoundary(
       child: NoteWidget(
         key: ValueKey('note_${note.id}'),

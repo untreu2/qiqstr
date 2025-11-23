@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../models/note_model.dart';
@@ -27,9 +28,12 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
   late final NostrDataService _nostrDataService;
   late ScrollController _scrollController;
   bool _showInteractionsBubble = false;
+  bool _isLoadingInteractions = false;
   
   List<Map<String, dynamic>>? _cachedInteractions;
   String? _lastNoteId;
+  Timer? _updateTimer;
+  StreamSubscription<List<NoteModel>>? _notesSubscription;
 
   @override
   void initState() {
@@ -37,6 +41,16 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
     _userRepository = AppDI.get<UserRepository>();
     _nostrDataService = AppDI.get<NostrDataService>();
     _scrollController = ScrollController()..addListener(_scrollListener);
+
+    _notesSubscription = _nostrDataService.notesStream.listen((notes) {
+      if (mounted && _isLoadingInteractions) {
+        final hasRelevantNote = notes.any((note) => note.id == widget.note.id);
+        if (hasRelevantNote) {
+          _buildInteractionsList();
+          setState(() {});
+        }
+      }
+    });
 
     _fetchInteractionsForNote();
     _buildInteractionsList();
@@ -55,22 +69,54 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
 
   @override
   void dispose() {
+    _updateTimer?.cancel();
+    _notesSubscription?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
 
   Future<void> _fetchInteractionsForNote() async {
+    if (_isLoadingInteractions) return;
+
     try {
-      debugPrint('[NoteStatisticsPage] Fetching fresh interactions for note: ${widget.note.id}');
-      await _nostrDataService.fetchInteractionsForNotes([widget.note.id], useCount: false);
+      setState(() {
+        _isLoadingInteractions = true;
+      });
+
+      _updateTimer?.cancel();
+      _updateTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
+        if (mounted && _isLoadingInteractions) {
+          _buildInteractionsList();
+          setState(() {});
+        } else {
+          timer.cancel();
+        }
+      });
+
+      debugPrint('[NoteStatisticsPage] Fetching interactions with EOSE for note: ${widget.note.id}');
+      await _nostrDataService.fetchInteractionsForNotesWithEOSE(widget.note.id);
+
+      _updateTimer?.cancel();
+      _updateTimer = null;
 
       if (mounted) {
-        setState(() {});
+        _buildInteractionsList();
+        setState(() {
+          _isLoadingInteractions = false;
+        });
       }
 
-      debugPrint('[NoteStatisticsPage] Fresh interactions fetched');
+      debugPrint('[NoteStatisticsPage] Interactions fetched with EOSE');
     } catch (e) {
       debugPrint('[NoteStatisticsPage] Error fetching interactions: $e');
+      _updateTimer?.cancel();
+      _updateTimer = null;
+      if (mounted) {
+        _buildInteractionsList();
+        setState(() {
+          _isLoadingInteractions = false;
+        });
+      }
     }
   }
 
@@ -220,7 +266,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
   }
 
   void _buildInteractionsList() {
-    if (_lastNoteId == widget.note.id && _cachedInteractions != null) {
+    if (_lastNoteId == widget.note.id && _cachedInteractions != null && !_isLoadingInteractions) {
       return;
     }
     
@@ -311,7 +357,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                 child: _buildHeader(context),
               ),
               SliverToBoxAdapter(
-                child: interactionWidgets.isEmpty
+                child: interactionWidgets.isEmpty && !_isLoadingInteractions
                     ? Center(
                         child: Padding(
                           padding: const EdgeInsets.only(top: 32),

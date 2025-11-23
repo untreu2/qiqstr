@@ -237,8 +237,13 @@ class NoteRepository {
     }
   }
 
-  Future<Result<List<NoteModel>>> getThreadReplies(String rootNoteId) async {
+  Future<Result<List<NoteModel>>> getThreadReplies(String rootNoteId, {bool fetchFromRelays = false}) async {
     try {
+      if (fetchFromRelays) {
+        await _nostrDataService.fetchThreadRepliesForNote(rootNoteId);
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+
       debugPrint('[NoteRepository] Getting thread replies for root: $rootNoteId');
 
       final allNotes = _getAllCachedNotes();

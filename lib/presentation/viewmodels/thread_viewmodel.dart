@@ -5,11 +5,11 @@ import 'package:flutter/widgets.dart';
 import '../../core/base/base_view_model.dart';
 import '../../core/base/ui_state.dart';
 import '../../core/base/app_error.dart';
-import '../../core/base/result.dart';
 import '../../data/repositories/note_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/services/user_batch_fetcher.dart';
+import '../../data/services/note_counter_service.dart';
 import '../../models/note_model.dart';
 import '../../models/user_model.dart';
 
@@ -35,6 +35,9 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
   UIState<ThreadStructure> _threadStructureState = const InitialState();
   UIState<ThreadStructure> get threadStructureState => _threadStructureState;
 
+  UIState<NoteModel> _focusedNoteState = const InitialState();
+  UIState<NoteModel> get focusedNoteState => _focusedNoteState;
+
   final Map<String, UserModel> _userProfiles = {};
   Map<String, UserModel> get userProfiles => _userProfiles;
 
@@ -53,8 +56,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
   UserModel? _currentUser;
   UserModel? get currentUser => _currentUser;
 
-  bool _isLoadingInteractions = false;
-  bool get isLoadingInteractions => _isLoadingInteractions;
 
   LoadThreadCommand? _loadThreadCommand;
   AddReplyCommand? _addReplyCommand;
@@ -84,11 +85,29 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     _loadExistingProfileCache();
     _subscribeToThreadUpdates();
     
+    if (focusedNoteId != null) {
+      _loadFocusedNoteFromCache();
+    }
+    
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!isDisposed) {
         loadThread();
       }
     });
+  }
+
+  Future<void> _loadFocusedNoteFromCache() async {
+    if (_focusedNoteId == null) return;
+
+    try {
+      final result = await _noteRepository.getNoteById(_focusedNoteId!);
+      if (result.isSuccess && result.data != null) {
+        _focusedNoteState = LoadedState(result.data!);
+        safeNotifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[ThreadViewModel] Error loading focused note from cache: $e');
+    }
   }
 
   Future<void> _loadCurrentUser() async {
@@ -129,46 +148,9 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         final cachedRootResult = await _noteRepository.getNoteById(_rootNoteId);
         final cachedRepliesResult = await _noteRepository.getThreadReplies(_rootNoteId);
 
-        bool hasImmediateData = false;
+        final rootNote = cachedRootResult.data;
+        final replies = cachedRepliesResult.data ?? [];
 
-        if (cachedRootResult.isSuccess && cachedRootResult.data != null) {
-          _rootNoteState = LoadedState(cachedRootResult.data!);
-          hasImmediateData = true;
-        }
-
-        if (cachedRepliesResult.isSuccess && 
-            cachedRepliesResult.data != null && 
-            cachedRootResult.isSuccess && 
-            cachedRootResult.data != null) {
-          _repliesState = LoadedState(cachedRepliesResult.data!);
-
-          final structure = _buildThreadStructure(cachedRootResult.data!, cachedRepliesResult.data!);
-          _threadStructureState = LoadedState(structure);
-
-          hasImmediateData = true;
-        }
-
-        if (hasImmediateData) {
-          safeNotifyListeners();
-        } else {
-          _rootNoteState = const LoadingState();
-          safeNotifyListeners();
-        }
-
-        final results = await Future.wait([
-          _noteRepository.getNoteById(_rootNoteId),
-          _noteRepository.getThreadReplies(_rootNoteId),
-        ]);
-
-        final rootResult = results[0] as Result<NoteModel?>;
-        if (rootResult.isError) {
-          _rootNoteState = ErrorState(rootResult.error!);
-          _repliesState = ErrorState(rootResult.error!);
-          safeNotifyListeners();
-          return;
-        }
-
-        final rootNote = rootResult.data;
         if (rootNote == null) {
           _rootNoteState = const ErrorState('Note not found');
           _repliesState = const ErrorState('Note not found');
@@ -177,39 +159,33 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         }
 
         _rootNoteState = LoadedState(rootNote);
+        _repliesState = LoadedState(replies);
 
-        final repliesResult = results[1] as Result<List<NoteModel>>;
-        if (repliesResult.isSuccess) {
-          final replies = repliesResult.data!;
+        final structure = _buildThreadStructure(rootNote, replies);
+        _threadStructureState = LoadedState(structure);
 
-          final shouldUpdate = !hasImmediateData || _hasDataChanged(rootNote, replies);
-          if (shouldUpdate) {
-            _rootNoteState = LoadedState(rootNote);
-            _repliesState = LoadedState(replies);
+        final allThreadNotes = [rootNote, ...replies];
+        _loadUserProfiles(allThreadNotes);
+        safeNotifyListeners();
 
-            final structure = _buildThreadStructure(rootNote, replies);
-            _threadStructureState = LoadedState(structure);
-
-            final allThreadNotes = [rootNote, ...replies];
-            _loadUserProfiles(allThreadNotes);
-            safeNotifyListeners();
-            
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!isDisposed) {
-                _loadInteractionsForThread(allThreadNotes);
-              }
-            });
-          } else {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (!isDisposed) {
-                _loadInteractionsForThread([rootNote, ...replies]);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!isDisposed) {
+            _triggerCountServiceForNotes(allThreadNotes);
+            _noteRepository.getThreadReplies(_rootNoteId, fetchFromRelays: true).then((result) {
+              if (!isDisposed && result.isSuccess) {
+                final newReplies = result.data ?? [];
+                if (newReplies.length != replies.length) {
+                  _repliesState = LoadedState(newReplies);
+                  final newStructure = _buildThreadStructure(rootNote, newReplies);
+                  _threadStructureState = LoadedState(newStructure);
+                  _loadUserProfiles([rootNote, ...newReplies]);
+                  _triggerCountServiceForNotes(newReplies);
+                  safeNotifyListeners();
+                }
               }
             });
           }
-        } else {
-          _repliesState = ErrorState(repliesResult.error!);
-          safeNotifyListeners();
-        }
+        });
       } catch (e) {
         _rootNoteState = ErrorState('Failed to load thread: $e');
         _repliesState = ErrorState('Failed to load thread: $e');
@@ -218,26 +194,100 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     });
   }
 
-  bool _hasDataChanged(NoteModel? newRootNote, List<NoteModel> newReplies) {
-    if (_rootNoteState.isLoaded && newRootNote != null) {
-      final currentRoot = _rootNoteState.data!;
-      if (currentRoot.id != newRootNote.id) {
-        return true;
-      }
-    }
-
-    if (_repliesState.isLoaded) {
-      final currentReplies = _repliesState.data!;
-      if (currentReplies.length != newReplies.length) {
-        return true;
-      }
-    }
-
-    return false;
-  }
 
   Future<void> refreshThread() async {
     await loadThread();
+  }
+
+  void _triggerCountServiceForNotes(List<NoteModel> notes) {
+    for (final note in notes) {
+      final noteId = note.isRepost && note.rootId != null ? note.rootId! : note.id;
+      NoteCounterService.instance.getCounts(noteId).then((counts) {
+        if (counts != null && !isDisposed) {
+          final rootNote = _rootNoteState.data;
+          if (rootNote != null) {
+            final targetNoteId = rootNote.isRepost && rootNote.rootId != null ? rootNote.rootId! : rootNote.id;
+            if (targetNoteId == noteId) {
+              rootNote.reactionCount = counts.reactionCount;
+              rootNote.repostCount = counts.repostCount;
+              rootNote.replyCount = counts.replyCount;
+              rootNote.zapAmount = counts.zapAmount;
+              safeNotifyListeners();
+            }
+          }
+
+          final focusedNote = _focusedNoteState.data;
+          if (focusedNote != null) {
+            final focusedNoteId = focusedNote.isRepost && focusedNote.rootId != null ? focusedNote.rootId! : focusedNote.id;
+            if (focusedNoteId == noteId) {
+              focusedNote.reactionCount = counts.reactionCount;
+              focusedNote.repostCount = counts.repostCount;
+              focusedNote.replyCount = counts.replyCount;
+              focusedNote.zapAmount = counts.zapAmount;
+              safeNotifyListeners();
+            }
+          }
+
+          final replies = _repliesState.data ?? [];
+          for (final reply in replies) {
+            final replyNoteId = reply.isRepost && reply.rootId != null ? reply.rootId! : reply.id;
+            if (replyNoteId == noteId) {
+              reply.reactionCount = counts.reactionCount;
+              reply.repostCount = counts.repostCount;
+              reply.replyCount = counts.replyCount;
+              reply.zapAmount = counts.zapAmount;
+            }
+          }
+          safeNotifyListeners();
+        }
+      }).catchError((e) {
+        debugPrint('[ThreadViewModel] Error getting counts for $noteId: $e');
+      });
+    }
+  }
+
+  void triggerCountServiceForNote(String noteId) {
+    NoteCounterService.instance.getCounts(noteId).then((counts) {
+      if (counts != null && !isDisposed) {
+        final rootNote = _rootNoteState.data;
+        if (rootNote != null) {
+          final targetNoteId = rootNote.isRepost && rootNote.rootId != null ? rootNote.rootId! : rootNote.id;
+          if (targetNoteId == noteId) {
+            rootNote.reactionCount = counts.reactionCount;
+            rootNote.repostCount = counts.repostCount;
+            rootNote.replyCount = counts.replyCount;
+            rootNote.zapAmount = counts.zapAmount;
+            safeNotifyListeners();
+          }
+        }
+
+        final focusedNote = _focusedNoteState.data;
+        if (focusedNote != null) {
+          final focusedNoteId = focusedNote.isRepost && focusedNote.rootId != null ? focusedNote.rootId! : focusedNote.id;
+          if (focusedNoteId == noteId) {
+            focusedNote.reactionCount = counts.reactionCount;
+            focusedNote.repostCount = counts.repostCount;
+            focusedNote.replyCount = counts.replyCount;
+            focusedNote.zapAmount = counts.zapAmount;
+            safeNotifyListeners();
+          }
+        }
+
+        final replies = _repliesState.data ?? [];
+        for (final reply in replies) {
+          final replyNoteId = reply.isRepost && reply.rootId != null ? reply.rootId! : reply.id;
+          if (replyNoteId == noteId) {
+            reply.reactionCount = counts.reactionCount;
+            reply.repostCount = counts.repostCount;
+            reply.replyCount = counts.replyCount;
+            reply.zapAmount = counts.zapAmount;
+          }
+        }
+        safeNotifyListeners();
+      }
+    }).catchError((e) {
+      debugPrint('[ThreadViewModel] Error getting counts for $noteId: $e');
+    });
   }
 
   Future<void> checkRepliesFromCache() async {
@@ -263,7 +313,7 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
               
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (!isDisposed) {
-                  _loadInteractionsForThread(newReplies);
+                  _triggerCountServiceForNotes(newReplies);
                 }
               });
             }
@@ -354,45 +404,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     }
   }
 
-  Future<void> _loadInteractionsForThread(List<NoteModel> notes) async {
-    try {
-      const maxInitialInteractionFetch = 8;
-      final limitedNotes = notes.take(maxInitialInteractionFetch).toList();
-      
-      if (notes.length > maxInitialInteractionFetch) {
-        debugPrint('[ThreadViewModel] Limiting interaction fetch from ${notes.length} to $maxInitialInteractionFetch notes (only visible notes)');
-      }
-      
-      final noteIds = <String>{};
-      for (final note in limitedNotes) {
-        if (note.isRepost && note.rootId != null) {
-          noteIds.add(note.rootId!);
-        } else {
-          noteIds.add(note.id);
-        }
-      }
-      
-      if (noteIds.isEmpty) return;
-
-      _isLoadingInteractions = true;
-      safeNotifyListeners();
-
-      debugPrint('[ThreadViewModel] Fetching interactions for ${noteIds.length} initially visible notes');
-      
-      await _noteRepository.fetchInteractionsForNotes(
-        noteIds.toList(), 
-        useCount: false,
-        forceLoad: true,
-      );
-      
-      _isLoadingInteractions = false;
-      safeNotifyListeners();
-    } catch (e) {
-      _isLoadingInteractions = false;
-      safeNotifyListeners();
-      debugPrint('[ThreadViewModel] Error loading interactions for thread: $e');
-    }
-  }
 
   ThreadStructure _buildThreadStructure(NoteModel root, List<NoteModel> replies) {
     final Map<String, List<NoteModel>> childrenMap = {};
@@ -496,7 +507,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         final allNewNotes = [...newReplies, ...updatedReplies];
         if (allNewNotes.isNotEmpty) {
           _loadUserProfiles(allNewNotes);
-          await _loadInteractionsForThread(allNewNotes);
         }
         
         safeNotifyListeners();
