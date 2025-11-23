@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 import '../../core/base/base_view_model.dart';
 import '../../core/base/ui_state.dart';
-import '../../core/base/app_error.dart';
 import '../../data/repositories/note_repository.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/user_repository.dart';
@@ -212,7 +211,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           final currentNotes = _feedState is LoadedState<List<NoteModel>> ? (_feedState as LoadedState<List<NoteModel>>).data : <NoteModel>[];
           if (currentNotes.isEmpty || sortedNotes.length >= currentNotes.length || skipCache) {
             _feedState = LoadedState(sortedNotes);
-            _lastNoteCount = sortedNotes.length;
             safeNotifyListeners();
           } else {
             final mergedNotes = _feedLoader.mergeNotesWithUpdates(
@@ -222,7 +220,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             );
             if (mergedNotes.length >= currentNotes.length) {
               _feedState = LoadedState(mergedNotes);
-              _lastNoteCount = mergedNotes.length;
               safeNotifyListeners();
             }
           }
@@ -304,7 +301,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
       final currentNotes = _feedState is LoadedState<List<NoteModel>> ? (_feedState as LoadedState<List<NoteModel>>).data : <NoteModel>[];
       if (currentNotes.isNotEmpty) {
         _feedState = LoadedState(currentNotes);
-        _lastNoteCount = currentNotes.length;
       } else {
         _feedState = ErrorState('Failed to refresh feed: ${e.toString()}');
       }
@@ -354,7 +350,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           final sortedNotes = _feedLoader.sortNotes(updatedNotes, _sortMode);
 
           _feedState = LoadedState(sortedNotes);
-          _lastNoteCount = sortedNotes.length;
           safeNotifyListeners();
 
           _feedLoader.preloadCachedUserProfilesSync(
@@ -409,7 +404,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
       final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
       final sortedNotes = _feedLoader.sortNotes(List.from(currentNotes), _sortMode);
       _feedState = LoadedState(sortedNotes);
-      _lastNoteCount = sortedNotes.length;
     }
 
     safeNotifyListeners();
@@ -434,7 +428,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     if (notesToSort != null && notesToSort.isNotEmpty) {
       final sortedNotes = _feedLoader.sortNotes(List.from(notesToSort), _sortMode);
       _feedState = LoadedState(sortedNotes);
-      _lastNoteCount = sortedNotes.length;
       safeNotifyListeners();
     } else {
       safeNotifyListeners();
@@ -455,7 +448,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
     await _loadFeed();
   }
 
-  int _lastNoteCount = 0;
 
   void _subscribeToDeletions() {
     addSubscription(
@@ -466,7 +458,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
           if (updatedNotes.length != currentNotes.length) {
             _feedState = LoadedState(updatedNotes);
-            _lastNoteCount = updatedNotes.length;
             safeNotifyListeners();
           }
         }
@@ -528,7 +519,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           final sortedNotes = _feedLoader.sortNotes(deduplicatedNotes, _sortMode);
           
           _feedState = LoadedState(sortedNotes);
-          _lastNoteCount = sortedNotes.length;
           safeNotifyListeners();
 
           _feedLoader.preloadCachedUserProfilesSync(
@@ -601,7 +591,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           if (currentNotes.isEmpty) {
             if (filteredNotes.isNotEmpty) {
               _feedState = LoadedState(List<NoteModel>.from(filteredNotes));
-              _lastNoteCount = filteredNotes.length;
               safeNotifyListeners();
 
               _feedLoader.preloadCachedUserProfilesSync(
@@ -644,7 +633,6 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
             }
 
             _feedState = LoadedState(mergedNotes);
-            _lastNoteCount = mergedNotes.length;
             safeNotifyListeners();
 
             final newNotes = mergedNotes.where((n) => !currentNotes.any((c) => c.id == n.id)).toList();

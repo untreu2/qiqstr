@@ -32,7 +32,7 @@ class AppColors {
 }
 
 class AppColorsLight {
-  static const Color accent = Color.fromARGB(255, 140, 60, 130);
+  static const Color accent = Color.fromARGB(255, 210, 100, 0);
 
   static const Color background = Colors.white;
   static const Color surface = Colors.white;
