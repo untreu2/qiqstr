@@ -11,7 +11,6 @@ import 'package:qiqstr/ui/screens/notification/notification_page.dart';
 import 'package:qiqstr/ui/screens/wallet/wallet_page.dart';
 import 'package:qiqstr/ui/screens/note/share_note.dart';
 import '../theme/theme_manager.dart';
-import '../widgets/common/indicator_widget.dart';
 
 class HomeNavigator extends StatefulWidget {
   final String npub;
@@ -142,33 +141,11 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                     _handleNavigation(pageViewIndex);
                   },
                   behavior: HitTestBehavior.opaque,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    clipBehavior: Clip.none,
-                    children: [
-                      originalIndex == 3
-                          ? _buildNotificationIcon(item['icon'] as String, isSelected)
-                          : originalIndex == 2
-                              ? _buildWalletIcon(item['icon'] as String, isSelected)
-                              : _buildRegularIcon(item, isSelected),
-                      Positioned(
-                        top: -12,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeInOut,
-                          width: isSelected ? 56 : 0,
-                          height: 4,
-                          alignment: Alignment.center,
-                          child: isSelected
-                              ? const IndicatorWidget(
-                                  orientation: IndicatorOrientation.horizontal,
-                                  size: IndicatorSize.big,
-                                )
-                              : const SizedBox.shrink(),
-                        ),
-                      ),
-                    ],
-                  ),
+                  child: originalIndex == 3
+                      ? _buildNotificationIcon(item['icon'] as String, isSelected)
+                      : originalIndex == 2
+                          ? _buildWalletIcon(item['icon'] as String, isSelected)
+                          : _buildRegularIcon(item, isSelected),
                 ),
               );
             }).toList(),

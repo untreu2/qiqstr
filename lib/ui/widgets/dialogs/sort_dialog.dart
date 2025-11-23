@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:bounce/bounce.dart';
 import '../../theme/theme_manager.dart';
 import '../../../presentation/viewmodels/feed_viewmodel.dart';
 
@@ -18,7 +19,8 @@ Future<void> showSortDialog({
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          GestureDetector(
+          Bounce(
+            scaleFactor: 0.85,
             onTap: () {
               Navigator.pop(modalContext);
               viewModel.setHashtag(null);
@@ -76,7 +78,8 @@ Future<void> showSortDialog({
             ),
           ),
           const SizedBox(height: 12),
-          GestureDetector(
+          Bounce(
+            scaleFactor: 0.85,
             onTap: () {
               Navigator.pop(modalContext);
               viewModel.setHashtag(null);

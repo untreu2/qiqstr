@@ -388,7 +388,7 @@ class _SidebarContent extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 160),
+                const SizedBox(height: 130),
               ],
             ),
           ),
