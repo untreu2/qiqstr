@@ -96,6 +96,30 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     });
   }
 
+  void changeFocusedNote(String? noteId) {
+    if (_focusedNoteId == noteId) return;
+    
+    _focusedNoteId = noteId;
+    
+    if (noteId == null) {
+      _focusedNoteState = const InitialState();
+    } else {
+      final threadStructure = _threadStructureState.data;
+      if (threadStructure != null) {
+        final note = threadStructure.getNote(noteId);
+        if (note != null) {
+          _focusedNoteState = LoadedState(note);
+        } else {
+          _loadFocusedNoteFromCache();
+        }
+      } else {
+        _loadFocusedNoteFromCache();
+      }
+    }
+    
+    safeNotifyListeners();
+  }
+
   Future<void> _loadFocusedNoteFromCache() async {
     if (_focusedNoteId == null) return;
 
@@ -625,6 +649,51 @@ class ThreadStructure {
 
   List<NoteModel> getAllNotes() {
     return notesMap.values.toList();
+  }
+
+  List<NoteModel> getParentChain(String noteId) {
+    final chain = <NoteModel>[];
+    NoteModel? current = notesMap[noteId];
+    
+    if (current == null) return chain;
+    if (current.id == rootNote.id) return chain;
+    
+    final visited = <String>{};
+    
+    while (current != null && !visited.contains(current.id)) {
+      visited.add(current.id);
+      
+      if (current.parentId == null) {
+        break;
+      }
+      
+      if (current.parentId == rootNote.id) {
+        chain.insert(0, rootNote);
+        break;
+      }
+      
+      final parent = notesMap[current.parentId!];
+      if (parent == null) {
+        break;
+      }
+      
+      if (parent.isRepost) {
+        if (parent.rootId == rootNote.id) {
+          chain.insert(0, rootNote);
+        }
+        break;
+      }
+      
+      if (parent.id == rootNote.id) {
+        chain.insert(0, rootNote);
+        break;
+      }
+      
+      chain.insert(0, parent);
+      current = parent;
+    }
+    
+    return chain;
   }
 }
 

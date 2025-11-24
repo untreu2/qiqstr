@@ -25,6 +25,7 @@ class NoteWidget extends StatefulWidget {
   final dynamic notesListProvider;
   final bool isVisible;
   final bool isSelectable;
+  final void Function(String noteId, String? rootId)? onNoteTap;
 
   const NoteWidget({
     super.key,
@@ -38,6 +39,7 @@ class NoteWidget extends StatefulWidget {
     this.notesListProvider,
     this.isVisible = true,
     this.isSelectable = false,
+    this.onNoteTap,
   });
 
   @override
@@ -483,15 +485,19 @@ class _NoteWidgetState extends State<NoteWidget> {
         focusedId = null;
       }
 
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ThreadPage(
-            rootNoteId: rootId,
-            focusedNoteId: focusedId,
+      if (widget.onNoteTap != null) {
+        widget.onNoteTap!(_noteId, rootId);
+      } else {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ThreadPage(
+              rootNoteId: rootId,
+              focusedNoteId: focusedId,
+            ),
           ),
-        ),
-      );
+        );
+      }
     } catch (e) {
       debugPrint('[NoteWidget] Navigate to thread error: $e');
     }

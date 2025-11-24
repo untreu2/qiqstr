@@ -34,7 +34,9 @@ class ThreadPage extends StatefulWidget {
 
 class _ThreadPageState extends State<ThreadPage> {
   late ScrollController _scrollController;
-  final GlobalKey _focusedNoteKey = GlobalKey();
+  final Map<String, GlobalKey> _noteKeys = {};
+  String? _currentFocusedNoteId;
+  ThreadViewModel? _viewModel;
 
   int _visibleRepliesCount = 3;
   static const int _repliesPerPage = 5;
@@ -66,6 +68,7 @@ class _ThreadPageState extends State<ThreadPage> {
     return ViewModelBuilder<ThreadViewModel>(
       create: () {
         final vm = AppDI.get<ThreadViewModel>();
+        _currentFocusedNoteId = widget.focusedNoteId;
         Future.microtask(() {
           if (mounted) {
             vm.initializeWithThread(
@@ -75,7 +78,7 @@ class _ThreadPageState extends State<ThreadPage> {
             if (widget.focusedNoteId != null) {
               Future.delayed(const Duration(milliseconds: 300), () {
                 if (mounted) {
-                  _scheduleScrollToFocusedNote();
+                  _scheduleScrollToFocusedNote(widget.focusedNoteId!);
                 }
               });
             }
@@ -89,6 +92,7 @@ class _ThreadPageState extends State<ThreadPage> {
         return vm;
       },
       builder: (context, viewModel) {
+        _viewModel = viewModel;
         final double topPadding = MediaQuery.of(context).padding.top;
         return Scaffold(
           backgroundColor: context.colors.background,
@@ -149,14 +153,15 @@ class _ThreadPageState extends State<ThreadPage> {
 
   Widget _buildThreadContent(BuildContext context, ThreadViewModel viewModel, NoteModel? rootNote) {
     NoteModel? displayNote = rootNote;
-    if (widget.focusedNoteId != null) {
+    final focusedNoteId = _currentFocusedNoteId ?? widget.focusedNoteId;
+    if (focusedNoteId != null) {
       final focusedNoteState = viewModel.focusedNoteState;
       if (focusedNoteState.isLoaded && focusedNoteState.data != null) {
         displayNote = focusedNoteState.data;
       } else if (rootNote != null) {
         final threadStructure = viewModel.threadStructureState.data;
         if (threadStructure != null) {
-          displayNote = threadStructure.getNote(widget.focusedNoteId!) ?? rootNote;
+          displayNote = threadStructure.getNote(focusedNoteId) ?? rootNote;
         }
       }
     }
@@ -217,18 +222,24 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   Widget _buildContextNote(BuildContext context, ThreadViewModel viewModel, NoteModel displayNote) {
-    if (displayNote.isReply && displayNote.parentId != null) {
-      final parentNote = viewModel.threadStructureState.data?.getNote(displayNote.parentId!);
+    final threadStructure = viewModel.threadStructureState.data;
+    if (threadStructure == null) return const SizedBox.shrink();
+    
+    if (displayNote.id == threadStructure.rootNote.id) {
+      return const SizedBox.shrink();
+    }
+    
+    final parentChain = threadStructure.getParentChain(displayNote.id);
+    if (parentChain.isEmpty) return const SizedBox.shrink();
 
-      if (parentNote != null && !parentNote.isRepost) {
+    return Column(
+      children: parentChain.map((parentNote) {
         return Padding(
-          padding: const EdgeInsets.fromLTRB(0, 4, 0, 0),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
           child: _buildSimpleNoteWidget(context, parentNote, viewModel, isSmallView: true),
         );
-      }
-    }
-
-    return const SizedBox.shrink();
+      }).toList(),
+    );
   }
 
   Widget _buildMainNote(BuildContext context, ThreadViewModel viewModel, NoteModel note) {
@@ -236,8 +247,12 @@ class _ThreadPageState extends State<ThreadPage> {
       return const SizedBox.shrink();
     }
 
+    final focusedNoteId = _currentFocusedNoteId ?? widget.focusedNoteId;
+    final noteKey = _getNoteKey(note.id);
+    final isFocused = focusedNoteId == note.id;
+
     return Container(
-      key: widget.focusedNoteId != null ? _focusedNoteKey : null,
+      key: isFocused ? noteKey : null,
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 6),
       child: FocusedNoteWidget(
         note: note,
@@ -495,7 +510,9 @@ class _ThreadPageState extends State<ThreadPage> {
     const int maxDepth = 1;
     final double currentIndent = depth * baseIndentWidth;
 
-    final isFocused = reply.id == widget.focusedNoteId;
+    final focusedNoteId = _currentFocusedNoteId ?? widget.focusedNoteId;
+    final isFocused = reply.id == focusedNoteId;
+    final noteKey = _getNoteKey(reply.id);
     final allNestedReplies = threadStructure.getChildren(reply.id);
     final nestedReplies = <NoteModel>[];
     for (final nestedReply in allNestedReplies) {
@@ -516,7 +533,7 @@ class _ThreadPageState extends State<ThreadPage> {
           if (depth > 0) SizedBox(width: currentIndent),
           Expanded(
             child: Column(
-              key: isFocused ? _focusedNoteKey : null,
+              key: isFocused ? noteKey : null,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 2),
@@ -588,7 +605,6 @@ class _ThreadPageState extends State<ThreadPage> {
     NoteModel note,
     int depth,
   ) {
-
     return RepaintBoundary(
       child: NoteWidget(
         key: ValueKey('note_${note.id}'),
@@ -600,6 +616,7 @@ class _ThreadPageState extends State<ThreadPage> {
         isSmallView: depth > 0,
         scrollController: _scrollController,
         isVisible: true,
+        onNoteTap: _handleNoteTap,
       ),
     );
   }
@@ -621,6 +638,7 @@ class _ThreadPageState extends State<ThreadPage> {
         isSmallView: isSmallView,
         scrollController: _scrollController,
         isVisible: true,
+        onNoteTap: _handleNoteTap,
       ),
     );
   }
@@ -720,19 +738,99 @@ class _ThreadPageState extends State<ThreadPage> {
     );
   }
 
-  void _scheduleScrollToFocusedNote() {
-    if (!mounted || widget.focusedNoteId == null) return;
+  void _handleNoteTap(String noteId, String? rootId) {
+    final viewModel = _viewModel;
+    if (viewModel == null) return;
+    
+    final threadStructure = viewModel.threadStructureState.data;
+    
+    String targetRootId = rootId ?? widget.rootNoteId;
+    String? targetFocusedId;
+    
+    final note = threadStructure?.getNote(noteId);
+    if (note != null) {
+      if (note.isReply && note.rootId != null && note.rootId!.isNotEmpty) {
+        targetRootId = note.rootId!;
+        targetFocusedId = noteId;
+      } else if (note.isRepost && note.rootId != null && note.rootId!.isNotEmpty) {
+        targetRootId = note.rootId!;
+        targetFocusedId = null;
+      } else {
+        targetRootId = noteId;
+        targetFocusedId = null;
+      }
+    } else {
+      if (rootId != null && rootId != widget.rootNoteId) {
+        targetRootId = rootId;
+        targetFocusedId = noteId;
+      } else {
+        targetRootId = noteId;
+        targetFocusedId = null;
+      }
+    }
+    
+    if (targetRootId != widget.rootNoteId) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ThreadPage(
+            rootNoteId: targetRootId,
+            focusedNoteId: targetFocusedId,
+          ),
+        ),
+      );
+      return;
+    }
+    
+    setState(() {
+      _currentFocusedNoteId = targetFocusedId;
+    });
+    
+    viewModel.changeFocusedNote(targetFocusedId);
+    
+    if (targetFocusedId != null) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (mounted) {
+          _scheduleScrollToFocusedNote(targetFocusedId!);
+        }
+      });
+    } else {
+      _scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  GlobalKey _getNoteKey(String noteId) {
+    if (!_noteKeys.containsKey(noteId)) {
+      _noteKeys[noteId] = GlobalKey();
+    }
+    return _noteKeys[noteId]!;
+  }
+
+  void _scheduleScrollToFocusedNote(String noteId) {
+    if (!mounted) return;
 
     Future.delayed(const Duration(milliseconds: 300), () {
       if (!mounted) return;
-      _attemptScrollToFocusedNote(retries: 3);
+      _attemptScrollToFocusedNote(noteId, retries: 3);
     });
   }
 
-  void _attemptScrollToFocusedNote({int retries = 0}) {
-    if (!mounted || widget.focusedNoteId == null || retries <= 0) return;
+  void _attemptScrollToFocusedNote(String noteId, {int retries = 0}) {
+    if (!mounted || retries <= 0) return;
 
-    final context = _focusedNoteKey.currentContext;
+    final noteKey = _noteKeys[noteId];
+    if (noteKey == null) {
+      Future.delayed(const Duration(milliseconds: 200), () {
+        _attemptScrollToFocusedNote(noteId, retries: retries - 1);
+      });
+      return;
+    }
+
+    final context = noteKey.currentContext;
     if (context != null) {
       Scrollable.ensureVisible(
         context,
@@ -742,7 +840,7 @@ class _ThreadPageState extends State<ThreadPage> {
       );
     } else {
       Future.delayed(const Duration(milliseconds: 200), () {
-        _attemptScrollToFocusedNote(retries: retries - 1);
+        _attemptScrollToFocusedNote(noteId, retries: retries - 1);
       });
     }
   }
