@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:bounce/bounce.dart';
 import '../../theme/theme_manager.dart';
 import 'common_buttons.dart';
 
@@ -88,8 +87,7 @@ class BackButtonWidget extends StatelessWidget {
           color: context.colors.buttonPrimary,
           borderRadius: BorderRadius.circular(22.0),
         ),
-        child: Bounce(
-          scaleFactor: 0.85,
+        child: GestureDetector(
           onTap: onPressed ?? () => Navigator.pop(context),
           behavior: HitTestBehavior.opaque,
           child: Semantics(
