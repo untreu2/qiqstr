@@ -283,10 +283,25 @@ class FeedLoaderService {
   ) async {
     try {
       final authorIds = _extractAuthorIds(notes);
-      final missingAuthorIds = authorIds.where((id) {
+      final missingAuthorIds = <String>[];
+      
+      bool hasSyncUpdates = false;
+      for (final id in authorIds) {
         final cachedProfile = profiles[id];
-        return cachedProfile == null || cachedProfile.profileImage.isEmpty;
-      }).toList();
+        if (cachedProfile == null || cachedProfile.profileImage.isEmpty) {
+          final syncCached = _userRepository.getCachedUserSync(id);
+          if (syncCached != null && syncCached.profileImage.isNotEmpty) {
+            profiles[id] = syncCached;
+            hasSyncUpdates = true;
+          } else {
+            missingAuthorIds.add(id);
+          }
+        }
+      }
+
+      if (hasSyncUpdates) {
+        onProfilesUpdated(profiles);
+      }
 
       if (missingAuthorIds.isEmpty) {
         return;

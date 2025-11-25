@@ -211,7 +211,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
           type: FeedType.profile,
           targetUserNpub: userNpub,
           limit: _pageSize,
-          skipCache: true,
+          skipCache: false,
         );
 
         final result = await _feedLoader.loadFeed(params);
@@ -233,26 +233,15 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
             },
           );
 
-          Future.microtask(() async {
-            await _feedLoader.preloadCachedUserProfiles(
-              filteredNotes,
-              _profiles,
-              (profiles) {
-                _profilesController.add(Map.from(profiles));
-                safeNotifyListeners();
-              },
-            );
-
-            _feedLoader.loadUserProfilesForNotes(
-              filteredNotes,
-              _profiles,
-              (profiles) {
-                _profilesController.add(Map.from(profiles));
-                safeNotifyListeners();
-              },
-            ).catchError((e) {
-              debugPrint('[ProfileViewModel] Error loading user profiles in background: $e');
-            });
+          _feedLoader.loadUserProfilesForNotes(
+            filteredNotes,
+            _profiles,
+            (profiles) {
+              _profilesController.add(Map.from(profiles));
+              safeNotifyListeners();
+            },
+          ).catchError((e) {
+            debugPrint('[ProfileViewModel] Error loading user profiles in background: $e');
           });
         } else {
           _profileNotesState = ErrorState(result.error ?? 'Failed to load notes');
@@ -284,7 +273,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
         targetUserNpub: _currentProfileNpub,
         limit: _pageSize,
         until: until,
-        skipCache: true,
+        skipCache: false,
       );
       
       final result = await _feedLoader.loadFeed(params);
@@ -321,26 +310,15 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
             },
           );
 
-          Future.microtask(() async {
-            await _feedLoader.preloadCachedUserProfiles(
-              uniqueNewNotes,
-              _profiles,
-              (profiles) {
-                _profilesController.add(Map.from(profiles));
-                safeNotifyListeners();
-              },
-            );
-
-            _feedLoader.loadUserProfilesForNotes(
-              uniqueNewNotes,
-              _profiles,
-              (profiles) {
-                _profilesController.add(Map.from(profiles));
-                safeNotifyListeners();
-              },
-            ).catchError((e) {
-              debugPrint('[ProfileViewModel] Error loading user profiles: $e');
-            });
+          _feedLoader.loadUserProfilesForNotes(
+            uniqueNewNotes,
+            _profiles,
+            (profiles) {
+              _profilesController.add(Map.from(profiles));
+              safeNotifyListeners();
+            },
+          ).catchError((e) {
+            debugPrint('[ProfileViewModel] Error loading user profiles: $e');
           });
         }
       }

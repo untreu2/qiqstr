@@ -46,7 +46,7 @@ class AppColorsLight {
 
   static const Color buttonPrimary = Color(0xFF2D2D2D);
   static const Color buttonText = Colors.white;
-
+ 
   static const Color border = Colors.black12;
   static const Color divider = Colors.black12;
 

@@ -1724,8 +1724,8 @@ class NostrDataService {
           final eventKind = eventData['kind'] as int? ?? 0;
           return eventAuthor == pubkeyHex && (eventKind == 1 || eventKind == 6);
         },
-        timeout: const Duration(seconds: 4),
-        connectTimeout: const Duration(seconds: 2),
+        timeout: const Duration(seconds: 2),
+        connectTimeout: const Duration(seconds: 1),
         shouldStop: () => _isClosed,
         debugPrefix: 'PROFILE',
       );
@@ -2031,8 +2031,8 @@ class NostrDataService {
           final eventKind = eventData['kind'] as int? ?? 0;
           return eventKind == 1;
         },
-        timeout: const Duration(seconds: 4),
-        connectTimeout: const Duration(seconds: 2),
+        timeout: const Duration(seconds: 2),
+        connectTimeout: const Duration(seconds: 1),
         shouldStop: () => _isClosed,
         debugPrefix: 'HASHTAG',
       );

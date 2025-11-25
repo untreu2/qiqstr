@@ -18,36 +18,38 @@ extension NoteRepositoryCompat on NoteRepository {
     bool skipCache = false,
   }) async {
     try {
-      if (!skipCache) {
-        final cachedResult = await getFilteredNotes(filter);
-        if (cachedResult.isSuccess && cachedResult.data!.isNotEmpty) {
-          List<NoteModel> filteredCachedNotes = cachedResult.data!;
-          
-          if (until != null) {
-            filteredCachedNotes = filteredCachedNotes.where((note) {
-              final noteTime = note.isRepost ? (note.repostTimestamp ?? note.timestamp) : note.timestamp;
-              return noteTime.isBefore(until);
-            }).toList();
-          }
-          
-          if (filteredCachedNotes.isNotEmpty) {
-            debugPrint('[NoteRepository] Found ${filteredCachedNotes.length} cached notes (after until filter: ${until != null})');
-            
-            fetchNotesFromRelays(
-              authorNpubs: authorNpubs,
-              limit: limit,
-              until: until,
-              since: since,
-              isProfileMode: isProfileMode,
-            ).then((_) {}).catchError((e) {
-              debugPrint('[NoteRepository] Error fetching notes in background: $e');
-            });
-            
-            return Result.success(filteredCachedNotes);
-          }
+      final cachedResult = await getFilteredNotes(filter);
+      List<NoteModel>? cachedNotes;
+      
+      if (cachedResult.isSuccess && cachedResult.data!.isNotEmpty) {
+        cachedNotes = cachedResult.data!;
+        
+        if (until != null) {
+          cachedNotes = cachedNotes.where((note) {
+            final noteTime = note.isRepost ? (note.repostTimestamp ?? note.timestamp) : note.timestamp;
+            return noteTime.isBefore(until);
+          }).toList();
         }
-      } else {
-        debugPrint('[NoteRepository] Skipping cache, fetching directly from relays');
+      }
+      
+      if (cachedNotes != null && cachedNotes.isNotEmpty) {
+        debugPrint('[NoteRepository] Found ${cachedNotes.length} cached notes, returning immediately');
+        
+        fetchNotesFromRelays(
+          authorNpubs: authorNpubs,
+          limit: limit,
+          until: until,
+          since: since,
+          isProfileMode: isProfileMode,
+        ).then((_) {}).catchError((e) {
+          debugPrint('[NoteRepository] Error fetching notes in background: $e');
+        });
+        
+        return Result.success(cachedNotes);
+      }
+      
+      if (skipCache) {
+        debugPrint('[NoteRepository] No cached notes, fetching from relays');
       }
       
       await fetchNotesFromRelays(
@@ -158,7 +160,7 @@ extension NoteRepositoryCompat on NoteRepository {
     int limit = 50,
     DateTime? until,
     DateTime? since,
-    bool skipCache = true,
+    bool skipCache = false,
   }) async {
     debugPrint('[NoteRepository] getProfileNotes for $authorNpub (skipCache: $skipCache)');
     
