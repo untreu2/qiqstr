@@ -219,32 +219,35 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                             ],
                           ),
                         ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (zapAmount != null)
-                              Text(
-                                ' $zapAmount sats',
-                                style: const TextStyle(
-                                  color: Color(0xFFECB200),
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            if (content.isNotEmpty) ...[
-                              if (zapAmount != null) const SizedBox(width: 12),
-                              Flexible(
-                                child: Text(
-                                  content,
+                        Flexible(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              if (zapAmount != null)
+                                Text(
+                                  ' $zapAmount sats',
                                   style: TextStyle(
-                                    color: context.colors.textSecondary,
-                                    fontSize: content.length <= 5 ? 20 : 15,
+                                    color: context.colors.accent,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w500,
                                   ),
-                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
+                              if (content.isNotEmpty) ...[
+                                if (zapAmount != null) const SizedBox(width: 12),
+                                Flexible(
+                                  child: Text(
+                                    content,
+                                    style: TextStyle(
+                                      color: context.colors.textPrimary,
+                                      fontSize: content.length <= 5 ? 20 : 15,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       ],
                     ),

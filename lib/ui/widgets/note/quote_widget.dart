@@ -340,7 +340,7 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
     return GestureDetector(
       onTap: _navigateToThread,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 8),
+        margin: const EdgeInsets.only(top: 8, bottom: 0),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: context.colors.surface,
@@ -354,7 +354,7 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
             _buildHeader(user),
             if (_hasContent(parsedContent))
               Padding(
-                padding: const EdgeInsets.only(top: 10),
+                padding: const EdgeInsets.only(top: 4),
                 child: _buildNoteContent(parsedContent),
               ),
           ],

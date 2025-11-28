@@ -228,7 +228,7 @@ class _NoteSeparator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 24,
+      height: 16,
       child: Center(
         child: Container(
           height: 0.5,

@@ -519,7 +519,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
               mainAxisSize: MainAxisSize.min,
               children: _quoteIds
                   .map((quoteId) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.only(top: 8, bottom: 2),
                         child: QuoteWidget(bech32: quoteId),
                       ))
                   .toList(),

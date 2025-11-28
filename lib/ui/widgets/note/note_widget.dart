@@ -561,7 +561,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                         valueListenable: _stateNotifier,
                         builder: (context, state, _) {
                           return Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
+                            padding: const EdgeInsets.only(bottom: 0),
                             child: GestureDetector(
                               onTap: () {
                                 final reposterId = _reposterId;
@@ -632,8 +632,10 @@ class _NoteWidgetState extends State<NoteWidget> {
                                 formattedTimestamp: _formattedTimestamp,
                                 colors: colors,
                               ),
-                              RepaintBoundary(
-                                child: _SafeContentSection(
+                              Transform.translate(
+                                offset: const Offset(0, -4),
+                                child: RepaintBoundary(
+                                  child: _SafeContentSection(
                                   parsedContent: _shouldTruncate ? _truncatedContent! : _parsedContent,
                                   onMentionTap: _navigateToMentionProfile,
                                   onShowMoreTap: _shouldTruncate ? (_) => _navigateToThreadPage() : null,
@@ -643,8 +645,9 @@ class _NoteWidgetState extends State<NoteWidget> {
                                   authorId: _authorId,
                                   isSelectable: widget.isSelectable,
                                 ),
+                                ),
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 2),
                               RepaintBoundary(
                                 child: Padding(
                                   padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -712,7 +715,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                               Padding(
                                 padding: EdgeInsets.only(
                                   top: 4,
-                                  bottom: hasReply ? 2 : 8,
+                                  bottom: hasReply ? 0 : 0,
                                 ),
                                 child: GestureDetector(
                                   onTap: () {
@@ -799,11 +802,12 @@ class _NoteWidgetState extends State<NoteWidget> {
                         formattedTimestamp: _formattedTimestamp,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: RepaintBoundary(
-                        child: _SafeContentSection(
+                    Transform.translate(
+                      offset: const Offset(0, -4),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: RepaintBoundary(
+                          child: _SafeContentSection(
                           parsedContent: _shouldTruncate ? _truncatedContent! : _parsedContent,
                           onMentionTap: _navigateToMentionProfile,
                           onShowMoreTap: _shouldTruncate ? (_) => _navigateToThreadPage() : null,
@@ -813,9 +817,10 @@ class _NoteWidgetState extends State<NoteWidget> {
                           authorId: _authorId,
                           isSelectable: widget.isSelectable,
                         ),
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 2),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 2),
                       child: RepaintBoundary(
@@ -922,7 +927,7 @@ class _SafeProfileSection extends StatelessWidget {
           }
         } catch (e) {
           debugPrint('[ProfileSection] Build error: $e');
-          return const SizedBox(width: 44, height: 44);
+          return const SizedBox(width: 40, height: 40);
         }
       },
     );
@@ -937,7 +942,7 @@ class _SafeProfileSection extends StatelessWidget {
         onTap: onAuthorTap,
         child: _ProfileAvatar(
           imageUrl: authorImageUrl,
-          radius: 22,
+          radius: 20,
           colors: colors,
         ),
       ),
@@ -956,7 +961,7 @@ class _SafeProfileSection extends StatelessWidget {
             onTap: onAuthorTap,
             child: _ProfileAvatar(
               imageUrl: authorImageUrl,
-              radius: 22,
+              radius: 20,
               colors: colors,
             ),
           ),

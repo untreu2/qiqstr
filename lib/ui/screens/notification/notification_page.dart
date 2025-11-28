@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../theme/theme_manager.dart';
 import '../../../core/ui/ui_state_builder.dart';
@@ -14,7 +15,7 @@ import '../../widgets/note/quote_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../profile/profile_page.dart';
 import '../note/thread_page.dart';
-import '../../widgets/common/title_widget.dart';
+import '../../widgets/common/indicator_widget.dart';
 import '../../../utils/string_optimizer.dart';
 
 class NotificationPage extends StatefulWidget {
@@ -59,7 +60,12 @@ class _NotificationPageState extends State<NotificationPage> {
           body: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildHeader(context, viewModel, 0),
+              Consumer<NotificationViewModel>(
+                builder: (context, vm, child) {
+                  final last24HoursCount = vm.notificationsLast24Hours;
+                  return _buildHeader(context, viewModel, last24HoursCount);
+                },
+              ),
               Expanded(
                 child: Consumer<NotificationViewModel>(
                   builder: (context, vm, child) {
@@ -110,27 +116,49 @@ class _NotificationPageState extends State<NotificationPage> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, NotificationViewModel viewModel, int notificationCount) {
+  Widget _buildHeader(BuildContext context, NotificationViewModel viewModel, int last24HoursCount) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 60, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.fromLTRB(16, 60, 16, 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const TitleWidget(
-            title: 'Notifications',
-            padding: EdgeInsets.zero,
+          const IndicatorWidget(
+            orientation: IndicatorOrientation.vertical,
+            size: IndicatorSize.small,
           ),
-          if (notificationCount > 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 4, left: 17),
-              child: Text(
-                '$notificationCount notification${notificationCount != 1 ? 's' : ''}',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: context.colors.textSecondary,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  'Notifications',
+                  style: GoogleFonts.poppins(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: context.colors.textPrimary,
+                    letterSpacing: -0.5,
+                  ),
                 ),
-              ),
+                Text(
+                  ' · ',
+                  style: GoogleFonts.poppins(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: context.colors.textPrimary,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                Text(
+                  '$last24HoursCount in last 24h',
+                  style: TextStyle(
+                    fontSize: 17,
+                    color: context.colors.textSecondary,
+                  ),
+                ),
+              ],
             ),
+          ),
         ],
       ),
     );
@@ -195,15 +223,15 @@ class _NotificationPageState extends State<NotificationPage> {
                               color: context.colors.textSecondary,
                             ),
                           ),
-                          if (first.content.trim().isNotEmpty && first.type != 'repost') ...[
-                            const SizedBox(height: 8),
+                          if (first.content.trim().isNotEmpty && first.type != 'repost' && first.type != 'reaction') ...[
+                            const SizedBox(height: 4),
                             NoteContentWidget(
                               parsedContent: _parseContent(first.content),
                               noteId: first.id,
                               onNavigateToMentionProfile: (npub) => _navigateToProfileFromContent(npub, viewModel),
                             ),
                           ],
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 2),
                           QuoteWidget(
                             bech32: _encodeEventId(first.targetEventId),
                           ),
@@ -238,9 +266,9 @@ class _NotificationPageState extends State<NotificationPage> {
                       onTap: () => _navigateToAuthorProfile(item.author, viewModel),
                       child: CircleAvatar(
                         radius: 20,
-                        backgroundColor: Colors.amber.shade700,
+                        backgroundColor: context.colors.accent,
                         backgroundImage: image.isNotEmpty ? CachedNetworkImageProvider(image) : null,
-                        child: image.isEmpty ? const Icon(Icons.flash_on, size: 20, color: Colors.white) : null,
+                        child: image.isEmpty ? Icon(Icons.flash_on, size: 20, color: context.colors.background) : null,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -274,7 +302,7 @@ class _NotificationPageState extends State<NotificationPage> {
                                     style: TextStyle(
                                       fontWeight: FontWeight.w700,
                                       fontSize: 15,
-                                      color: Colors.amber.shade700,
+                                      color: context.colors.accent,
                                     ),
                                   ),
                                 ],
@@ -290,16 +318,16 @@ class _NotificationPageState extends State<NotificationPage> {
                             ),
                           ),
                           if (item.content.trim().isNotEmpty) ...[
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 4),
                             Text(
                               item.content,
                               style: TextStyle(
-                                color: context.colors.textSecondary,
+                                color: context.colors.textPrimary,
                                 fontSize: 14,
                               ),
                             ),
                           ],
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 2),
                           QuoteWidget(
                             bech32: _encodeEventId(item.targetEventId),
                           ),
@@ -363,15 +391,15 @@ class _NotificationPageState extends State<NotificationPage> {
                               color: context.colors.textSecondary,
                             ),
                           ),
-                          if (item.content.trim().isNotEmpty && item.type != 'repost') ...[
-                            const SizedBox(height: 8),
+                          if (item.content.trim().isNotEmpty && item.type != 'repost' && item.type != 'reaction') ...[
+                            const SizedBox(height: 4),
                             NoteContentWidget(
                               parsedContent: _parseContent(item.content),
                               noteId: item.id,
                               onNavigateToMentionProfile: (npub) => _navigateToProfileFromContent(npub, viewModel),
                             ),
                           ],
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 2),
                           QuoteWidget(
                             bech32: _encodeEventId(item.targetEventId),
                           ),

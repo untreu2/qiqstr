@@ -1,13 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../../models/user_model.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../widgets/user/user_tile_widget.dart';
-import '../../widgets/common/title_widget.dart';
+import '../../widgets/common/indicator_widget.dart';
 
 class UserSearchPage extends StatefulWidget {
   const UserSearchPage({super.key});
@@ -23,6 +24,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
   bool _isSearching = false;
   bool _isLoadingRandom = false;
   String? _error;
+  int? _userCount;
 
   late final UserRepository _userRepository;
 
@@ -32,6 +34,24 @@ class _UserSearchPageState extends State<UserSearchPage> {
     _userRepository = AppDI.get<UserRepository>();
     _searchController.addListener(_onSearchChanged);
     _loadRandomUsers();
+    _loadUserCount();
+  }
+
+  Future<void> _loadUserCount() async {
+    try {
+      final isarService = _userRepository.isarService;
+      if (!isarService.isInitialized) {
+        await isarService.waitForInitialization();
+      }
+      final count = await isarService.getUserProfileCount();
+      if (mounted) {
+        setState(() {
+          _userCount = count;
+        });
+      }
+    } catch (e) {
+      debugPrint('[UserSearchPage] Error loading user count: $e');
+    }
   }
 
   void _onSearchChanged() {
@@ -139,7 +159,53 @@ class _UserSearchPageState extends State<UserSearchPage> {
 
 
   Widget _buildHeader(BuildContext context) {
-    return const TitleWidget(title: 'Search');
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 60, 16, 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const IndicatorWidget(
+            orientation: IndicatorOrientation.vertical,
+            size: IndicatorSize.small,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  'Search',
+                  style: GoogleFonts.poppins(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: context.colors.textPrimary,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                if (_userCount != null) ...[
+                  Text(
+                    ' · ',
+                    style: GoogleFonts.poppins(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: context.colors.textPrimary,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  Text(
+                    '$_userCount users cached',
+                    style: TextStyle(
+                      fontSize: 17,
+                      color: context.colors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _pasteFromClipboard() async {

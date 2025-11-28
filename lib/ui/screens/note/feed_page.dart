@@ -6,7 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:bounce/bounce.dart';
+import 'package:carbon_icons/carbon_icons.dart';
 import 'package:qiqstr/ui/widgets/note/note_list_widget.dart' as widgets;
 import 'package:qiqstr/ui/widgets/common/sidebar_widget.dart';
 import 'package:qiqstr/ui/widgets/common/back_button_widget.dart';
@@ -17,7 +17,7 @@ import '../../../core/ui/ui_state_builder.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/providers/viewmodel_provider.dart';
 import '../../../presentation/viewmodels/feed_viewmodel.dart';
-import '../../widgets/dialogs/sort_dialog.dart';
+import '../../../services/relay_service.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -35,14 +35,31 @@ class FeedPageState extends State<FeedPage> {
 
   final ValueNotifier<List<NoteModel>> _notesNotifier = ValueNotifier([]);
   Timer? _scrollDebounceTimer;
+  Timer? _relayCountTimer;
+  final ValueNotifier<int> _connectedRelaysCount = ValueNotifier(0);
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController()..addListener(_scrollListener);
+    _updateRelayCount();
+    _relayCountTimer = Timer.periodic(const Duration(seconds: 2), (_) => _updateRelayCount());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkFirstOpen();
     });
+  }
+
+  void _updateRelayCount() {
+    if (!mounted) return;
+    try {
+      final manager = WebSocketManager.instance;
+      final count = manager.activeSockets.length;
+      if (_connectedRelaysCount.value != count) {
+        _connectedRelaysCount.value = count;
+      }
+    } catch (e) {
+      debugPrint('[FeedPage] Error updating relay count: $e');
+    }
   }
 
   void _scrollListener() {
@@ -78,9 +95,11 @@ class FeedPageState extends State<FeedPage> {
   @override
   void dispose() {
     _scrollDebounceTimer?.cancel();
+    _relayCountTimer?.cancel();
     _scrollController.removeListener(_scrollListener);
     _scrollController.dispose();
     _notesNotifier.dispose();
+    _connectedRelaysCount.dispose();
     super.dispose();
   }
 
@@ -197,71 +216,18 @@ class FeedPageState extends State<FeedPage> {
                     ),
                   ),
                 ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (!isHashtagMode) ...[
-                        Bounce(
-                          scaleFactor: 0.85,
-                          onTap: () => showSortDialog(
-                            context: context,
-                            viewModel: viewModel,
-                          ),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            constraints: const BoxConstraints(minHeight: 40),
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: colors.buttonPrimary,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  viewModel.hashtag != null
-                                      ? Icons.tag
-                                      : viewModel.sortMode == FeedSortMode.mostInteracted
-                                          ? Icons.trending_up
-                                          : Icons.access_time,
-                                  size: 18,
-                                  color: colors.buttonText,
-                                ),
-                                if (viewModel.hashtag != null) ...[
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    viewModel.hashtag!,
-                                    style: TextStyle(
-                                      color: colors.buttonText,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      height: 1.0,
-                                    ),
-                                  ),
-                                ] else ...[
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    viewModel.sortMode == FeedSortMode.mostInteracted ? 'Popular' : 'Latest',
-                                    style: TextStyle(
-                                      color: colors.buttonText,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      height: 1.0,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
+                if (!isHashtagMode)
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: Icon(
+                        CarbonIcons.forum,
+                        size: 23,
+                        color: colors.textPrimary,
+                      ),
+                    ),
                   ),
-                ),
               ],
             ),
           ),
