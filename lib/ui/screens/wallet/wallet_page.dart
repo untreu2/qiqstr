@@ -394,7 +394,13 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
       itemCount: recentTransactions.length,
       itemBuilder: (context, index) {
         final tx = recentTransactions[index];
-        return _buildTransactionTile(context, tx);
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildTransactionTile(context, tx),
+            if (index < recentTransactions.length - 1) const _TransactionSeparator(),
+          ],
+        );
       },
     );
   }
@@ -413,66 +419,58 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
     final formatted = '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          color: context.colors.overlayLight,
-          borderRadius: BorderRadius.circular(40),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: context.colors.surface,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Icon(
-                isIncoming ? Icons.arrow_downward : Icons.arrow_upward,
-                color: context.colors.textPrimary,
-                size: 14,
-              ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: context.colors.surface,
+              borderRadius: BorderRadius.circular(14),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    isIncoming ? 'Received' : 'Sent',
-                    style: TextStyle(
-                      color: context.colors.textPrimary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+            child: Icon(
+              isIncoming ? Icons.arrow_downward : Icons.arrow_upward,
+              color: context.colors.textPrimary,
+              size: 14,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isIncoming ? 'Received' : 'Sent',
+                  style: TextStyle(
+                    color: context.colors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    formatted,
-                    style: TextStyle(
-                      color: context.colors.textSecondary,
-                      fontSize: 11,
-                    ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  formatted,
+                  style: TextStyle(
+                    color: context.colors.textSecondary,
+                    fontSize: 11,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const SizedBox(width: 6),
-            Text(
-              '${isIncoming ? '+' : '-'}${tx.amount.abs()} sats',
-              style: TextStyle(
-                color: context.colors.textPrimary,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '${isIncoming ? '+' : '-'}${tx.amount.abs()} sats',
+            style: TextStyle(
+              color: context.colors.textPrimary,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -659,6 +657,25 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
           ),
         );
       },
+    );
+  }
+}
+
+class _TransactionSeparator extends StatelessWidget {
+  const _TransactionSeparator();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 16,
+      child: Center(
+        child: Container(
+          height: 0.5,
+          decoration: BoxDecoration(
+            color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
+          ),
+        ),
+      ),
     );
   }
 }

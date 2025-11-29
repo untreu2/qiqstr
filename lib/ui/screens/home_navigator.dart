@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:bounce/bounce.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:provider/provider.dart';
 
@@ -94,8 +93,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
 
               if (item['type'] == 'add') {
                 return Expanded(
-                  child: Bounce(
-                    scaleFactor: 0.85,
+                  child: GestureDetector(
                     onTap: () {
                       HapticFeedback.lightImpact();
                       ShareNotePage.show(context);
@@ -127,8 +125,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
               final bool isSelected = _currentIndex == pageViewIndex;
 
               return Expanded(
-                child: Bounce(
-                  scaleFactor: 0.85,
+                child: GestureDetector(
                   onTap: () {
                     HapticFeedback.lightImpact();
                     final themeManager = context.themeManager;

@@ -2,13 +2,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:carbon_icons/carbon_icons.dart';
+import 'package:nostr_nip19/nostr_nip19.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../../models/user_model.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
-import '../../widgets/user/user_tile_widget.dart';
+import '../../../data/repositories/auth_repository.dart';
+import '../../screens/profile/profile_page.dart';
 import '../../widgets/common/indicator_widget.dart';
+import '../../widgets/common/snackbar_widget.dart';
+import '../../widgets/dialogs/unfollow_user_dialog.dart';
 
 class UserSearchPage extends StatefulWidget {
   const UserSearchPage({super.key});
@@ -303,10 +309,16 @@ class _UserSearchPageState extends State<UserSearchPage> {
       return ListView.builder(
         padding: EdgeInsets.zero,
         itemCount: _filteredUsers.length,
-        itemBuilder: (context, index) => UserTile(
-          key: ValueKey(_filteredUsers[index].pubkeyHex),
-          user: _filteredUsers[index],
-        ),
+        itemBuilder: (context, index) {
+          final user = _filteredUsers[index];
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildUserItem(context, user),
+              if (index < _filteredUsers.length - 1) const _UserSeparator(),
+            ],
+          );
+        },
       );
     }
 
@@ -342,11 +354,21 @@ class _UserSearchPageState extends State<UserSearchPage> {
     return ListView.builder(
       padding: EdgeInsets.zero,
       itemCount: _randomUsers.length,
-      itemBuilder: (context, index) => UserTile(
-        key: ValueKey(_randomUsers[index].pubkeyHex),
-        user: _randomUsers[index],
-      ),
+      itemBuilder: (context, index) {
+        final user = _randomUsers[index];
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildUserItem(context, user),
+            if (index < _randomUsers.length - 1) const _UserSeparator(),
+          ],
+        );
+      },
     );
+  }
+
+  Widget _buildUserItem(BuildContext context, UserModel user) {
+    return _UserItemWidget(user: user);
   }
 
   @override
@@ -437,6 +459,412 @@ class _UserSearchPageState extends State<UserSearchPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _UserItemWidget extends StatefulWidget {
+  final UserModel user;
+
+  const _UserItemWidget({required this.user});
+
+  @override
+  State<_UserItemWidget> createState() => _UserItemWidgetState();
+}
+
+class _UserItemWidgetState extends State<_UserItemWidget> {
+  bool? _isFollowing;
+  bool _isLoading = false;
+  late UserRepository _userRepository;
+  late AuthRepository _authRepository;
+  StreamSubscription<List<UserModel>>? _followingListSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _userRepository = AppDI.get<UserRepository>();
+    _authRepository = AppDI.get<AuthRepository>();
+    _checkFollowStatus();
+    _setupFollowingListListener();
+  }
+
+  @override
+  void dispose() {
+    _followingListSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _setupFollowingListListener() async {
+    final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
+    if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
+      return;
+    }
+
+    _followingListSubscription = _userRepository.followingListStream.listen(
+      (followingList) {
+        if (!mounted) return;
+
+        final targetUserHex = widget.user.pubkeyHex;
+        final isFollowing = followingList.any((user) => user.pubkeyHex == targetUserHex);
+
+        if (mounted && _isFollowing != isFollowing) {
+          setState(() {
+            _isFollowing = isFollowing;
+            _isLoading = false;
+          });
+        }
+      },
+      onError: (error) {
+        debugPrint('[UserItemWidget] Error in following list stream: $error');
+      },
+    );
+  }
+
+  Future<void> _checkFollowStatus() async {
+    try {
+      final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
+      if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
+        return;
+      }
+
+      final followStatusResult = await _userRepository.isFollowing(widget.user.pubkeyHex);
+
+      followStatusResult.fold(
+        (isFollowing) {
+          if (mounted) {
+            setState(() {
+              _isFollowing = isFollowing;
+            });
+          }
+        },
+        (error) {
+          if (mounted) {
+            setState(() {
+              _isFollowing = false;
+            });
+          }
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isFollowing = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _toggleFollow() async {
+    final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
+    if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
+      return;
+    }
+
+    if (_isFollowing == null || _isLoading) return;
+
+    final originalFollowState = _isFollowing;
+
+    if (originalFollowState == true) {
+      final userName = widget.user.name.isNotEmpty
+          ? widget.user.name
+          : (widget.user.nip05.isNotEmpty ? widget.user.nip05.split('@').first : 'this user');
+
+      showUnfollowUserDialog(
+        context: context,
+        userName: userName,
+        onConfirm: () => _performUnfollow(),
+      );
+      return;
+    }
+
+    _performFollow();
+  }
+
+  Future<void> _performFollow() async {
+    final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
+    if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
+      return;
+    }
+
+    if (_isFollowing == null || _isLoading) return;
+
+    final originalFollowState = _isFollowing;
+
+    setState(() {
+      _isFollowing = !_isFollowing!;
+      _isLoading = true;
+    });
+
+    try {
+      final targetNpub = widget.user.pubkeyHex.startsWith('npub1') ? widget.user.pubkeyHex : _getNpubBech32(widget.user.pubkeyHex);
+
+      final result = await _userRepository.followUser(targetNpub);
+
+      result.fold(
+        (_) {
+          setState(() {
+            _isLoading = false;
+          });
+        },
+        (error) {
+          if (mounted) {
+            setState(() {
+              _isFollowing = originalFollowState;
+              _isLoading = false;
+            });
+            AppSnackbar.error(context, 'Failed to follow user: $error');
+          }
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isFollowing = originalFollowState;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _performUnfollow() async {
+    final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
+    if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
+      return;
+    }
+
+    if (_isFollowing == null || _isLoading) return;
+
+    final originalFollowState = _isFollowing;
+
+    setState(() {
+      _isFollowing = !_isFollowing!;
+      _isLoading = true;
+    });
+
+    try {
+      final targetNpub = widget.user.pubkeyHex.startsWith('npub1') ? widget.user.pubkeyHex : _getNpubBech32(widget.user.pubkeyHex);
+
+      final result = await _userRepository.unfollowUser(targetNpub);
+
+      result.fold(
+        (_) {
+          setState(() {
+            _isLoading = false;
+          });
+        },
+        (error) {
+          if (mounted) {
+            setState(() {
+              _isFollowing = originalFollowState;
+              _isLoading = false;
+            });
+            AppSnackbar.error(context, 'Failed to unfollow user: $error');
+          }
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isFollowing = originalFollowState;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  String _getNpubBech32(String identifier) {
+    if (identifier.isEmpty) return '';
+
+    if (identifier.startsWith('npub1')) {
+      return identifier;
+    }
+
+    if (identifier.length == 64 && RegExp(r'^[0-9a-fA-F]+$').hasMatch(identifier)) {
+      try {
+        return encodeBasicBech32(identifier, "npub");
+      } catch (e) {
+        return identifier;
+      }
+    }
+
+    return identifier;
+  }
+
+  Widget _buildFollowButton(BuildContext context) {
+    final isFollowing = _isFollowing!;
+    return GestureDetector(
+      onTap: _isLoading ? null : _toggleFollow,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isFollowing ? context.colors.overlayLight : context.colors.buttonPrimary,
+          borderRadius: BorderRadius.circular(40),
+        ),
+        child: _isLoading
+            ? SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    isFollowing ? context.colors.textPrimary : context.colors.buttonText,
+                  ),
+                ),
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    isFollowing ? CarbonIcons.user_admin : CarbonIcons.user_follow,
+                    size: 16,
+                    color: isFollowing ? context.colors.textPrimary : context.colors.buttonText,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    isFollowing ? 'Following' : 'Follow',
+                    style: TextStyle(
+                      color: isFollowing ? context.colors.textPrimary : context.colors.buttonText,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder(
+      future: _authRepository.getCurrentUserNpub(),
+      builder: (context, snapshot) {
+        final currentUserNpub = snapshot.data?.fold((data) => data, (error) => null);
+        final isCurrentUser = currentUserNpub == widget.user.pubkeyHex || currentUserNpub == widget.user.npub;
+
+        return GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ProfilePage(user: widget.user),
+              ),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                _buildAvatar(context, widget.user.profileImage),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                widget.user.name.length > 25 ? '${widget.user.name.substring(0, 25)}...' : widget.user.name,
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                  color: context.colors.textPrimary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (widget.user.nip05.isNotEmpty && widget.user.nip05Verified) ...[
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.verified,
+                                size: 16,
+                                color: context.colors.accent,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (!isCurrentUser && _isFollowing != null) ...[
+                  const SizedBox(width: 10),
+                  _buildFollowButton(context),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAvatar(BuildContext context, String imageUrl) {
+    if (imageUrl.isEmpty) {
+      return CircleAvatar(
+        radius: 24,
+        backgroundColor: Colors.grey.shade800,
+        child: Icon(
+          Icons.person,
+          size: 26,
+          color: context.colors.textSecondary,
+        ),
+      );
+    }
+
+    return ClipOval(
+      child: Container(
+        width: 48,
+        height: 48,
+        color: Colors.transparent,
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
+          width: 48,
+          height: 48,
+          fit: BoxFit.cover,
+          fadeInDuration: Duration.zero,
+          fadeOutDuration: Duration.zero,
+          memCacheWidth: 192,
+          placeholder: (context, url) => Container(
+            color: Colors.grey.shade800,
+            child: Icon(
+              Icons.person,
+              size: 26,
+              color: context.colors.textSecondary,
+            ),
+          ),
+          errorWidget: (context, url, error) => Container(
+            color: Colors.grey.shade800,
+            child: Icon(
+              Icons.person,
+              size: 26,
+              color: context.colors.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _UserSeparator extends StatelessWidget {
+  const _UserSeparator();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 8,
+      child: Center(
+        child: Container(
+          height: 0.5,
+          decoration: BoxDecoration(
+            color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
+          ),
+        ),
       ),
     );
   }

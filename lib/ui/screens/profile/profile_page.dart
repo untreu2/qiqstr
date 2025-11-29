@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
-import 'package:bounce/bounce.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../theme/theme_manager.dart';
 import '../../../models/user_model.dart';
@@ -307,8 +306,7 @@ class _ProfilePageState extends State<ProfilePage> {
           color: context.colors.buttonPrimary,
           borderRadius: BorderRadius.circular(22.0),
         ),
-        child: Bounce(
-          scaleFactor: 0.85,
+        child: GestureDetector(
           onTap: () async {
             try {
               final npub = widget.user.npub;

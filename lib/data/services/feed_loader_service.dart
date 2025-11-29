@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
 import '../../core/base/result.dart';
+import '../../core/base/logger.dart';
 import '../../models/note_model.dart';
 import '../../models/user_model.dart';
 import '../repositories/note_repository.dart';
@@ -58,12 +58,15 @@ class FeedLoadResult {
 class FeedLoaderService {
   final NoteRepository _noteRepository;
   final UserRepository _userRepository;
+  final Logger _logger;
 
   FeedLoaderService({
     required NoteRepository noteRepository,
     required UserRepository userRepository,
+    Logger? logger,
   })  : _noteRepository = noteRepository,
-        _userRepository = userRepository;
+        _userRepository = userRepository,
+        _logger = logger ?? NoOpLogger();
 
   Future<FeedLoadResult> loadFeed(FeedLoadParams params) async {
     try {
@@ -131,17 +134,19 @@ class FeedLoaderService {
       }
       return const FeedLoadResult(notes: []);
     } catch (e) {
+      _logger.error('Failed to load feed', 'FeedLoaderService', e);
       return FeedLoadResult(notes: [], error: 'Failed to load feed: ${e.toString()}');
     }
   }
 
   List<NoteModel> _processNotes(List<NoteModel> notes) {
+    if (notes.isEmpty) return notes;
+    
     final seenIds = <String>{};
     final deduplicatedNotes = <NoteModel>[];
 
     for (final note in notes) {
-      if (!seenIds.contains(note.id)) {
-        seenIds.add(note.id);
+      if (seenIds.add(note.id)) {
         deduplicatedNotes.add(note);
       }
     }
@@ -235,7 +240,7 @@ class FeedLoaderService {
         onProfilesUpdated(profiles);
       }
     } catch (e) {
-      debugPrint('[FeedLoaderService] Error preloading cached user profiles: $e');
+      _logger.error('Error preloading cached user profiles', 'FeedLoaderService', e);
     }
   }
 
@@ -272,7 +277,7 @@ class FeedLoaderService {
         onProfilesUpdated(profiles);
       }
     } catch (e) {
-      debugPrint('[FeedLoaderService] Error preloading cached user profiles: $e');
+      _logger.error('Error preloading cached user profiles', 'FeedLoaderService', e);
     }
   }
 
@@ -345,7 +350,7 @@ class FeedLoaderService {
         onProfilesUpdated(profiles);
       }
     } catch (e) {
-      debugPrint('[FeedLoaderService] Error loading user profiles: $e');
+      _logger.error('Error loading user profiles', 'FeedLoaderService', e);
     }
   }
 

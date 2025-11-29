@@ -145,7 +145,7 @@ class _FollowingPageState extends State<FollowingPage> {
     );
   }
 
-  Widget _buildUserTile(BuildContext context, UserModel user) {
+  Widget _buildUserTile(BuildContext context, UserModel user, int index) {
     final isLoading = _loadingStates[user.npub] == true;
     final loadedUser = _loadedUsers[user.npub] ?? user;
 
@@ -158,93 +158,117 @@ class _FollowingPageState extends State<FollowingPage> {
       displayName = user.npub.startsWith('npub1') ? '${user.npub.substring(0, 16)}...' : 'Unknown User';
     }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: GestureDetector(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ProfilePage(user: loadedUser),
-            ),
-          );
-        },
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-          decoration: BoxDecoration(
-            color: context.colors.overlayLight,
-            borderRadius: BorderRadius.circular(40),
-          ),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundImage: loadedUser.profileImage.isNotEmpty ? CachedNetworkImageProvider(loadedUser.profileImage) : null,
-                backgroundColor: Colors.grey.shade800,
-                child: loadedUser.profileImage.isEmpty
-                    ? Icon(
-                        Icons.person,
-                        size: 26,
-                        color: context.colors.textSecondary,
-                      )
-                    : null,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ProfilePage(user: loadedUser),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            displayName,
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w600,
-                              color: isLoading ? context.colors.textSecondary : context.colors.textPrimary,
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                _buildAvatar(context, loadedUser.profileImage),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                displayName,
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                  color: isLoading ? context.colors.textSecondary : context.colors.textPrimary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                            overflow: TextOverflow.ellipsis,
+                            if (loadedUser.nip05.isNotEmpty && loadedUser.nip05Verified) ...[
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.verified,
+                                size: 16,
+                                color: context.colors.accent,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (isLoading) ...[
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.5,
+                            color: context.colors.textSecondary,
                           ),
                         ),
-                        if (loadedUser.nip05.isNotEmpty && loadedUser.nip05Verified) ...[
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.verified,
-                            size: 16,
-                            color: context.colors.accent,
-                          ),
-                        ],
                       ],
-                    ),
-                    if (isLoading) ...[
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 12,
-                            height: 12,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 1.5,
-                              color: context.colors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Loading profile...',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: context.colors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
                     ],
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
+          ),
+        ),
+        if (index < _followingUsers.length - 1) const _UserSeparator(),
+      ],
+    );
+  }
+
+  Widget _buildAvatar(BuildContext context, String imageUrl) {
+    if (imageUrl.isEmpty) {
+      return CircleAvatar(
+        radius: 24,
+        backgroundColor: Colors.grey.shade800,
+        child: Icon(
+          Icons.person,
+          size: 26,
+          color: context.colors.textSecondary,
+        ),
+      );
+    }
+
+    return ClipOval(
+      child: Container(
+        width: 48,
+        height: 48,
+        color: Colors.transparent,
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
+          width: 48,
+          height: 48,
+          fit: BoxFit.cover,
+          fadeInDuration: Duration.zero,
+          fadeOutDuration: Duration.zero,
+          memCacheWidth: 192,
+          placeholder: (context, url) => Container(
+            color: Colors.grey.shade800,
+            child: Icon(
+              Icons.person,
+              size: 26,
+              color: context.colors.textSecondary,
+            ),
+          ),
+          errorWidget: (context, url, error) => Container(
+            color: Colors.grey.shade800,
+            child: Icon(
+              Icons.person,
+              size: 26,
+              color: context.colors.textSecondary,
+            ),
           ),
         ),
       ),
@@ -365,7 +389,7 @@ class _FollowingPageState extends State<FollowingPage> {
               delegate: SliverChildBuilderDelegate(
                 (context, index) {
                   if (index < _followingUsers.length) {
-                    return _buildUserTile(context, _followingUsers[index]);
+                    return _buildUserTile(context, _followingUsers[index], index);
                   }
                   return null;
                 },
@@ -397,6 +421,25 @@ class _FollowingPageState extends State<FollowingPage> {
           ),
         );
       },
+    );
+  }
+}
+
+class _UserSeparator extends StatelessWidget {
+  const _UserSeparator();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 8,
+      child: Center(
+        child: Container(
+          height: 0.5,
+          decoration: BoxDecoration(
+            color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -3,7 +3,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:carbon_icons/carbon_icons.dart';
-import 'package:bounce/bounce.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../theme/theme_manager.dart';
 
@@ -122,8 +121,7 @@ class _WebViewPageState extends State<WebViewPage> {
                 color: colors.buttonPrimary,
                 borderRadius: BorderRadius.circular(22.0),
               ),
-              child: Bounce(
-                scaleFactor: 0.85,
+              child: GestureDetector(
                 onTap: () => Navigator.of(context).pop(),
                 behavior: HitTestBehavior.opaque,
                 child: Semantics(
@@ -191,8 +189,7 @@ class _WebViewPageState extends State<WebViewPage> {
                 color: colors.buttonPrimary,
                 borderRadius: BorderRadius.circular(22.0),
               ),
-              child: Bounce(
-                scaleFactor: 0.85,
+              child: GestureDetector(
                 onTap: () async {
                   try {
                     final url = _currentUrl.isNotEmpty ? _currentUrl : widget.url;

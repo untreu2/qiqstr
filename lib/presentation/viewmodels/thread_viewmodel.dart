@@ -531,6 +531,11 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         final allNewNotes = [...newReplies, ...updatedReplies];
         if (allNewNotes.isNotEmpty) {
           _loadUserProfiles(allNewNotes);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!isDisposed) {
+              _triggerCountServiceForNotes(allNewNotes);
+            }
+          });
         }
         
         safeNotifyListeners();

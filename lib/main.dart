@@ -30,7 +30,13 @@ void main() {
 
     await EventParserIsolate.instance.initialize();
 
-    LifecycleManager().initialize();
+    final lifecycleManager = LifecycleManager();
+    lifecycleManager.initialize();
+    
+    final noteRepository = AppDI.get<NoteRepository>();
+    lifecycleManager.addOnPauseCallback(() => noteRepository.setPaused(true));
+    lifecycleManager.addOnResumeCallback(() => noteRepository.setPaused(false));
+    
     MemoryTrimmingService().startPeriodicTrimming();
 
     debugProfileBuildsEnabled = false;

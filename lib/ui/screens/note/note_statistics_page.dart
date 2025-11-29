@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../models/note_model.dart';
 import '../../../models/user_model.dart';
 import '../../theme/theme_manager.dart';
@@ -9,7 +10,6 @@ import '../../../data/services/nostr_data_service.dart';
 import '../profile/profile_page.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/title_widget.dart';
-import '../../widgets/user/user_tile_widget.dart';
 
 class NoteStatisticsPage extends StatefulWidget {
   final NoteModel note;
@@ -205,14 +205,104 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
           );
         }
 
-        return UserTile(
-          key: ValueKey(npub),
-          user: user,
-          showFollowButton: false,
-          trailing: trailing,
+        return GestureDetector(
           onTap: () => _navigateToProfile(npub),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              children: [
+                _buildAvatar(context, user.profileImage),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Row(
+                    mainAxisAlignment: trailing != null ? MainAxisAlignment.spaceBetween : MainAxisAlignment.start,
+                    children: [
+                      Flexible(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                user.name.length > 25 ? '${user.name.substring(0, 25)}...' : user.name,
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                  color: context.colors.textPrimary,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (user.nip05.isNotEmpty && user.nip05Verified) ...[
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.verified,
+                                size: 16,
+                                color: context.colors.accent,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (trailing != null) ...[
+                        Flexible(
+                          child: trailing,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       },
+    );
+  }
+
+  Widget _buildAvatar(BuildContext context, String imageUrl) {
+    if (imageUrl.isEmpty) {
+      return CircleAvatar(
+        radius: 24,
+        backgroundColor: Colors.grey.shade800,
+        child: Icon(
+          Icons.person,
+          size: 26,
+          color: context.colors.textSecondary,
+        ),
+      );
+    }
+
+    return ClipOval(
+      child: Container(
+        width: 48,
+        height: 48,
+        color: Colors.transparent,
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
+          width: 48,
+          height: 48,
+          fit: BoxFit.cover,
+          fadeInDuration: Duration.zero,
+          fadeOutDuration: Duration.zero,
+          memCacheWidth: 192,
+          placeholder: (context, url) => Container(
+            color: Colors.grey.shade800,
+            child: Icon(
+              Icons.person,
+              size: 26,
+              color: context.colors.textSecondary,
+            ),
+          ),
+          errorWidget: (context, url, error) => Container(
+            color: Colors.grey.shade800,
+            child: Icon(
+              Icons.person,
+              size: 26,
+              color: context.colors.textSecondary,
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -293,13 +383,20 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
       _buildInteractionsList();
     }
     
-    final interactionWidgets = _cachedInteractions!
-        .map((interaction) => _buildEntry(
-              npub: interaction['npub'],
-              content: interaction['content'],
-              zapAmount: interaction['zapAmount'],
-            ))
-        .toList();
+    final interactionWidgets = <Widget>[];
+    for (int i = 0; i < _cachedInteractions!.length; i++) {
+      final interaction = _cachedInteractions![i];
+      interactionWidgets.add(
+        _buildEntry(
+          npub: interaction['npub'],
+          content: interaction['content'],
+          zapAmount: interaction['zapAmount'],
+        ),
+      );
+      if (i < _cachedInteractions!.length - 1) {
+        interactionWidgets.add(const _UserSeparator());
+      }
+    }
 
     return Scaffold(
       backgroundColor: context.colors.background,
@@ -331,6 +428,8 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                 delegate: SliverChildBuilderDelegate(
                   (context, index) => interactionWidgets[index],
                   childCount: interactionWidgets.length,
+                  addAutomaticKeepAlives: true,
+                  addRepaintBoundaries: false,
                 ),
               ),
             ],
@@ -372,6 +471,25 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _UserSeparator extends StatelessWidget {
+  const _UserSeparator();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 8,
+      child: Center(
+        child: Container(
+          height: 0.5,
+          decoration: BoxDecoration(
+            color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
+          ),
+        ),
       ),
     );
   }

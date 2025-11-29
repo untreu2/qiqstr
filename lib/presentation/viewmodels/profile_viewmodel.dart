@@ -91,6 +91,8 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
     _checkIfCurrentUser();
     
     loadProfileCommand.execute(npub);
+    _profileNotesState = const LoadingState();
+    safeNotifyListeners();
     loadProfileNotes(npub);
   }
 

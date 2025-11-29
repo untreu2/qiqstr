@@ -3,7 +3,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
-import 'package:bounce/bounce.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:qiqstr/models/note_model.dart';
@@ -16,6 +15,7 @@ import '../../../core/ui/ui_state_builder.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/providers/viewmodel_provider.dart';
 import '../../../presentation/viewmodels/thread_viewmodel.dart';
+import '../../../data/services/note_counter_service.dart';
 import 'share_note.dart';
 
 class ThreadPage extends StatefulWidget {
@@ -75,6 +75,13 @@ class _ThreadPageState extends State<ThreadPage> {
               rootNoteId: widget.rootNoteId,
               focusedNoteId: widget.focusedNoteId,
             );
+            
+            Future.delayed(const Duration(milliseconds: 500), () {
+              if (mounted) {
+                NoteCounterService.instance.getCounts(widget.rootNoteId);
+              }
+            });
+            
             if (widget.focusedNoteId != null) {
               Future.delayed(const Duration(milliseconds: 300), () {
                 if (mounted) {
@@ -889,8 +896,7 @@ class _ThreadPageState extends State<ThreadPage> {
           color: context.colors.buttonPrimary,
           borderRadius: BorderRadius.circular(22.0),
         ),
-        child: Bounce(
-          scaleFactor: 0.85,
+        child: GestureDetector(
           onTap: () async {
             final rootNote = viewModel.rootNoteState.data;
             if (rootNote == null) return;

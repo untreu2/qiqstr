@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
-
 import '../../core/base/result.dart';
 import '../../models/note_model.dart';
 import '../filters/feed_filters.dart';
@@ -18,38 +16,34 @@ extension NoteRepositoryCompat on NoteRepository {
     bool skipCache = false,
   }) async {
     try {
-      final cachedResult = await getFilteredNotes(filter);
-      List<NoteModel>? cachedNotes;
-      
-      if (cachedResult.isSuccess && cachedResult.data!.isNotEmpty) {
-        cachedNotes = cachedResult.data!;
+      if (!skipCache) {
+        final cachedResult = await getFilteredNotes(filter);
+        List<NoteModel>? cachedNotes;
         
-        if (until != null) {
-          cachedNotes = cachedNotes.where((note) {
-            final noteTime = note.isRepost ? (note.repostTimestamp ?? note.timestamp) : note.timestamp;
-            return noteTime.isBefore(until);
-          }).toList();
+        if (cachedResult.isSuccess && cachedResult.data!.isNotEmpty) {
+          cachedNotes = cachedResult.data!;
+          
+          if (until != null) {
+            cachedNotes = cachedNotes.where((note) {
+              final noteTime = note.isRepost ? (note.repostTimestamp ?? note.timestamp) : note.timestamp;
+              return noteTime.isBefore(until);
+            }).toList();
+          }
         }
-      }
-      
-      if (cachedNotes != null && cachedNotes.isNotEmpty) {
-        debugPrint('[NoteRepository] Found ${cachedNotes.length} cached notes, returning immediately');
         
-        fetchNotesFromRelays(
-          authorNpubs: authorNpubs,
-          limit: limit,
-          until: until,
-          since: since,
-          isProfileMode: isProfileMode,
-        ).then((_) {}).catchError((e) {
-          debugPrint('[NoteRepository] Error fetching notes in background: $e');
-        });
-        
-        return Result.success(cachedNotes);
-      }
-      
-      if (skipCache) {
-        debugPrint('[NoteRepository] No cached notes, fetching from relays');
+        if (cachedNotes != null && cachedNotes.isNotEmpty) {
+          fetchNotesFromRelays(
+            authorNpubs: authorNpubs,
+            limit: limit,
+            until: until,
+            since: since,
+            isProfileMode: isProfileMode,
+          ).then((_) {}).catchError((e) {
+            logger.error('Error fetching notes in background', 'NoteRepository', e);
+          });
+          
+          return Result.success(cachedNotes);
+        }
       }
       
       await fetchNotesFromRelays(
@@ -59,6 +53,10 @@ extension NoteRepositoryCompat on NoteRepository {
         since: since,
         isProfileMode: isProfileMode,
       );
+      
+      if (skipCache && isProfileMode) {
+        await Future.delayed(const Duration(milliseconds: 1500));
+      }
       
       final result = await getFilteredNotes(filter);
       
@@ -72,7 +70,7 @@ extension NoteRepositoryCompat on NoteRepository {
       
       return result;
     } catch (e) {
-      debugPrint('[NoteRepository] Exception in _getFeedNotesForAuthors: $e');
+      logger.error('Exception in _getFeedNotesForAuthors', 'NoteRepository', e);
       return Result.error('Failed to get feed notes: ${e.toString()}');
     }
   }
@@ -85,8 +83,6 @@ extension NoteRepositoryCompat on NoteRepository {
     bool skipCache = false,
   }) async {
     try {
-      debugPrint('[NoteRepository] getFeedNotesFromFollowList for user: $currentUserNpub');
-      
       final nostrService = nostrDataService;
       final currentUserHex = nostrService.authService.npubToHex(currentUserNpub) ?? currentUserNpub;
       
@@ -96,7 +92,6 @@ extension NoteRepositoryCompat on NoteRepository {
       Set<String> followedNpubs;
       
       if (cachedFollowList == null || cachedFollowList.isEmpty) {
-        debugPrint('[NoteRepository] No cached following list, fetching from relays');
         await fetchNotesFromRelays(
           authorNpubs: [currentUserNpub],
           limit: limit,
@@ -107,7 +102,6 @@ extension NoteRepositoryCompat on NoteRepository {
         final followingResult = await nostrService.getFollowingList(currentUserNpub);
         
         if (followingResult.isError || followingResult.data == null || followingResult.data!.isEmpty) {
-          debugPrint('[NoteRepository] No following list, returning empty');
           return Result.success([]);
         }
         
@@ -124,7 +118,7 @@ extension NoteRepositoryCompat on NoteRepository {
           until: until,
           since: since,
         ).then((_) {}).catchError((e) {
-          debugPrint('[NoteRepository] Error fetching notes in background: $e');
+          logger.error('Error fetching notes in background', 'NoteRepository', e);
         });
         
         final followedHexKeys = cachedFollowList;
@@ -150,7 +144,7 @@ extension NoteRepositoryCompat on NoteRepository {
         skipCache: skipCache,
       );
     } catch (e) {
-      debugPrint('[NoteRepository] Exception in getFeedNotesFromFollowList: $e');
+      logger.error('Exception in getFeedNotesFromFollowList', 'NoteRepository', e);
       return Result.error('Failed to get feed notes: ${e.toString()}');
     }
   }
@@ -162,8 +156,6 @@ extension NoteRepositoryCompat on NoteRepository {
     DateTime? since,
     bool skipCache = false,
   }) async {
-    debugPrint('[NoteRepository] getProfileNotes for $authorNpub (skipCache: $skipCache)');
-    
     final filter = ProfileFeedFilter(
       targetUserNpub: authorNpub,
       currentUserNpub: authorNpub,
@@ -188,8 +180,6 @@ extension NoteRepositoryCompat on NoteRepository {
     DateTime? since,
   }) async {
     try {
-      debugPrint('[NoteRepository] getHashtagNotes for #$hashtag');
-      
       final result = await nostrDataService.fetchHashtagNotes(
         hashtag: hashtag,
         limit: limit,
@@ -199,10 +189,9 @@ extension NoteRepositoryCompat on NoteRepository {
       
       return result;
     } catch (e) {
-      debugPrint('[NoteRepository] Exception in getHashtagNotes: $e');
+      logger.error('Exception in getHashtagNotes', 'NoteRepository', e);
       return Result.error('Failed to get hashtag notes: ${e.toString()}');
     }
   }
   
 }
-

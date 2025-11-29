@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../../models/user_model.dart';
 import '../home_navigator.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/title_widget.dart';
-import '../../widgets/user/user_tile_widget.dart';
 import '../../../core/ui/ui_state_builder.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/viewmodels/suggested_follows_viewmodel.dart';
@@ -98,14 +98,17 @@ class SuggestedFollowsPage extends StatelessWidget {
               children: [
                 _buildHeader(context),
                 const SizedBox(height: 16),
-                ...users.map((user) => UserTile(
-                      key: ValueKey(user.pubkeyHex),
-                      user: user,
-                      showFollowButton: false,
-                      showSelectionIndicator: true,
-                      isSelected: viewModel.selectedUsers.contains(user.npub),
-                      onTap: () => viewModel.toggleUserSelection(user.npub),
-                    )),
+                ...users.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final user = entry.value;
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildUserItem(context, user, viewModel),
+                      if (index < users.length - 1) const _UserSeparator(),
+                    ],
+                  );
+                }),
                 const SizedBox(height: 120),
               ],
             ),
@@ -125,6 +128,115 @@ class SuggestedFollowsPage extends StatelessWidget {
       subtitle: "Select at least 3 people to follow to get started.",
       useTopPadding: false,
       padding: EdgeInsets.fromLTRB(16, topPadding + 20, 16, 8),
+    );
+  }
+
+  Widget _buildUserItem(BuildContext context, UserModel user, SuggestedFollowsViewModel viewModel) {
+    final isSelected = viewModel.selectedUsers.contains(user.npub);
+    
+    return GestureDetector(
+      onTap: () => viewModel.toggleUserSelection(user.npub),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            _buildAvatar(context, user.profileImage),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      user.name.length > 25 ? '${user.name.substring(0, 25)}...' : user.name,
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        color: context.colors.textPrimary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (user.nip05.isNotEmpty && user.nip05Verified) ...[
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.verified,
+                      size: 16,
+                      color: context.colors.accent,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isSelected ? context.colors.accent : Colors.transparent,
+                border: Border.all(
+                  color: isSelected ? context.colors.accent : context.colors.border,
+                  width: 2,
+                ),
+              ),
+              child: isSelected
+                  ? Icon(
+                      Icons.check,
+                      color: context.colors.background,
+                      size: 16,
+                    )
+                  : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvatar(BuildContext context, String imageUrl) {
+    if (imageUrl.isEmpty) {
+      return CircleAvatar(
+        radius: 24,
+        backgroundColor: Colors.grey.shade800,
+        child: Icon(
+          Icons.person,
+          size: 26,
+          color: context.colors.textSecondary,
+        ),
+      );
+    }
+
+    return ClipOval(
+      child: Container(
+        width: 48,
+        height: 48,
+        color: Colors.transparent,
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
+          width: 48,
+          height: 48,
+          fit: BoxFit.cover,
+          fadeInDuration: Duration.zero,
+          fadeOutDuration: Duration.zero,
+          memCacheWidth: 192,
+          placeholder: (context, url) => Container(
+            color: Colors.grey.shade800,
+            child: Icon(
+              Icons.person,
+              size: 26,
+              color: context.colors.textSecondary,
+            ),
+          ),
+          errorWidget: (context, url, error) => Container(
+            color: Colors.grey.shade800,
+            child: Icon(
+              Icons.person,
+              size: 26,
+              color: context.colors.textSecondary,
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -197,6 +309,25 @@ class SuggestedFollowsPage extends StatelessWidget {
       context,
       MaterialPageRoute(
         builder: (_) => HomeNavigator(npub: npub),
+      ),
+    );
+  }
+}
+
+class _UserSeparator extends StatelessWidget {
+  const _UserSeparator();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 8,
+      child: Center(
+        child: Container(
+          height: 0.5,
+          decoration: BoxDecoration(
+            color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
+          ),
+        ),
       ),
     );
   }
