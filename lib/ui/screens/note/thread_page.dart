@@ -333,13 +333,9 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
   void _handleReplyInputTap() {
-    Navigator.push(
+    ShareNotePage.show(
       context,
-      MaterialPageRoute(
-        builder: (_) => ShareNotePage(
-          replyToNoteId: widget.rootNoteId,
-        ),
-      ),
+      replyToNoteId: widget.rootNoteId,
     );
   }
 

@@ -10,7 +10,6 @@ import '../../../data/repositories/note_repository.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import '../../../models/user_model.dart';
 import '../../theme/theme_manager.dart';
-import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/note/quote_widget.dart';
 import '../../widgets/media/video_preview.dart';
@@ -27,6 +26,18 @@ class ShareNotePage extends StatefulWidget {
 
   @override
   State<ShareNotePage> createState() => _ShareNotePageState();
+
+  static Future<bool?> show(BuildContext context, {String? initialText, String? replyToNoteId}) {
+    return showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ShareNotePage(
+        initialText: initialText,
+        replyToNoteId: replyToNoteId,
+      ),
+    );
+  }
 }
 
 class _ShareNotePageState extends State<ShareNotePage> {
@@ -797,17 +808,55 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    final double topPadding = MediaQuery.of(context).padding.top;
-
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, topPadding + 16, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const SizedBox.shrink(),
+          Row(
+            children: [
+              _buildCloseButton(),
+              const SizedBox(width: 12),
+              _buildDragHandle(),
+            ],
+          ),
           _buildAppBarActions(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCloseButton() {
+    return Semantics(
+      label: 'Close dialog',
+      button: true,
+      child: GestureDetector(
+        onTap: () => Navigator.of(context).pop(),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: context.colors.overlayLight,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            Icons.close,
+            size: 20,
+            color: context.colors.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDragHandle() {
+    return Container(
+      width: 40,
+      height: 4,
+      margin: const EdgeInsets.only(left: 8),
+      decoration: BoxDecoration(
+        color: context.colors.textSecondary.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(2),
       ),
     );
   }
@@ -824,18 +873,17 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: context.colors.background,
-      body: Stack(
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.9,
+      decoration: BoxDecoration(
+        color: context.colors.background,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
         children: [
-          Column(
-            children: [
-              _buildHeader(context),
-              Expanded(child: _buildMainContent()),
-              if (_isSearchingUsers) _buildUserSuggestions(),
-            ],
-          ),
-          const BackButtonWidget.floating(),
+          _buildHeader(context),
+          Expanded(child: _buildMainContent()),
+          if (_isSearchingUsers) _buildUserSuggestions(),
         ],
       ),
     );

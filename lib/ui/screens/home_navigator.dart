@@ -98,11 +98,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                     scaleFactor: 0.85,
                     onTap: () {
                       HapticFeedback.lightImpact();
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ShareNotePage(),
-                        ),
-                      );
+                      ShareNotePage.show(context);
                     },
                     behavior: HitTestBehavior.opaque,
                     child: Center(

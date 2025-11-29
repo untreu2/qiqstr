@@ -262,11 +262,9 @@ class _InteractionBarState extends State<InteractionBar> {
 
   void _handleReplyTap() {
     HapticFeedback.lightImpact();
-    Navigator.push(
+    ShareNotePage.show(
       context,
-      MaterialPageRoute(
-        builder: (_) => ShareNotePage(replyToNoteId: widget.noteId),
-      ),
+      replyToNoteId: widget.noteId,
     );
   }
 
@@ -388,13 +386,9 @@ class _InteractionBarState extends State<InteractionBar> {
     final bech32 = encodeBasicBech32(noteToQuote.id, 'note');
     final quoteText = 'nostr:$bech32';
 
-    Navigator.push(
+    ShareNotePage.show(
       context,
-      MaterialPageRoute(
-        builder: (_) => ShareNotePage(
-          initialText: quoteText,
-        ),
-      ),
+      initialText: quoteText,
     );
   }
 
