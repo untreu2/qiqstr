@@ -390,7 +390,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
     final recentTransactions = _transactions!.take(6).toList();
 
     return ListView.builder(
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.only(bottom: 100),
       itemCount: recentTransactions.length,
       itemBuilder: (context, index) {
         final tx = recentTransactions[index];
@@ -413,10 +413,10 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
     final formatted = '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         decoration: BoxDecoration(
           color: context.colors.overlayLight,
           borderRadius: BorderRadius.circular(40),
@@ -424,19 +424,19 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
         child: Row(
           children: [
             Container(
-              width: 32,
-              height: 32,
+              width: 28,
+              height: 28,
               decoration: BoxDecoration(
                 color: context.colors.surface,
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(
                 isIncoming ? Icons.arrow_downward : Icons.arrow_upward,
                 color: context.colors.textPrimary,
-                size: 16,
+                size: 14,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -446,7 +446,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
                     style: TextStyle(
                       color: context.colors.textPrimary,
                       fontWeight: FontWeight.w600,
-                      fontSize: 15,
+                      fontSize: 14,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -456,19 +456,19 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
                     formatted,
                     style: TextStyle(
                       color: context.colors.textSecondary,
-                      fontSize: 12,
+                      fontSize: 11,
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Text(
               '${isIncoming ? '+' : '-'}${tx.amount.abs()} sats',
               style: TextStyle(
                 color: context.colors.textPrimary,
                 fontWeight: FontWeight.w600,
-                fontSize: 14,
+                fontSize: 13,
               ),
             ),
           ],

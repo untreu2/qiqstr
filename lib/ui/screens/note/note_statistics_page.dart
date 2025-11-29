@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../../../models/note_model.dart';
 import '../../../models/user_model.dart';
 import '../../theme/theme_manager.dart';
@@ -10,6 +9,7 @@ import '../../../data/services/nostr_data_service.dart';
 import '../profile/profile_page.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/title_widget.dart';
+import '../../widgets/user/user_tile_widget.dart';
 
 class NoteStatisticsPage extends StatefulWidget {
   final NoteModel note;
@@ -168,94 +168,49 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
       future: _getUser(npub),
       builder: (_, snapshot) {
         final user = snapshot.data;
+        
+        if (user == null) {
+          return const SizedBox.shrink();
+        }
 
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: GestureDetector(
-            onTap: () => _navigateToProfile(npub),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-              decoration: BoxDecoration(
-                color: context.colors.overlayLight,
-                borderRadius: BorderRadius.circular(40),
-              ),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundImage: user?.profileImage.isNotEmpty == true ? CachedNetworkImageProvider(user!.profileImage) : null,
-                    backgroundColor: context.colors.grey800,
-                    child: user?.profileImage.isNotEmpty != true ? Icon(Icons.person, color: context.colors.surface, size: 26) : null,
+        Widget? trailing;
+        if (zapAmount != null || content.isNotEmpty) {
+          trailing = Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              if (zapAmount != null)
+                Text(
+                  ' $zapAmount sats',
+                  style: TextStyle(
+                    color: context.colors.accent,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Flexible(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  user?.name ?? npub.substring(0, 8),
-                                  style: TextStyle(
-                                    color: context.colors.textPrimary,
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (user?.nip05.isNotEmpty == true && user?.nip05Verified == true) ...[
-                                const SizedBox(width: 4),
-                                Icon(
-                                  Icons.verified,
-                                  size: 16,
-                                  color: context.colors.accent,
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        Flexible(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              if (zapAmount != null)
-                                Text(
-                                  ' $zapAmount sats',
-                                  style: TextStyle(
-                                    color: context.colors.accent,
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              if (content.isNotEmpty) ...[
-                                if (zapAmount != null) const SizedBox(width: 12),
-                                Flexible(
-                                  child: Text(
-                                    content,
-                                    style: TextStyle(
-                                      color: context.colors.textPrimary,
-                                      fontSize: content.length <= 5 ? 20 : 15,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ],
+                ),
+              if (content.isNotEmpty) ...[
+                if (zapAmount != null) const SizedBox(width: 12),
+                Flexible(
+                  child: Text(
+                    content,
+                    style: TextStyle(
+                      color: context.colors.textPrimary,
+                      fontSize: content.length <= 5 ? 20 : 15,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ],
-              ),
-            ),
-          ),
+                ),
+              ],
+            ],
+          );
+        }
+
+        return UserTile(
+          key: ValueKey(npub),
+          user: user,
+          showFollowButton: false,
+          trailing: trailing,
+          onTap: () => _navigateToProfile(npub),
         );
       },
     );

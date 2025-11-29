@@ -84,7 +84,6 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
     registerCommand('loadMoreProfileNotes', loadMoreProfileNotesCommand);
 
     _subscribeToUserUpdates();
-    _subscribeToNotesUpdates();
   }
 
   void initializeWithUser(String npub) {
@@ -211,7 +210,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
           type: FeedType.profile,
           targetUserNpub: userNpub,
           limit: _pageSize,
-          skipCache: false,
+          skipCache: true,
         );
 
         final result = await _feedLoader.loadFeed(params);
@@ -273,7 +272,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
         targetUserNpub: _currentProfileNpub,
         limit: _pageSize,
         until: until,
-        skipCache: false,
+        skipCache: true,
       );
       
       final result = await _feedLoader.loadFeed(params);
@@ -361,30 +360,6 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
   }
 
 
-  void _subscribeToNotesUpdates() {
-    final stream = _feedLoader.getNotesStream(FeedType.profile);
-
-    addSubscription(
-      stream.listen((updatedNotes) {
-        if (isDisposed || _profileNotesState is! LoadedState<List<NoteModel>>) return;
-
-        final currentNotes = (_profileNotesState as LoadedState<List<NoteModel>>).data;
-        if (currentNotes.isEmpty) return;
-
-        final mergedNotes = _feedLoader.mergeProfileNotesWithUpdates(
-          currentNotes,
-          updatedNotes,
-        );
-
-        if (mergedNotes != currentNotes) {
-          _profileNotesState = mergedNotes.isEmpty
-              ? const EmptyState('No notes from this user yet')
-              : LoadedState(mergedNotes);
-          safeNotifyListeners();
-        }
-      }),
-    );
-  }
 
 
   UserModel? get currentProfile {

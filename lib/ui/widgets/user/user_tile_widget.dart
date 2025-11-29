@@ -15,11 +15,19 @@ import '../../widgets/dialogs/unfollow_user_dialog.dart';
 class UserTile extends StatefulWidget {
   final UserModel user;
   final bool showFollowButton;
+  final bool isSelected;
+  final bool showSelectionIndicator;
+  final VoidCallback? onTap;
+  final Widget? trailing;
 
   const UserTile({
     super.key,
     required this.user,
     this.showFollowButton = true,
+    this.isSelected = false,
+    this.showSelectionIndicator = false,
+    this.onTap,
+    this.trailing,
   });
 
   @override
@@ -254,9 +262,9 @@ class _UserTileState extends State<UserTile> {
 
         return RepaintBoundary(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: GestureDetector(
-              onTap: () {
+              onTap: widget.onTap ?? () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -266,7 +274,7 @@ class _UserTileState extends State<UserTile> {
               },
               child: Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                 decoration: BoxDecoration(
                   color: context.colors.overlayLight,
                   borderRadius: BorderRadius.circular(40),
@@ -277,34 +285,69 @@ class _UserTileState extends State<UserTile> {
                       imageUrl: widget.user.profileImage,
                       colors: context.colors,
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Row(
+                        mainAxisAlignment: widget.trailing != null ? MainAxisAlignment.spaceBetween : MainAxisAlignment.start,
                         children: [
                           Flexible(
-                            child: Text(
-                              widget.user.name.length > 25 ? '${widget.user.name.substring(0, 25)}...' : widget.user.name,
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w600,
-                                color: context.colors.textPrimary,
-                              ),
-                              overflow: TextOverflow.ellipsis,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    widget.user.name.length > 25 ? '${widget.user.name.substring(0, 25)}...' : widget.user.name,
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: context.colors.textPrimary,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (widget.user.nip05.isNotEmpty && widget.user.nip05Verified) ...[
+                                  const SizedBox(width: 3),
+                                  Icon(
+                                    Icons.verified,
+                                    size: 14,
+                                    color: context.colors.accent,
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
-                          if (widget.user.nip05.isNotEmpty && widget.user.nip05Verified) ...[
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.verified,
-                              size: 16,
-                              color: context.colors.accent,
+                          if (widget.trailing != null) ...[
+                            Flexible(
+                              child: widget.trailing!,
                             ),
                           ],
                         ],
                       ),
                     ),
-                    if (widget.showFollowButton && !isCurrentUser && _isFollowing != null) ...[
-                      const SizedBox(width: 12),
+                    if (widget.showSelectionIndicator) ...[
+                      const SizedBox(width: 10),
+                      Container(
+                        width: 20,
+                        height: 20,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: widget.isSelected ? context.colors.accent : Colors.transparent,
+                          border: Border.all(
+                            color: widget.isSelected ? context.colors.accent : context.colors.border,
+                            width: 2,
+                          ),
+                        ),
+                        child: widget.isSelected
+                            ? Icon(
+                                Icons.check,
+                                color: context.colors.background,
+                                size: 14,
+                              )
+                            : null,
+                      ),
+                    ],
+                    if (widget.showFollowButton && !isCurrentUser && _isFollowing != null && !widget.showSelectionIndicator) ...[
+                      const SizedBox(width: 10),
                       Builder(
                         builder: (context) {
                           final followBgColor = context.colors.buttonPrimary;
@@ -315,16 +358,16 @@ class _UserTileState extends State<UserTile> {
                           return GestureDetector(
                             onTap: _isLoading ? null : _toggleFollow,
                             child: Container(
-                              width: 48,
-                              height: 48,
+                              width: 40,
+                              height: 40,
                               decoration: BoxDecoration(
                                 color: _isFollowing == true ? unfollowBgColor : followBgColor,
                                 shape: BoxShape.circle,
                               ),
                               child: _isLoading
                                   ? SizedBox(
-                                      width: 20,
-                                      height: 20,
+                                      width: 18,
+                                      height: 18,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
                                         valueColor: AlwaysStoppedAnimation<Color>(
@@ -334,7 +377,7 @@ class _UserTileState extends State<UserTile> {
                                     )
                                   : Icon(
                                       _isFollowing == true ? CarbonIcons.user_admin : CarbonIcons.user_follow,
-                                      size: 21,
+                                      size: 18,
                                       color: _isFollowing == true ? unfollowIconColor : followIconColor,
                                     ),
                             ),
@@ -367,11 +410,11 @@ class _UserAvatar extends StatelessWidget {
     if (imageUrl.isEmpty) {
       return RepaintBoundary(
         child: CircleAvatar(
-          radius: 24,
+          radius: 20,
           backgroundColor: Colors.grey.shade800,
           child: Icon(
             Icons.person,
-            size: 26,
+            size: 22,
             color: colors.textSecondary,
           ),
         ),
@@ -382,23 +425,23 @@ class _UserAvatar extends StatelessWidget {
       child: ClipOval(
         clipBehavior: Clip.antiAlias,
         child: Container(
-          width: 48,
-          height: 48,
+          width: 40,
+          height: 40,
           color: Colors.transparent,
           child: CachedNetworkImage(
             key: ValueKey('user_avatar_${imageUrl.hashCode}'),
             imageUrl: imageUrl,
-            width: 48,
-            height: 48,
+            width: 40,
+            height: 40,
             fit: BoxFit.cover,
             fadeInDuration: Duration.zero,
             fadeOutDuration: Duration.zero,
-            memCacheWidth: 180,
+            memCacheWidth: 160,
             placeholder: (context, url) => Container(
               color: Colors.grey.shade800,
               child: Icon(
                 Icons.person,
-                size: 26,
+                size: 22,
                 color: colors.textSecondary,
               ),
             ),
@@ -406,7 +449,7 @@ class _UserAvatar extends StatelessWidget {
               color: Colors.grey.shade800,
               child: Icon(
                 Icons.person,
-                size: 26,
+                size: 22,
                 color: colors.textSecondary,
               ),
             ),

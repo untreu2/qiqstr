@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../../models/user_model.dart';
 import '../home_navigator.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/title_widget.dart';
+import '../../widgets/user/user_tile_widget.dart';
 import '../../../core/ui/ui_state_builder.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/viewmodels/suggested_follows_viewmodel.dart';
@@ -98,7 +98,14 @@ class SuggestedFollowsPage extends StatelessWidget {
               children: [
                 _buildHeader(context),
                 const SizedBox(height: 16),
-                ...users.map((user) => _buildUserTile(context, viewModel, user)),
+                ...users.map((user) => UserTile(
+                      key: ValueKey(user.pubkeyHex),
+                      user: user,
+                      showFollowButton: false,
+                      showSelectionIndicator: true,
+                      isSelected: viewModel.selectedUsers.contains(user.npub),
+                      onTap: () => viewModel.toggleUserSelection(user.npub),
+                    )),
                 const SizedBox(height: 120),
               ],
             ),
@@ -121,86 +128,6 @@ class SuggestedFollowsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildUserTile(BuildContext context, SuggestedFollowsViewModel viewModel, UserModel user) {
-    final isSelected = viewModel.selectedUsers.contains(user.npub);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: GestureDetector(
-        onTap: () => viewModel.toggleUserSelection(user.npub),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-          decoration: BoxDecoration(
-            color: context.colors.overlayLight,
-            borderRadius: BorderRadius.circular(40),
-          ),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
-                backgroundColor: Colors.grey.shade800,
-                child: user.profileImage.isEmpty
-                    ? Icon(
-                        Icons.person,
-                        size: 26,
-                        color: context.colors.textSecondary,
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        user.name.isNotEmpty ? user.name : 'Anonymous',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                          color: context.colors.textPrimary,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (user.nip05.isNotEmpty && user.nip05Verified) ...[
-                      const SizedBox(width: 4),
-                      Icon(
-                        Icons.verified,
-                        size: 16,
-                        color: context.colors.accent,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isSelected ? context.colors.accent : Colors.transparent,
-                  border: Border.all(
-                    color: isSelected ? context.colors.accent : context.colors.border,
-                    width: 2,
-                  ),
-                ),
-                child: isSelected
-                    ? Icon(
-                        Icons.check,
-                        color: context.colors.background,
-                        size: 16,
-                      )
-                    : null,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildBottomSection(BuildContext context, SuggestedFollowsViewModel viewModel) {
     return Container(
