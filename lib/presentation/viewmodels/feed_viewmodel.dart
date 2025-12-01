@@ -505,13 +505,97 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
     addSubscription(
       _noteRepository.notesStream.listen((allNotes) {
-        if (isDisposed || _feedState is! LoadedState<List<NoteModel>>) return;
+        if (isDisposed) return;
+
+        if (_feedState is! LoadedState<List<NoteModel>>) {
+          return;
+        }
 
         final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
         final currentNoteIds = currentNotes.map((n) => n.id).toSet();
 
         final userNewNotes = allNotes.where((note) {
-          final isUserNote = note.author == currentUserHex;
+          final noteAuthorHex = _authRepository.npubToHex(note.author);
+          final isUserNote = noteAuthorHex != null && noteAuthorHex == currentUserHex;
+          
+          final isUserRepost = note.isRepost && note.repostedBy != null;
+          String? repostedByHex;
+          if (isUserRepost) {
+            repostedByHex = note.repostedBy!.length == 64 
+                ? note.repostedBy 
+                : _authRepository.npubToHex(note.repostedBy!);
+            repostedByHex = repostedByHex ?? note.repostedBy;
+          }
+          final isUserRepostMatch = isUserRepost && repostedByHex == currentUserHex;
+          
+          final isNew = !currentNoteIds.contains(note.id);
+          
+          final matchesFeed = !isHashtagMode || 
+                             (_hashtag != null && note.tTags.contains(_hashtag!.toLowerCase()));
+          
+          return (isUserNote || isUserRepostMatch) && isNew && matchesFeed;
+        }).toList();
+
+        if (userNewNotes.isNotEmpty) {
+          final updatedNotes = [...userNewNotes, ...currentNotes];
+          
+          final seenIds = <String>{};
+          final deduplicatedNotes = <NoteModel>[];
+          for (final note in updatedNotes) {
+            if (!seenIds.contains(note.id)) {
+              seenIds.add(note.id);
+              deduplicatedNotes.add(note);
+            }
+          }
+
+          final sortedNotes = _feedLoader.sortNotes(deduplicatedNotes, _sortMode);
+          
+          _feedState = LoadedState(sortedNotes);
+          safeNotifyListeners();
+
+          _feedLoader.preloadCachedUserProfilesSync(
+            userNewNotes,
+            _profiles,
+            (profiles) {
+              _profilesController.add(Map.from(profiles));
+            },
+          );
+
+          _feedLoader.preloadCachedUserProfiles(
+            userNewNotes,
+            _profiles,
+            (profiles) {
+              _profilesController.add(Map.from(profiles));
+            },
+          );
+
+          _feedLoader.loadUserProfilesForNotes(
+            userNewNotes,
+            _profiles,
+            (profiles) {
+              _profilesController.add(Map.from(profiles));
+            },
+          ).catchError((e) {
+            debugPrint('[FeedViewModel] Error loading user profiles for new notes: $e');
+          });
+        }
+      }),
+    );
+
+    addSubscription(
+      _noteRepository.realTimeNotesStream.listen((allNotes) {
+        if (isDisposed) return;
+
+        if (_feedState is! LoadedState<List<NoteModel>>) {
+          return;
+        }
+
+        final currentNotes = (_feedState as LoadedState<List<NoteModel>>).data;
+        final currentNoteIds = currentNotes.map((n) => n.id).toSet();
+
+        final userNewNotes = allNotes.where((note) {
+          final noteAuthorHex = _authRepository.npubToHex(note.author);
+          final isUserNote = noteAuthorHex != null && noteAuthorHex == currentUserHex;
           
           final isUserRepost = note.isRepost && note.repostedBy != null;
           String? repostedByHex;

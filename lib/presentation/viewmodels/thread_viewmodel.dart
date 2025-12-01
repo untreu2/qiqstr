@@ -9,7 +9,6 @@ import '../../data/repositories/note_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/services/user_batch_fetcher.dart';
-import '../../data/services/note_counter_service.dart';
 import '../../models/note_model.dart';
 import '../../models/user_model.dart';
 
@@ -194,7 +193,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!isDisposed) {
-            _triggerCountServiceForNotes(allThreadNotes);
             _noteRepository.getThreadReplies(_rootNoteId, fetchFromRelays: true).then((result) {
               if (!isDisposed && result.isSuccess) {
                 final newReplies = result.data ?? [];
@@ -203,7 +201,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
                   final newStructure = _buildThreadStructure(rootNote, newReplies);
                   _threadStructureState = LoadedState(newStructure);
                   _loadUserProfiles([rootNote, ...newReplies]);
-                  _triggerCountServiceForNotes(newReplies);
                   safeNotifyListeners();
                 }
               }
@@ -223,96 +220,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     await loadThread();
   }
 
-  void _triggerCountServiceForNotes(List<NoteModel> notes) {
-    for (final note in notes) {
-      final noteId = note.isRepost && note.rootId != null ? note.rootId! : note.id;
-      NoteCounterService.instance.getCounts(noteId).then((counts) {
-        if (counts != null && !isDisposed) {
-          final rootNote = _rootNoteState.data;
-          if (rootNote != null) {
-            final targetNoteId = rootNote.isRepost && rootNote.rootId != null ? rootNote.rootId! : rootNote.id;
-            if (targetNoteId == noteId) {
-              rootNote.reactionCount = counts.reactionCount;
-              rootNote.repostCount = counts.repostCount;
-              rootNote.replyCount = counts.replyCount;
-              rootNote.zapAmount = counts.zapAmount;
-              safeNotifyListeners();
-            }
-          }
-
-          final focusedNote = _focusedNoteState.data;
-          if (focusedNote != null) {
-            final focusedNoteId = focusedNote.isRepost && focusedNote.rootId != null ? focusedNote.rootId! : focusedNote.id;
-            if (focusedNoteId == noteId) {
-              focusedNote.reactionCount = counts.reactionCount;
-              focusedNote.repostCount = counts.repostCount;
-              focusedNote.replyCount = counts.replyCount;
-              focusedNote.zapAmount = counts.zapAmount;
-              safeNotifyListeners();
-            }
-          }
-
-          final replies = _repliesState.data ?? [];
-          for (final reply in replies) {
-            final replyNoteId = reply.isRepost && reply.rootId != null ? reply.rootId! : reply.id;
-            if (replyNoteId == noteId) {
-              reply.reactionCount = counts.reactionCount;
-              reply.repostCount = counts.repostCount;
-              reply.replyCount = counts.replyCount;
-              reply.zapAmount = counts.zapAmount;
-            }
-          }
-          safeNotifyListeners();
-        }
-      }).catchError((e) {
-        debugPrint('[ThreadViewModel] Error getting counts for $noteId: $e');
-      });
-    }
-  }
-
-  void triggerCountServiceForNote(String noteId) {
-    NoteCounterService.instance.getCounts(noteId).then((counts) {
-      if (counts != null && !isDisposed) {
-        final rootNote = _rootNoteState.data;
-        if (rootNote != null) {
-          final targetNoteId = rootNote.isRepost && rootNote.rootId != null ? rootNote.rootId! : rootNote.id;
-          if (targetNoteId == noteId) {
-            rootNote.reactionCount = counts.reactionCount;
-            rootNote.repostCount = counts.repostCount;
-            rootNote.replyCount = counts.replyCount;
-            rootNote.zapAmount = counts.zapAmount;
-            safeNotifyListeners();
-          }
-        }
-
-        final focusedNote = _focusedNoteState.data;
-        if (focusedNote != null) {
-          final focusedNoteId = focusedNote.isRepost && focusedNote.rootId != null ? focusedNote.rootId! : focusedNote.id;
-          if (focusedNoteId == noteId) {
-            focusedNote.reactionCount = counts.reactionCount;
-            focusedNote.repostCount = counts.repostCount;
-            focusedNote.replyCount = counts.replyCount;
-            focusedNote.zapAmount = counts.zapAmount;
-            safeNotifyListeners();
-          }
-        }
-
-        final replies = _repliesState.data ?? [];
-        for (final reply in replies) {
-          final replyNoteId = reply.isRepost && reply.rootId != null ? reply.rootId! : reply.id;
-          if (replyNoteId == noteId) {
-            reply.reactionCount = counts.reactionCount;
-            reply.repostCount = counts.repostCount;
-            reply.replyCount = counts.replyCount;
-            reply.zapAmount = counts.zapAmount;
-          }
-        }
-        safeNotifyListeners();
-      }
-    }).catchError((e) {
-      debugPrint('[ThreadViewModel] Error getting counts for $noteId: $e');
-    });
-  }
 
   Future<void> checkRepliesFromCache() async {
     try {
@@ -334,12 +241,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
             if (newReplies.isNotEmpty) {
               final allThreadNotes = [rootNote, ...newReplies];
               _loadUserProfiles(allThreadNotes);
-              
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!isDisposed) {
-                  _triggerCountServiceForNotes(newReplies);
-                }
-              });
             }
             
             safeNotifyListeners();
@@ -531,11 +432,6 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         final allNewNotes = [...newReplies, ...updatedReplies];
         if (allNewNotes.isNotEmpty) {
           _loadUserProfiles(allNewNotes);
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!isDisposed) {
-              _triggerCountServiceForNotes(allNewNotes);
-            }
-          });
         }
         
         safeNotifyListeners();

@@ -9,7 +9,6 @@ import '../../screens/note/note_statistics_page.dart';
 import '../../../models/note_model.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/note_repository.dart';
-import '../../../data/services/note_counter_service.dart';
 import '../dialogs/zap_dialog.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import '../dialogs/delete_note_dialog.dart';
@@ -94,42 +93,6 @@ class _InteractionBarState extends State<InteractionBar> {
   }
 
   void _fetchCountsIfNeeded() {
-    final note = _findNote();
-    final isRepostCase = widget.note != null && 
-                        widget.note!.isRepost && 
-                        widget.note!.rootId == widget.noteId;
-    
-    bool shouldFetchCounts = false;
-    if (isRepostCase) {
-      shouldFetchCounts = true;
-    } else if (note == null) {
-      shouldFetchCounts = true;
-    } else {
-      shouldFetchCounts = note.id != widget.noteId;
-    }
-    
-    if (shouldFetchCounts) {
-      NoteCounterService.instance.getCounts(widget.noteId).then((counts) {
-        if (!mounted) return;
-        if (counts != null) {
-          final currentState = _stateNotifier.value;
-          final newState = _InteractionState(
-            reactionCount: counts.reactionCount,
-            repostCount: counts.repostCount,
-            replyCount: counts.replyCount,
-            zapAmount: counts.zapAmount,
-            hasReacted: currentState.hasReacted,
-            hasReposted: currentState.hasReposted,
-            hasZapped: currentState.hasZapped,
-          );
-          if (currentState != newState) {
-            _stateNotifier.value = newState;
-          }
-        }
-      }).catchError((e) {
-        debugPrint('[InteractionBar] Error fetching counts: $e');
-      });
-    }
   }
 
   @override

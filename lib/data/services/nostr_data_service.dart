@@ -25,7 +25,6 @@ import 'user_cache_service.dart';
 import 'follow_cache_service.dart';
 import 'mute_cache_service.dart';
 import 'relay_query_helper.dart';
-import 'note_counter_service.dart';
 
 class NostrDataService {
   final AuthService _authService;
@@ -640,19 +639,6 @@ class NostrDataService {
       _noteCache[id] = note;
       _eventIds.add(id);
 
-      NoteCounterService.instance.getCounts(id).then((counts) {
-        if (counts != null && _noteCache.containsKey(id)) {
-          final cachedNote = _noteCache[id]!;
-          cachedNote.reactionCount = counts.reactionCount;
-          cachedNote.replyCount = counts.replyCount;
-          cachedNote.repostCount = counts.repostCount;
-          cachedNote.zapAmount = counts.zapAmount;
-          _scheduleUIUpdate();
-        }
-      }).catchError((e) {
-        debugPrint('[NostrDataService] Error updating counts for $id: $e');
-      });
-
       if (isReply && parentId != null) {
         final parentNote = _noteCache[parentId];
         if (parentNote != null) {
@@ -668,6 +654,12 @@ class NostrDataService {
       }
 
       _updateAllReplyCountsForNote(id);
+
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (!_isClosed) {
+          fetchInteractionsForNotes([id], forceLoad: false, useCount: false);
+        }
+      });
 
       if (!isReply) {
         Future.delayed(const Duration(milliseconds: 500), () {
@@ -965,6 +957,7 @@ class NostrDataService {
       }
 
       if (originalEventId != null) {
+        final eventIdForInteractions = originalEventId;
         final reposterNpub = _authService.hexToNpub(pubkey) ?? pubkey;
         final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
 
@@ -1135,17 +1128,10 @@ class NostrDataService {
           debugPrint(' [NostrDataService] Updated original note $originalEventId repost count: ${targetNote.repostCount}');
         }
 
-        NoteCounterService.instance.getCounts(originalEventId).then((counts) {
-          if (counts != null && _noteCache.containsKey(id)) {
-            final cachedRepost = _noteCache[id]!;
-            cachedRepost.reactionCount = counts.reactionCount;
-            cachedRepost.replyCount = counts.replyCount;
-            cachedRepost.repostCount = counts.repostCount;
-            cachedRepost.zapAmount = counts.zapAmount;
-            _scheduleUIUpdate();
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (!_isClosed) {
+            fetchInteractionsForNotes([eventIdForInteractions], forceLoad: false, useCount: false);
           }
-        }).catchError((e) {
-          debugPrint('[NostrDataService] Error updating counts for repost $id (original: $originalEventId): $e');
         });
       
         _scheduleUIUpdate();
@@ -1857,17 +1843,6 @@ class NostrDataService {
         pTags: pTags,
       );
 
-      NoteCounterService.instance.getCounts(id).then((counts) {
-        if (counts != null) {
-          note.reactionCount = counts.reactionCount;
-          note.replyCount = counts.replyCount;
-          note.repostCount = counts.repostCount;
-          note.zapAmount = counts.zapAmount;
-        }
-      }).catchError((e) {
-        debugPrint('[NostrDataService] Error updating counts for $id: $e');
-      });
-
       return note;
     } catch (e) {
       debugPrint('[NostrDataService] PROFILE: Error processing kind 1: $e');
@@ -1958,17 +1933,6 @@ class NostrDataService {
         zapAmount: 0,
         rawWs: jsonEncode(eventData),
       );
-
-      NoteCounterService.instance.getCounts(originalEventId).then((counts) {
-        if (counts != null) {
-          note.reactionCount = counts.reactionCount;
-          note.replyCount = counts.replyCount;
-          note.repostCount = counts.repostCount;
-          note.zapAmount = counts.zapAmount;
-        }
-      }).catchError((e) {
-        debugPrint('[NostrDataService] Error updating counts for repost $id (original: $originalEventId): $e');
-      });
     
       return note;
     } catch (e) {
@@ -2154,17 +2118,6 @@ class NostrDataService {
         tTags: tTags,
       );
 
-      NoteCounterService.instance.getCounts(id).then((counts) {
-        if (counts != null) {
-          note.reactionCount = counts.reactionCount;
-          note.replyCount = counts.replyCount;
-          note.repostCount = counts.repostCount;
-          note.zapAmount = counts.zapAmount;
-        }
-      }).catchError((e) {
-        debugPrint('[NostrDataService] Error updating counts for $id: $e');
-      });
-
       return note;
     } catch (e) {
       debugPrint('[NostrDataService] HASHTAG: Error processing event: $e');
@@ -2325,19 +2278,6 @@ class NostrDataService {
       _noteCache[note.id] = note;
       _eventIds.add(note.id);
 
-      NoteCounterService.instance.getCounts(note.id).then((counts) {
-        if (counts != null && _noteCache.containsKey(note.id)) {
-          final cachedNote = _noteCache[note.id]!;
-          cachedNote.reactionCount = counts.reactionCount;
-          cachedNote.replyCount = counts.replyCount;
-          cachedNote.repostCount = counts.repostCount;
-          cachedNote.zapAmount = counts.zapAmount;
-          _scheduleUIUpdate();
-        }
-      }).catchError((e) {
-        debugPrint('[NostrDataService] Error updating counts for posted note ${note.id}: $e');
-      });
-
       _scheduleUIUpdate();
 
       debugPrint('[NostrDataService] Note posted and cached successfully');
@@ -2455,6 +2395,79 @@ class NostrDataService {
 
       await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
       debugPrint('[NostrDataService] Repost broadcasted IMMEDIATELY to ${_relayManager.activeSockets.length} relays');
+
+      final userResult = await _authService.getCurrentUserNpub();
+      final reposterNpub = userResult.data ?? '';
+      final timestamp = DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000);
+
+      String displayContent = 'Reposted note';
+      String displayAuthor = noteAuthor;
+      bool detectedIsReply = false;
+      String? detectedRootId;
+      String? detectedParentId;
+
+      if (originalNote != null) {
+        displayContent = originalNote.content;
+        displayAuthor = originalNote.author;
+        detectedIsReply = originalNote.isReply;
+        detectedRootId = originalNote.rootId;
+        detectedParentId = originalNote.parentId;
+      } else if (repostContent.isNotEmpty) {
+        try {
+          final originalContent = jsonDecode(repostContent) as Map<String, dynamic>;
+          displayContent = originalContent['content'] as String? ?? 'Reposted note';
+          final originalAuthorHex = _authService.npubToHex(noteAuthor) ?? noteAuthor;
+          displayAuthor = _authService.hexToNpub(originalAuthorHex) ?? originalAuthorHex;
+
+          final originalTags = originalContent['tags'] as List<dynamic>? ?? [];
+          for (final tag in originalTags) {
+            if (tag is List && tag.length >= 2 && tag[0] == 'e') {
+              final eventId = tag[1] as String;
+              if (tag.length >= 4) {
+                final marker = tag[3] as String;
+                if (marker == 'root') {
+                  detectedRootId = eventId;
+                  detectedParentId = eventId;
+                  detectedIsReply = true;
+                } else if (marker == 'reply') {
+                  detectedParentId = eventId;
+                  detectedIsReply = true;
+                }
+              } else if (detectedParentId == null) {
+                detectedParentId = eventId;
+                detectedRootId = eventId;
+                detectedIsReply = true;
+              }
+            }
+          }
+        } catch (e) {
+          displayContent = 'Reposted note';
+          displayAuthor = _authService.hexToNpub(_authService.npubToHex(noteAuthor) ?? noteAuthor) ?? noteAuthor;
+        }
+      }
+
+      final repostNote = NoteModel(
+        id: event.id,
+        content: displayContent,
+        author: displayAuthor,
+        timestamp: timestamp,
+        isReply: detectedIsReply,
+        isRepost: true,
+        rootId: detectedRootId ?? noteId,
+        parentId: detectedParentId,
+        repostedBy: reposterNpub,
+        repostTimestamp: timestamp,
+        reactionCount: 0,
+        replyCount: 0,
+        repostCount: 0,
+        zapAmount: 0,
+        rawWs: jsonEncode(NostrService.eventToJson(event)),
+      );
+
+      _noteCache[event.id] = repostNote;
+      _eventIds.add(event.id);
+
+      _trackRepostForCount(NostrService.eventToJson(event));
 
       _scheduleUIUpdate();
 
@@ -3012,8 +3025,13 @@ class NostrDataService {
     debugPrint('[NostrDataService] Fetching interactions for ${noteIds.length} notes...');
 
     try {
-      const batchSize = 12;
+      final relayUrls = await getRelaySetMainSockets();
+      if (relayUrls.isEmpty) {
+        debugPrint('[NostrDataService] No relays available for interaction fetch');
+        return;
+      }
 
+      const batchSize = 12;
       for (int i = 0; i < noteIds.length; i += batchSize) {
         final batch = noteIds.skip(i).take(batchSize).toList();
 
@@ -3021,8 +3039,62 @@ class NostrDataService {
           eventIds: batch,
           limit: limit,
         );
-        final request = NostrService.createRequest(filter);
-        await _relayManager.broadcast(NostrService.serializeRequest(request));
+        final serializedRequest = NostrService.createRequest(filter);
+        final requestJson = jsonDecode(serializedRequest) as List;
+        final subscriptionId = requestJson[1] as String;
+
+        final Map<String, Map<String, Map<String, dynamic>>> noteEvents = {};
+        for (final noteId in batch) {
+          noteEvents[noteId] = {};
+        }
+
+        await RelayQueryHelper.queryRelaysParallel<Map<String, dynamic>>(
+          relayUrls: relayUrls,
+          request: serializedRequest,
+          subscriptionId: subscriptionId,
+          eventProcessor: (eventData, relayUrl) {
+            final eventId = eventData['id'] as String? ?? '';
+            if (eventId.isEmpty) return null;
+
+            final kind = eventData['kind'] as int? ?? 0;
+            if (kind != 1 && kind != 6 && kind != 7 && kind != 9735) return null;
+
+            final tags = eventData['tags'] as List<dynamic>? ?? [];
+            for (final tag in tags) {
+              if (tag is List && tag.length >= 2 && tag[0] == 'e') {
+                final targetNoteId = tag[1] as String? ?? '';
+                if (targetNoteId.isNotEmpty && noteEvents.containsKey(targetNoteId)) {
+                  if (!noteEvents[targetNoteId]!.containsKey(eventId)) {
+                    noteEvents[targetNoteId]![eventId] = eventData;
+                  }
+                  return eventData;
+                }
+              }
+            }
+            return null;
+          },
+          timeout: const Duration(seconds: 4),
+          connectTimeout: const Duration(seconds: 3),
+          debugPrefix: 'INTERACTIONS',
+        );
+
+        for (final noteId in batch) {
+          final events = noteEvents[noteId] ?? {};
+          for (final event in events.values) {
+            final kind = event['kind'] as int? ?? 0;
+            switch (kind) {
+              case 7:
+                _processReactionEvent(event);
+                break;
+              case 6:
+                _trackRepostForCount(event);
+                break;
+              case 9735:
+                _processZapEvent(event);
+                break;
+            }
+          }
+        }
 
         if (i + batchSize < noteIds.length) {
           await Future.delayed(const Duration(milliseconds: 50));

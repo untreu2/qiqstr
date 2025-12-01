@@ -15,7 +15,6 @@ import '../../../core/ui/ui_state_builder.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/providers/viewmodel_provider.dart';
 import '../../../presentation/viewmodels/thread_viewmodel.dart';
-import '../../../data/services/note_counter_service.dart';
 import 'share_note.dart';
 
 class ThreadPage extends StatefulWidget {
@@ -75,12 +74,6 @@ class _ThreadPageState extends State<ThreadPage> {
               rootNoteId: widget.rootNoteId,
               focusedNoteId: widget.focusedNoteId,
             );
-            
-            Future.delayed(const Duration(milliseconds: 500), () {
-              if (mounted) {
-                NoteCounterService.instance.getCounts(widget.rootNoteId);
-              }
-            });
             
             if (widget.focusedNoteId != null) {
               Future.delayed(const Duration(milliseconds: 300), () {
