@@ -120,8 +120,6 @@ class AppThemeColors {
   final Color error;
   final Color success;
   final Color warning;
-  final Color buttonPrimary;
-  final Color buttonText;
   final Color border;
   final Color divider;
   final Color overlayLight;
@@ -141,8 +139,6 @@ class AppThemeColors {
     required this.error,
     required this.success,
     required this.warning,
-    required this.buttonPrimary,
-    required this.buttonText,
     required this.border,
     required this.divider,
     required this.overlayLight,
@@ -208,8 +204,6 @@ class AppThemeColors {
       error: AppColors.error,
       success: AppColors.success,
       warning: AppColors.warning,
-      buttonPrimary: AppColors.buttonPrimary,
-      buttonText: AppColors.buttonText,
       border: AppColors.border,
       divider: AppColors.divider,
       overlayLight: AppColors.overlayLight,
@@ -232,8 +226,6 @@ class AppThemeColors {
       error: AppColorsLight.error,
       success: AppColorsLight.success,
       warning: AppColorsLight.warning,
-      buttonPrimary: AppColorsLight.buttonPrimary,
-      buttonText: AppColorsLight.buttonText,
       border: AppColorsLight.border,
       divider: AppColorsLight.divider,
       overlayLight: AppColorsLight.overlayLight,

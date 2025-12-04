@@ -124,7 +124,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                           decoration: BoxDecoration(
-                            color: colors.buttonPrimary,
+                            color: colors.textPrimary,
                             borderRadius: BorderRadius.circular(40),
                           ),
                           child: Row(
@@ -155,7 +155,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               Text(
                                 widget.user.name.isNotEmpty ? widget.user.name : widget.user.npub.substring(0, 8),
                                 style: TextStyle(
-                                  color: colors.buttonText,
+                                  color: colors.background,
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -303,7 +303,7 @@ class _ProfilePageState extends State<ProfilePage> {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: context.colors.buttonPrimary,
+          color: context.colors.textPrimary,
           borderRadius: BorderRadius.circular(22.0),
         ),
         child: GestureDetector(
@@ -331,7 +331,7 @@ class _ProfilePageState extends State<ProfilePage> {
             button: true,
             child: Icon(
               CarbonIcons.share,
-              color: context.colors.buttonText,
+              color: context.colors.background,
               size: 20,
             ),
           ),

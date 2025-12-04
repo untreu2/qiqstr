@@ -814,13 +814,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            children: [
-              _buildCloseButton(),
-              const SizedBox(width: 12),
-              _buildDragHandle(),
-            ],
-          ),
+          _buildCloseButton(),
           _buildAppBarActions(),
         ],
       ),
@@ -845,18 +839,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
             color: context.colors.textPrimary,
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildDragHandle() {
-    return Container(
-      width: 40,
-      height: 4,
-      margin: const EdgeInsets.only(left: 8),
-      decoration: BoxDecoration(
-        color: context.colors.textSecondary.withOpacity(0.3),
-        borderRadius: BorderRadius.circular(2),
       ),
     );
   }
@@ -944,7 +926,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: context.colors.buttonPrimary,
+            color: context.colors.textPrimary,
             borderRadius: BorderRadius.circular(40),
           ),
           child: _isPosting ? _buildPostingIndicator() : _buildPostButtonText(),
@@ -968,7 +950,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
     return Text(
       _postButtonText,
       style: TextStyle(
-        color: context.colors.buttonText,
+        color: context.colors.background,
         fontSize: _smallFontSize,
         fontWeight: FontWeight.w600,
       ),
@@ -1179,7 +1161,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
           child: Material(
           elevation: 4.0,
             borderRadius: BorderRadius.circular(40),
-            color: context.colors.buttonPrimary,
+            color: context.colors.textPrimary,
           child: Container(
             constraints: const BoxConstraints(maxHeight: _userSuggestionsMaxHeight),
             child: ListView.builder(
@@ -1213,7 +1195,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
           radius: _avatarRadius,
           backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
           backgroundColor: context.colors.surfaceTransparent,
-                child: user.profileImage.isEmpty ? Icon(Icons.person, color: context.colors.buttonText, size: 20) : null,
+                child: user.profileImage.isEmpty ? Icon(Icons.person, color: context.colors.background, size: 20) : null,
         ),
               const SizedBox(width: 12),
               Expanded(
@@ -1223,7 +1205,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
                     Text(
           user.name,
                       style: TextStyle(
-                        color: context.colors.buttonText,
+                        color: context.colors.background,
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
         ),
@@ -1234,7 +1216,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
                       Text(
                         user.about,
                         style: TextStyle(
-                          color: context.colors.buttonText.withOpacity(0.7),
+                          color: context.colors.background.withOpacity(0.7),
                           fontSize: 14,
                         ),
                         overflow: TextOverflow.ellipsis,

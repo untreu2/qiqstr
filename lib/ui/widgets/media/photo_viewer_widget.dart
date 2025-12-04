@@ -184,13 +184,11 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
                             ),
                             IconActionButton(
                               icon: _isDownloading ? CarbonIcons.download : CarbonIcons.download,
-                              iconColor: colors.textPrimary,
                               onPressed: _isDownloading ? null : () => _downloadImage(widget.imageUrls[currentIndex]),
                               size: ButtonSize.small,
                             ),
                             IconActionButton(
                               icon: CarbonIcons.close,
-                              iconColor: colors.textPrimary,
                               onPressed: () => Navigator.of(context).pop(),
                               size: ButtonSize.small,
                             ),

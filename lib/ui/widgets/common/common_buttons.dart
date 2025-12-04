@@ -35,7 +35,7 @@ class PrimaryButton extends StatelessWidget {
     return ElevatedButton(
       onPressed: isLoading ? null : onPressed,
       style: ElevatedButton.styleFrom(
-        backgroundColor: backgroundColor ?? colors.accent,
+        backgroundColor: backgroundColor ?? colors.textPrimary,
         foregroundColor: foregroundColor ?? colors.background,
         padding: config.padding,
         shape: RoundedRectangleBorder(
@@ -50,7 +50,7 @@ class PrimaryButton extends StatelessWidget {
               child: CircularProgressIndicator(
                 strokeWidth: 2,
                 valueColor: AlwaysStoppedAnimation<Color>(
-                  foregroundColor ?? colors.buttonText,
+                  foregroundColor ?? colors.background,
                 ),
               ),
             )
@@ -111,8 +111,8 @@ class SecondaryButton extends StatelessWidget {
       onPressed: isLoading ? null : onPressed,
       style: OutlinedButton.styleFrom(
         side: BorderSide.none,
-        backgroundColor: backgroundColor ?? colors.buttonPrimary,
-        foregroundColor: foregroundColor ?? colors.buttonText,
+        backgroundColor: backgroundColor ?? colors.textPrimary,
+        foregroundColor: foregroundColor ?? colors.background,
         padding: config.padding,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(config.borderRadius),
@@ -125,7 +125,7 @@ class SecondaryButton extends StatelessWidget {
               child: CircularProgressIndicator(
                 strokeWidth: 2,
                 valueColor: AlwaysStoppedAnimation<Color>(
-                  foregroundColor ?? colors.buttonText,
+                  foregroundColor ?? colors.background,
                 ),
               ),
             )
@@ -179,7 +179,7 @@ class TextActionButton extends StatelessWidget {
     return TextButton(
       onPressed: onPressed,
       style: TextButton.styleFrom(
-        foregroundColor: foregroundColor ?? colors.accent,
+        foregroundColor: foregroundColor ?? colors.textPrimary,
         minimumSize: Size.zero,
         padding: config.padding,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -238,10 +238,10 @@ class IconActionButton extends StatelessWidget {
     return IconButton(
       icon: Icon(icon, size: config.iconSize),
       onPressed: onPressed,
-      color: iconColor ?? colors.textPrimary,
+      color: iconColor ?? colors.background,
       tooltip: tooltip,
       style: IconButton.styleFrom(
-        backgroundColor: backgroundColor ?? colors.overlayLight,
+        backgroundColor: backgroundColor ?? colors.textPrimary,
         padding: config.padding,
         shape: isCircular
             ? const CircleBorder()
@@ -289,7 +289,7 @@ _ButtonSizeConfig _getSizeConfig(ButtonSize size) {
       );
     case ButtonSize.large:
       return const _ButtonSizeConfig(
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         borderRadius: 40,
         fontSize: 17,
         iconSize: 20,

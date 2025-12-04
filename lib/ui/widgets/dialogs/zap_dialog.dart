@@ -19,6 +19,7 @@ import 'package:ndk/shared/nips/nip01/bip340.dart';
 import '../../../constants/relays.dart';
 import '../common/snackbar_widget.dart';
 import '../common/common_buttons.dart';
+import '../common/custom_input_field.dart';
 
 Future<bool> _payZapWithWallet(
   BuildContext context,
@@ -270,43 +271,17 @@ Future<Map<String, dynamic>> showZapDialog({
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(
+              CustomInputField(
                 controller: amountController,
                 keyboardType: TextInputType.number,
-                style: TextStyle(color: colors.textPrimary),
-                decoration: InputDecoration(
-                  labelText: 'Amount (sats)',
-                  labelStyle: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: colors.textSecondary,
-                  ),
-                  filled: true,
-                  fillColor: colors.inputFill,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(25),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                ),
+                labelText: 'Amount (sats)',
+                fillColor: colors.inputFill,
               ),
               const SizedBox(height: 16),
-              TextField(
+              CustomInputField(
                 controller: noteController,
-                style: TextStyle(color: colors.textPrimary),
-                decoration: InputDecoration(
-                  labelText: 'Comment (Optional)',
-                  labelStyle: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: colors.textSecondary,
-                  ),
-                  filled: true,
-                  fillColor: colors.inputFill,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(25),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                ),
+                labelText: 'Comment (Optional)',
+                fillColor: colors.inputFill,
               ),
               const SizedBox(height: 24),
               SizedBox(

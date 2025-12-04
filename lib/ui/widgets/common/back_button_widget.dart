@@ -84,7 +84,7 @@ class BackButtonWidget extends StatelessWidget {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: context.colors.buttonPrimary,
+          color: context.colors.textPrimary,
           borderRadius: BorderRadius.circular(22.0),
         ),
         child: GestureDetector(
@@ -95,7 +95,7 @@ class BackButtonWidget extends StatelessWidget {
             button: true,
             child: Icon(
               Icons.arrow_back,
-              color: iconColor ?? context.colors.buttonText,
+              color: iconColor ?? context.colors.background,
               size: iconSize ?? 20,
             ),
           ),

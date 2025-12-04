@@ -41,7 +41,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   late AuthRepository _authRepository;
   late UserRepository _userRepository;
 
-  bool _copiedToClipboard = false;
   bool _isInitialized = false;
 
   int _followingCount = 0;
@@ -97,14 +96,11 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
     final parsedContent = _parseBioContent(user.about);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2.0),
-      child: NoteContentWidget(
-        parsedContent: parsedContent,
-        noteId: 'bio_${user.pubkeyHex}',
-        onNavigateToMentionProfile: widget.onNavigateToProfile,
-        size: NoteContentSize.small,
-      ),
+    return NoteContentWidget(
+      parsedContent: parsedContent,
+      noteId: 'bio_${user.pubkeyHex}',
+      onNavigateToMentionProfile: widget.onNavigateToProfile,
+      size: NoteContentSize.small,
     );
   }
 
@@ -545,7 +541,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     return ValueListenableBuilder<UserModel>(
       valueListenable: _userNotifier,
       builder: (context, user, _) {
-        final npubBech32 = _getNpubBech32(user.pubkeyHex);
         final screenWidth = MediaQuery.of(context).size.width;
         final websiteUrl = user.website.isNotEmpty && !(user.website.startsWith("http://") || user.website.startsWith("https://"))
             ? "https://${user.website}"
@@ -558,22 +553,20 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             children: [
               _buildOptimizedBanner(context, user, screenWidth),
               Container(
-                transform: Matrix4.translationValues(0, -30, 0),
+                transform: Matrix4.translationValues(0, -15, 0),
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildAvatarAndActionsRow(context, user),
                     _buildNameRow(context, user),
-                    const SizedBox(height: 1),
-                    _buildNpubCopyButton(context, npubBech32),
                     if (user.about.isNotEmpty) ...[
-                      const SizedBox(height: 14),
-                      _buildBioContent(user),
                       const SizedBox(height: 6),
+                      _buildBioContent(user),
+                      const SizedBox(height: 2),
                     ],
                     if (user.website.isNotEmpty && _isInitialized) ...[
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 2),
                       GestureDetector(
                         onTap: () async {
                           final Uri url = Uri.parse(websiteUrl);
@@ -592,7 +585,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                         ),
                       ),
                     ],
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 2),
                     _buildFollowerInfo(context),
                   ],
                 ),
@@ -680,7 +673,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               shape: BoxShape.circle,
               border: Border.all(
                 color: context.colors.background,
-                width: 4.0,
+                width: 3.0,
               ),
             ),
             child: _getCachedAvatar(
@@ -804,7 +797,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         const Spacer(),
         if (_currentUserNpub != null && !isOwnProfile)
           Padding(
-            padding: const EdgeInsets.only(top: 35.0),
+            padding: const EdgeInsets.only(top: 15.0),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -819,7 +812,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           )
         else if (_currentUserNpub != null && isOwnProfile)
           Padding(
-            padding: const EdgeInsets.only(top: 35.0),
+            padding: const EdgeInsets.only(top: 15.0),
             child: _buildEditProfileButton(context),
           ),
       ],
@@ -999,7 +992,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             : const EdgeInsets.all(8),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: isMuted ? context.colors.buttonPrimary : context.colors.overlayLight,
+          color: isMuted ? context.colors.textPrimary : context.colors.overlayLight,
           borderRadius: BorderRadius.circular(40),
         ),
         child: isMuted
@@ -1009,13 +1002,13 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                   Icon(
                     CarbonIcons.notification_off,
                     size: 16,
-                    color: context.colors.buttonText,
+                    color: context.colors.background,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     'Muted',
                     style: TextStyle(
-                      color: context.colors.buttonText,
+                      color: context.colors.background,
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1039,7 +1032,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: isFollowing ? context.colors.overlayLight : context.colors.buttonPrimary,
+          color: isFollowing ? context.colors.overlayLight : context.colors.textPrimary,
           borderRadius: BorderRadius.circular(40),
         ),
         child: Row(
@@ -1048,13 +1041,13 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             Icon(
               isFollowing ? CarbonIcons.user_admin : CarbonIcons.user_follow,
               size: 16,
-              color: isFollowing ? context.colors.textPrimary : context.colors.buttonText,
+              color: isFollowing ? context.colors.textPrimary : context.colors.background,
             ),
             const SizedBox(width: 6),
             Text(
               isFollowing ? 'Following' : 'Follow',
               style: TextStyle(
-                color: isFollowing ? context.colors.textPrimary : context.colors.buttonText,
+                color: isFollowing ? context.colors.textPrimary : context.colors.background,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
@@ -1065,54 +1058,10 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     );
   }
 
-  Widget _buildNpubCopyButton(BuildContext context, String npubBech32) {
-    return GestureDetector(
-      onTap: () async {
-        await Clipboard.setData(ClipboardData(text: npubBech32));
-        setState(() => _copiedToClipboard = true);
-        await Future.delayed(const Duration(seconds: 1));
-        if (mounted) setState(() => _copiedToClipboard = false);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: context.colors.overlayLight,
-          borderRadius: BorderRadius.circular(40),
-        ),
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 300),
-          transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
-          child: Row(
-            key: ValueKey(_copiedToClipboard),
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.copy, size: 14, color: context.colors.textTertiary),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  _copiedToClipboard ? 'Copied to clipboard' : npubBech32,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: context.colors.textPrimary,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildFollowerInfo(BuildContext context) {
     if (_isLoadingCounts) {
       return const Padding(
-        padding: EdgeInsets.only(top: 12.0),
+        padding: EdgeInsets.only(top: 4.0),
         child: SizedBox(
           height: 16,
           width: 16,
@@ -1122,7 +1071,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(top: 6.0),
+      padding: const EdgeInsets.only(top: 2.0),
       child: Row(
         children: [
           Row(

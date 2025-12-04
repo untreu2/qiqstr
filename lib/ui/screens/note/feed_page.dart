@@ -18,6 +18,7 @@ import '../../../core/di/app_di.dart';
 import '../../../presentation/providers/viewmodel_provider.dart';
 import '../../../presentation/viewmodels/feed_viewmodel.dart';
 import '../../../services/relay_service.dart';
+import '../search/users_search_page.dart';
 
 class FeedPage extends StatefulWidget {
   final String npub;
@@ -138,6 +139,18 @@ class FeedPageState extends State<FeedPage> {
     }
   }
 
+  void _showSearchPopup(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.colors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => const UserSearchPage(),
+    );
+  }
+
   Widget _buildHeader(BuildContext context, double topPadding, FeedViewModel viewModel) {
     final colors = context.colors;
     final isHashtagMode = widget.hashtag != null;
@@ -150,86 +163,118 @@ class FeedPageState extends State<FeedPage> {
         children: [
           SizedBox(
             height: 40,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                if (!isHashtagMode)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: GestureDetector(
-                      onTap: () => Scaffold.of(context).openDrawer(),
-                      child: viewModel.currentUser != null
-                          ? Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: colors.avatarPlaceholder,
-                                image: viewModel.currentUser!.profileImage.isNotEmpty == true
-                                    ? DecorationImage(
-                                        image: CachedNetworkImageProvider(viewModel.currentUser!.profileImage),
-                                        fit: BoxFit.cover,
+            child: !isHashtagMode
+                ? Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => Scaffold.of(context).openDrawer(),
+                        child: viewModel.currentUser != null
+                            ? Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: colors.avatarPlaceholder,
+                                  image: viewModel.currentUser!.profileImage.isNotEmpty == true
+                                      ? DecorationImage(
+                                          image: CachedNetworkImageProvider(viewModel.currentUser!.profileImage),
+                                          fit: BoxFit.cover,
+                                        )
+                                      : null,
+                                ),
+                                child: viewModel.currentUser!.profileImage.isEmpty != false
+                                    ? Icon(
+                                        Icons.person,
+                                        size: 20,
+                                        color: colors.textSecondary,
                                       )
                                     : null,
+                              )
+                            : Container(
+                                width: 36,
+                                height: 36,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: colors.avatarPlaceholder,
+                                ),
+                                child: CircularProgressIndicator(
+                                  color: colors.accent,
+                                  strokeWidth: 2,
+                                ),
                               ),
-                              child: viewModel.currentUser!.profileImage.isEmpty != false
-                                  ? Icon(
-                                      Icons.person,
-                                      size: 20,
-                                      color: colors.textSecondary,
-                                    )
-                                  : null,
-                            )
-                          : Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: colors.avatarPlaceholder,
-                              ),
-                              child: CircularProgressIndicator(
-                                color: colors.accent,
-                                strokeWidth: 2,
-                              ),
-                            ),
-                    ),
-                  ),
-                if (isHashtagMode)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: BackButtonWidget.floating(),
-                  ),
-                Center(
-                  child: GestureDetector(
-                    onTap: () {
-                      _scrollController.animateTo(
-                        0,
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeOut,
-                      );
-                    },
-                    child: SvgPicture.asset(
-                      'assets/main_icon_white.svg',
-                      width: 30,
-                      height: 30,
-                      colorFilter: ColorFilter.mode(colors.textPrimary, BlendMode.srcIn),
-                    ),
-                  ),
-                ),
-                if (!isHashtagMode)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 4),
-                      child: Icon(
-                        CarbonIcons.forum,
-                        size: 23,
-                        color: colors.textPrimary,
                       ),
-                    ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            _showSearchPopup(context);
+                          },
+                          child: Container(
+                            height: 36,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            decoration: BoxDecoration(
+                              color: colors.overlayLight,
+                              borderRadius: BorderRadius.circular(25),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  CarbonIcons.search,
+                                  size: 18,
+                                  color: colors.textPrimary,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Search...',
+                                  style: TextStyle(
+                                    color: colors.textPrimary,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: Icon(
+                          CarbonIcons.forum,
+                          size: 23,
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  )
+                : Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: BackButtonWidget.floating(),
+                      ),
+                      Center(
+                        child: GestureDetector(
+                          onTap: () {
+                            _scrollController.animateTo(
+                              0,
+                              duration: const Duration(milliseconds: 300),
+                              curve: Curves.easeOut,
+                            );
+                          },
+                          child: SvgPicture.asset(
+                            'assets/main_icon_white.svg',
+                            width: 30,
+                            height: 30,
+                            colorFilter: ColorFilter.mode(colors.textPrimary, BlendMode.srcIn),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-              ],
-            ),
           ),
         ],
       ),
@@ -351,13 +396,13 @@ class FeedPageState extends State<FeedPage> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(
-                          color: colors.buttonPrimary,
+                          color: colors.textPrimary,
                           borderRadius: BorderRadius.circular(40),
                         ),
                         child: Text(
                           '#${widget.hashtag}',
                           style: TextStyle(
-                            color: colors.buttonText,
+                            color: colors.background,
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
                           ),

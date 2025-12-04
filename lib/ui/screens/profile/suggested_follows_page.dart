@@ -271,7 +271,7 @@ class SuggestedFollowsPage extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
-          color: isDisabled ? context.colors.buttonPrimary.withValues(alpha: 0.3) : context.colors.buttonPrimary,
+          color: isDisabled ? context.colors.textPrimary.withValues(alpha: 0.3) : context.colors.textPrimary,
           borderRadius: BorderRadius.circular(40),
         ),
         child: viewModel.isProcessing
@@ -281,7 +281,7 @@ class SuggestedFollowsPage extends StatelessWidget {
                   width: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: context.colors.buttonText,
+                    color: context.colors.background,
                   ),
                 ),
               )
@@ -289,7 +289,7 @@ class SuggestedFollowsPage extends StatelessWidget {
                 'Continue',
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: isDisabled ? context.colors.buttonText.withValues(alpha: 0.5) : context.colors.buttonText,
+                  color: isDisabled ? context.colors.background.withValues(alpha: 0.5) : context.colors.background,
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
                   decoration: hasMinimumSelection ? TextDecoration.none : TextDecoration.lineThrough,

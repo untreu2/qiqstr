@@ -600,13 +600,11 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                                   const SizedBox(width: 8),
                                   IconActionButton(
                                     icon: _isDownloading ? CarbonIcons.download : CarbonIcons.download,
-                                    iconColor: colors.textPrimary,
                                     onPressed: _isDownloading ? null : _downloadVideo,
                                     size: ButtonSize.small,
                                   ),
                                   IconActionButton(
                                     icon: CarbonIcons.close,
-                                    iconColor: colors.textPrimary,
                                     onPressed: () => Navigator.pop(context),
                                     size: ButtonSize.small,
                                   ),

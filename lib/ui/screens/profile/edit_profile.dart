@@ -11,6 +11,7 @@ import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/title_widget.dart';
+import '../../widgets/common/custom_input_field.dart';
 
 class EditOwnProfilePage extends StatelessWidget {
   const EditOwnProfilePage({super.key});
@@ -216,6 +217,7 @@ class _EditProfileContentState extends State<_EditProfileContent> {
         borderSide: BorderSide.none,
       ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      isDense: true,
       suffixIcon: onUpload != null
           ? IconActionButton(
               icon: Icons.upload,
@@ -263,10 +265,10 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            TextFormField(
+                            CustomInputField(
                               controller: _nameController,
-                              decoration: _inputDecoration(context, 'Username'),
-                              style: TextStyle(color: context.colors.textPrimary),
+                              labelText: 'Username',
+                              fillColor: context.colors.inputFill,
                               maxLength: 50,
                               onChanged: (value) => viewModel.updateName(value),
                               validator: (value) {
@@ -275,14 +277,16 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                                 }
                                 return null;
                               },
+                              suffixIcon: _inputDecoration(context, 'Username').suffixIcon,
                             ),
                             const SizedBox(height: 20),
-                            TextFormField(
+                            CustomInputField(
                               controller: _aboutController,
-                              decoration: _inputDecoration(context, 'Bio'),
-                              style: TextStyle(color: context.colors.textPrimary),
+                              labelText: 'Bio',
+                              fillColor: context.colors.inputFill,
                               maxLines: 3,
                               maxLength: 300,
+                              height: null,
                               onChanged: (value) => viewModel.updateAbout(value),
                               validator: (value) {
                                 if (value != null && value.trim().length > 300) {
@@ -292,21 +296,11 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                               },
                             ),
                             const SizedBox(height: 20),
-                            TextFormField(
+                            CustomInputField(
                               controller: _pictureController,
                               enabled: !viewModel.isUploadingPicture,
-                              decoration: _inputDecoration(
-                                context,
-                                'Profile image URL',
-                                onUpload: viewModel.isUploadingPicture
-                                    ? null
-                                    : () => _pickAndUploadMedia(
-                                          controller: _pictureController,
-                                          label: 'Profile image',
-                                          isPicture: true,
-                                        ),
-                              ),
-                              style: TextStyle(color: context.colors.textPrimary),
+                              labelText: 'Profile image URL',
+                              fillColor: context.colors.inputFill,
                               onChanged: (value) => viewModel.updatePicture(value),
                               validator: (value) {
                                 if (value != null && value.trim().isNotEmpty) {
@@ -317,23 +311,24 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                                 }
                                 return null;
                               },
-                            ),
-                            const SizedBox(height: 20),
-                            TextFormField(
-                              controller: _bannerController,
-                              enabled: !_isUploadingBanner,
-                              decoration: _inputDecoration(
+                              suffixIcon: _inputDecoration(
                                 context,
-                                'Banner URL',
-                                onUpload: _isUploadingBanner
+                                'Profile image URL',
+                                onUpload: viewModel.isUploadingPicture
                                     ? null
                                     : () => _pickAndUploadMedia(
-                                          controller: _bannerController,
-                                          label: 'Banner',
-                                          isPicture: false,
+                                          controller: _pictureController,
+                                          label: 'Profile image',
+                                          isPicture: true,
                                         ),
-                              ),
-                              style: TextStyle(color: context.colors.textPrimary),
+                              ).suffixIcon,
+                            ),
+                            const SizedBox(height: 20),
+                            CustomInputField(
+                              controller: _bannerController,
+                              enabled: !_isUploadingBanner,
+                              labelText: 'Banner URL',
+                              fillColor: context.colors.inputFill,
                               validator: (value) {
                                 if (value != null && value.trim().isNotEmpty) {
                                   final uri = Uri.tryParse(value.trim());
@@ -343,6 +338,17 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                                 }
                                 return null;
                               },
+                              suffixIcon: _inputDecoration(
+                                context,
+                                'Banner URL',
+                                onUpload: _isUploadingBanner
+                                    ? null
+                                    : () => _pickAndUploadMedia(
+                                          controller: _bannerController,
+                                          label: 'Banner',
+                                          isPicture: false,
+                                        ),
+                              ).suffixIcon,
                             ),
                             const SizedBox(height: 20),
                             TextFormField(
@@ -394,7 +400,7 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: context.colors.buttonPrimary,
+                      color: context.colors.textPrimary,
                       borderRadius: BorderRadius.circular(22),
                     ),
                     child: viewModel.isSaving
@@ -404,13 +410,13 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(context.colors.buttonText),
+                                valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
                               ),
                             ),
                           )
                         : Icon(
                             Icons.check,
-                            color: context.colors.buttonText,
+                            color: context.colors.background,
                             size: 24,
                           ),
                   ),

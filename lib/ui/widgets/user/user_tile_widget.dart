@@ -350,8 +350,8 @@ class _UserTileState extends State<UserTile> {
                       const SizedBox(width: 10),
                       Builder(
                         builder: (context) {
-                          final followBgColor = context.colors.buttonPrimary;
-                          final followIconColor = context.colors.buttonText;
+                          final followBgColor = context.colors.textPrimary;
+                          final followIconColor = context.colors.background;
                           final unfollowBgColor = context.colors.background;
                           final unfollowIconColor = context.colors.textPrimary;
 

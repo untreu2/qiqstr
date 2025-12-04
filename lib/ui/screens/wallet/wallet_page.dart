@@ -248,7 +248,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
             padding: const EdgeInsets.symmetric(vertical: 12),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: context.colors.buttonPrimary,
+              color: context.colors.textPrimary,
               borderRadius: BorderRadius.circular(40),
             ),
             child: _isConnecting
@@ -263,7 +263,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
                 : Text(
                     'Connect Wallet',
                     style: TextStyle(
-                      color: context.colors.buttonText,
+                      color: context.colors.background,
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
                     ),
@@ -407,58 +407,35 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
 
   Widget _buildTransactionTile(BuildContext context, CoinosPayment tx) {
     final isIncoming = tx.isIncoming;
-    final createdAt = tx.createdAt ?? DateTime.now().millisecondsSinceEpoch ~/ 1000;
-
-    DateTime dateTime;
-    if (createdAt > 1000000000000) {
-      dateTime = DateTime.fromMillisecondsSinceEpoch(createdAt);
-    } else {
-      dateTime = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
-    }
-
-    final formatted = '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
           Container(
-            width: 28,
-            height: 28,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
               color: context.colors.surface,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(20),
             ),
             child: Icon(
               isIncoming ? Icons.arrow_downward : Icons.arrow_upward,
               color: context.colors.textPrimary,
-              size: 14,
+              size: 20,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isIncoming ? 'Received' : 'Sent',
-                  style: TextStyle(
-                    color: context.colors.textPrimary,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  formatted,
-                  style: TextStyle(
-                    color: context.colors.textSecondary,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
+            child: Text(
+              isIncoming ? 'Received' : 'Sent',
+              style: TextStyle(
+                color: context.colors.textPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 17,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           const SizedBox(width: 6),
@@ -467,7 +444,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
             style: TextStyle(
               color: context.colors.textPrimary,
               fontWeight: FontWeight.w600,
-              fontSize: 13,
+              fontSize: 17,
             ),
           ),
         ],
@@ -599,18 +576,18 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
                               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
-                                color: context.colors.buttonPrimary,
+                                color: context.colors.textPrimary,
                                 borderRadius: BorderRadius.circular(40),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.arrow_downward, size: 20, color: context.colors.buttonText),
+                                  Icon(Icons.arrow_downward, size: 20, color: context.colors.background),
                                   const SizedBox(width: 8),
                                   Text(
                                     'Receive',
                                     style: TextStyle(
-                                      color: context.colors.buttonText,
+                                      color: context.colors.background,
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -628,18 +605,18 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
                               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
                               alignment: Alignment.center,
                               decoration: BoxDecoration(
-                                color: context.colors.buttonPrimary,
+                                color: context.colors.textPrimary,
                                 borderRadius: BorderRadius.circular(40),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.arrow_upward, size: 20, color: context.colors.buttonText),
+                                  Icon(Icons.arrow_upward, size: 20, color: context.colors.background),
                                   const SizedBox(width: 8),
                                   Text(
                                     'Send',
                                     style: TextStyle(
-                                      color: context.colors.buttonText,
+                                      color: context.colors.background,
                                       fontSize: 16,
                                       fontWeight: FontWeight.w600,
                                     ),

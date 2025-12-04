@@ -8,6 +8,7 @@ import '../settings/keys_info_page.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/brand_widget.dart';
+import '../../widgets/common/custom_input_field.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -192,36 +193,27 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             },
           ),
           const SizedBox(height: 40),
-          TextField(
+          CustomInputField(
             controller: _inputController,
-            style: TextStyle(color: context.colors.textPrimary),
-            decoration: InputDecoration(
-              labelText: 'Enter your seed phrase or nsec...',
-              labelStyle: TextStyle(color: context.colors.textSecondary),
-              suffixIcon: Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: GestureDetector(
-                  onTap: _pasteFromClipboard,
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: context.colors.buttonPrimary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.content_paste,
-                      color: context.colors.buttonText,
-                      size: 20,
-                    ),
+            labelText: 'Enter your seed phrase or nsec...',
+            fillColor: context.colors.inputFill,
+            suffixIcon: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: GestureDetector(
+                onTap: _pasteFromClipboard,
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: context.colors.textPrimary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.content_paste,
+                    color: context.colors.background,
+                    size: 20,
                   ),
                 ),
-              ),
-              filled: true,
-              fillColor: context.colors.inputFill,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(40),
-                borderSide: BorderSide.none,
               ),
             ),
           ),

@@ -251,7 +251,7 @@ class _InteractionBarState extends State<InteractionBar> {
         offset.dx + size.width,
         offset.dy + size.height + 200,
       ),
-      color: context.colors.buttonPrimary,
+      color: context.colors.textPrimary,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
       items: [
         PopupMenuItem(
@@ -260,12 +260,12 @@ class _InteractionBarState extends State<InteractionBar> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Row(
               children: [
-                Icon(Icons.repeat, size: 18, color: context.colors.buttonText),
+                Icon(Icons.repeat, size: 18, color: context.colors.background),
                 const SizedBox(width: 12),
                 Text(
                   'Repost',
                   style: TextStyle(
-                    color: context.colors.buttonText,
+                    color: context.colors.background,
                     fontSize: 17,
                     fontWeight: FontWeight.w600,
                   ),
@@ -281,12 +281,12 @@ class _InteractionBarState extends State<InteractionBar> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Row(
               children: [
-                Icon(Icons.format_quote, size: 18, color: context.colors.buttonText),
+                Icon(Icons.format_quote, size: 18, color: context.colors.background),
                 const SizedBox(width: 12),
                 Text(
                   'Quote',
                   style: TextStyle(
-                    color: context.colors.buttonText,
+                    color: context.colors.background,
                     fontSize: 17,
                     fontWeight: FontWeight.w600,
                   ),
@@ -569,12 +569,12 @@ class _InteractionBarState extends State<InteractionBar> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Row(
             children: [
-              Icon(CarbonIcons.chart_bar, size: 18, color: context.colors.buttonText),
+              Icon(CarbonIcons.chart_bar, size: 18, color: context.colors.background),
               const SizedBox(width: 12),
               Text(
                 'Interactions',
                 style: TextStyle(
-                  color: context.colors.buttonText,
+                  color: context.colors.background,
                   fontSize: 17,
                   fontWeight: FontWeight.w600,
                 ),
@@ -593,12 +593,12 @@ class _InteractionBarState extends State<InteractionBar> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Row(
               children: [
-                Icon(CarbonIcons.delete, size: 18, color: context.colors.buttonText),
+                Icon(CarbonIcons.delete, size: 18, color: context.colors.background),
                 const SizedBox(width: 12),
                 Text(
                   'Delete',
                   style: TextStyle(
-                    color: context.colors.buttonText,
+                    color: context.colors.background,
                     fontSize: 17,
                     fontWeight: FontWeight.w600,
                   ),
@@ -618,7 +618,7 @@ class _InteractionBarState extends State<InteractionBar> {
         offset.dx + size.width,
         offset.dy + size.height + 200,
       ),
-      color: context.colors.buttonPrimary,
+      color: context.colors.textPrimary,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
       items: items,
     ).then((value) {

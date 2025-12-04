@@ -7,12 +7,12 @@ import 'package:carbon_icons/carbon_icons.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/common_buttons.dart';
+import '../../widgets/common/custom_input_field.dart';
 import '../../../models/user_model.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../screens/profile/profile_page.dart';
-import '../../widgets/common/indicator_widget.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/dialogs/unfollow_user_dialog.dart';
 
@@ -166,15 +166,10 @@ class _UserSearchPageState extends State<UserSearchPage> {
 
   Widget _buildHeader(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 60, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const IndicatorWidget(
-            orientation: IndicatorOrientation.vertical,
-            size: IndicatorSize.small,
-          ),
-          const SizedBox(width: 12),
           Expanded(
             child: Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
@@ -379,84 +374,53 @@ class _UserSearchPageState extends State<UserSearchPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: context.colors.background,
-      body: Stack(
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.9,
+      decoration: BoxDecoration(
+        color: context.colors.background,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              RepaintBoundary(child: _buildHeader(context)),
-              Expanded(
-                child: _buildSearchResults(context),
-              ),
-              const SizedBox(height: 80),
-            ],
+          Container(
+            margin: const EdgeInsets.only(top: 8),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: context.colors.textSecondary.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: RepaintBoundary(
-              child: Container(
-                decoration: BoxDecoration(
-                  color: context.colors.surface,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 10,
-                      offset: const Offset(0, -2),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: CustomInputField(
+              controller: _searchController,
+              autofocus: true,
+              hintText: 'Search by name or npub...',
+              suffixIcon: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: GestureDetector(
+                  onTap: _pasteFromClipboard,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: context.colors.background,
+                      shape: BoxShape.circle,
                     ),
-                  ],
-                ),
-                padding: EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 12,
-                  bottom: MediaQuery.of(context).padding.bottom + 12,
-                ),
-                child: TextField(
-                  controller: _searchController,
-                  style: TextStyle(
-                    color: context.colors.textPrimary,
-                    fontSize: 15,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Search by name or npub...',
-                    hintStyle: TextStyle(
-                      color: context.colors.textSecondary,
-                      fontSize: 15,
+                    child: Icon(
+                      Icons.content_paste,
+                      color: context.colors.textPrimary,
+                      size: 20,
                     ),
-                    suffixIcon: Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: GestureDetector(
-                        onTap: _pasteFromClipboard,
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: context.colors.background,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.content_paste,
-                            color: context.colors.textPrimary,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                    ),
-                    filled: true,
-                    fillColor: context.colors.overlayLight,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(25),
-                      borderSide: BorderSide.none,
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   ),
                 ),
               ),
             ),
+          ),
+          RepaintBoundary(child: _buildHeader(context)),
+          Expanded(
+            child: _buildSearchResults(context),
           ),
         ],
       ),
@@ -699,7 +663,7 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: isFollowing ? context.colors.overlayLight : context.colors.buttonPrimary,
+          color: isFollowing ? context.colors.overlayLight : context.colors.textPrimary,
           borderRadius: BorderRadius.circular(40),
         ),
         child: _isLoading
@@ -709,7 +673,7 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   valueColor: AlwaysStoppedAnimation<Color>(
-                    isFollowing ? context.colors.textPrimary : context.colors.buttonText,
+                    isFollowing ? context.colors.textPrimary : context.colors.background,
                   ),
                 ),
               )
@@ -719,13 +683,13 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
                   Icon(
                     isFollowing ? CarbonIcons.user_admin : CarbonIcons.user_follow,
                     size: 16,
-                    color: isFollowing ? context.colors.textPrimary : context.colors.buttonText,
+                    color: isFollowing ? context.colors.textPrimary : context.colors.background,
                   ),
                   const SizedBox(width: 6),
                   Text(
                     isFollowing ? 'Following' : 'Follow',
                     style: TextStyle(
-                      color: isFollowing ? context.colors.textPrimary : context.colors.buttonText,
+                      color: isFollowing ? context.colors.textPrimary : context.colors.background,
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),

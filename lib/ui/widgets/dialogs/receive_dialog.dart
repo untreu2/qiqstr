@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../data/repositories/wallet_repository.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
+import '../common/custom_input_field.dart';
 
 class ReceiveDialog extends StatefulWidget {
   final WalletRepository walletRepository;
@@ -160,46 +161,29 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextField(
+          CustomInputField(
             controller: _amountController,
             keyboardType: TextInputType.number,
             enabled: !_isLoading,
-            style: TextStyle(
-              color: colors.textPrimary,
-              fontSize: 15,
-            ),
-            decoration: InputDecoration(
-              hintText: 'Enter amount in sats...',
-              hintStyle: TextStyle(
-                color: colors.textSecondary,
-                fontSize: 15,
-              ),
-              suffixIcon: Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: GestureDetector(
-                  onTap: _pasteFromClipboard,
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: colors.background,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.content_paste,
-                      color: colors.textPrimary,
-                      size: 20,
-                    ),
+            hintText: 'Enter amount in sats...',
+            suffixIcon: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: GestureDetector(
+                onTap: _pasteFromClipboard,
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: colors.background,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.content_paste,
+                    color: colors.textPrimary,
+                    size: 20,
                   ),
                 ),
               ),
-              filled: true,
-              fillColor: colors.overlayLight,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(25),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
           ),
           if (_error != null) ...[

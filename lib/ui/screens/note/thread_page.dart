@@ -117,13 +117,13 @@ class _ThreadPageState extends State<ThreadPage> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(
-                        color: context.colors.buttonPrimary,
+                        color: context.colors.textPrimary,
                         borderRadius: BorderRadius.circular(40),
                       ),
                       child: Text(
                         'Thread',
                         style: TextStyle(
-                          color: context.colors.buttonText,
+                          color: context.colors.background,
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
@@ -886,7 +886,7 @@ class _ThreadPageState extends State<ThreadPage> {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: context.colors.buttonPrimary,
+          color: context.colors.textPrimary,
           borderRadius: BorderRadius.circular(22.0),
         ),
         child: GestureDetector(
@@ -923,7 +923,7 @@ class _ThreadPageState extends State<ThreadPage> {
             button: true,
             child: Icon(
               CarbonIcons.share,
-              color: context.colors.buttonText,
+              color: context.colors.background,
               size: 20,
             ),
           ),

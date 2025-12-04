@@ -192,14 +192,14 @@ class _KeysInfoPageState extends State<KeysInfoPage> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 18),
             decoration: BoxDecoration(
-              color: context.colors.buttonPrimary,
+              color: context.colors.textPrimary,
               borderRadius: BorderRadius.circular(40),
             ),
             child: Text(
               'I have written down my seed phrase',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: context.colors.buttonText,
+                color: context.colors.background,
                 fontSize: 17,
                 fontWeight: FontWeight.w600,
               ),

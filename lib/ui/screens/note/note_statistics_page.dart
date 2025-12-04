@@ -454,13 +454,13 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
-                      color: context.colors.buttonPrimary,
+                      color: context.colors.textPrimary,
                       borderRadius: BorderRadius.circular(40),
                     ),
                     child: Text(
                       'Interactions',
                       style: TextStyle(
-                        color: context.colors.buttonText,
+                        color: context.colors.background,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),

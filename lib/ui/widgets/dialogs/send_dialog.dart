@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../data/repositories/wallet_repository.dart';
 import '../../theme/theme_manager.dart';
 import '../common/common_buttons.dart';
+import '../common/custom_input_field.dart';
 
 class SendDialog extends StatefulWidget {
   final WalletRepository walletRepository;
@@ -117,45 +118,28 @@ class _SendDialogState extends State<SendDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextField(
+          CustomInputField(
             controller: _invoiceController,
             enabled: !_isLoading,
-            style: TextStyle(
-              color: colors.textPrimary,
-              fontSize: 15,
-            ),
-            decoration: InputDecoration(
-              hintText: 'Paste invoice here...',
-              hintStyle: TextStyle(
-                color: colors.textSecondary,
-                fontSize: 15,
-              ),
-              suffixIcon: Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: GestureDetector(
-                  onTap: _pasteFromClipboard,
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: colors.background,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.content_paste,
-                      color: colors.textPrimary,
-                      size: 20,
-                    ),
+            hintText: 'Paste invoice here...',
+            suffixIcon: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: GestureDetector(
+                onTap: _pasteFromClipboard,
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: colors.background,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.content_paste,
+                    color: colors.textPrimary,
+                    size: 20,
                   ),
                 ),
               ),
-              filled: true,
-              fillColor: colors.overlayLight,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(25),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
           ),
           if (_error != null) ...[

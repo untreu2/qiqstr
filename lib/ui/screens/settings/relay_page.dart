@@ -641,13 +641,13 @@ class _RelayPageState extends State<RelayPage> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: context.colors.buttonPrimary,
+                    color: context.colors.textPrimary,
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
                     CarbonIcons.delete,
                     size: 20,
-                    color: context.colors.buttonText,
+                    color: context.colors.background,
                   ),
                 ),
               ),

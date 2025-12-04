@@ -13,9 +13,6 @@ class AppColors {
   static const Color success = Color(0xFF51CF66);
   static const Color warning = Color(0xFFFFA726);
 
-  static const Color buttonPrimary = Color(0xFFFFFFFF);
-  static const Color buttonText = Color(0xFF121212);
-
   static const Color border = Color(0xFF333333);
   static const Color divider = Color(0xFF2A2A2A);
 
@@ -44,9 +41,6 @@ class AppColorsLight {
   static const Color success = Colors.greenAccent;
   static const Color warning = Colors.amber;
 
-  static const Color buttonPrimary = Color(0xFF2D2D2D);
-  static const Color buttonText = Colors.white;
- 
   static const Color border = Colors.black12;
   static const Color divider = Colors.black12;
 

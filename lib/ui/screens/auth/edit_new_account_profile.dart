@@ -11,6 +11,7 @@ import '../../../services/media_service.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/title_widget.dart';
+import '../../widgets/common/custom_input_field.dart';
 
 class EditNewAccountProfilePage extends StatefulWidget {
   final String npub;
@@ -218,42 +219,45 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            TextFormField(
+                            CustomInputField(
                               controller: _nameController,
-                              decoration: _inputDecoration(context, 'Username'),
-                              style: TextStyle(color: context.colors.textPrimary),
+                              labelText: 'Username',
+                              fillColor: context.colors.inputFill,
                               maxLength: 50,
+                              suffixIcon: _inputDecoration(context, 'Username').suffixIcon,
                             ),
                             const SizedBox(height: 20),
-                            TextFormField(
+                            CustomInputField(
                               controller: _aboutController,
-                              decoration: _inputDecoration(context, 'Bio'),
-                              style: TextStyle(color: context.colors.textPrimary),
+                              labelText: 'Bio',
+                              fillColor: context.colors.inputFill,
                               maxLines: 3,
                               maxLength: 300,
+                              height: null,
                             ),
                             const SizedBox(height: 20),
-                            TextFormField(
+                            CustomInputField(
                               controller: _pictureController,
                               enabled: !_isUploadingPicture,
-                              decoration: _inputDecoration(
+                              labelText: 'Profile image URL',
+                              fillColor: context.colors.inputFill,
+                              suffixIcon: _inputDecoration(
                                 context,
                                 'Profile image URL',
                                 onUpload: _isUploadingPicture ? null : _pickAndUploadMedia,
-                              ),
-                              style: TextStyle(color: context.colors.textPrimary),
+                              ).suffixIcon,
                             ),
                             const SizedBox(height: 20),
-                            TextFormField(
+                            CustomInputField(
                               controller: _lud16Controller,
-                              decoration: _inputDecoration(context, 'Lightning address (optional)'),
-                              style: TextStyle(color: context.colors.textPrimary),
+                              labelText: 'Lightning address (optional)',
+                              fillColor: context.colors.inputFill,
                             ),
                             const SizedBox(height: 20),
-                            TextFormField(
+                            CustomInputField(
                               controller: _websiteController,
-                              decoration: _inputDecoration(context, 'Website (optional)'),
-                              style: TextStyle(color: context.colors.textPrimary),
+                              labelText: 'Website (optional)',
+                              fillColor: context.colors.inputFill,
                             ),
                             const SizedBox(height: 60),
                           ],
@@ -272,7 +276,7 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: context.colors.buttonPrimary,
+                      color: context.colors.textPrimary,
                       borderRadius: BorderRadius.circular(22),
                     ),
                     child: _isSaving
@@ -282,13 +286,13 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                               height: 20,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(context.colors.buttonText),
+                                valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
                               ),
                             ),
                           )
                         : Icon(
                             Icons.check,
-                            color: context.colors.buttonText,
+                            color: context.colors.background,
                             size: 24,
                           ),
                   ),
