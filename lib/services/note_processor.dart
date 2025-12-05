@@ -82,7 +82,6 @@ class NoteProcessor {
     String? rootId;
     String? parentId;
     String? replyMarker;
-    bool isReply = false;
     List<Map<String, String>> eTags = [];
     List<Map<String, String>> pTags = [];
     List<String> tTags = [];
@@ -103,18 +102,9 @@ class NoteProcessor {
             if (marker == 'root') {
               rootId = tag[1] as String;
               replyMarker = 'root';
-              isReply = true;
             } else if (marker == 'reply') {
               parentId = tag[1] as String;
               replyMarker = 'reply';
-              isReply = true;
-            } else if (marker == 'mention') {
-              continue;
-            }
-          } else {
-            if (!isReply) {
-              parentId = tag[1] as String;
-              isReply = true;
             }
           }
         } else if (tag[0] == 'p' && tag.length >= 2) {
@@ -133,10 +123,11 @@ class NoteProcessor {
       }
     }
 
-    if (rootId != null && parentId != null) {
-    } else if (rootId != null && parentId == null) {
+    if (rootId != null && parentId == null) {
       parentId = rootId;
     }
+
+    final bool isReply = rootId != null;
 
     return ReplyInfo(
       isReply: isReply,

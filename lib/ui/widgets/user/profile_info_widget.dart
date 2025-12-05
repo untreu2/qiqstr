@@ -97,10 +97,10 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     final parsedContent = _parseBioContent(user.about);
 
     return NoteContentWidget(
-      parsedContent: parsedContent,
-      noteId: 'bio_${user.pubkeyHex}',
-      onNavigateToMentionProfile: widget.onNavigateToProfile,
-      size: NoteContentSize.small,
+        parsedContent: parsedContent,
+        noteId: 'bio_${user.pubkeyHex}',
+        onNavigateToMentionProfile: widget.onNavigateToProfile,
+        size: NoteContentSize.small,
     );
   }
 

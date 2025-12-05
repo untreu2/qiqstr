@@ -428,14 +428,14 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              isIncoming ? 'Received' : 'Sent',
-              style: TextStyle(
-                color: context.colors.textPrimary,
-                fontWeight: FontWeight.w600,
+                  isIncoming ? 'Received' : 'Sent',
+                  style: TextStyle(
+                    color: context.colors.textPrimary,
+                    fontWeight: FontWeight.w600,
                 fontSize: 17,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
             ),
           ),
           const SizedBox(width: 6),

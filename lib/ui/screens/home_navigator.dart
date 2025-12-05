@@ -146,7 +146,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                           ? _buildWalletIcon(item['icon'] as String, isSelected)
                           : originalIndex == 1
                               ? _buildExploreIcon(isSelected)
-                              : _buildRegularIcon(item, isSelected),
+                          : _buildRegularIcon(item, isSelected),
                 ),
               );
             }).toList(),
@@ -211,7 +211,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                         carbonIcon,
                         size: iconSize,
                         color: context.colors.accent,
-                      )
+                          )
                     : isWallet
                         ? isDarkMode
                             ? ColorFiltered(
@@ -263,20 +263,20 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                               ))
             : iconPath.isNotEmpty
                 ? SvgPicture.asset(
-                    iconPath,
-                    width: iconSize,
-                    height: iconSize,
-                    fit: BoxFit.contain,
-                    colorFilter: ColorFilter.mode(
-                      context.colors.textPrimary,
-                      BlendMode.srcIn,
-                    ),
+                iconPath,
+                width: iconSize,
+                height: iconSize,
+                fit: BoxFit.contain,
+                colorFilter: ColorFilter.mode(
+                  context.colors.textPrimary,
+                  BlendMode.srcIn,
+                ),
                   )
                 : Icon(
                     carbonIcon,
                     size: iconSize,
                     color: context.colors.textPrimary,
-                  ),
+              ),
       );
     }
     
@@ -330,7 +330,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                             carbonIcon,
                             size: iconSize,
                             color: context.colors.accent,
-                          )
+                              )
                         : isWallet
                             ? isDarkMode
                                 ? ColorFiltered(
@@ -382,20 +382,20 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                                   ))
                 : iconPath.isNotEmpty
                     ? SvgPicture.asset(
-                        iconPath,
-                        width: iconSize,
-                        height: iconSize,
-                        fit: BoxFit.contain,
-                        colorFilter: ColorFilter.mode(
-                          context.colors.textPrimary,
-                          BlendMode.srcIn,
-                        ),
+                    iconPath,
+                    width: iconSize,
+                    height: iconSize,
+                    fit: BoxFit.contain,
+                    colorFilter: ColorFilter.mode(
+                      context.colors.textPrimary,
+                      BlendMode.srcIn,
+                    ),
                       )
                     : Icon(
                         carbonIcon,
                         size: iconSize,
                         color: context.colors.textPrimary,
-                      ),
+                  ),
           );
         },
       ),

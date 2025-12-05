@@ -165,25 +165,25 @@ class _ReceiveDialogState extends State<ReceiveDialog> {
             controller: _amountController,
             keyboardType: TextInputType.number,
             enabled: !_isLoading,
-            hintText: 'Enter amount in sats...',
-            suffixIcon: Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: GestureDetector(
-                onTap: _pasteFromClipboard,
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: colors.background,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.content_paste,
-                    color: colors.textPrimary,
-                    size: 20,
+              hintText: 'Enter amount in sats...',
+              suffixIcon: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: GestureDetector(
+                  onTap: _pasteFromClipboard,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: colors.background,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.content_paste,
+                      color: colors.textPrimary,
+                      size: 20,
+                    ),
                   ),
                 ),
-              ),
             ),
           ),
           if (_error != null) ...[

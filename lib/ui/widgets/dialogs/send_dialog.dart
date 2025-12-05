@@ -121,25 +121,25 @@ class _SendDialogState extends State<SendDialog> {
           CustomInputField(
             controller: _invoiceController,
             enabled: !_isLoading,
-            hintText: 'Paste invoice here...',
-            suffixIcon: Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: GestureDetector(
-                onTap: _pasteFromClipboard,
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: colors.background,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.content_paste,
-                    color: colors.textPrimary,
-                    size: 20,
+              hintText: 'Paste invoice here...',
+              suffixIcon: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: GestureDetector(
+                  onTap: _pasteFromClipboard,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: colors.background,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.content_paste,
+                      color: colors.textPrimary,
+                      size: 20,
+                    ),
                   ),
                 ),
-              ),
             ),
           ),
           if (_error != null) ...[

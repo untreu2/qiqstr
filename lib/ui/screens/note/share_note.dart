@@ -814,7 +814,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _buildCloseButton(),
+              _buildCloseButton(),
           _buildAppBarActions(),
         ],
       ),

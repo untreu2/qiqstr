@@ -195,23 +195,23 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           const SizedBox(height: 40),
           CustomInputField(
             controller: _inputController,
-            labelText: 'Enter your seed phrase or nsec...',
+              labelText: 'Enter your seed phrase or nsec...',
             fillColor: context.colors.inputFill,
-            suffixIcon: Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: GestureDetector(
-                onTap: _pasteFromClipboard,
-                child: Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
+              suffixIcon: Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: GestureDetector(
+                  onTap: _pasteFromClipboard,
+                  child: Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
                     color: context.colors.textPrimary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.content_paste,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.content_paste,
                     color: context.colors.background,
-                    size: 20,
+                      size: 20,
                   ),
                 ),
               ),

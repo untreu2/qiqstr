@@ -386,36 +386,36 @@ class _UserSearchPageState extends State<UserSearchPage> {
             margin: const EdgeInsets.only(top: 8),
             width: 40,
             height: 4,
-            decoration: BoxDecoration(
+                decoration: BoxDecoration(
               color: context.colors.textSecondary.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(2),
-            ),
-          ),
+                    ),
+                ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: CustomInputField(
-              controller: _searchController,
+                  controller: _searchController,
               autofocus: true,
-              hintText: 'Search by name or npub...',
-              suffixIcon: Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: GestureDetector(
-                  onTap: _pasteFromClipboard,
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: context.colors.background,
-                      shape: BoxShape.circle,
+                    hintText: 'Search by name or npub...',
+                    suffixIcon: Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: GestureDetector(
+                        onTap: _pasteFromClipboard,
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: context.colors.background,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.content_paste,
+                            color: context.colors.textPrimary,
+                            size: 20,
+                          ),
+                        ),
+                      ),
                     ),
-                    child: Icon(
-                      Icons.content_paste,
-                      color: context.colors.textPrimary,
-                      size: 20,
-                    ),
-                  ),
-                ),
-              ),
             ),
           ),
           RepaintBoundary(child: _buildHeader(context)),

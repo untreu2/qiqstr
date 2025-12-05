@@ -40,7 +40,7 @@ class AppColorsLight {
   static const Color error = Colors.redAccent;
   static const Color success = Colors.greenAccent;
   static const Color warning = Colors.amber;
-
+ 
   static const Color border = Colors.black12;
   static const Color divider = Colors.black12;
 

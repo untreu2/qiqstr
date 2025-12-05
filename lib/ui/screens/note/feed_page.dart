@@ -158,7 +158,7 @@ class FeedPageState extends State<FeedPage> {
     return Container(
       width: double.infinity,
       color: colors.background.withValues(alpha: 0.8),
-      padding: EdgeInsets.fromLTRB(16, topPadding + 4, 16, 8),
+      padding: EdgeInsets.fromLTRB(16, topPadding + 4, 16, 0),
       child: Column(
         children: [
           SizedBox(
@@ -329,7 +329,7 @@ class FeedPageState extends State<FeedPage> {
                             ),
                           ),
                         SliverToBoxAdapter(
-                          child: SizedBox(height: isHashtagMode ? topPadding + 85 : 8),
+                          child: SizedBox(height: isHashtagMode ? topPadding + 85 : 0),
                         ),
                         widgets.NoteListWidget(
                           notes: notes,

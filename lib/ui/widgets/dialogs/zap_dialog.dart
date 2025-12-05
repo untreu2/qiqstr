@@ -274,14 +274,14 @@ Future<Map<String, dynamic>> showZapDialog({
               CustomInputField(
                 controller: amountController,
                 keyboardType: TextInputType.number,
-                labelText: 'Amount (sats)',
-                fillColor: colors.inputFill,
+                  labelText: 'Amount (sats)',
+                  fillColor: colors.inputFill,
               ),
               const SizedBox(height: 16),
               CustomInputField(
                 controller: noteController,
-                labelText: 'Comment (Optional)',
-                fillColor: colors.inputFill,
+                  labelText: 'Comment (Optional)',
+                  fillColor: colors.inputFill,
               ),
               const SizedBox(height: 24),
               SizedBox(

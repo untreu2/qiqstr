@@ -498,31 +498,15 @@ class NostrDataService {
     try {
       final tags = List<dynamic>.from(eventData['tags'] ?? []);
       String? rootId;
-      String? replyId;
-      bool isReply = false;
 
       for (var tag in tags) {
-        if (tag is List && tag.length >= 2 && tag[0] == 'e') {
-          if (tag.length >= 4 && tag[3] == 'mention') continue;
-
-          if (tag.length >= 4) {
-            if (tag[3] == 'root') {
-              rootId = tag[1] as String;
-              isReply = true;
-            } else if (tag[3] == 'reply') {
-              replyId = tag[1] as String;
-              isReply = true;
-            }
-          } else if (rootId == null && replyId == null) {
-            replyId = tag[1] as String;
-            isReply = true;
-          }
+        if (tag is List && tag.length >= 4 && tag[0] == 'e' && tag[3] == 'root') {
+          rootId = tag[1] as String;
+          break;
         }
       }
 
-      if (isReply && replyId != null) {
-        await _handleReplyEvent(eventData, replyId);
-      } else if (isReply && rootId != null && replyId == null) {
+      if (rootId != null) {
         await _handleReplyEvent(eventData, rootId);
       } else {
         await _processNoteEvent(eventData);
@@ -566,7 +550,6 @@ class NostrDataService {
 
       String? rootId;
       String? parentId;
-      bool isReply = false;
       final List<Map<String, String>> eTags = [];
       final List<Map<String, String>> pTags = [];
       final List<String> tTags = [];
@@ -589,13 +572,8 @@ class NostrDataService {
 
             if (marker == 'root') {
               rootId = eventId;
-              isReply = true;
             } else if (marker == 'reply') {
               parentId = eventId;
-              isReply = true;
-            } else if (rootId == null) {
-              rootId = eventId;
-              isReply = true;
             }
           } else if (tagType == 'p' && tag.length >= 2) {
             final pubkeyTag = tag[1] as String;
@@ -615,6 +593,8 @@ class NostrDataService {
           }
         }
       }
+
+      final bool isReply = rootId != null;
 
       final note = NoteModel(
         id: id,
@@ -639,17 +619,18 @@ class NostrDataService {
       _noteCache[id] = note;
       _eventIds.add(id);
 
-      if (isReply && parentId != null) {
-        final parentNote = _noteCache[parentId];
-        if (parentNote != null) {
-          parentNote.addReply(note);
+      if (isReply) {
+        if (parentId != null) {
+          final parentNote = _noteCache[parentId];
+          if (parentNote != null) {
+            parentNote.addReply(note);
+          }
         }
-      }
-
-      if (isReply && rootId != null && rootId != parentId) {
-        final rootNote = _noteCache[rootId];
-        if (rootNote != null) {
-          rootNote.addReply(note);
+        if (rootId != parentId) {
+          final rootNote = _noteCache[rootId];
+          if (rootNote != null) {
+            rootNote.addReply(note);
+          }
         }
       }
 
@@ -1785,7 +1766,6 @@ class NostrDataService {
 
       String? rootId;
       String? parentId;
-      bool isReply = false;
       final List<Map<String, String>> eTags = [];
       final List<Map<String, String>> pTags = [];
 
@@ -1806,13 +1786,8 @@ class NostrDataService {
 
             if (marker == 'root') {
               rootId = eventId;
-              isReply = true;
             } else if (marker == 'reply') {
               parentId = eventId;
-              isReply = true;
-            } else if (rootId == null) {
-              rootId = eventId;
-              isReply = true;
             }
           } else if (tag[0] == 'p' && tag.length >= 2) {
             pTags.add({
@@ -1823,6 +1798,8 @@ class NostrDataService {
           }
         }
       }
+
+      final bool isReply = rootId != null;
 
       final note = NoteModel(
         id: id,
@@ -1874,7 +1851,6 @@ class NostrDataService {
 
       String displayContent = 'Reposted note';
       String displayAuthor = originalAuthorHex != null ? (_authService.hexToNpub(originalAuthorHex) ?? originalAuthorHex) : 'Unknown';
-      bool detectedIsReply = false;
       String? detectedRootId;
       String? detectedParentId;
 
@@ -1889,32 +1865,20 @@ class NostrDataService {
 
           final originalTags = originalContent['tags'] as List<dynamic>? ?? [];
           for (final tag in originalTags) {
-            if (tag is List && tag.length >= 2 && tag[0] == 'e') {
-              final eventId = tag[1] as String;
-
-              if (tag.length >= 4) {
-                final marker = tag[3] as String;
-                if (marker == 'root') {
-                  detectedRootId = eventId;
-                  detectedParentId = eventId;
-                  detectedIsReply = true;
-                } else if (marker == 'reply') {
-                  detectedParentId = eventId;
-                  detectedIsReply = true;
-                }
-              } else {
-                if (detectedParentId == null) {
-                  detectedParentId = eventId;
-                  detectedRootId = eventId;
-                  detectedIsReply = true;
-                }
-              }
+            if (tag is List && tag.length >= 4 && tag[0] == 'e' && tag[3] == 'root') {
+              detectedRootId = tag[1] as String;
+              detectedParentId = tag[1] as String;
+              break;
+            } else if (tag is List && tag.length >= 4 && tag[0] == 'e' && tag[3] == 'reply') {
+              detectedParentId = tag[1] as String;
             }
           }
         } catch (e) {
           debugPrint('[NostrDataService] PROFILE: Failed to parse repost content: $e');
         }
       }
+
+      final bool detectedIsReply = detectedRootId != null;
 
       final note = NoteModel(
         id: id,
@@ -2053,7 +2017,6 @@ class NostrDataService {
 
       String? rootId;
       String? parentId;
-      bool isReply = false;
       final List<Map<String, String>> eTags = [];
       final List<Map<String, String>> pTags = [];
       final List<String> tTags = [];
@@ -2075,13 +2038,8 @@ class NostrDataService {
 
             if (marker == 'root') {
               rootId = eventId;
-              isReply = true;
             } else if (marker == 'reply') {
               parentId = eventId;
-              isReply = true;
-            } else if (rootId == null) {
-              rootId = eventId;
-              isReply = true;
             }
           } else if (tag[0] == 'p' && tag.length >= 2) {
             pTags.add({
@@ -2097,6 +2055,8 @@ class NostrDataService {
           }
         }
       }
+
+      final bool isReply = rootId != null;
 
       final note = NoteModel(
         id: id,
