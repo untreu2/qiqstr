@@ -97,10 +97,10 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     final parsedContent = _parseBioContent(user.about);
 
     return NoteContentWidget(
-        parsedContent: parsedContent,
-        noteId: 'bio_${user.pubkeyHex}',
-        onNavigateToMentionProfile: widget.onNavigateToProfile,
-        size: NoteContentSize.small,
+      parsedContent: parsedContent,
+      noteId: 'bio_${user.pubkeyHex}',
+      onNavigateToMentionProfile: widget.onNavigateToProfile,
+      size: NoteContentSize.small,
     );
   }
 
@@ -518,8 +518,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           _followerCount = followerCount;
           _isLoadingCounts = false;
         });
-        
-        // Update follower count in Isar if it's not 0
         if (followerCount > 0) {
           await _userRepository.updateUserFollowerCount(_userNotifier.value.pubkeyHex, followerCount);
         }
@@ -553,20 +551,21 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             children: [
               _buildOptimizedBanner(context, user, screenWidth),
               Container(
-                transform: Matrix4.translationValues(0, -15, 0),
+                transform: Matrix4.translationValues(0, -16, 0),
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildAvatarAndActionsRow(context, user),
+                    const SizedBox(height: 2),
                     _buildNameRow(context, user),
                     if (user.about.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      _buildBioContent(user),
                       const SizedBox(height: 2),
+                      _buildBioContent(user),
+                      const SizedBox(height: 4),
                     ],
                     if (user.website.isNotEmpty && _isInitialized) ...[
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 4),
                       GestureDetector(
                         onTap: () async {
                           final Uri url = Uri.parse(websiteUrl);
@@ -585,7 +584,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                         ),
                       ),
                     ],
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 4),
                     _buildFollowerInfo(context),
                   ],
                 ),
@@ -672,9 +671,9 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
-                color: context.colors.background,
-                width: 3.0,
-              ),
+              color: context.colors.background,
+              width: 3,
+            ),
             ),
             child: _getCachedAvatar(
               currentUser.profileImage,
@@ -722,7 +721,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                 ),
               ),
               if (user.nip05.isNotEmpty && user.nip05Verified) ...[
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 GestureDetector(
                   onTap: () => _showVerificationTooltip(context, user.nip05),
                   child: Icon(
@@ -797,7 +796,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         const Spacer(),
         if (_currentUserNpub != null && !isOwnProfile)
           Padding(
-            padding: const EdgeInsets.only(top: 15.0),
+            padding: const EdgeInsets.only(top: 16),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -812,7 +811,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           )
         else if (_currentUserNpub != null && isOwnProfile)
           Padding(
-            padding: const EdgeInsets.only(top: 15.0),
+            padding: const EdgeInsets.only(top: 16),
             child: _buildEditProfileButton(context),
           ),
       ],
@@ -987,7 +986,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     return GestureDetector(
       onTap: _toggleMute,
       child: Container(
-        padding: isMuted 
+        padding: isMuted
             ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
             : const EdgeInsets.all(8),
         alignment: Alignment.center,
@@ -1004,7 +1003,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                     size: 16,
                     color: context.colors.background,
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
                   Text(
                     'Muted',
                     style: TextStyle(
@@ -1043,7 +1042,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               size: 16,
               color: isFollowing ? context.colors.textPrimary : context.colors.background,
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 8),
             Text(
               isFollowing ? 'Following' : 'Follow',
               style: TextStyle(
@@ -1060,20 +1059,15 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   Widget _buildFollowerInfo(BuildContext context) {
     if (_isLoadingCounts) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 4.0),
-        child: SizedBox(
-          height: 16,
-          width: 16,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
+      return const SizedBox(
+        height: 16,
+        width: 16,
+        child: CircularProgressIndicator(strokeWidth: 2),
       );
     }
 
-    return Padding(
-      padding: const EdgeInsets.only(top: 2.0),
-      child: Row(
-        children: [
+    return Row(
+      children: [
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1149,8 +1143,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               ),
             ),
           ],
-        ],
-      ),
+      ],
     );
   }
 
