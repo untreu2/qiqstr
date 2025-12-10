@@ -15,6 +15,7 @@ import '../../../core/ui/ui_state_builder.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/providers/viewmodel_provider.dart';
 import '../../../presentation/viewmodels/thread_viewmodel.dart';
+import '../../../data/services/nostr_data_service.dart';
 import 'share_note.dart';
 
 class ThreadPage extends StatefulWidget {
@@ -50,6 +51,80 @@ class _ThreadPageState extends State<ThreadPage> {
   void initState() {
     super.initState();
     _scrollController = ScrollController();
+    Future.microtask(() {
+      if (mounted) {
+        _fetchInteractionsInstantly();
+      }
+    });
+  }
+
+  void _fetchInteractionsInstantly() async {
+    try {
+      final nostrDataService = AppDI.get<NostrDataService>();
+      await nostrDataService.fetchInteractionsForNotesWithEOSE(widget.rootNoteId);
+      
+      if (mounted && _viewModel != null) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        _fetchReplyInteractions();
+      }
+    } catch (e) {
+      debugPrint('[ThreadPage] Error fetching interactions: $e');
+    }
+  }
+
+  void _fetchReplyInteractions() async {
+    try {
+      final viewModel = _viewModel;
+      if (viewModel == null) return;
+
+      final threadStructure = viewModel.threadStructureState.data;
+      if (threadStructure == null) return;
+
+      final allNoteIds = <String>{};
+      _collectAllNoteIds(threadStructure, widget.rootNoteId, allNoteIds);
+      
+      final noteIdsToFetch = allNoteIds.where((id) => id != widget.rootNoteId).toList();
+      if (noteIdsToFetch.isEmpty) return;
+
+      final nostrDataService = AppDI.get<NostrDataService>();
+      const batchSize = 20;
+      
+      for (int i = 0; i < noteIdsToFetch.length; i += batchSize) {
+        final end = (i + batchSize < noteIdsToFetch.length) ? i + batchSize : noteIdsToFetch.length;
+        final batch = noteIdsToFetch.sublist(i, end);
+        
+        unawaited(Future.wait(
+          batch.map((noteId) => nostrDataService.fetchInteractionsForNotesWithEOSE(noteId))
+        ));
+        
+        if (i + batchSize < noteIdsToFetch.length) {
+          await Future.delayed(const Duration(milliseconds: 100));
+        }
+      }
+    } catch (e) {
+      debugPrint('[ThreadPage] Error fetching reply interactions: $e');
+    }
+  }
+
+  void _collectAllNoteIds(ThreadStructure structure, String noteId, Set<String> collector) {
+    final note = structure.getNote(noteId);
+    if (note != null) {
+      final targetId = note.isRepost && note.rootId != null && note.rootId!.isNotEmpty 
+          ? note.rootId! 
+          : noteId;
+      collector.add(targetId);
+    } else {
+      collector.add(noteId);
+    }
+    
+    final children = structure.getChildren(noteId);
+    for (final child in children) {
+      if (!child.isRepost) {
+        _collectAllNoteIds(structure, child.id, collector);
+      } else if (child.rootId != null && child.rootId!.isNotEmpty) {
+        collector.add(child.rootId!);
+      }
+    }
   }
 
   @override
@@ -85,6 +160,7 @@ class _ThreadPageState extends State<ThreadPage> {
             Future.delayed(const Duration(seconds: 1), () {
               if (mounted) {
                 vm.checkRepliesFromCache();
+                _fetchReplyInteractions();
               }
             });
           }

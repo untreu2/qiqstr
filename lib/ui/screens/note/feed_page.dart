@@ -239,13 +239,10 @@ class FeedPageState extends State<FeedPage> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Padding(
-                        padding: const EdgeInsets.only(right: 4),
-                        child: Icon(
-                          CarbonIcons.forum,
-                          size: 23,
-                          color: colors.textPrimary,
-                        ),
+                      Icon(
+                        CarbonIcons.explore,
+                        size: 26,
+                        color: colors.textPrimary,
                       ),
                     ],
                   )
@@ -329,7 +326,7 @@ class FeedPageState extends State<FeedPage> {
                             ),
                           ),
                         SliverToBoxAdapter(
-                          child: SizedBox(height: isHashtagMode ? topPadding + 85 : 0),
+                          child: SizedBox(height: isHashtagMode ? topPadding + 85 : 6),
                         ),
                         widgets.NoteListWidget(
                           notes: notes,

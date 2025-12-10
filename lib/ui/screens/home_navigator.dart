@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:qiqstr/ui/screens/note/feed_page.dart';
 import 'package:qiqstr/ui/screens/notification/notification_page.dart';
 import 'package:qiqstr/ui/screens/wallet/wallet_page.dart';
-import 'package:qiqstr/ui/screens/explore/explore_page.dart';
+import 'package:qiqstr/ui/screens/dm/dm.dart';
 import 'package:qiqstr/ui/screens/note/share_note.dart';
 import '../theme/theme_manager.dart';
 
@@ -437,8 +437,8 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
             )
           : null,
       child: Icon(
-        CarbonIcons.explore,
-        size: 29.0,
+        CarbonIcons.forum,
+        size: 26.0,
         color: context.colors.textPrimary,
       ),
     );

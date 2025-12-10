@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../../models/note_model.dart';
 import '../../../models/user_model.dart';
+import '../../../core/di/app_di.dart';
+import '../../../data/services/nostr_data_service.dart';
 import 'note_widget.dart';
 import '../common/common_buttons.dart';
 
@@ -38,34 +42,99 @@ class NoteListWidget extends StatefulWidget {
 
 class _NoteListWidgetState extends State<NoteListWidget> {
   bool _hasTriggeredLoadMore = false;
+  Timer? _updateTimer;
+  bool _hasInitialFetch = false;
+  late final NostrDataService _nostrDataService;
+  StreamSubscription<List<NoteModel>>? _notesSubscription;
 
   @override
   void initState() {
     super.initState();
+    _nostrDataService = AppDI.get<NostrDataService>();
     widget.scrollController?.addListener(_onScroll);
+    
+    _notesSubscription = _nostrDataService.notesStream.listen((_) {
+      _scheduleUpdate();
+    });
+    
+    Future.microtask(() {
+      if (mounted) {
+        _fetchAllInteractions();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(NoteListWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.notes.length != widget.notes.length && !_hasInitialFetch) {
+      _fetchAllInteractions();
+    }
   }
 
   @override
   void dispose() {
+    _updateTimer?.cancel();
+    _notesSubscription?.cancel();
     widget.scrollController?.removeListener(_onScroll);
     super.dispose();
   }
 
   void _onScroll() {
     if (widget.scrollController == null) return;
-    if (!widget.canLoadMore || widget.isLoading) return;
-    if (_hasTriggeredLoadMore) return;
+    
+    if (!_hasTriggeredLoadMore && widget.canLoadMore && !widget.isLoading) {
+      final maxScroll = widget.scrollController!.position.maxScrollExtent;
+      final currentScroll = widget.scrollController!.position.pixels;
+      final threshold = maxScroll * 0.8;
 
-    final maxScroll = widget.scrollController!.position.maxScrollExtent;
-    final currentScroll = widget.scrollController!.position.pixels;
-    final threshold = maxScroll * 0.8;
+      if (currentScroll >= threshold) {
+        _hasTriggeredLoadMore = true;
+        widget.onLoadMore?.call();
+        Future.delayed(const Duration(milliseconds: 500), () {
+          _hasTriggeredLoadMore = false;
+        });
+      }
+    }
 
-    if (currentScroll >= threshold) {
-      _hasTriggeredLoadMore = true;
-      widget.onLoadMore?.call();
-      Future.delayed(const Duration(milliseconds: 500), () {
-        _hasTriggeredLoadMore = false;
-      });
+    _scheduleUpdate();
+  }
+
+  void _scheduleUpdate() {
+    _updateTimer?.cancel();
+    _updateTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  void _fetchAllInteractions() {
+    if (_hasInitialFetch || widget.notes.isEmpty) return;
+    _hasInitialFetch = true;
+
+    final allNoteIds = <String>[];
+    for (final note in widget.notes) {
+      final targetNoteId = note.isRepost && note.rootId != null && note.rootId!.isNotEmpty 
+          ? note.rootId! 
+          : note.id;
+      allNoteIds.add(targetNoteId);
+    }
+
+    if (allNoteIds.isEmpty) return;
+
+    const batchSize = 20;
+    for (int i = 0; i < allNoteIds.length; i += batchSize) {
+      final end = (i + batchSize < allNoteIds.length) ? i + batchSize : allNoteIds.length;
+      final batch = allNoteIds.sublist(i, end);
+      
+      unawaited(Future.wait(
+        batch.map((noteId) => _nostrDataService.fetchInteractionsForNotesWithEOSE(noteId))
+      ));
+      
+      if (i + batchSize < allNoteIds.length) {
+        Future.delayed(Duration(milliseconds: 50 * (i ~/ batchSize)));
+      }
     }
   }
 

@@ -53,7 +53,6 @@ class WebSocketManager {
         print('[WebSocketManager] Initializing relay list...');
       }
       
-      
       final customRelays = await getRelaySetMainSockets();
       
       if (relayUrls.isEmpty) {
@@ -545,7 +544,6 @@ class WebSocketManager {
             print('[WebSocketManager] Relay list changed, updating...');
           }
           
-          
           final activeConnections = _webSockets.length;
           final closeFutures = _webSockets.values.map((ws) async {
             try {
@@ -557,12 +555,10 @@ class WebSocketManager {
             }
           });
           await Future.wait(closeFutures, eagerError: false);
-
           
           _webSockets.clear();
           relayUrls.clear();
           _connectionStats.clear();
-
           
           relayUrls.addAll(customRelays);
           _initializeStats();
@@ -570,7 +566,6 @@ class WebSocketManager {
           if (kDebugMode) {
             print('[WebSocketManager] Updated to ${customRelays.length} relays');
           }
-
           
           if (activeConnections > 0) {
             if (kDebugMode) {

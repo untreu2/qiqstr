@@ -192,7 +192,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               );
             },
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 16),
           CustomInputField(
             controller: _inputController,
               labelText: 'Enter your seed phrase or nsec...',
@@ -234,6 +234,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               label: 'Create a New Account',
               onPressed: _isLoading ? null : _createNewAccount,
               size: ButtonSize.large,
+              backgroundColor: context.colors.accent,
+              foregroundColor: context.colors.textPrimary,
             ),
           ),
           const SizedBox(height: 20),

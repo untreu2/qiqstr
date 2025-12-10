@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/theme_manager.dart';
-import 'indicator_widget.dart';
 
 class TitleWidget extends StatelessWidget {
   final String title;
@@ -33,11 +32,6 @@ class TitleWidget extends StatelessWidget {
 
     final Widget titleRow = Row(
       children: [
-        const IndicatorWidget(
-          orientation: IndicatorOrientation.vertical,
-          size: IndicatorSize.small,
-        ),
-        const SizedBox(width: 12),
         Text(
           title,
           style: GoogleFonts.poppins(
@@ -58,25 +52,14 @@ class TitleWidget extends StatelessWidget {
           children: [
             titleRow,
             const SizedBox(height: 4),
-            Padding(
-              padding: const EdgeInsets.only(left: 17),
-              child: subtitleAction != null
-                  ? Row(
-                      children: [
-                        Expanded(
-                          child: subtitleOnTap != null
-                              ? GestureDetector(
-                                  onTap: subtitleOnTap,
-                                  child: Text(
-                                    subtitle!,
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      color: context.colors.textSecondary,
-                                      height: 1.4,
-                                    ),
-                                  ),
-                                )
-                              : Text(
+            subtitleAction != null
+                ? Row(
+                    children: [
+                      Expanded(
+                        child: subtitleOnTap != null
+                            ? GestureDetector(
+                                onTap: subtitleOnTap,
+                                child: Text(
                                   subtitle!,
                                   style: TextStyle(
                                     fontSize: 15,
@@ -84,24 +67,24 @@ class TitleWidget extends StatelessWidget {
                                     height: 1.4,
                                   ),
                                 ),
-                        ),
-                        const SizedBox(width: 8),
-                        subtitleAction!,
-                      ],
-                    )
-                  : subtitleOnTap != null
-                      ? GestureDetector(
-                          onTap: subtitleOnTap,
-                          child: Text(
-                            subtitle!,
-                            style: TextStyle(
-                              fontSize: 15,
-                              color: context.colors.textSecondary,
-                              height: 1.4,
-                            ),
-                          ),
-                        )
-                      : Text(
+                              )
+                            : Text(
+                                subtitle!,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  color: context.colors.textSecondary,
+                                  height: 1.4,
+                                ),
+                              ),
+                      ),
+                      const SizedBox(width: 8),
+                      subtitleAction!,
+                    ],
+                  )
+                : subtitleOnTap != null
+                    ? GestureDetector(
+                        onTap: subtitleOnTap,
+                        child: Text(
                           subtitle!,
                           style: TextStyle(
                             fontSize: 15,
@@ -109,7 +92,15 @@ class TitleWidget extends StatelessWidget {
                             height: 1.4,
                           ),
                         ),
-            ),
+                      )
+                    : Text(
+                        subtitle!,
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: context.colors.textSecondary,
+                          height: 1.4,
+                        ),
+                      ),
           ],
         ),
       );

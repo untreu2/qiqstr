@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/theme_manager.dart';
-import 'indicator_widget.dart';
 
 class BrandWidget extends StatelessWidget {
   final double iconSize;
-  final IndicatorSize indicatorSize;
   final double fontSize;
   final double iconTopPadding;
   final MainAxisAlignment mainAxisAlignment;
@@ -15,7 +13,6 @@ class BrandWidget extends StatelessWidget {
   const BrandWidget({
     super.key,
     this.iconSize = 50,
-    this.indicatorSize = IndicatorSize.big,
     this.fontSize = 48,
     this.iconTopPadding = 24,
     this.mainAxisAlignment = MainAxisAlignment.center,
@@ -41,23 +38,14 @@ class BrandWidget extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        Row(
-          children: [
-            IndicatorWidget(
-              orientation: IndicatorOrientation.vertical,
-              size: indicatorSize,
-            ),
-            const SizedBox(width: 12),
-            Text(
-              'qiqstr',
-              style: GoogleFonts.poppins(
-                fontSize: fontSize,
-                fontWeight: FontWeight.w700,
-                color: context.colors.textPrimary,
-                letterSpacing: -0.5,
-              ),
-            ),
-          ],
+        Text(
+          'qiqstr',
+          style: GoogleFonts.poppins(
+            fontSize: fontSize,
+            fontWeight: FontWeight.w700,
+            color: context.colors.textPrimary,
+            letterSpacing: -0.5,
+          ),
         ),
       ],
     );

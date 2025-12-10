@@ -412,7 +412,6 @@ class NostrService {
     );
   }
 
-
   static Filter createFollowingFilter({
     required List<String> authors,
     int? limit,
@@ -510,7 +509,6 @@ class NostrService {
   static String serializeEvent(Nip01Event event) => jsonEncode(['EVENT', event.toJson()]);
 
   static String serializeRequest(String request) => request;
-
 
   static String serializeCountRequest(String subscriptionId, Filter filter) {
     final filterMap = filter.toJson();

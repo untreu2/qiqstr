@@ -744,7 +744,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   }
 
   Widget _buildOptimizedBanner(BuildContext context, UserModel user, double screenWidth) {
-    final double bannerHeight = screenWidth * (4 / 10);
+    final double bannerHeight = screenWidth * (3.5 / 10);
 
     return GestureDetector(
       onTap: () {

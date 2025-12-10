@@ -223,8 +223,12 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                               controller: _nameController,
                               labelText: 'Username',
                               fillColor: context.colors.inputFill,
-                              maxLength: 50,
-                              suffixIcon: _inputDecoration(context, 'Username').suffixIcon,
+                              validator: (value) {
+                                if (value != null && value.trim().length > 50) {
+                                  return 'Username must be 50 characters or less';
+                                }
+                                return null;
+                              },
                             ),
                             const SizedBox(height: 20),
                             CustomInputField(
@@ -232,8 +236,13 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                               labelText: 'Bio',
                               fillColor: context.colors.inputFill,
                               maxLines: 3,
-                              maxLength: 300,
                               height: null,
+                              validator: (value) {
+                                if (value != null && value.trim().length > 300) {
+                                  return 'Bio must be 300 characters or less';
+                                }
+                                return null;
+                              },
                             ),
                             const SizedBox(height: 20),
                             CustomInputField(
@@ -241,6 +250,15 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                               enabled: !_isUploadingPicture,
                               labelText: 'Profile image URL',
                               fillColor: context.colors.inputFill,
+                              validator: (value) {
+                                if (value != null && value.trim().isNotEmpty) {
+                                  final uri = Uri.tryParse(value.trim());
+                                  if (uri == null || !uri.hasScheme) {
+                                    return 'Please enter a valid URL';
+                                  }
+                                }
+                                return null;
+                              },
                               suffixIcon: _inputDecoration(
                                 context,
                                 'Profile image URL',
@@ -252,12 +270,30 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
                               controller: _lud16Controller,
                               labelText: 'Lightning address (optional)',
                               fillColor: context.colors.inputFill,
+                              validator: (value) {
+                                if (value != null && value.trim().isNotEmpty) {
+                                  final lud16 = value.trim();
+                                  if (!lud16.contains('@') || lud16.split('@').length != 2) {
+                                    return 'Please enter a valid lightning address (e.g., user@domain.com)';
+                                  }
+                                }
+                                return null;
+                              },
                             ),
                             const SizedBox(height: 20),
                             CustomInputField(
                               controller: _websiteController,
                               labelText: 'Website (optional)',
                               fillColor: context.colors.inputFill,
+                              validator: (value) {
+                                if (value != null && value.trim().isNotEmpty) {
+                                  final website = value.trim();
+                                  if (!website.contains('.') || website.contains(' ')) {
+                                    return 'Please enter a valid website URL';
+                                  }
+                                }
+                                return null;
+                              },
                             ),
                             const SizedBox(height: 60),
                           ],

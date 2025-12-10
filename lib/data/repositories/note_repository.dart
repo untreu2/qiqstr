@@ -37,8 +37,6 @@ class NoteRepository {
   final Map<String, List<ZapModel>> _zaps = {};
 
   final StreamController<List<NoteModel>> _notesController = StreamController<List<NoteModel>>.broadcast();
-  final StreamController<Map<String, List<ReactionModel>>> _reactionsController =
-      StreamController<Map<String, List<ReactionModel>>>.broadcast();
 
   StreamSubscription<List<NoteModel>>? _dataServiceSubscription;
   StreamSubscription<String>? _deletionSubscription;
@@ -281,22 +279,6 @@ class NoteRepository {
     }
   }
 
-  Future<Result<List<NoteModel>>> getDirectReplies(String noteId) async {
-    try {
-      final directReplies = <NoteModel>[];
-      for (final note in _allNotes) {
-        if (note.isReply && note.parentId == noteId) {
-          directReplies.add(note);
-        }
-      }
-
-      directReplies.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-
-      return Result.success(directReplies);
-    } catch (e) {
-      return Result.error('Failed to get direct replies: ${e.toString()}');
-    }
-  }
 
   Future<Result<void>> addNote(NoteModel note) async {
     try {
@@ -351,38 +333,6 @@ class NoteRepository {
     }
   }
 
-  Future<Result<List<ReactionModel>>> getReactions(String noteId) async {
-    try {
-      final reactions = _reactions[noteId] ?? [];
-      return Result.success(reactions);
-    } catch (e) {
-      return Result.error('Failed to get reactions: ${e.toString()}');
-    }
-  }
-
-  Future<Result<void>> addReaction(String noteId, ReactionModel reaction) async {
-    try {
-      _reactions.putIfAbsent(noteId, () => []);
-
-      final reactionList = _reactions[noteId]!;
-      if (reactionList.any((r) => r.id == reaction.id)) {
-        return const Result.success(null);
-      }
-
-      reactionList.add(reaction);
-
-      final note = _notesCache[noteId];
-      if (note != null) {
-        note.reactionCount = reactionList.length;
-      }
-
-      _reactionsController.add(Map.unmodifiable(_reactions));
-
-      return const Result.success(null);
-    } catch (e) {
-      return Result.error('Failed to add reaction: ${e.toString()}');
-    }
-  }
 
   Future<Result<void>> clearCache() async {
     try {
@@ -393,7 +343,6 @@ class NoteRepository {
       _zaps.clear();
 
       _notesController.add(_allNotes);
-      _reactionsController.add(_reactions);
 
       return const Result.success(null);
     } catch (e) {
@@ -466,54 +415,10 @@ class NoteRepository {
 
   Stream<List<NoteModel>> get notesStream => _notesController.stream;
 
-  Stream<Map<String, List<ReactionModel>>> get reactionsStream => _reactionsController.stream;
 
   List<NoteModel> get currentNotes => List.unmodifiable(_allNotes);
 
-  Map<String, List<ReactionModel>> get currentReactions => Map.unmodifiable(_reactions);
 
-  Map<String, List<NoteModel>> buildThreadHierarchy(String rootNoteId) {
-    final Map<String, List<NoteModel>> hierarchy = {};
-    final threadReplies = <NoteModel>[];
-    
-    for (final note in _allNotes) {
-      if (note.isReply && (note.rootId == rootNoteId || note.parentId == rootNoteId)) {
-        threadReplies.add(note);
-      }
-    }
-
-    for (final reply in threadReplies) {
-      final parentId = reply.parentId ?? rootNoteId;
-      hierarchy.putIfAbsent(parentId, () => []);
-      hierarchy[parentId]!.add(reply);
-    }
-
-    hierarchy.forEach((key, replies) {
-      replies.sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    });
-
-    return hierarchy;
-  }
-
-  NoteStats getNoteStats(String noteId) {
-    return NoteStats(
-      reactionCount: _reactions[noteId]?.length ?? 0,
-      replyCount: 0,
-      repostCount: 0,
-      zapAmount: _zaps[noteId]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0,
-    );
-  }
-
-  void updateNoteInteractionCounts(String noteId) {
-    final note = _notesCache[noteId];
-    if (note != null) {
-      final stats = getNoteStats(noteId);
-      note.reactionCount = stats.reactionCount;
-      note.replyCount = stats.replyCount;
-      note.repostCount = stats.repostCount;
-      note.zapAmount = stats.zapAmount;
-    }
-  }
 
   Future<Result<void>> reactToNote(String noteId, String reaction) async {
     try {
@@ -843,31 +748,12 @@ class NoteRepository {
     return null;
   }
 
-  Future<void> fetchInteractionsForNote(String noteId, {bool useCount = false}) async {
+  Future<void> fetchInteractionsForNoteWithEOSE(String noteId) async {
     try {
-      await _nostrDataService.fetchInteractionsForNotes([noteId], forceLoad: false, useCount: useCount);
-
-      if (!useCount) {
+      await _nostrDataService.fetchInteractionsForNotesWithEOSE(noteId);
         _updateNoteReplyCount(noteId);
-      }
     } catch (e) {
       _logger.error('Error fetching interactions for note', 'NoteRepository', e);
-    }
-  }
-
-  Future<void> fetchInteractionsForNotes(List<String> noteIds, {bool useCount = false, bool forceLoad = false}) async {
-    try {
-      if (noteIds.isEmpty) return;
-
-      await _nostrDataService.fetchInteractionsForNotes(noteIds, forceLoad: forceLoad, useCount: useCount);
-
-      if (!useCount) {
-        for (final noteId in noteIds) {
-          _updateNoteReplyCount(noteId);
-        }
-      }
-    } catch (e) {
-      _logger.error('Error fetching interactions for notes', 'NoteRepository', e);
     }
   }
 
@@ -920,29 +806,31 @@ class NoteRepository {
     }
   }
 
+  Future<Result<List<NoteModel>>> getHashtagNotes({
+    required String hashtag,
+    int limit = 20,
+    DateTime? until,
+    DateTime? since,
+  }) async {
+    try {
+      final result = await _nostrDataService.fetchHashtagNotes(
+        hashtag: hashtag,
+        limit: limit,
+        until: until,
+        since: since,
+      );
+      
+      return result;
+    } catch (e) {
+      _logger.error('Exception in getHashtagNotes', 'NoteRepository', e);
+      return Result.error('Failed to get hashtag notes: ${e.toString()}');
+    }
+  }
+
   void dispose() {
     _updateThrottleTimer?.cancel();
     _dataServiceSubscription?.cancel();
     _deletionSubscription?.cancel();
     _notesController.close();
-    _reactionsController.close();
   }
 }
-
-class NoteStats {
-  final int reactionCount;
-  final int replyCount;
-  final int repostCount;
-  final int zapAmount;
-
-  const NoteStats({
-    required this.reactionCount,
-    required this.replyCount,
-    required this.repostCount,
-    required this.zapAmount,
-  });
-
-  @override
-  String toString() => 'NoteStats(reactions: $reactionCount, replies: $replyCount, reposts: $repostCount, zaps: $zapAmount)';
-}
-

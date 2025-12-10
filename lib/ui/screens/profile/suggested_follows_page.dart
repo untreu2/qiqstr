@@ -246,9 +246,6 @@ class SuggestedFollowsPage extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
       decoration: BoxDecoration(
         color: context.colors.background,
-        border: Border(
-          top: BorderSide(color: context.colors.border),
-        ),
       ),
       child: SizedBox(
         width: double.infinity,

@@ -269,7 +269,6 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                               controller: _nameController,
                               labelText: 'Username',
                               fillColor: context.colors.inputFill,
-                              maxLength: 50,
                               onChanged: (value) => viewModel.updateName(value),
                               validator: (value) {
                                 if (value != null && value.trim().length > 50) {
@@ -277,7 +276,6 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                                 }
                                 return null;
                               },
-                              suffixIcon: _inputDecoration(context, 'Username').suffixIcon,
                             ),
                             const SizedBox(height: 20),
                             CustomInputField(
@@ -285,7 +283,6 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                               labelText: 'Bio',
                               fillColor: context.colors.inputFill,
                               maxLines: 3,
-                              maxLength: 300,
                               height: null,
                               onChanged: (value) => viewModel.updateAbout(value),
                               validator: (value) {
@@ -351,10 +348,10 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                               ).suffixIcon,
                             ),
                             const SizedBox(height: 20),
-                            TextFormField(
+                            CustomInputField(
                               controller: _lud16Controller,
-                              decoration: _inputDecoration(context, 'Lightning address (optional)'),
-                              style: TextStyle(color: context.colors.textPrimary),
+                              labelText: 'Lightning address (optional)',
+                              fillColor: context.colors.inputFill,
                               onChanged: (value) => viewModel.updateLud16(value),
                               validator: (value) {
                                 if (value != null && value.trim().isNotEmpty) {
@@ -367,10 +364,10 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                               },
                             ),
                             const SizedBox(height: 20),
-                            TextFormField(
+                            CustomInputField(
                               controller: _websiteController,
-                              decoration: _inputDecoration(context, 'Website (optional)'),
-                              style: TextStyle(color: context.colors.textPrimary),
+                              labelText: 'Website (optional)',
+                              fillColor: context.colors.inputFill,
                               onChanged: (value) => viewModel.updateWebsite(value),
                               validator: (value) {
                                 if (value != null && value.trim().isNotEmpty) {

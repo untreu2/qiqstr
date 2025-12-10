@@ -273,7 +273,7 @@ _ButtonSizeConfig _getSizeConfig(ButtonSize size) {
   switch (size) {
     case ButtonSize.small:
       return const _ButtonSizeConfig(
-        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         borderRadius: 40,
         fontSize: 13,
         iconSize: 16,
@@ -281,7 +281,7 @@ _ButtonSizeConfig _getSizeConfig(ButtonSize size) {
       );
     case ButtonSize.medium:
       return const _ButtonSizeConfig(
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         borderRadius: 40,
         fontSize: 14,
         iconSize: 18,
@@ -289,7 +289,7 @@ _ButtonSizeConfig _getSizeConfig(ButtonSize size) {
       );
     case ButtonSize.large:
       return const _ButtonSizeConfig(
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         borderRadius: 40,
         fontSize: 17,
         iconSize: 20,

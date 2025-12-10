@@ -8,8 +8,6 @@ import '../../../core/di/app_di.dart';
 import '../../../data/repositories/wallet_repository.dart';
 import '../../../models/wallet_model.dart';
 import '../../theme/theme_manager.dart';
-import '../../widgets/common/snackbar_widget.dart';
-import '../../widgets/common/indicator_widget.dart';
 import '../../widgets/dialogs/receive_dialog.dart';
 import '../../widgets/dialogs/send_dialog.dart';
 
@@ -163,55 +161,18 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
   }
 
   Widget _buildHeader(BuildContext context) {
-    final lud16 = _getCoinosLud16();
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 60, 16, 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const IndicatorWidget(
-            orientation: IndicatorOrientation.vertical,
-            size: IndicatorSize.small,
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
           Text(
             'Wallet',
             style: GoogleFonts.poppins(
-              fontSize: 24,
+              fontSize: 28,
               fontWeight: FontWeight.w700,
               color: context.colors.textPrimary,
               letterSpacing: -0.5,
-            ),
-          ),
-                if (lud16 != null) ...[
-                  Text(
-                    ' · ',
-                    style: GoogleFonts.poppins(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: context.colors.textPrimary,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: () {
-                      Clipboard.setData(ClipboardData(text: lud16));
-                      AppSnackbar.success(context, 'Lightning address copied', duration: const Duration(seconds: 2));
-                    },
-                    child: Text(
-                      lud16,
-                      style: TextStyle(
-                        fontSize: 17,
-                        color: context.colors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
             ),
           ),
         ],
