@@ -8,6 +8,7 @@ import '../viewmodels/profile_viewmodel.dart';
 import '../viewmodels/notification_viewmodel.dart';
 import '../viewmodels/thread_viewmodel.dart';
 import '../viewmodels/compose_viewmodel.dart';
+import '../viewmodels/dm_viewmodel.dart';
 
 class ViewModelProvider {
   static Widget login({
@@ -195,6 +196,21 @@ class ViewModelProvider {
         builder: builder,
         child: child,
       ),
+    );
+  }
+
+  static Widget dm({
+    required Widget Function(BuildContext context, DmViewModel viewModel) builder,
+  }) {
+    return ChangeNotifierProvider<DmViewModel>(
+      create: (_) {
+        final viewModel = AppDI.get<DmViewModel>();
+        return viewModel;
+      },
+      builder: (context, child) {
+        final viewModel = Provider.of<DmViewModel>(context, listen: false);
+        return builder(context, viewModel);
+      },
     );
   }
 }

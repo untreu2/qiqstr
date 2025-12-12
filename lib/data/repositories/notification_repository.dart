@@ -61,7 +61,7 @@ class NotificationRepository {
   void _debouncedProcessNotifications(List<NotificationModel> newNotifications) {
     final debounceTime = DateTime.now();
     _lastDebounceTime = debounceTime;
-    
+
     Future.delayed(_debounceDelay, () async {
       if (_lastDebounceTime == debounceTime) {
         await _processNotifications(newNotifications);
@@ -130,12 +130,10 @@ class NotificationRepository {
   }
 
   Future<Result<List<NotificationModel>>> getNotifications({
-    int limit = 50,
+    int limit = 20,
     DateTime? since,
   }) async {
     try {
-      debugPrint('[NotificationRepository] getNotifications called with limit: $limit');
-
       if (_currentUserHex == null) {
         await _initializeCurrentUser();
         if (_currentUserHex == null) {
@@ -155,8 +153,6 @@ class NotificationRepository {
         _notifications.addAll(filteredNotifications);
         _unreadCount = filteredNotifications.length;
 
-        debugPrint('[NotificationRepository] Loaded ${_notifications.length} notifications (filtered from ${result.data!.length})');
-
         _notificationsController.add(List.unmodifiable(_notifications));
         _unreadCountController.add(_unreadCount);
 
@@ -165,7 +161,6 @@ class NotificationRepository {
 
       return result;
     } catch (e) {
-      debugPrint('[NotificationRepository] Error getting notifications: $e');
       return Result.error('Failed to get notifications: $e');
     }
   }

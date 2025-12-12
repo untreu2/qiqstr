@@ -52,7 +52,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
   String _currentUserNpub = '';
   String get currentUserNpub => _currentUserNpub;
 
-  static const int _pageSize = 100;
+  static const int _pageSize = 30;
   int get currentLimit => _pageSize;
 
   bool _isLoadingMore = false;
@@ -89,7 +89,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
   void initializeWithUser(String npub) {
     _currentProfileNpub = npub;
     _checkIfCurrentUser();
-    
+
     loadProfileCommand.execute(npub);
     _profileNotesState = const LoadingState();
     safeNotifyListeners();
@@ -173,8 +173,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
           wasFollowing ? await _userRepository.unfollowUser(_currentProfileNpub) : await _userRepository.followUser(_currentProfileNpub);
 
       result.fold(
-        (_) {
-        },
+        (_) {},
         (error) {
           _isFollowing = wasFollowing;
           setError(NetworkError(message: 'Failed to ${wasFollowing ? 'unfollow' : 'follow'} user: $error'));
@@ -212,18 +211,16 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
           type: FeedType.profile,
           targetUserNpub: userNpub,
           limit: _pageSize,
-          skipCache: true,
+          skipCache: false,
         );
 
         final result = await _feedLoader.loadFeed(params);
 
         if (result.isSuccess) {
           final filteredNotes = _feedLoader.filterProfileNotes(result.notes);
-          
-          _profileNotesState = filteredNotes.isEmpty
-              ? const EmptyState('No notes from this user yet')
-              : LoadedState(filteredNotes);
-          
+
+          _profileNotesState = filteredNotes.isEmpty ? const EmptyState('No notes from this user yet') : LoadedState(filteredNotes);
+
           safeNotifyListeners();
 
           _feedLoader.preloadCachedUserProfilesSync(
@@ -239,7 +236,6 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
             _profiles,
             (profiles) {
               _profilesController.add(Map.from(profiles));
-              safeNotifyListeners();
             },
           ).catchError((e) {
             debugPrint('[ProfileViewModel] Error loading user profiles in background: $e');
@@ -264,6 +260,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
     if (currentNotes.isEmpty) return;
 
     _isLoadingMore = true;
+    safeNotifyListeners();
 
     try {
       final oldestNote = currentNotes.reduce((a, b) => a.timestamp.isBefore(b.timestamp) ? a : b);
@@ -274,11 +271,11 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
         targetUserNpub: _currentProfileNpub,
         limit: _pageSize,
         until: until,
-        skipCache: true,
+        skipCache: false,
       );
-      
+
       final result = await _feedLoader.loadFeed(params);
-      
+
       if (result.isSuccess && result.notes.isNotEmpty) {
         final currentIds = currentNotes.map((n) => n.id).toSet();
         final uniqueNewNotes = result.notes.where((n) => !currentIds.contains(n.id)).toList();
@@ -296,11 +293,9 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
           }
 
           final filteredNotes = _feedLoader.filterProfileNotes(deduplicatedNotes);
-          
-          _profileNotesState = filteredNotes.isEmpty
-              ? const EmptyState('No notes from this user yet')
-              : LoadedState(filteredNotes);
-          
+
+          _profileNotesState = filteredNotes.isEmpty ? const EmptyState('No notes from this user yet') : LoadedState(filteredNotes);
+
           safeNotifyListeners();
 
           _feedLoader.preloadCachedUserProfilesSync(
@@ -316,7 +311,6 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
             _profiles,
             (profiles) {
               _profilesController.add(Map.from(profiles));
-              safeNotifyListeners();
             },
           ).catchError((e) {
             debugPrint('[ProfileViewModel] Error loading user profiles: $e');
@@ -327,6 +321,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
       debugPrint('[ProfileViewModel] Exception in loadMoreProfileNotes: $e');
     } finally {
       _isLoadingMore = false;
+      safeNotifyListeners();
     }
   }
 
@@ -361,9 +356,6 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
     );
   }
 
-
-
-
   UserModel? get currentProfile {
     return _profileState.data;
   }
@@ -385,7 +377,6 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
   }
 
   bool get canLoadMoreProfileNotes => _profileNotesState.isLoaded && !_isLoadingMore;
-
 
   @override
   void onRetry() {

@@ -14,6 +14,10 @@ import 'data/services/nostr_data_service.dart';
 import 'data/services/auth_service.dart';
 import 'data/repositories/notification_repository.dart';
 import 'data/repositories/note_repository.dart';
+import 'data/repositories/dm_repository.dart';
+import 'models/note_model.dart';
+import 'models/dm_message_model.dart';
+import 'core/base/result.dart';
 import 'services/memory_trimming_service.dart';
 import 'services/lifecycle_manager.dart';
 import 'services/event_parser_isolate.dart';
@@ -26,23 +30,8 @@ void main() {
     PaintingBinding.instance.imageCache.maximumSizeBytes = 150 << 20;
     PaintingBinding.instance.imageCache.maximumSize = 600;
 
-    await AppDI.initialize();
-
-    await EventParserIsolate.instance.initialize();
-
-    final lifecycleManager = LifecycleManager();
-    lifecycleManager.initialize();
-    
-    final noteRepository = AppDI.get<NoteRepository>();
-    lifecycleManager.addOnPauseCallback(() => noteRepository.setPaused(true));
-    lifecycleManager.addOnResumeCallback(() => noteRepository.setPaused(false));
-    
-    MemoryTrimmingService().startPeriodicTrimming();
-
     debugProfileBuildsEnabled = false;
     debugPrintRebuildDirtyWidgets = false;
-
-    AppDI.get<NostrDataService>();
 
     loggingService.configure(
       level: LogLevel.error,
@@ -53,7 +42,6 @@ void main() {
       if (details.exception is SocketException) {
         return;
       }
-
       FlutterError.presentError(details);
     };
 
@@ -62,13 +50,25 @@ void main() {
         if (error is SocketException) {
           return true;
         }
-
         logError('Platform error', 'Main', error);
         return true;
       };
     } catch (e) {
       logError('Could not set platform error handler', 'Main', e);
     }
+
+    await AppDI.initialize();
+
+    unawaited(EventParserIsolate.instance.initialize());
+
+    final lifecycleManager = LifecycleManager();
+    lifecycleManager.initialize();
+
+    final noteRepository = AppDI.get<NoteRepository>();
+    lifecycleManager.addOnPauseCallback(() => noteRepository.setPaused(true));
+    lifecycleManager.addOnResumeCallback(() => noteRepository.setPaused(false));
+
+    MemoryTrimmingService().startPeriodicTrimming();
 
     final initialHome = await _determineInitialHomeWithPreloading();
 
@@ -103,10 +103,11 @@ Future<Widget> _determineInitialHomeWithPreloading() async {
       if (npubResult.isSuccess && npubResult.data != null && npubResult.data!.isNotEmpty) {
         final npub = npubResult.data!;
 
+        await _loadInitialDataBeforeHome(npub);
+
         FlutterNativeSplash.remove();
 
-        unawaited(_initializeNotifications());
-        unawaited(_loadInitialFeedInBackground(npub));
+        unawaited(_initializeBackgroundServices());
 
         return HomeNavigator(npub: npub);
       }
@@ -120,66 +121,76 @@ Future<Widget> _determineInitialHomeWithPreloading() async {
   }
 }
 
-Future<void> _loadInitialFeedInBackground(String npub) async {
+Future<void> _loadInitialDataBeforeHome(String npub) async {
   try {
     final noteRepository = AppDI.get<NoteRepository>();
+    final dmRepository = AppDI.get<DmRepository>();
     final nostrDataService = AppDI.get<NostrDataService>();
 
     final cachedNotes = noteRepository.currentNotes;
     if (cachedNotes.isNotEmpty) {
-      debugPrint('[Main] Using cached notes, starting real-time feed');
       unawaited(noteRepository.startRealTimeFeed([npub]));
+      unawaited(dmRepository.getConversations());
       return;
     }
 
-    noteRepository.startRealTimeFeed([npub]);
+    unawaited(noteRepository.startRealTimeFeed([npub]));
 
-    nostrDataService.fetchFeedNotes(
-      authorNpubs: [npub],
-      limit: 30,
-    ).then((result) {
-      if (result.isSuccess && result.data != null) {
-        debugPrint('[Main] Feed loaded: ${result.data!.length} notes');
-      }
-    }).catchError((e) {
-      debugPrint('[Main] Error loading feed: $e');
-    });
-  } catch (e) {
-    debugPrint('[Main] Error in background feed loading: $e');
-  }
-}
-
-void unawaited(Future<void> future) {
-  future.catchError((error) {});
-}
-
-Future<void> _initializeNotifications() async {
-  try {
-    final notificationRepository = AppDI.get<NotificationRepository>();
-
-    final result = await notificationRepository.getNotifications(limit: 50);
-
-    if (result.isSuccess) {
-      _startBackgroundNotificationListening();
+    try {
+      await Future.wait([
+        nostrDataService
+            .fetchFeedNotes(
+              authorNpubs: [npub],
+              limit: 15,
+            )
+            .timeout(const Duration(seconds: 8))
+            .then((result) {
+              if (result.isSuccess && result.data != null) {
+                debugPrint('[Main] Feed loaded during splash: ${result.data!.length} notes');
+              }
+              return result;
+            })
+            .catchError((e) {
+              debugPrint('[Main] Feed load error: $e');
+              return Result<List<NoteModel>>.error(e.toString());
+            }),
+        dmRepository.getConversations().timeout(const Duration(seconds: 5)).then((result) {
+          if (result.isSuccess && result.data != null) {
+            debugPrint('[Main] DMs loaded during splash: ${result.data!.length} conversations');
+          }
+          return result;
+        }).catchError((e) {
+          debugPrint('[Main] DMs load error: $e');
+          return Result<List<DmConversationModel>>.error(e.toString());
+        }),
+      ]);
+    } catch (error) {
+      debugPrint('[Main] Error loading initial data (continuing anyway): $error');
     }
   } catch (e) {
-    debugPrint('[Main] Error initializing services: $e');
+    debugPrint('[Main] Error in initial data loading (continuing anyway): $e');
   }
 }
 
-void _startBackgroundNotificationListening() {
+Future<void> _initializeBackgroundServices() async {
+  await Future.delayed(const Duration(seconds: 3));
+
   try {
     final notificationRepository = AppDI.get<NotificationRepository>();
 
     notificationRepository.notificationsStream.listen(
       (notifications) {},
-      onError: (error) {
-        debugPrint('[Main] Notification stream error: $error');
-      },
+      onError: (error) {},
     );
+
+    unawaited(notificationRepository.getNotifications(limit: 15));
   } catch (e) {
-    debugPrint('[Main] Error starting notification listener: $e');
+    debugPrint('[Main] Error initializing background services: $e');
   }
+}
+
+void unawaited(Future<void> future) {
+  future.catchError((error) {});
 }
 
 class QiqstrApp extends ConsumerWidget {

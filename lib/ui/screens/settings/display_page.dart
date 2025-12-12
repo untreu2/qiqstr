@@ -152,7 +152,7 @@ class _DisplayPageState extends State<DisplayPage> {
   Widget _buildBottomNavOrderSection(BuildContext context, ThemeManager themeManager) {
     final navItems = [
       {'index': 0, 'name': 'Home', 'icon': CarbonIcons.home},
-      {'index': 1, 'name': 'Search', 'icon': CarbonIcons.search},
+      {'index': 1, 'name': 'Search', 'icon': CarbonIcons.send_alt},
       {'index': 2, 'name': 'Wallet', 'icon': CarbonIcons.wallet},
       {'index': 3, 'name': 'Notifications', 'icon': CarbonIcons.notification},
     ];

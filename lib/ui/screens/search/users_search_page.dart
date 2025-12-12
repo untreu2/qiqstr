@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
@@ -17,7 +16,12 @@ import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/dialogs/unfollow_user_dialog.dart';
 
 class UserSearchPage extends StatefulWidget {
-  const UserSearchPage({super.key});
+  final Function(UserModel)? onUserSelected;
+
+  const UserSearchPage({
+    super.key,
+    this.onUserSelected,
+  });
 
   @override
   State<UserSearchPage> createState() => _UserSearchPageState();
@@ -30,7 +34,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
   bool _isSearching = false;
   bool _isLoadingRandom = false;
   String? _error;
-  int? _userCount;
 
   late final UserRepository _userRepository;
 
@@ -40,24 +43,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
     _userRepository = AppDI.get<UserRepository>();
     _searchController.addListener(_onSearchChanged);
     _loadRandomUsers();
-    _loadUserCount();
-  }
-
-  Future<void> _loadUserCount() async {
-    try {
-      final isarService = _userRepository.isarService;
-      if (!isarService.isInitialized) {
-        await isarService.waitForInitialization();
-      }
-      final count = await isarService.getUserProfileCount();
-      if (mounted) {
-        setState(() {
-          _userCount = count;
-        });
-      }
-    } catch (e) {
-      debugPrint('[UserSearchPage] Error loading user count: $e');
-    }
   }
 
   void _onSearchChanged() {
@@ -164,50 +149,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
   }
 
 
-  Widget _buildHeader(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(
-                  'Search',
-                  style: GoogleFonts.poppins(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    color: context.colors.textPrimary,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                if (_userCount != null) ...[
-                  Text(
-                    ' · ',
-                    style: GoogleFonts.poppins(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: context.colors.textPrimary,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  Text(
-                    '$_userCount users cached',
-                    style: TextStyle(
-                      fontSize: 17,
-                      color: context.colors.textSecondary,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Future<void> _pasteFromClipboard() async {
     final clipboardData = await Clipboard.getData('text/plain');
@@ -363,7 +304,10 @@ class _UserSearchPageState extends State<UserSearchPage> {
   }
 
   Widget _buildUserItem(BuildContext context, UserModel user) {
-    return _UserItemWidget(user: user);
+    return _UserItemWidget(
+      user: user,
+      onUserSelected: widget.onUserSelected,
+    );
   }
 
   @override
@@ -418,7 +362,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
                     ),
             ),
           ),
-          RepaintBoundary(child: _buildHeader(context)),
+          const SizedBox(height: 16),
           Expanded(
             child: _buildSearchResults(context),
           ),
@@ -430,8 +374,12 @@ class _UserSearchPageState extends State<UserSearchPage> {
 
 class _UserItemWidget extends StatefulWidget {
   final UserModel user;
+  final Function(UserModel)? onUserSelected;
 
-  const _UserItemWidget({required this.user});
+  const _UserItemWidget({
+    required this.user,
+    this.onUserSelected,
+  });
 
   @override
   State<_UserItemWidget> createState() => _UserItemWidgetState();
@@ -710,12 +658,17 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
 
         return GestureDetector(
           onTap: () {
+            if (widget.onUserSelected != null) {
+              widget.onUserSelected!(widget.user);
+              Navigator.of(context).pop();
+            } else {
             Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (_) => ProfilePage(user: widget.user),
               ),
             );
+            }
           },
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),

@@ -86,20 +86,19 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
     return await _userRepository.getUserProfile(npub);
   }
 
-  Future<void> loadNotifications() async {
+  Future<void> loadNotifications({int limit = 20}) async {
     await executeOperation('loadNotifications', () async {
       _notificationsState = const LoadingState();
       safeNotifyListeners();
 
-      final result = await _notificationRepository.getNotifications();
+      final result = await _notificationRepository.getNotifications(limit: limit);
 
       result.fold(
         (notifications) async {
           final groupedNotifications = _notificationRepository.groupNotifications(notifications);
 
-          await _loadUserProfiles(notifications);
-
-          await _fetchTargetEvents(notifications);
+          unawaited(_loadUserProfilesInBackground(notifications));
+          unawaited(_fetchTargetEventsInBackground(notifications));
 
           _notificationsState = groupedNotifications.isEmpty ? const EmptyState('No notifications yet') : LoadedState(groupedNotifications);
         },
@@ -110,7 +109,7 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
     });
   }
 
-  Future<void> refreshNotifications() async {
+  Future<void> refreshNotifications({int limit = 20}) async {
     await executeOperation('refreshNotifications', () async {
       _notificationsState = const LoadingState(LoadingType.refreshing);
       safeNotifyListeners();
@@ -121,9 +120,8 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
         (notifications) async {
           final groupedNotifications = _notificationRepository.groupNotifications(notifications);
 
-          await _loadUserProfiles(notifications);
-
-          await _fetchTargetEvents(notifications);
+          unawaited(_loadUserProfilesInBackground(notifications));
+          unawaited(_fetchTargetEventsInBackground(notifications));
 
           _notificationsState = groupedNotifications.isEmpty ? const EmptyState('No notifications yet') : LoadedState(groupedNotifications);
         },
@@ -154,69 +152,50 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
     safeNotifyListeners();
   }
 
-  Future<void> _loadUserProfiles(List<NotificationModel> notifications) async {
-    final authorNpubs = notifications.map((n) => n.author).toSet().toList();
+  Future<void> _loadUserProfilesInBackground(List<NotificationModel> notifications) async {
+    try {
+      final authorNpubs = notifications.map((n) => n.author).toSet().toList();
+      final missingNpubs = authorNpubs.where((npub) => !_userProfiles.containsKey(npub)).toList();
 
-    final missingNpubs = authorNpubs.where((npub) => !_userProfiles.containsKey(npub)).toList();
+      if (missingNpubs.isEmpty) return;
 
-    if (missingNpubs.isEmpty) {
-      return;
-    }
-
-    debugPrint('[NotificationViewModel] Batch fetching ${missingNpubs.length} user profiles');
-
-    final results = await _userRepository.getUserProfiles(
-      missingNpubs,
-      priority: FetchPriority.normal,
-    );
-
-    for (final entry in results.entries) {
-      entry.value.fold(
-        (user) => _userProfiles[entry.key] = user,
-        (_) {},
+      final results = await _userRepository.getUserProfiles(
+        missingNpubs,
+        priority: FetchPriority.low,
       );
-    }
 
-    debugPrint('[NotificationViewModel] Loaded ${results.length} profiles');
+      for (final entry in results.entries) {
+        entry.value.fold(
+          (user) => _userProfiles[entry.key] = user,
+          (_) {},
+        );
+      }
+
+      safeNotifyListeners();
+    } catch (e) {}
   }
 
-  Future<void> _fetchTargetEvents(List<NotificationModel> notifications) async {
+  Future<void> _fetchTargetEventsInBackground(List<NotificationModel> notifications) async {
     try {
-      debugPrint(' [NotificationViewModel] Fetching target events for ${notifications.length} notifications');
-
       final targetEventIds = notifications.map((n) => n.targetEventId).where((id) => id.isNotEmpty).toSet().toList();
 
       if (targetEventIds.isNotEmpty) {
-        debugPrint(' [NotificationViewModel] Found ${targetEventIds.length} target events to fetch');
-
         await _nostrDataService.fetchSpecificNotes(targetEventIds);
-
-        debugPrint(' [NotificationViewModel] Target events fetch completed');
-      } else {
-        debugPrint(' [NotificationViewModel] No target events to fetch');
       }
-    } catch (e) {
-      debugPrint(' [NotificationViewModel] Error fetching target events: $e');
-    }
+    } catch (e) {}
   }
 
   void _subscribeToNotificationUpdates() {
-    debugPrint('[NotificationViewModel] Setting up notification stream subscriptions');
-
     addSubscription(
       _notificationRepository.notificationsStream.listen((notifications) {
         if (!isDisposed) {
-          debugPrint('[NotificationViewModel] Received ${notifications.length} notifications from stream');
-
           final groupedNotifications = _notificationRepository.groupNotifications(notifications);
 
-          _loadUserProfiles(notifications);
-
-          _fetchTargetEvents(notifications);
+          unawaited(_loadUserProfilesInBackground(notifications));
+          unawaited(_fetchTargetEventsInBackground(notifications));
 
           _notificationsState = groupedNotifications.isEmpty ? const EmptyState('No notifications yet') : LoadedState(groupedNotifications);
 
-          debugPrint('[NotificationViewModel] Updated state with ${groupedNotifications.length} grouped items');
           safeNotifyListeners();
         }
       }),
@@ -225,14 +204,15 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
     addSubscription(
       _notificationRepository.unreadCountStream.listen((count) {
         if (!isDisposed) {
-          debugPrint('[NotificationViewModel] Unread count updated: $count');
           _unreadCountState = LoadedState(count);
           safeNotifyListeners();
         }
       }),
     );
+  }
 
-    debugPrint('[NotificationViewModel] Stream subscriptions active');
+  void unawaited(Future<void> future) {
+    future.catchError((error) {});
   }
 
   String buildGroupTitle(dynamic item) {

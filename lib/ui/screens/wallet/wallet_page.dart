@@ -30,7 +30,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
   Timer? _balanceTimer;
 
   @override
-  bool get wantKeepAlive => false;
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {

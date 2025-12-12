@@ -7,7 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:qiqstr/ui/screens/note/feed_page.dart';
 import 'package:qiqstr/ui/screens/notification/notification_page.dart';
 import 'package:qiqstr/ui/screens/wallet/wallet_page.dart';
-import 'package:qiqstr/ui/screens/dm/dm.dart';
+import 'package:qiqstr/ui/screens/dm/dm_page.dart';
 import 'package:qiqstr/ui/screens/note/share_note.dart';
 import '../theme/theme_manager.dart';
 
@@ -30,19 +30,28 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
   late AnimationController _exploreRotationController;
   bool _isFirstBuild = true;
 
-  List<Widget> _buildPages() {
-    final themeManager = context.themeManager;
-    final navOrder = themeManager?.bottomNavOrder ?? [0, 1, 2, 3];
-    
-    final allPages = [
-      FeedPage(key: _feedPageKey, npub: widget.npub),
-      const ExplorePage(),
-      const WalletPage(),
-      const NotificationPage(),
-    ];
-    
-    return navOrder.map((index) => allPages[index]).toList();
+  final Map<int, Widget> _pageCache = {};
+
+  Widget _getPage(int index) {
+    if (!_pageCache.containsKey(index)) {
+      switch (index) {
+        case 0:
+          _pageCache[index] = FeedPage(key: _feedPageKey, npub: widget.npub);
+          break;
+        case 1:
+          _pageCache[index] = const DmPage();
+          break;
+        case 2:
+          _pageCache[index] = const WalletPage();
+          break;
+        case 3:
+          _pageCache[index] = const NotificationPage();
+          break;
+      }
+    }
+    return _pageCache[index]!;
   }
+
 
   @override
   void initState() {
@@ -67,16 +76,16 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
   Widget _buildCustomBottomBar() {
     final themeManager = context.themeManager;
     final navOrder = themeManager?.bottomNavOrder ?? [0, 1, 2, 3];
-    
+
     final navItems = [
       {'icon': 'assets/home_gap.svg', 'index': 0, 'type': 'svg'},
       {'icon': '', 'index': 1, 'type': 'carbon'},
       {'icon': 'assets/wallet_icon.svg', 'index': 2, 'type': 'svg'},
       {'icon': 'assets/notification_button.svg', 'index': 3, 'type': 'svg'},
     ];
-    
+
     final orderedNavItems = navOrder.map((index) => navItems[index]).toList();
-    
+
     final items = [
       orderedNavItems[0],
       orderedNavItems[1],
@@ -146,7 +155,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                           ? _buildWalletIcon(item['icon'] as String, isSelected)
                           : originalIndex == 1
                               ? _buildExploreIcon(isSelected)
-                          : _buildRegularIcon(item, isSelected),
+                              : _buildRegularIcon(item, isSelected),
                 ),
               );
             }).toList(),
@@ -159,7 +168,9 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
   static const double _iconSizeSelected = 25.0;
   static const double _iconSizeUnselected = 21.0;
   static const double _homeIconSizeSelected = 26.0;
-  static const double _homeIconSizeUnselected = 22.0;
+  static const double _homeIconSizeUnselected = 24.0;
+  static const double _sendAltIconSize = 28.0;
+  static const double _sendAltIconSizeSelected = 30.0;
 
   Widget _buildIcon({
     required String iconPath,
@@ -172,14 +183,13 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
     bool isWallet = false,
     bool isNotification = false,
   }) {
-    final iconSize = isHome
-        ? (isSelected ? _homeIconSizeSelected : _homeIconSizeUnselected)
-        : (isSelected ? _iconSizeSelected : _iconSizeUnselected);
-    
+    final iconSize =
+        isHome ? (isSelected ? _homeIconSizeSelected : _homeIconSizeUnselected) : (isSelected ? _iconSizeSelected : _iconSizeUnselected);
+
     if (_isFirstBuild) {
       final themeManager = context.themeManager;
       final isDarkMode = themeManager?.isDarkMode ?? false;
-      
+
       return SizedBox(
         width: iconSize,
         height: iconSize,
@@ -188,10 +198,26 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                 ? isDarkMode
                     ? ColorFiltered(
                         colorFilter: const ColorFilter.matrix([
-                          -1, 0, 0, 0, 255,
-                          0, -1, 0, 0, 255,
-                          0, 0, -1, 0, 255,
-                          0, 0, 0, 1, 0,
+                          -1,
+                          0,
+                          0,
+                          0,
+                          255,
+                          0,
+                          -1,
+                          0,
+                          0,
+                          255,
+                          0,
+                          0,
+                          -1,
+                          0,
+                          255,
+                          0,
+                          0,
+                          0,
+                          1,
+                          0,
                         ]),
                         child: Image.asset(
                           'assets/home_filled.png',
@@ -208,18 +234,34 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                       )
                 : isExplore
                     ? Icon(
-                        carbonIcon,
-                        size: iconSize,
-                        color: context.colors.accent,
-                          )
+                        isSelected ? CarbonIcons.send_alt_filled : CarbonIcons.send_alt,
+                        size: isSelected ? _sendAltIconSizeSelected : _sendAltIconSize,
+                        color: context.colors.textPrimary,
+                      )
                     : isWallet
                         ? isDarkMode
                             ? ColorFiltered(
                                 colorFilter: const ColorFilter.matrix([
-                                  -1, 0, 0, 0, 255,
-                                  0, -1, 0, 0, 255,
-                                  0, 0, -1, 0, 255,
-                                  0, 0, 0, 1, 0,
+                                  -1,
+                                  0,
+                                  0,
+                                  0,
+                                  255,
+                                  0,
+                                  -1,
+                                  0,
+                                  0,
+                                  255,
+                                  0,
+                                  0,
+                                  -1,
+                                  0,
+                                  255,
+                                  0,
+                                  0,
+                                  0,
+                                  1,
+                                  0,
                                 ]),
                                 child: Image.asset(
                                   'assets/wallet_filled.png',
@@ -238,10 +280,26 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                             ? isDarkMode
                                 ? ColorFiltered(
                                     colorFilter: const ColorFilter.matrix([
-                                      -1, 0, 0, 0, 255,
-                                      0, -1, 0, 0, 255,
-                                      0, 0, -1, 0, 255,
-                                      0, 0, 0, 1, 0,
+                                      -1,
+                                      0,
+                                      0,
+                                      0,
+                                      255,
+                                      0,
+                                      -1,
+                                      0,
+                                      0,
+                                      255,
+                                      0,
+                                      0,
+                                      -1,
+                                      0,
+                                      255,
+                                      0,
+                                      0,
+                                      0,
+                                      1,
+                                      0,
                                     ]),
                                     child: Image.asset(
                                       'assets/notification_filled.png',
@@ -263,23 +321,23 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                               ))
             : iconPath.isNotEmpty
                 ? SvgPicture.asset(
-                iconPath,
-                width: iconSize,
-                height: iconSize,
-                fit: BoxFit.contain,
-                colorFilter: ColorFilter.mode(
-                  context.colors.textPrimary,
-                  BlendMode.srcIn,
-                ),
+                    iconPath,
+                    width: iconSize,
+                    height: iconSize,
+                    fit: BoxFit.contain,
+                    colorFilter: ColorFilter.mode(
+                      context.colors.textPrimary,
+                      BlendMode.srcIn,
+                    ),
                   )
                 : Icon(
                     carbonIcon,
                     size: iconSize,
                     color: context.colors.textPrimary,
-              ),
+                  ),
       );
     }
-    
+
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 300),
       switchInCurve: Curves.easeInOut,
@@ -297,9 +355,10 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
         builder: (context) {
           final themeManager = context.themeManager;
           final isDarkMode = themeManager?.isDarkMode ?? false;
-          
+
           return SizedBox(
-            key: ValueKey('${isSelected ? (isHome ? 'home_filled' : isExplore ? 'explore' : isWallet ? 'wallet_filled' : isNotification ? 'notification_filled' : 'carbon') : 'svg'}_${iconType ?? index}_${isDarkMode ? 'dark' : 'light'}'),
+            key: ValueKey(
+                '${isSelected ? (isHome ? 'home_filled' : isExplore ? 'explore' : isWallet ? 'wallet_filled' : isNotification ? 'notification_filled' : 'carbon') : 'svg'}_${iconType ?? index}_${isDarkMode ? 'dark' : 'light'}'),
             width: iconSize,
             height: iconSize,
             child: isSelected
@@ -307,10 +366,26 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                     ? isDarkMode
                         ? ColorFiltered(
                             colorFilter: const ColorFilter.matrix([
-                              -1, 0, 0, 0, 255,
-                              0, -1, 0, 0, 255,
-                              0, 0, -1, 0, 255,
-                              0, 0, 0, 1, 0,
+                              -1,
+                              0,
+                              0,
+                              0,
+                              255,
+                              0,
+                              -1,
+                              0,
+                              0,
+                              255,
+                              0,
+                              0,
+                              -1,
+                              0,
+                              255,
+                              0,
+                              0,
+                              0,
+                              1,
+                              0,
                             ]),
                             child: Image.asset(
                               'assets/home_filled.png',
@@ -327,18 +402,34 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                           )
                     : isExplore
                         ? Icon(
-                            carbonIcon,
-                            size: iconSize,
-                            color: context.colors.accent,
-                              )
+                            isSelected ? CarbonIcons.send_alt_filled : CarbonIcons.send_alt,
+                            size: isSelected ? _sendAltIconSizeSelected : _sendAltIconSize,
+                            color: context.colors.textPrimary,
+                          )
                         : isWallet
                             ? isDarkMode
                                 ? ColorFiltered(
                                     colorFilter: const ColorFilter.matrix([
-                                      -1, 0, 0, 0, 255,
-                                      0, -1, 0, 0, 255,
-                                      0, 0, -1, 0, 255,
-                                      0, 0, 0, 1, 0,
+                                      -1,
+                                      0,
+                                      0,
+                                      0,
+                                      255,
+                                      0,
+                                      -1,
+                                      0,
+                                      0,
+                                      255,
+                                      0,
+                                      0,
+                                      -1,
+                                      0,
+                                      255,
+                                      0,
+                                      0,
+                                      0,
+                                      1,
+                                      0,
                                     ]),
                                     child: Image.asset(
                                       'assets/wallet_filled.png',
@@ -357,10 +448,26 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                                 ? isDarkMode
                                     ? ColorFiltered(
                                         colorFilter: const ColorFilter.matrix([
-                                          -1, 0, 0, 0, 255,
-                                          0, -1, 0, 0, 255,
-                                          0, 0, -1, 0, 255,
-                                          0, 0, 0, 1, 0,
+                                          -1,
+                                          0,
+                                          0,
+                                          0,
+                                          255,
+                                          0,
+                                          -1,
+                                          0,
+                                          0,
+                                          255,
+                                          0,
+                                          0,
+                                          -1,
+                                          0,
+                                          255,
+                                          0,
+                                          0,
+                                          0,
+                                          1,
+                                          0,
                                         ]),
                                         child: Image.asset(
                                           'assets/notification_filled.png',
@@ -382,20 +489,20 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                                   ))
                 : iconPath.isNotEmpty
                     ? SvgPicture.asset(
-                    iconPath,
-                    width: iconSize,
-                    height: iconSize,
-                    fit: BoxFit.contain,
-                    colorFilter: ColorFilter.mode(
-                      context.colors.textPrimary,
-                      BlendMode.srcIn,
-                    ),
+                        iconPath,
+                        width: iconSize,
+                        height: iconSize,
+                        fit: BoxFit.contain,
+                        colorFilter: ColorFilter.mode(
+                          context.colors.textPrimary,
+                          BlendMode.srcIn,
+                        ),
                       )
                     : Icon(
                         carbonIcon,
                         size: iconSize,
                         color: context.colors.textPrimary,
-                  ),
+                      ),
           );
         },
       ),
@@ -425,22 +532,10 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
   }
 
   Widget _buildExploreIcon(bool isSelected) {
-    return Container(
-      padding: const EdgeInsets.all(8),
-      decoration: isSelected
-          ? BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: context.colors.accent,
-                width: 2,
-              ),
-            )
-          : null,
-      child: Icon(
-        CarbonIcons.forum,
-        size: 26.0,
-        color: context.colors.textPrimary,
-      ),
+    return Icon(
+      isSelected ? CarbonIcons.send_alt_filled : CarbonIcons.send_alt,
+      size: isSelected ? _sendAltIconSizeSelected : _sendAltIconSize,
+      color: context.colors.textPrimary,
     );
   }
 
@@ -468,7 +563,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
     final themeManager = context.themeManager;
     final navOrder = themeManager?.bottomNavOrder ?? [0, 1, 2, 3];
     final originalIndex = navOrder[pageViewIndex];
-    
+
     if (originalIndex == 0) {
       if (_currentIndex == pageViewIndex) {
         _feedPageKey.currentState?.scrollToTop();
@@ -503,29 +598,27 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
         }
       });
     }
-    
+
     return Consumer<ThemeManager>(
       builder: (context, themeManager, child) {
+        final navOrder = themeManager.bottomNavOrder;
+
         return Scaffold(
           extendBody: true,
           body: PageStorage(
             bucket: PageStorageBucket(),
-            child: Consumer<ThemeManager>(
-              builder: (context, themeManager, child) {
-                final pages = _buildPages();
-                return IndexedStack(
-                  index: _currentIndex,
-                  children: pages,
-                );
-              },
+            child: IndexedStack(
+              index: _currentIndex,
+              children: navOrder.map((originalIndex) {
+                if (navOrder.indexOf(originalIndex) <= _currentIndex || originalIndex == 0) {
+                  return _getPage(originalIndex);
+                }
+                return const SizedBox.shrink();
+              }).toList(),
             ),
           ),
           bottomNavigationBar: RepaintBoundary(
-            child: Consumer<ThemeManager>(
-              builder: (context, themeManager, child) {
-                return _buildCustomBottomBar();
-              },
-            ),
+            child: _buildCustomBottomBar(),
           ),
         );
       },
