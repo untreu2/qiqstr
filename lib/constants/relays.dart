@@ -8,8 +8,6 @@ const List<String> _defaultRelaySetMainSockets = [
   'wss://vitor.nostr1.com',
 ];
 
-const String cachingServerUrl = 'wss://cache2.primal.net/v1';
-
 const String countRelayUrl = 'wss://relay.nostr.band/';
 
 Future<List<String>> getRelaySetMainSockets() async {

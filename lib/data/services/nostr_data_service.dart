@@ -16,15 +16,14 @@ import '../../models/user_model.dart';
 import '../../models/notification_model.dart';
 import '../../models/reaction_model.dart';
 import '../../models/zap_model.dart';
-import '../../services/nostr_service.dart';
-import '../../services/relay_service.dart';
-import '../../services/time_service.dart';
+import 'nostr_service.dart';
+import 'relay_service.dart';
+import 'time_service.dart';
 import '../../constants/relays.dart';
 import 'auth_service.dart';
 import 'user_cache_service.dart';
 import 'follow_cache_service.dart';
 import 'mute_cache_service.dart';
-import 'relay_query_helper.dart';
 
 class NostrDataService {
   final AuthService _authService;
@@ -224,23 +223,18 @@ class NostrDataService {
     final allRelays = _relayManager.relayUrls.toList();
 
     await Future.wait(allRelays.map((relayUrl) async {
-      WebSocket? ws;
-      StreamSubscription? sub;
       try {
-        ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 3));
         if (_isClosed) {
-          await ws.close();
           return;
         }
 
-        final completer = Completer<void>();
-
-        sub = ws.listen((event) {
-          try {
-            final decoded = jsonDecode(event);
-
-            if (decoded[0] == 'EVENT') {
-              final eventData = decoded[2] as Map<String, dynamic>;
+        final completer = await _relayManager.sendQuery(
+          relayUrl,
+          request,
+          subscriptionId,
+          timeout: const Duration(seconds: 3),
+          onEvent: (eventData, url) {
+            try {
               final eventId = eventData['id'] as String;
               final eventKind = eventData['kind'] as int;
               final eventAuthor = eventData['pubkey'] as String;
@@ -275,29 +269,15 @@ class NostrDataService {
                   }
                 }
               }
-            } else if (decoded[0] == 'EOSE') {
-              if (!completer.isCompleted) completer.complete();
+            } catch (e) {
+              debugPrint('[NostrDataService] Error processing combined data: $e');
             }
-          } catch (e) {
-            debugPrint('[NostrDataService] Error processing combined data: $e');
-          }
-        }, onDone: () {
-          if (!completer.isCompleted) completer.complete();
-        }, onError: (error) {
-          if (!completer.isCompleted) completer.complete();
-        }, cancelOnError: true);
+          },
+        );
 
-        if (ws.readyState == WebSocket.open) {
-          ws.add(request);
-        }
-
-        await completer.future.timeout(const Duration(seconds: 3), onTimeout: () {});
-
-        await sub.cancel();
-        await ws.close();
+        await completer.future;
       } catch (e) {
-        await sub?.cancel();
-        await ws?.close();
+        debugPrint('[NostrDataService] Error fetching combined data: $e');
       }
     }));
 
@@ -649,23 +629,18 @@ class NostrDataService {
       final processedReplyIds = <String>{};
 
       await Future.wait(allRelays.map((relayUrl) async {
-        WebSocket? ws;
-        StreamSubscription? sub;
         try {
-          ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 3));
           if (_isClosed) {
-            await ws.close();
             return;
           }
 
-          final completer = Completer<void>();
-
-          sub = ws.listen((event) {
-            try {
-              final decoded = jsonDecode(event) as List<dynamic>;
-
-              if (decoded[0] == 'EVENT' && decoded[1] == actualSubscriptionId) {
-                final eventData = decoded[2] as Map<String, dynamic>;
+          final completer = await _relayManager.sendQuery(
+            relayUrl,
+            serializedRequest,
+            actualSubscriptionId,
+            timeout: const Duration(seconds: 3),
+            onEvent: (eventData, url) {
+              try {
                 final eventId = eventData['id'] as String;
                 final eventKind = eventData['kind'] as int;
 
@@ -673,28 +648,14 @@ class NostrDataService {
                   processedReplyIds.add(eventId);
                   unawaited(_processNostrEvent(eventData));
                 }
-              } else if (decoded[0] == 'EOSE' && decoded[1] == actualSubscriptionId) {
-                if (!completer.isCompleted) completer.complete();
+              } catch (e) {
               }
-            } catch (e) {
-            }
-          }, onDone: () {
-            if (!completer.isCompleted) completer.complete();
-          }, onError: (error) {
-            if (!completer.isCompleted) completer.complete();
-          }, cancelOnError: true);
+            },
+          );
 
-          if (ws.readyState == WebSocket.open) {
-            ws.add(serializedRequest);
-          }
-
-          await completer.future.timeout(const Duration(seconds: 3), onTimeout: () {});
-
-          await sub.cancel();
-          await ws.close();
+          await completer.future;
         } catch (e) {
-          await sub?.cancel();
-          await ws?.close();
+          debugPrint('[NostrDataService] Error fetching thread replies: $e');
         }
       }));
 
@@ -1597,31 +1558,41 @@ class NostrDataService {
       final subscriptionId = requestJson[1] as String;
       final allRelays = _relayManager.relayUrls.toList();
 
-      final queryResult = await RelayQueryHelper.queryRelaysParallel<NoteModel>(
-        relayUrls: allRelays,
-        request: serializedRequest,
-        subscriptionId: subscriptionId,
-        eventProcessor: (eventData, relayUrl) {
-          final eventAuthor = eventData['pubkey'] as String? ?? '';
-          final eventKind = eventData['kind'] as int? ?? 0;
+      final fetchedNotes = <String, NoteModel>{};
 
-          if (eventAuthor == pubkeyHex && (eventKind == 1 || eventKind == 6)) {
-            return _processProfileEventDirectlySync(eventData, userNpub);
-          }
-          return null;
-        },
-        eventValidator: (eventData) {
-          final eventAuthor = eventData['pubkey'] as String? ?? '';
-          final eventKind = eventData['kind'] as int? ?? 0;
-          return eventAuthor == pubkeyHex && (eventKind == 1 || eventKind == 6);
-        },
-        timeout: const Duration(seconds: 2),
-        connectTimeout: const Duration(seconds: 1),
-        shouldStop: () => _isClosed,
-        debugPrefix: 'PROFILE',
-      );
+      await Future.wait(allRelays.map((relayUrl) async {
+        try {
+          final completer = await _relayManager.sendQuery(
+            relayUrl,
+            serializedRequest,
+            subscriptionId,
+            timeout: const Duration(seconds: 30),
+            onEvent: (data, url) {
+              try {
+                final eventData = data is Map<String, dynamic> ? data : jsonDecode(data.toString()) as Map<String, dynamic>;
+                final eventAuthor = eventData['pubkey'] as String? ?? '';
+                final eventKind = eventData['kind'] as int? ?? 0;
+                final eventId = eventData['id'] as String? ?? '';
 
-      final fetchedNotes = queryResult.results;
+                if (eventAuthor == pubkeyHex && (eventKind == 1 || eventKind == 6) && eventId.isNotEmpty) {
+                  if (!fetchedNotes.containsKey(eventId)) {
+                    final note = _processProfileEventDirectlySync(eventData, userNpub);
+                    if (note != null) {
+                      fetchedNotes[eventId] = note;
+                    }
+                  }
+                }
+              } catch (e) {
+                debugPrint('[NostrDataService] Error processing profile event: $e');
+              }
+            },
+          );
+
+          await completer.future.timeout(const Duration(seconds: 30), onTimeout: () {});
+        } catch (e) {
+          debugPrint('[NostrDataService] Error querying relay $relayUrl: $e');
+        }
+      }));
 
       for (final note in fetchedNotes.values) {
         if (!_eventIds.contains(note.id)) {
@@ -1835,38 +1806,49 @@ class NostrDataService {
       final subscriptionId = NostrService.generateUUID();
       final serializedRequest = jsonEncode(['REQ', subscriptionId, filterMap]);
 
-      final queryResult = await RelayQueryHelper.queryRelaysParallel<NoteModel>(
-        relayUrls: allRelays,
-        request: serializedRequest,
-        subscriptionId: subscriptionId,
-        eventProcessor: (eventData, relayUrl) {
-          final eventId = eventData['id'] as String? ?? '';
-          final eventKind = eventData['kind'] as int? ?? 0;
+      final hashtagNotes = <NoteModel>[];
 
-          if (eventKind == 1 && eventId.isNotEmpty) {
-            if (_eventIds.contains(eventId)) {
-              return _noteCache[eventId];
-            }
-            final note = _processHashtagEventDirectlySync(eventData);
-            if (note != null) {
-              _noteCache[eventId] = note;
-              _eventIds.add(eventId);
-              return note;
-            }
-          }
-          return null;
-        },
-        eventValidator: (eventData) {
-          final eventKind = eventData['kind'] as int? ?? 0;
-          return eventKind == 1;
-        },
-        timeout: const Duration(milliseconds: 1500),
-        connectTimeout: const Duration(milliseconds: 800),
-        shouldStop: () => _isClosed,
-        debugPrefix: 'HASHTAG',
-      );
+      await Future.wait(allRelays.map((relayUrl) async {
+        try {
+          final completer = await _relayManager.sendQuery(
+            relayUrl,
+            serializedRequest,
+            subscriptionId,
+            timeout: const Duration(seconds: 30),
+            onEvent: (data, url) {
+              try {
+                final eventData = data is Map<String, dynamic> ? data : jsonDecode(data.toString()) as Map<String, dynamic>;
+                final eventId = eventData['id'] as String? ?? '';
+                final eventKind = eventData['kind'] as int? ?? 0;
 
-      final hashtagNotes = queryResult.results.values.toList();
+                if (eventKind == 1 && eventId.isNotEmpty) {
+                  if (_eventIds.contains(eventId)) {
+                    final cachedNote = _noteCache[eventId];
+                    if (cachedNote != null && !hashtagNotes.any((n) => n.id == eventId)) {
+                      hashtagNotes.add(cachedNote);
+                    }
+                  } else {
+                    final note = _processHashtagEventDirectlySync(eventData);
+                    if (note != null) {
+                      _noteCache[eventId] = note;
+                      _eventIds.add(eventId);
+                      if (!hashtagNotes.any((n) => n.id == eventId)) {
+                        hashtagNotes.add(note);
+                      }
+                    }
+                  }
+                }
+              } catch (e) {
+                debugPrint('[NostrDataService] Error processing hashtag event: $e');
+              }
+            },
+          );
+
+          await completer.future.timeout(const Duration(seconds: 30), onTimeout: () {});
+        } catch (e) {
+          debugPrint('[NostrDataService] Error querying relay $relayUrl: $e');
+        }
+      }));
 
       final validatedHashtagNotes = hashtagNotes.where((note) {
         if (note.tTags.isNotEmpty) {
@@ -2678,24 +2660,22 @@ class NostrDataService {
       final allRelays = _relayManager.relayUrls.toList();
       final processedEventIds = <String>{};
 
+      final requestJson = jsonDecode(serializedRequest) as List;
+      final subscriptionId = requestJson[1] as String;
+
       await Future.wait(allRelays.map((relayUrl) async {
-        WebSocket? ws;
-        StreamSubscription? sub;
         try {
-          ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 3));
           if (_isClosed) {
-            await ws.close();
             return;
           }
 
-          final completer = Completer<void>();
-
-          sub = ws.listen((event) {
-            try {
-              final decoded = jsonDecode(event);
-
-              if (decoded[0] == 'EVENT') {
-                final eventData = decoded[2] as Map<String, dynamic>;
+          final completer = await _relayManager.sendQuery(
+            relayUrl,
+            serializedRequest,
+            subscriptionId,
+            timeout: const Duration(seconds: 3),
+            onEvent: (eventData, url) {
+              try {
                 final eventId = eventData['id'] as String;
                 final eventAuthor = eventData['pubkey'] as String;
                 final eventKind = eventData['kind'] as int;
@@ -2709,32 +2689,16 @@ class NostrDataService {
                       following.add(tag[1] as String);
                     }
                   }
-
-                  if (!completer.isCompleted) completer.complete();
                 }
-              } else if (decoded[0] == 'EOSE') {
-                if (!completer.isCompleted) completer.complete();
+              } catch (e) {
+                debugPrint('[NostrDataService] Error processing follow list: $e');
               }
-            } catch (e) {
-              debugPrint('[NostrDataService] Error processing follow list: $e');
-            }
-          }, onDone: () {
-            if (!completer.isCompleted) completer.complete();
-          }, onError: (error) {
-            if (!completer.isCompleted) completer.complete();
-          }, cancelOnError: true);
+            },
+          );
 
-          if (ws.readyState == WebSocket.open) {
-            ws.add(serializedRequest);
-          }
-
-          await completer.future.timeout(const Duration(seconds: 3), onTimeout: () {});
-
-          await sub.cancel();
-          await ws.close();
+          await completer.future;
         } catch (e) {
-          await sub?.cancel();
-          await ws?.close();
+          debugPrint('[NostrDataService] Error fetching follow list: $e');
         }
       }));
 
@@ -2758,26 +2722,24 @@ class NostrDataService {
       bool noteFound = false;
 
       await Future.wait(allRelays.map((relayUrl) async {
-        WebSocket? ws;
-        StreamSubscription? sub;
         try {
-          ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 3));
           if (_isClosed) {
-            await ws.close();
             return;
           }
 
-          final completer = Completer<void>();
-
           final filter = NostrService.createEventByIdFilter(eventIds: [noteId]);
           final request = NostrService.createRequest(filter);
+          final serializedRequest = NostrService.serializeRequest(request);
+          final requestJson = jsonDecode(serializedRequest) as List;
+          final subscriptionId = requestJson[1] as String;
 
-          sub = ws.listen((event) {
-            try {
-              final decoded = jsonDecode(event);
-
-              if (decoded[0] == 'EVENT') {
-                final eventData = decoded[2] as Map<String, dynamic>;
+          final completer = await _relayManager.sendQuery(
+            relayUrl,
+            serializedRequest,
+            subscriptionId,
+            timeout: const Duration(seconds: 3),
+            onEvent: (eventData, url) {
+              try {
                 final eventId = eventData['id'] as String;
 
                 if (eventId == noteId) {
@@ -2793,28 +2755,13 @@ class NostrDataService {
                     }
                   }
                 }
-              } else if (decoded[0] == 'EOSE') {
-                if (!completer.isCompleted) completer.complete();
+              } catch (e) {
               }
-            } catch (e) {
-            }
-          }, onDone: () {
-            if (!completer.isCompleted) completer.complete();
-          }, onError: (error) {
-            if (!completer.isCompleted) completer.complete();
-          }, cancelOnError: true);
+            },
+          );
 
-          if (ws.readyState == WebSocket.open) {
-            ws.add(NostrService.serializeRequest(request));
-          }
-
-          await completer.future.timeout(const Duration(seconds: 3), onTimeout: () {});
-
-          await sub.cancel();
-          await ws.close();
+          await completer.future;
         } catch (e) {
-          await sub?.cancel();
-          await ws?.close();
         }
       }));
 
@@ -2952,83 +2899,91 @@ class NostrDataService {
   }
 
   Future<void> fetchInteractionsForNotesWithEOSE(String noteId) async {
-    if (_isClosed) return;
+    await fetchInteractionsForNotesBatchWithEOSE([noteId]);
+  }
+
+  Future<void> fetchInteractionsForNotesBatchWithEOSE(List<String> noteIds) async {
+    if (_isClosed || noteIds.isEmpty) return;
 
     try {
-      final filter = NostrService.createCombinedInteractionFilter(
-        eventIds: [noteId],
-        limit: 5000,
-      );
-
-      final request = NostrService.createRequest(filter);
-      final serializedRequest = NostrService.serializeRequest(request);
-      final requestJson = jsonDecode(serializedRequest) as List;
-      final actualSubscriptionId = requestJson[1] as String;
-
       final allRelays = _relayManager.relayUrls.toList();
+      if (allRelays.isEmpty) return;
+
       final processedInteractionIds = <String>{};
+      final sortedNoteIds = noteIds.toSet().toList()..sort();
+
+      final interactionKinds = [1, 7, 6, 9735];
+      final deletionKinds = [5];
+      final quoteKinds = [1];
 
       await Future.wait(allRelays.map((relayUrl) async {
-        WebSocket? ws;
-        StreamSubscription? sub;
         try {
-          ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 3));
-          if (_isClosed) {
-            await ws.close();
-            return;
-          }
+          if (_isClosed) return;
 
-          final completer = Completer<void>();
+          final quoteFilter = Filter(
+            kinds: quoteKinds,
+            limit: 1000,
+          );
+          quoteFilter.setTag('q', sortedNoteIds);
 
-          sub = ws.listen((event) {
-            try {
-              final decoded = jsonDecode(event) as List<dynamic>;
+          final filters = [
+            Filter(
+              kinds: interactionKinds,
+              eTags: sortedNoteIds,
+              limit: 1000,
+            ),
+            Filter(
+              kinds: deletionKinds,
+              eTags: sortedNoteIds,
+              limit: 100,
+            ),
+            quoteFilter,
+          ];
 
-              if (decoded[0] == 'EVENT' && decoded[1] == actualSubscriptionId) {
-                final eventData = decoded[2] as Map<String, dynamic>;
+          final request = NostrService.createMultiFilterRequest(filters);
+          final requestJson = jsonDecode(request) as List;
+          final subscriptionId = requestJson[1] as String;
+
+          final completer = await _relayManager.sendQuery(
+            relayUrl,
+            request,
+            subscriptionId,
+            onEvent: (eventData, url) {
+              try {
                 final eventId = eventData['id'] as String;
                 final eventKind = eventData['kind'] as int;
 
-                if ([7, 1, 6, 9735].contains(eventKind) && !processedInteractionIds.contains(eventId)) {
+                if ((interactionKinds.contains(eventKind) || 
+                     deletionKinds.contains(eventKind) || 
+                     quoteKinds.contains(eventKind)) && 
+                    !processedInteractionIds.contains(eventId)) {
                   processedInteractionIds.add(eventId);
                   unawaited(_processNostrEvent(eventData));
                 }
-              } else if (decoded[0] == 'EOSE' && decoded[1] == actualSubscriptionId) {
-                if (!completer.isCompleted) completer.complete();
+              } catch (e) {
               }
-            } catch (e) {
-            }
-          }, onDone: () {
-            if (!completer.isCompleted) completer.complete();
-          }, onError: (error) {
-            if (!completer.isCompleted) completer.complete();
-          }, cancelOnError: true);
+            },
+          );
 
-          if (ws.readyState == WebSocket.open) {
-            ws.add(serializedRequest);
-          }
-
-          await completer.future.timeout(const Duration(seconds: 3), onTimeout: () {});
-
-          await sub.cancel();
-          await ws.close();
+          await completer.future;
         } catch (e) {
-          await sub?.cancel();
-          await ws?.close();
+          debugPrint('[NostrDataService] Error fetching interactions from $relayUrl: $e');
         }
       }));
 
-      final note = _noteCache[noteId];
-      if (note != null) {
-        note.reactionCount = _reactionsMap[noteId]?.length ?? 0;
-        note.repostCount = _repostsMap[noteId]?.length ?? 0;
-        note.zapAmount = _zapsMap[noteId]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
-        _updateNoteReplyCount(noteId);
+      for (final noteId in noteIds) {
+        final note = _noteCache[noteId];
+        if (note != null) {
+          note.reactionCount = _reactionsMap[noteId]?.length ?? 0;
+          note.repostCount = _repostsMap[noteId]?.length ?? 0;
+          note.zapAmount = _zapsMap[noteId]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0;
+          _updateNoteReplyCount(noteId);
+        }
       }
 
       _scheduleUIUpdate();
     } catch (e) {
-      debugPrint('[NostrDataService] Error fetching interactions with EOSE for $noteId: $e');
+      debugPrint('[NostrDataService] Error fetching interactions with EOSE: $e');
     }
   }
 
@@ -3359,24 +3314,22 @@ class NostrDataService {
       final allRelays = _relayManager.relayUrls.toList();
       final processedEventIds = <String>{};
 
+      final requestJson = jsonDecode(serializedRequest) as List;
+      final subscriptionId = requestJson[1] as String;
+
       await Future.wait(allRelays.map((relayUrl) async {
-        WebSocket? ws;
-        StreamSubscription? sub;
         try {
-          ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 3));
           if (_isClosed) {
-            await ws.close();
             return;
           }
 
-          final completer = Completer<void>();
-
-          sub = ws.listen((event) {
-            try {
-              final decoded = jsonDecode(event);
-
-              if (decoded[0] == 'EVENT') {
-                final eventData = decoded[2] as Map<String, dynamic>;
+          final completer = await _relayManager.sendQuery(
+            relayUrl,
+            serializedRequest,
+            subscriptionId,
+            timeout: const Duration(seconds: 3),
+            onEvent: (eventData, url) {
+              try {
                 final eventId = eventData['id'] as String;
                 final eventAuthor = eventData['pubkey'] as String;
                 final eventKind = eventData['kind'] as int;
@@ -3390,32 +3343,16 @@ class NostrDataService {
                       muted.add(tag[1] as String);
                     }
                   }
-
-                  if (!completer.isCompleted) completer.complete();
                 }
-              } else if (decoded[0] == 'EOSE') {
-                if (!completer.isCompleted) completer.complete();
+              } catch (e) {
+                debugPrint('[NostrDataService] Error processing mute list: $e');
               }
-            } catch (e) {
-              debugPrint('[NostrDataService] Error processing mute list: $e');
-            }
-          }, onDone: () {
-            if (!completer.isCompleted) completer.complete();
-          }, onError: (error) {
-            if (!completer.isCompleted) completer.complete();
-          }, cancelOnError: true);
+            },
+          );
 
-          if (ws.readyState == WebSocket.open) {
-            ws.add(serializedRequest);
-          }
-
-          await completer.future.timeout(const Duration(seconds: 3), onTimeout: () {});
-
-          await sub.cancel();
-          await ws.close();
+          await completer.future;
         } catch (e) {
-          await sub?.cancel();
-          await ws?.close();
+          debugPrint('[NostrDataService] Error fetching mute list: $e');
         }
       }));
 

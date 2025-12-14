@@ -1,6 +1,8 @@
 import 'dart:developer' as developer;
 
 enum LogLevel {
+  debug(0),
+  info(1),
   warning(2),
   error(3);
 
@@ -28,6 +30,18 @@ class LoggingService {
     _isEnabled = enabled;
   }
 
+  void debug(String message, [String? tag]) {
+    if (_isEnabled && _currentLevel.value <= LogLevel.debug.value) {
+      _fastLog(message, tag);
+    }
+  }
+
+  void info(String message, [String? tag]) {
+    if (_isEnabled && _currentLevel.value <= LogLevel.info.value) {
+      _fastLog(message, tag);
+    }
+  }
+
   void warning(String message, [String? tag]) {
     if (_isEnabled && _currentLevel.value <= LogLevel.warning.value) {
       _fastLog(message, tag);
@@ -53,7 +67,6 @@ class LoggingService {
 
     developer.log(tag != null ? '[$tag] $message' : message, level: 1000);
   }
-
 }
 
 final loggingService = LoggingService.instance;

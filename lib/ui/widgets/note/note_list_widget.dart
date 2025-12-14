@@ -43,7 +43,6 @@ class NoteListWidget extends StatefulWidget {
 class _NoteListWidgetState extends State<NoteListWidget> {
   bool _hasTriggeredLoadMore = false;
   Timer? _updateTimer;
-  bool _hasInitialFetch = false;
   late final NostrDataService _nostrDataService;
   StreamSubscription<List<NoteModel>>? _notesSubscription;
 
@@ -56,20 +55,11 @@ class _NoteListWidgetState extends State<NoteListWidget> {
     _notesSubscription = _nostrDataService.notesStream.listen((_) {
       _scheduleUpdate();
     });
-    
-    Future.microtask(() {
-      if (mounted) {
-        _fetchAllInteractions();
-      }
-    });
   }
 
   @override
   void didUpdateWidget(NoteListWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.notes.length != widget.notes.length && !_hasInitialFetch) {
-      _fetchAllInteractions();
-    }
   }
 
   @override
@@ -107,35 +97,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
         setState(() {});
       }
     });
-  }
-
-  void _fetchAllInteractions() {
-    if (_hasInitialFetch || widget.notes.isEmpty) return;
-    _hasInitialFetch = true;
-
-    final allNoteIds = <String>[];
-    for (final note in widget.notes) {
-      final targetNoteId = note.isRepost && note.rootId != null && note.rootId!.isNotEmpty 
-          ? note.rootId! 
-          : note.id;
-      allNoteIds.add(targetNoteId);
-    }
-
-    if (allNoteIds.isEmpty) return;
-
-    const batchSize = 20;
-    for (int i = 0; i < allNoteIds.length; i += batchSize) {
-      final end = (i + batchSize < allNoteIds.length) ? i + batchSize : allNoteIds.length;
-      final batch = allNoteIds.sublist(i, end);
-      
-      unawaited(Future.wait(
-        batch.map((noteId) => _nostrDataService.fetchInteractionsForNotesWithEOSE(noteId))
-      ));
-      
-      if (i + batchSize < allNoteIds.length) {
-        Future.delayed(Duration(milliseconds: 50 * (i ~/ batchSize)));
-      }
-    }
   }
 
   @override

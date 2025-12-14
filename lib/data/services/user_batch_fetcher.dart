@@ -2,8 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../../models/user_model.dart';
-import '../../services/nostr_service.dart';
-import '../../services/relay_service.dart';
+import 'nostr_service.dart';
+import 'relay_service.dart';
 
 enum FetchPriority {
   urgent,

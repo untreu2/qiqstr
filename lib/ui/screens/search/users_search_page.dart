@@ -316,6 +316,28 @@ class _UserSearchPageState extends State<UserSearchPage> {
     super.dispose();
   }
 
+  Widget _buildCloseButton() {
+    return Semantics(
+      label: 'Close dialog',
+      button: true,
+      child: GestureDetector(
+        onTap: () => Navigator.of(context).pop(),
+        child: Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: context.colors.overlayLight,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            Icons.close,
+            size: 20,
+            color: context.colors.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -337,29 +359,37 @@ class _UserSearchPageState extends State<UserSearchPage> {
                 ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: CustomInputField(
-                  controller: _searchController,
-              autofocus: true,
-                    hintText: 'Search by name or npub...',
-                    suffixIcon: Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: GestureDetector(
-                        onTap: _pasteFromClipboard,
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: context.colors.background,
-                            shape: BoxShape.circle,
+            child: Row(
+              children: [
+                _buildCloseButton(),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: CustomInputField(
+                        controller: _searchController,
+                    autofocus: true,
+                          hintText: 'Search by name or npub...',
+                          suffixIcon: Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: GestureDetector(
+                              onTap: _pasteFromClipboard,
+                              child: Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: context.colors.background,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.content_paste,
+                                  color: context.colors.textPrimary,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
                           ),
-                          child: Icon(
-                            Icons.content_paste,
-                            color: context.colors.textPrimary,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),

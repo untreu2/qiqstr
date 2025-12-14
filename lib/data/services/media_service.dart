@@ -8,7 +8,7 @@ import 'package:ndk/ndk.dart';
 import 'package:ndk/entities.dart';
 import 'package:ndk/shared/nips/nip01/bip340.dart';
 import 'dart:typed_data';
-import '../models/note_model.dart';
+import '../../../models/note_model.dart';
 import 'time_service.dart';
 
 class CachedMediaInfo {

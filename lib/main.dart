@@ -8,23 +8,16 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'ui/theme/theme_manager.dart' as theme;
 import 'ui/screens/home_navigator.dart';
 import 'ui/screens/auth/login_page.dart';
-import 'services/logging_service.dart';
+import 'data/services/logging_service.dart';
 import 'core/di/app_di.dart';
-import 'data/services/nostr_data_service.dart';
 import 'data/services/auth_service.dart';
-import 'data/repositories/notification_repository.dart';
-import 'data/repositories/note_repository.dart';
-import 'data/repositories/dm_repository.dart';
-import 'models/note_model.dart';
-import 'models/dm_message_model.dart';
-import 'core/base/result.dart';
-import 'services/memory_trimming_service.dart';
-import 'services/lifecycle_manager.dart';
-import 'services/event_parser_isolate.dart';
+import 'data/services/memory_trimming_service.dart';
+import 'data/services/lifecycle_manager.dart';
+import 'data/services/event_parser_isolate.dart';
 
 void main() {
   runZonedGuarded(() async {
-    WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+    final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
     FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
     PaintingBinding.instance.imageCache.maximumSizeBytes = 150 << 20;
@@ -60,17 +53,12 @@ void main() {
     await AppDI.initialize();
 
     unawaited(EventParserIsolate.instance.initialize());
+    MemoryTrimmingService().startPeriodicTrimming();
 
     final lifecycleManager = LifecycleManager();
     lifecycleManager.initialize();
 
-    final noteRepository = AppDI.get<NoteRepository>();
-    lifecycleManager.addOnPauseCallback(() => noteRepository.setPaused(true));
-    lifecycleManager.addOnResumeCallback(() => noteRepository.setPaused(false));
-
-    MemoryTrimmingService().startPeriodicTrimming();
-
-    final initialHome = await _determineInitialHomeWithPreloading();
+    final initialHome = await _determineInitialHome();
 
     runApp(
       provider.MultiProvider(
@@ -86,30 +74,21 @@ void main() {
     if (error is SocketException) {
       return;
     }
-
     logError('Unhandled error', 'Main', error);
   });
 }
 
-Future<Widget> _determineInitialHomeWithPreloading() async {
+Future<Widget> _determineInitialHome() async {
   try {
     final authService = AppDI.get<AuthService>();
-
     final nsecResult = await authService.getUserNsec();
 
     if (nsecResult.isSuccess && nsecResult.data != null && nsecResult.data!.isNotEmpty) {
       final npubResult = await authService.getCurrentUserNpub();
 
       if (npubResult.isSuccess && npubResult.data != null && npubResult.data!.isNotEmpty) {
-        final npub = npubResult.data!;
-
-        await _loadInitialDataBeforeHome(npub);
-
         FlutterNativeSplash.remove();
-
-        unawaited(_initializeBackgroundServices());
-
-        return HomeNavigator(npub: npub);
+        return HomeNavigator(npub: npubResult.data!);
       }
     }
 
@@ -118,74 +97,6 @@ Future<Widget> _determineInitialHomeWithPreloading() async {
   } catch (e) {
     FlutterNativeSplash.remove();
     return const LoginPage();
-  }
-}
-
-Future<void> _loadInitialDataBeforeHome(String npub) async {
-  try {
-    final noteRepository = AppDI.get<NoteRepository>();
-    final dmRepository = AppDI.get<DmRepository>();
-    final nostrDataService = AppDI.get<NostrDataService>();
-
-    final cachedNotes = noteRepository.currentNotes;
-    if (cachedNotes.isNotEmpty) {
-      unawaited(noteRepository.startRealTimeFeed([npub]));
-      unawaited(dmRepository.getConversations());
-      return;
-    }
-
-    unawaited(noteRepository.startRealTimeFeed([npub]));
-
-    try {
-      await Future.wait([
-        nostrDataService
-            .fetchFeedNotes(
-              authorNpubs: [npub],
-              limit: 15,
-            )
-            .timeout(const Duration(seconds: 8))
-            .then((result) {
-              if (result.isSuccess && result.data != null) {
-                debugPrint('[Main] Feed loaded during splash: ${result.data!.length} notes');
-              }
-              return result;
-            })
-            .catchError((e) {
-              debugPrint('[Main] Feed load error: $e');
-              return Result<List<NoteModel>>.error(e.toString());
-            }),
-        dmRepository.getConversations().timeout(const Duration(seconds: 5)).then((result) {
-          if (result.isSuccess && result.data != null) {
-            debugPrint('[Main] DMs loaded during splash: ${result.data!.length} conversations');
-          }
-          return result;
-        }).catchError((e) {
-          debugPrint('[Main] DMs load error: $e');
-          return Result<List<DmConversationModel>>.error(e.toString());
-        }),
-      ]);
-    } catch (error) {
-      debugPrint('[Main] Error loading initial data (continuing anyway): $error');
-    }
-  } catch (e) {
-    debugPrint('[Main] Error in initial data loading (continuing anyway): $e');
-  }
-}
-
-Future<void> _initializeBackgroundServices() async {
-  await Future.delayed(const Duration(seconds: 3));
-
-  try {
-    final notificationRepository = AppDI.get<NotificationRepository>();
-
-    notificationRepository.notificationsStream.listen(
-      (notifications) {},
-      onError: (error) {},
-    );
-
-    unawaited(notificationRepository.getNotifications(limit: 15));
-  } catch (e) {
-    debugPrint('[Main] Error initializing background services: $e');
   }
 }
 

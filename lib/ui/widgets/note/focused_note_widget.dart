@@ -4,7 +4,7 @@ import '../../../models/note_model.dart';
 import '../../../models/user_model.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
-import '../../../services/time_service.dart';
+import '../../../data/services/time_service.dart';
 import '../../theme/theme_manager.dart';
 import '../../screens/profile/profile_page.dart';
 import 'note_content_widget.dart';

@@ -8,7 +8,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:qiqstr/ui/widgets/note/note_list_widget.dart' as widgets;
-import 'package:qiqstr/ui/widgets/common/sidebar_widget.dart';
 import 'package:qiqstr/ui/widgets/common/back_button_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../theme/theme_manager.dart';
@@ -17,7 +16,7 @@ import '../../../core/ui/ui_state_builder.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/providers/viewmodel_provider.dart';
 import '../../../presentation/viewmodels/feed_viewmodel.dart';
-import '../../../services/relay_service.dart';
+import '../../../data/services/relay_service.dart';
 import '../search/users_search_page.dart';
 
 class FeedPage extends StatefulWidget {
@@ -167,7 +166,10 @@ class FeedPageState extends State<FeedPage> {
                 ? Row(
                     children: [
                       GestureDetector(
-                        onTap: () => Scaffold.of(context).openDrawer(),
+                        onTap: () {
+                          final rootScaffold = context.findRootAncestorStateOfType<ScaffoldState>();
+                          rootScaffold?.openDrawer();
+                        },
                         child: viewModel.currentUser != null
                             ? Container(
                                 width: 36,
@@ -293,7 +295,6 @@ class FeedPageState extends State<FeedPage> {
       builder: (context, viewModel) {
         return Scaffold(
           backgroundColor: colors.background,
-          drawer: !isHashtagMode ? const SidebarWidget() : null,
           body: Stack(
             children: [
               UIStateBuilder<List<NoteModel>>(

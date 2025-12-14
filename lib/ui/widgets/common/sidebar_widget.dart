@@ -143,7 +143,10 @@ class _SidebarWidgetState extends State<SidebarWidget> {
 
         return Drawer(
           shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.zero,
+            borderRadius: BorderRadius.only(
+              topRight: Radius.circular(24),
+              bottomRight: Radius.circular(24),
+            ),
           ),
           child: Container(
             color: colors.background,
@@ -177,11 +180,6 @@ class _SidebarWidgetState extends State<SidebarWidget> {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      Divider(
-                        height: 1,
-                        thickness: 1,
-                        color: colors.borderLight,
-                      ),
                       _SidebarContent(user: _currentUser!, colors: colors),
                     ],
                   ),
@@ -217,8 +215,8 @@ class _UserProfileHeader extends StatelessWidget {
           Row(
             children: [
               Container(
-                width: 64,
-                height: 64,
+                width: 56,
+                height: 56,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   color: colors.avatarPlaceholder,
@@ -232,7 +230,7 @@ class _UserProfileHeader extends StatelessWidget {
                 child: user.profileImage.isEmpty
                     ? Icon(
                         Icons.person,
-                        size: 32,
+                        size: 28,
                         color: colors.textSecondary,
                       )
                     : null,
@@ -388,7 +386,7 @@ class _SidebarContent extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 130),
+                const SizedBox(height: 75),
               ],
             ),
           ),

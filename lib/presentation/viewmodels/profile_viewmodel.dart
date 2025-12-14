@@ -211,7 +211,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
           type: FeedType.profile,
           targetUserNpub: userNpub,
           limit: _pageSize,
-          skipCache: false,
+          skipCache: true,
         );
 
         final result = await _feedLoader.loadFeed(params);
@@ -271,7 +271,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
         targetUserNpub: _currentProfileNpub,
         limit: _pageSize,
         until: until,
-        skipCache: false,
+        skipCache: true,
       );
 
       final result = await _feedLoader.loadFeed(params);

@@ -1,12 +1,12 @@
 import 'dart:async';
 import '../../core/base/result.dart';
-import '../../core/base/logger.dart';
+import 'logging_service.dart';
 import '../../models/note_model.dart';
 import '../../models/user_model.dart';
 import '../repositories/note_repository.dart';
-import '../repositories/note_repository_compat.dart';
 import '../repositories/user_repository.dart';
 import 'user_batch_fetcher.dart';
+import 'nostr_data_service.dart';
 
 enum FeedType {
   feed,
@@ -58,15 +58,18 @@ class FeedLoadResult {
 class FeedLoaderService {
   final NoteRepository _noteRepository;
   final UserRepository _userRepository;
-  final Logger _logger;
+  final LoggingService _logger;
+  final NostrDataService _nostrDataService;
 
   FeedLoaderService({
     required NoteRepository noteRepository,
     required UserRepository userRepository,
-    Logger? logger,
+    required NostrDataService nostrDataService,
+    LoggingService? logger,
   })  : _noteRepository = noteRepository,
         _userRepository = userRepository,
-        _logger = logger ?? NoOpLogger();
+        _logger = logger ?? LoggingService.instance,
+        _nostrDataService = nostrDataService;
 
   Future<FeedLoadResult> loadFeed(FeedLoadParams params) async {
     try {
@@ -119,6 +122,19 @@ class FeedLoaderService {
           }
 
           final processedNotes = _processNotes(notes);
+          
+          if (processedNotes.isNotEmpty) {
+            final noteIds = processedNotes.map((note) {
+              return note.isRepost && note.rootId != null && note.rootId!.isNotEmpty 
+                  ? note.rootId! 
+                  : note.id;
+            }).toSet().toList();
+            
+            if (noteIds.isNotEmpty) {
+              unawaited(_nostrDataService.fetchInteractionsForNotesBatchWithEOSE(noteIds));
+            }
+          }
+          
           return FeedLoadResult(
             notes: processedNotes,
             hasMore: notes.length >= params.limit,

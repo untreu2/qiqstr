@@ -12,7 +12,7 @@ import '../../data/repositories/auth_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../models/note_model.dart';
 import '../../models/user_model.dart';
-import '../../services/media_service.dart';
+import '../../data/services/media_service.dart';
 
 class ComposeViewModel extends BaseViewModel with CommandMixin {
   final NoteRepository _noteRepository;

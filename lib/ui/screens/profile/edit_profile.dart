@@ -6,7 +6,7 @@ import '../../../core/di/app_di.dart';
 import '../../../presentation/viewmodels/edit_profile_viewmodel.dart';
 import '../../../data/repositories/user_repository.dart';
 import 'package:file_picker/file_picker.dart';
-import '../../../services/media_service.dart';
+import '../../../data/services/media_service.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/common_buttons.dart';

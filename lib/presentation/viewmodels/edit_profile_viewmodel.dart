@@ -4,7 +4,7 @@ import '../../core/base/ui_state.dart';
 import '../../models/user_model.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/repositories/auth_repository.dart';
-import '../../services/media_service.dart';
+import '../../data/services/media_service.dart';
 
 class EditProfileViewModel extends BaseViewModel with CommandMixin {
   final UserRepository _userRepository;

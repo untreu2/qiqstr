@@ -1,6 +1,6 @@
 import 'dart:math' as math;
-import '../models/note_model.dart';
-import '../models/note_widget_metrics.dart';
+import '../../models/note_model.dart';
+import '../../models/note_widget_metrics.dart';
 
 class NoteWidgetCalculator {
   static final NoteWidgetCalculator instance = NoteWidgetCalculator._();

@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
-import '../core/di/app_di.dart';
-import '../data/repositories/note_repository.dart';
-import '../data/repositories/notification_repository.dart';
-import '../data/repositories/user_repository.dart';
+import '../../core/di/app_di.dart';
+import '../repositories/note_repository.dart';
+import '../repositories/notification_repository.dart';
+import '../repositories/user_repository.dart';
 import 'lifecycle_manager.dart';
 
 class MemoryTrimmingService {

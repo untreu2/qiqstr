@@ -9,6 +9,7 @@ import 'package:qiqstr/ui/screens/notification/notification_page.dart';
 import 'package:qiqstr/ui/screens/wallet/wallet_page.dart';
 import 'package:qiqstr/ui/screens/dm/dm_page.dart';
 import 'package:qiqstr/ui/screens/note/share_note.dart';
+import 'package:qiqstr/ui/widgets/common/sidebar_widget.dart';
 import '../theme/theme_manager.dart';
 
 class HomeNavigator extends StatefulWidget {
@@ -605,6 +606,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
 
         return Scaffold(
           extendBody: true,
+          drawer: const SidebarWidget(),
           body: PageStorage(
             bucket: PageStorageBucket(),
             child: IndexedStack(

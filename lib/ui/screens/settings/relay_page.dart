@@ -4,21 +4,70 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:ndk/ndk.dart';
 import 'package:ndk/shared/nips/nip01/bip340.dart';
 import 'package:carbon_icons/carbon_icons.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:async';
 import '../../theme/theme_manager.dart';
 import '../../../constants/relays.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/auth_repository.dart';
-import '../../../services/nostr_service.dart';
-import '../../../services/relay_service.dart';
+import '../../../data/services/nostr_service.dart';
+import '../../../data/services/relay_service.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/dialogs/reset_relays_dialog.dart';
 import '../../widgets/dialogs/add_relay_dialog.dart';
-import 'dart:convert';
-import 'dart:io';
-import 'dart:async';
+
+class RelayInfo {
+  final String? name;
+  final String? description;
+  final String? banner;
+  final String? icon;
+  final String? pubkey;
+  final String? contact;
+  final List<int>? supportedNips;
+  final String? software;
+  final String? version;
+  final Map<String, dynamic>? limitation;
+  final bool? paymentRequired;
+  final bool? authRequired;
+
+  RelayInfo({
+    this.name,
+    this.description,
+    this.banner,
+    this.icon,
+    this.pubkey,
+    this.contact,
+    this.supportedNips,
+    this.software,
+    this.version,
+    this.limitation,
+    this.paymentRequired,
+    this.authRequired,
+  });
+
+  factory RelayInfo.fromJson(Map<String, dynamic> json) {
+    return RelayInfo(
+      name: json['name'] as String?,
+      description: json['description'] as String?,
+      banner: json['banner'] as String?,
+      icon: json['icon'] as String?,
+      pubkey: json['pubkey'] as String?,
+      contact: json['contact'] as String?,
+      supportedNips: json['supported_nips'] != null
+          ? List<int>.from(json['supported_nips'] as List)
+          : null,
+      software: json['software'] as String?,
+      version: json['version'] as String?,
+      limitation: json['limitation'] as Map<String, dynamic>?,
+      paymentRequired: json['limitation']?['payment_required'] as bool?,
+      authRequired: json['limitation']?['auth_required'] as bool?,
+    );
+  }
+}
 
 class RelayPage extends StatefulWidget {
   const RelayPage({super.key});
@@ -36,9 +85,9 @@ class _RelayPageState extends State<RelayPage> {
   bool _isFetchingUserRelays = false;
   bool _isPublishingRelays = false;
   bool _disposed = false;
-
-  final List<WebSocket> _activeConnections = [];
-  final List<StreamSubscription> _activeSubscriptions = [];
+  final Map<String, RelayInfo?> _relayInfos = {};
+  final Map<String, bool> _expandedRelays = {};
+  final Map<String, Map<String, dynamic>> _relayStats = {};
 
   late AuthRepository _authRepository;
 
@@ -47,32 +96,41 @@ class _RelayPageState extends State<RelayPage> {
     super.initState();
     _initializeServices();
     _loadRelays();
+    _loadRelayStats();
+    _startStatsRefresh();
   }
 
   @override
   void dispose() {
     _disposed = true;
-
-    for (final subscription in _activeSubscriptions) {
-      try {
-        subscription.cancel();
-      } catch (_) {}
-    }
-    _activeSubscriptions.clear();
-
-    for (final ws in _activeConnections) {
-      try {
-        ws.close();
-      } catch (_) {}
-    }
-    _activeConnections.clear();
-
     _addRelayController.dispose();
     super.dispose();
   }
 
   void _initializeServices() {
     _authRepository = AppDI.get<AuthRepository>();
+  }
+
+  void _startStatsRefresh() {
+    Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (_disposed) {
+        timer.cancel();
+        return;
+      }
+      _loadRelayStats();
+    });
+  }
+
+  void _loadRelayStats() {
+    if (_disposed) return;
+    final manager = WebSocketManager.instance;
+    final stats = manager.getConnectionStats();
+    setState(() {
+      _relayStats.clear();
+      if (stats['relayStats'] != null) {
+        _relayStats.addAll(Map<String, Map<String, dynamic>>.from(stats['relayStats'] as Map));
+      }
+    });
   }
 
   Future<void> _loadRelays() async {
@@ -93,6 +151,10 @@ class _RelayPageState extends State<RelayPage> {
         _relays = customMainRelays ?? List.from(relaySetMainSockets);
         _isLoading = false;
       });
+
+      for (final relay in _relays) {
+        _fetchRelayInfo(relay);
+      }
     } catch (e) {
       setState(() {
         _relays = List.from(relaySetMainSockets);
@@ -103,6 +165,36 @@ class _RelayPageState extends State<RelayPage> {
       }
     }
   }
+
+  Future<void> _fetchRelayInfo(String relayUrl) async {
+    if (_relayInfos.containsKey(relayUrl)) return;
+
+    try {
+      final uri = Uri.parse(relayUrl).replace(scheme: 'https');
+      final response = await http
+          .get(uri, headers: {'Accept': 'application/nostr+json'})
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+        if (mounted && !_disposed) {
+          setState(() {
+            _relayInfos[relayUrl] = RelayInfo.fromJson(decoded);
+          });
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error fetching relay info for $relayUrl: $e');
+      }
+      if (mounted && !_disposed) {
+        setState(() {
+          _relayInfos[relayUrl] = null;
+        });
+      }
+    }
+  }
+
 
   Future<void> _publishRelays() async {
     if (!mounted) return;
@@ -188,29 +280,22 @@ class _RelayPageState extends State<RelayPage> {
   }
 
   Future<bool> _sendToRelay(String relayUrl, String serializedEvent) async {
-    WebSocket? ws;
     try {
-      ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
-
-      if (ws.readyState == WebSocket.open) {
-        ws.add(serializedEvent);
-        await ws.close();
-        return true;
-      }
-      return false;
+      final manager = WebSocketManager.instance;
+      final sent = await manager.sendMessage(relayUrl, serializedEvent);
+      return sent;
     } catch (e) {
       if (kDebugMode) {
         print('Failed to send relay list event to $relayUrl: $e');
       }
-      try {
-        await ws?.close();
-      } catch (_) {}
       return false;
     }
   }
 
   Future<void> _fetchUserRelays() async {
-    setState(() => _isFetchingUserRelays = true);
+    setState(() {
+      _isFetchingUserRelays = true;
+    });
 
     try {
       final npubResult = await _authRepository.getCurrentUserNpub();
@@ -244,7 +329,9 @@ class _RelayPageState extends State<RelayPage> {
         AppSnackbar.error(context, 'Error fetching user relays: ${e.toString()}');
       }
     } finally {
-      setState(() => _isFetchingUserRelays = false);
+      setState(() {
+        _isFetchingUserRelays = false;
+      });
     }
   }
 
@@ -254,17 +341,11 @@ class _RelayPageState extends State<RelayPage> {
     try {
       final pubkeyHex = _authRepository.npubToHex(npub) ?? npub;
 
+      final manager = WebSocketManager.instance;
+
       for (final relayUrl in relaySetMainSockets) {
-        WebSocket? ws;
-        StreamSubscription? sub;
         try {
           if (_disposed) return relayList;
-
-          ws = await WebSocket.connect(relayUrl).timeout(const Duration(seconds: 5));
-
-          if (!_disposed) {
-            _activeConnections.add(ws);
-          }
 
           final subscriptionId = DateTime.now().millisecondsSinceEpoch.toString();
           final request = jsonEncode([
@@ -277,50 +358,24 @@ class _RelayPageState extends State<RelayPage> {
             }
           ]);
 
-          final completer = Completer<Map<String, dynamic>?>();
+          Map<String, dynamic>? eventData;
 
-          sub = ws.listen((event) {
-            try {
-              if (_disposed || completer.isCompleted) return;
-              final decoded = jsonDecode(event);
-              if (decoded is List && decoded.length >= 2) {
-                if (decoded[0] == 'EVENT' && decoded[1] == subscriptionId) {
-                  completer.complete(decoded[2]);
-                } else if (decoded[0] == 'EOSE' && decoded[1] == subscriptionId) {
-                  completer.complete(null);
-                }
+          final completer = await manager.sendQuery(
+            relayUrl,
+            request,
+            subscriptionId,
+            timeout: const Duration(seconds: 5),
+            onEvent: (data, url) {
+              if (!_disposed) {
+                eventData = data;
               }
-            } catch (e) {
-              if (!completer.isCompleted) completer.complete(null);
-            }
-          }, onError: (error) {
-            if (!completer.isCompleted) completer.complete(null);
-          }, onDone: () {
-            if (!completer.isCompleted) completer.complete(null);
-          });
+            },
+          );
 
-          if (!_disposed) {
-            _activeSubscriptions.add(sub);
-          }
-
-          if (!_disposed && ws.readyState == WebSocket.open) {
-            ws.add(request);
-          }
-
-          final eventData = await completer.future.timeout(const Duration(seconds: 5), onTimeout: () => null);
-
-          try {
-            await sub.cancel();
-            _activeSubscriptions.remove(sub);
-          } catch (_) {}
-
-          try {
-            await ws.close();
-            _activeConnections.remove(ws);
-          } catch (_) {}
+          await completer.future.timeout(const Duration(seconds: 5), onTimeout: () {});
 
           if (eventData != null) {
-            final tags = eventData['tags'] as List<dynamic>? ?? [];
+            final tags = eventData!['tags'] as List<dynamic>? ?? [];
 
             for (final tag in tags) {
               if (tag is List && tag.isNotEmpty && tag[0] == 'r' && tag.length >= 2) {
@@ -350,15 +405,6 @@ class _RelayPageState extends State<RelayPage> {
           if (kDebugMode) {
             print('Error fetching from relay $relayUrl: $e');
           }
-
-          try {
-            await sub?.cancel();
-            if (sub != null) _activeSubscriptions.remove(sub);
-          } catch (_) {}
-          try {
-            await ws?.close();
-            if (ws != null) _activeConnections.remove(ws);
-          } catch (_) {}
         }
       }
     } catch (e) {
@@ -467,6 +513,7 @@ class _RelayPageState extends State<RelayPage> {
 
       await _saveRelays();
       _addRelayController.clear();
+      _fetchRelayInfo(url);
 
       if (mounted) {
         Navigator.pop(context);
@@ -484,6 +531,8 @@ class _RelayPageState extends State<RelayPage> {
   Future<void> _removeRelay(String url, bool isMainRelay) async {
     setState(() {
       _relays.remove(url);
+      _relayInfos.remove(url);
+      _expandedRelays.remove(url);
     });
 
     await _saveRelays();
@@ -611,49 +660,294 @@ class _RelayPageState extends State<RelayPage> {
   }
 
   Widget _buildRelayTile(String relay, bool isMainRelay) {
+    final manager = WebSocketManager.instance;
+    final isConnected = manager.isRelayConnected(relay);
+    final isConnecting = manager.isRelayConnecting(relay);
+    final stats = _relayStats[relay];
+    final info = _relayInfos[relay];
+    final isExpanded = _expandedRelays[relay] ?? false;
+
     return RepaintBoundary(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
             color: context.colors.overlayLight,
-            borderRadius: BorderRadius.circular(40),
+            borderRadius: BorderRadius.circular(16),
           ),
-          child: Row(
+          child: Column(
             children: [
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    _expandedRelays[relay] = !isExpanded;
+                  });
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isConnected
+                              ? Colors.green
+                              : isConnecting
+                                  ? Colors.orange
+                                  : Colors.red,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  relay,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              info?.name ?? relay,
                   style: TextStyle(
-                    fontSize: 15,
+                                fontSize: 16,
                     fontWeight: FontWeight.w600,
                     color: context.colors.textPrimary,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                if (info?.paymentRequired == true) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      'Paid',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.amber,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                if (info?.authRequired == true) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      'Auth',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.blue,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Icon(
+                        isExpanded ? Icons.expand_less : Icons.expand_more,
+                        color: context.colors.textSecondary,
+                        size: 20,
               ),
               const SizedBox(width: 12),
               GestureDetector(
                 onTap: () => _removeRelay(relay, isMainRelay),
                 child: Container(
-                  width: 40,
-                  height: 40,
+                          width: 36,
+                          height: 36,
                   decoration: BoxDecoration(
-                    color: context.colors.textPrimary,
+                            color: context.colors.background,
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
                     CarbonIcons.delete,
-                    size: 20,
-                    color: context.colors.background,
+                            size: 18,
+                            color: context.colors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
+                ),
+              ),
+              if (isExpanded)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'URL',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: context.colors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        relay,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: context.colors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      if (info != null) ...[
+                        if (info.description != null) ...[
+                          Text(
+                            'Description',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: context.colors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            info.description!,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: context.colors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        if (info.supportedNips != null && info.supportedNips!.isNotEmpty) ...[
+                          Text(
+                            'Supported NIPs',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: context.colors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: info.supportedNips!.take(20).map((nip) {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: context.colors.background,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  'NIP-$nip',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: context.colors.textSecondary,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        if (info.software != null) ...[
+                          Text(
+                            'Software',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: context.colors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            info.software!,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: context.colors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                        if (info.version != null) ...[
+                          Text(
+                            'Version',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: context.colors.textSecondary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            info.version!,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: context.colors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      ],
+                      if (stats != null) ...[
+                        Text(
+                          'Connection Statistics',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: context.colors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _buildStatRow('Success Rate', stats['successRate'] ?? 'N/A'),
+                        _buildStatRow('Connections', '${stats['successfulConnections'] ?? 0}'),
+                        _buildStatRow('Messages Sent', '${stats['messagesSent'] ?? 0}'),
+                        _buildStatRow('Messages Received', '${stats['messagesReceived'] ?? 0}'),
+                        _buildStatRow('Disconnections', '${stats['disconnections'] ?? 0}'),
+                      ],
+                    ],
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildStatRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: context.colors.textSecondary,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: context.colors.textPrimary,
+            ),
+          ),
+        ],
       ),
     );
   }

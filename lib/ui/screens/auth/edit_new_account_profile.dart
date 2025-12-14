@@ -7,7 +7,7 @@ import '../../../models/user_model.dart';
 import '../profile/suggested_follows_page.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
-import '../../../services/media_service.dart';
+import '../../../data/services/media_service.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/title_widget.dart';
