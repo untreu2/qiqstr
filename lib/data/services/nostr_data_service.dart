@@ -5,10 +5,6 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:ndk/ndk.dart';
-import 'package:ndk/entities.dart';
-import 'package:ndk/shared/nips/nip01/bip340.dart';
-import 'dart:typed_data';
 
 import '../../core/base/result.dart';
 import '../../models/note_model.dart';
@@ -614,9 +610,8 @@ class NostrDataService {
     _pendingThreadFetches.add(rootNoteId);
 
     try {
-      final filter = Filter(
-        kinds: [1],
-        eTags: [rootNoteId],
+      final filter = NostrService.createThreadRepliesFilter(
+        rootNoteId: rootNoteId,
         limit: 100,
       );
 
@@ -2920,21 +2915,21 @@ class NostrDataService {
         try {
           if (_isClosed) return;
 
-          final quoteFilter = Filter(
+          final quoteFilter = NostrService.createQuoteFilter(
             kinds: quoteKinds,
+            quotedEventIds: sortedNoteIds,
             limit: 1000,
           );
-          quoteFilter.setTag('q', sortedNoteIds);
 
           final filters = [
-            Filter(
+            NostrService.createInteractionFilter(
               kinds: interactionKinds,
-              eTags: sortedNoteIds,
+              eventIds: sortedNoteIds,
               limit: 1000,
             ),
-            Filter(
+            NostrService.createInteractionFilter(
               kinds: deletionKinds,
-              eTags: sortedNoteIds,
+              eventIds: sortedNoteIds,
               limit: 100,
             ),
             quoteFilter,
@@ -3164,68 +3159,13 @@ class NostrDataService {
         return const Result.error('Authentication credentials not available.');
       }
 
-      final file = File(filePath);
-      if (!await file.exists()) {
-        return Result.error('File not found: $filePath');
-      }
-
-      final fileBytes = await file.readAsBytes();
-      debugPrint('[NostrDataService] File read: ${fileBytes.length} bytes');
-
-      String mimeType = 'application/octet-stream';
-      final lowerPath = filePath.toLowerCase();
-      if (lowerPath.endsWith('.jpg') || lowerPath.endsWith('.jpeg')) {
-        mimeType = 'image/jpeg';
-      } else if (lowerPath.endsWith('.png')) {
-        mimeType = 'image/png';
-      } else if (lowerPath.endsWith('.gif')) {
-        mimeType = 'image/gif';
-      } else if (lowerPath.endsWith('.mp4')) {
-        mimeType = 'video/mp4';
-      }
-
-      debugPrint('[NostrDataService] Detected MIME type: $mimeType');
-
-      final publicKey = Bip340.getPublicKey(privateKey);
-
-      final ndk = Ndk(
-        NdkConfig(
-          eventVerifier: Bip340EventVerifier(),
-          cache: MemCacheManager(),
-          bootstrapRelays: [],
-        ),
+      debugPrint('[NostrDataService] Uploading to: $blossomUrl');
+      final url = await NostrService.sendMedia(
+        filePath: filePath,
+        blossomUrl: blossomUrl,
+        privateKey: privateKey,
       );
 
-      ndk.accounts.loginPrivateKey(
-        pubkey: publicKey,
-        privkey: privateKey,
-      );
-
-      final ndkFile = NdkFile(
-        data: Uint8List.fromList(fileBytes),
-        mimeType: mimeType,
-      );
-
-      final cleanedUrl = blossomUrl.replaceAll(RegExp(r'/+$'), '');
-      debugPrint('[NostrDataService] Uploading to: $cleanedUrl');
-
-      final uploadResults = await ndk.files.upload(
-        file: ndkFile,
-        serverUrls: [cleanedUrl],
-      );
-
-      debugPrint('[NostrDataService] Upload response: ${uploadResults.length} result(s)');
-
-      if (uploadResults.isEmpty || !uploadResults.first.success) {
-        return Result.error('Upload failed: ${uploadResults.first.error ?? 'Unknown error'}');
-      }
-
-      final blobDescriptor = uploadResults.first.descriptor;
-      if (blobDescriptor == null) {
-        return const Result.error('Upload succeeded but no descriptor returned.');
-      }
-
-      final url = blobDescriptor.url.isNotEmpty ? blobDescriptor.url : blobDescriptor.sha256;
       debugPrint('[NostrDataService] Media uploaded successfully: $url');
       return Result.success(url);
     } catch (e) {

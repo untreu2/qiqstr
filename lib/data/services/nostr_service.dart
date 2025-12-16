@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:collection';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:ndk/ndk.dart';
+import 'package:ndk/entities.dart';
 import 'package:ndk/shared/nips/nip01/bip340.dart';
 import 'package:crypto/crypto.dart';
 import 'package:uuid/uuid.dart';
@@ -467,6 +470,42 @@ class NostrService {
     );
   }
 
+  static Filter createThreadRepliesFilter({
+    required String rootNoteId,
+    int? limit,
+  }) {
+    return Filter(
+      kinds: [1],
+      eTags: [rootNoteId],
+      limit: limit ?? 100,
+    );
+  }
+
+  static Filter createInteractionFilter({
+    required List<int> kinds,
+    required List<String> eventIds,
+    int? limit,
+  }) {
+    return Filter(
+      kinds: kinds,
+      eTags: eventIds,
+      limit: limit,
+    );
+  }
+
+  static Filter createQuoteFilter({
+    required List<int> kinds,
+    required List<String> quotedEventIds,
+    int? limit,
+  }) {
+    final filter = Filter(
+      kinds: kinds,
+      limit: limit,
+    );
+    filter.setTag('q', quotedEventIds);
+    return filter;
+  }
+
   static String createRequest(Filter filter) {
     final uuid = generateUUID();
     final cacheKey = 'single_${filter.hashCode}';
@@ -740,5 +779,56 @@ class NostrService {
     createProfileFilter(authors: [], limit: 100);
     createCombinedInteractionFilter(eventIds: [], limit: 100);
     createNotificationFilter(pubkeys: [], limit: 50);
+  }
+
+  static Future<String> sendMedia({
+    required String filePath,
+    required String blossomUrl,
+    required String privateKey,
+  }) async {
+    final file = File(filePath);
+    if (!await file.exists()) {
+      throw Exception('File not found: $filePath');
+    }
+
+    final fileBytes = await file.readAsBytes();
+    final mimeType = detectMimeType(filePath);
+    final publicKey = Bip340.getPublicKey(privateKey);
+
+    final ndk = Ndk(
+      NdkConfig(
+        eventVerifier: Bip340EventVerifier(),
+        cache: MemCacheManager(),
+        bootstrapRelays: [],
+      ),
+    );
+
+    ndk.accounts.loginPrivateKey(
+      pubkey: publicKey,
+      privkey: privateKey,
+    );
+
+    final ndkFile = NdkFile(
+      data: Uint8List.fromList(fileBytes),
+      mimeType: mimeType,
+    );
+
+    final cleanedUrl = blossomUrl.replaceAll(RegExp(r'/+$'), '');
+
+    final uploadResults = await ndk.files.upload(
+      file: ndkFile,
+      serverUrls: [cleanedUrl],
+    );
+
+    if (uploadResults.isEmpty || !uploadResults.first.success) {
+      throw Exception('Upload failed: ${uploadResults.first.error ?? 'Unknown error'}');
+    }
+
+    final blobDescriptor = uploadResults.first.descriptor;
+    if (blobDescriptor == null) {
+      throw Exception('Upload succeeded but no descriptor returned.');
+    }
+
+    return blobDescriptor.url.isNotEmpty ? blobDescriptor.url : blobDescriptor.sha256;
   }
 }
