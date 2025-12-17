@@ -8,14 +8,14 @@ import '../../models/reaction_model.dart';
 import '../../models/zap_model.dart';
 import '../filters/feed_filters.dart';
 import '../services/network_service.dart';
-import '../services/nostr_data_service.dart';
+import '../services/data_service.dart';
 import '../services/mute_cache_service.dart';
 import '../services/user_batch_fetcher.dart';
 import '../services/follow_cache_service.dart';
 import 'user_repository.dart';
 
 class NoteRepository {
-  final NostrDataService _nostrDataService;
+  final DataService _nostrDataService;
   final UserRepository? _userRepository;
   final LoggingService _logger;
   
@@ -32,7 +32,7 @@ class NoteRepository {
   Timer? _updateThrottleTimer;
   bool _hasPendingUpdate = false;
 
-  NostrDataService get nostrDataService => _nostrDataService;
+  DataService get nostrDataService => _nostrDataService;
 
   final Map<String, List<ReactionModel>> _reactions = {};
   final Map<String, List<ZapModel>> _zaps = {};
@@ -45,7 +45,7 @@ class NoteRepository {
 
   NoteRepository({
     required NetworkService networkService,
-    required NostrDataService nostrDataService,
+    required DataService nostrDataService,
     UserRepository? userRepository,
     LoggingService? logger,
   })  : _nostrDataService = nostrDataService,

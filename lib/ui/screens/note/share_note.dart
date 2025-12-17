@@ -4,7 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../../core/di/app_di.dart';
-import '../../../data/services/nostr_data_service.dart';
+import '../../../data/services/data_service.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../data/repositories/note_repository.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
@@ -104,7 +104,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   final Map<String, String> _mentionMap = {};
   UserModel? _currentUser;
 
-  late NostrDataService _dataService;
+  late DataService _dataService;
   late UserRepository _userRepository;
   late NoteRepository _noteRepository;
 
@@ -125,7 +125,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   void _initializeServices() {
-    _dataService = AppDI.get<NostrDataService>();
+    _dataService = AppDI.get<DataService>();
     _userRepository = AppDI.get<UserRepository>();
     _noteRepository = AppDI.get<NoteRepository>();
   }

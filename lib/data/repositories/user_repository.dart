@@ -6,7 +6,7 @@ import '../../core/base/result.dart';
 import '../../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/validation_service.dart';
-import '../services/nostr_data_service.dart';
+import '../services/data_service.dart';
 import '../services/user_cache_service.dart';
 import '../services/user_batch_fetcher.dart';
 import '../services/isar_database_service.dart';
@@ -16,7 +16,7 @@ import '../services/mute_cache_service.dart';
 class UserRepository {
   final AuthService _authService;
   final ValidationService _validationService;
-  final NostrDataService _nostrDataService;
+  final DataService _nostrDataService;
   final UserCacheService _cacheService;
   final UserBatchFetcher _batchFetcher;
   final FollowCacheService _followCacheService;
@@ -28,7 +28,7 @@ class UserRepository {
   UserRepository({
     required AuthService authService,
     required ValidationService validationService,
-    required NostrDataService nostrDataService,
+    required DataService nostrDataService,
     UserCacheService? cacheService,
     UserBatchFetcher? batchFetcher,
     FollowCacheService? followCacheService,

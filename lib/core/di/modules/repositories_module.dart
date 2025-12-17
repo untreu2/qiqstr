@@ -8,7 +8,7 @@ import '../../../data/repositories/dm_repository.dart';
 import '../../../data/services/auth_service.dart';
 import '../../../data/services/validation_service.dart';
 import '../../../data/services/network_service.dart';
-import '../../../data/services/nostr_data_service.dart';
+import '../../../data/services/data_service.dart';
 import '../../../data/services/coinos_service.dart';
 import '../../../data/services/follow_cache_service.dart';
 import '../../../data/services/feed_loader_service.dart';
@@ -25,27 +25,27 @@ class RepositoriesModule extends DIModule {
     AppDI.registerLazySingleton<UserRepository>(() => UserRepository(
           authService: AppDI.get<AuthService>(),
           validationService: AppDI.get<ValidationService>(),
-          nostrDataService: AppDI.get<NostrDataService>(),
+          nostrDataService: AppDI.get<DataService>(),
           followCacheService: AppDI.get<FollowCacheService>(),
         ));
 
     AppDI.registerLazySingleton<NoteRepository>(() => NoteRepository(
           networkService: AppDI.get<NetworkService>(),
-          nostrDataService: AppDI.get<NostrDataService>(),
+          nostrDataService: AppDI.get<DataService>(),
           userRepository: AppDI.get<UserRepository>(),
         ));
 
     AppDI.registerLazySingleton<FeedLoaderService>(() => FeedLoaderService(
           noteRepository: AppDI.get<NoteRepository>(),
           userRepository: AppDI.get<UserRepository>(),
-          nostrDataService: AppDI.get<NostrDataService>(),
+          nostrDataService: AppDI.get<DataService>(),
         ));
 
     AppDI.registerLazySingleton<NotificationRepository>(() => NotificationRepository(
           authService: AppDI.get<AuthService>(),
           networkService: AppDI.get<NetworkService>(),
           validationService: AppDI.get<ValidationService>(),
-          nostrDataService: AppDI.get<NostrDataService>(),
+          nostrDataService: AppDI.get<DataService>(),
         ));
 
     AppDI.registerLazySingleton<WalletRepository>(() => WalletRepository(

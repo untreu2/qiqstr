@@ -12,7 +12,7 @@ import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../data/repositories/wallet_repository.dart';
-import '../../../data/services/nostr_data_service.dart';
+import '../../../data/services/data_service.dart';
 import '../../../data/services/nostr_service.dart';
 import '../../../data/services/relay_service.dart';
 import 'package:ndk/shared/nips/nip01/bip340.dart';
@@ -209,7 +209,7 @@ Future<void> _publishZapEventsAsync(
     }
 
     // Mark this zap event as user-published to prevent self-processing
-    final nostrDataService = AppDI.get<NostrDataService>();
+    final nostrDataService = AppDI.get<DataService>();
     nostrDataService.markZapAsUserPublished(zapEvent.id);
     if (kDebugMode) {
       print('[ZapDialog] Zap amount: $sats sats, preimage: ${paymentResult.data?.preimage}');

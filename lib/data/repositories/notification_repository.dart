@@ -8,11 +8,11 @@ import '../../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/network_service.dart';
 import '../services/validation_service.dart';
-import '../services/nostr_data_service.dart';
+import '../services/data_service.dart';
 
 class NotificationRepository {
   final AuthService _authService;
-  final NostrDataService _nostrDataService;
+  final DataService _nostrDataService;
 
   final StreamController<List<NotificationModel>> _notificationsController = StreamController<List<NotificationModel>>.broadcast();
   final StreamController<int> _unreadCountController = StreamController<int>.broadcast();
@@ -29,7 +29,7 @@ class NotificationRepository {
     required AuthService authService,
     required NetworkService networkService,
     required ValidationService validationService,
-    required NostrDataService nostrDataService,
+    required DataService nostrDataService,
   })  : _authService = authService,
         _nostrDataService = nostrDataService {
     _setupRealTimeNotifications();

@@ -10,7 +10,7 @@ import 'package:carbon_icons/carbon_icons.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/user_repository.dart';
-import '../../../data/services/nostr_data_service.dart';
+import '../../../data/services/data_service.dart';
 
 class SidebarWidget extends StatefulWidget {
   const SidebarWidget({super.key});
@@ -110,7 +110,7 @@ class _SidebarWidgetState extends State<SidebarWidget> {
         },
       );
 
-      final nostrDataService = AppDI.get<NostrDataService>();
+      final nostrDataService = AppDI.get<DataService>();
       final followerCount = await nostrDataService.fetchFollowerCount(_currentUser!.pubkeyHex);
       if (mounted) {
         setState(() {

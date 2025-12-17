@@ -18,7 +18,7 @@ import '../dialogs/mute_user_dialog.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/repositories/user_repository.dart';
-import '../../../data/services/nostr_data_service.dart';
+import '../../../data/services/data_service.dart';
 
 class ProfileInfoWidget extends StatefulWidget {
   final UserModel user;
@@ -503,7 +503,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         },
       );
 
-      final nostrDataService = AppDI.get<NostrDataService>();
+      final nostrDataService = AppDI.get<DataService>();
       final followerCount = await nostrDataService.fetchFollowerCount(_userNotifier.value.pubkeyHex);
       if (mounted) {
         setState(() {

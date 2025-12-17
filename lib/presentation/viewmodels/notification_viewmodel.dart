@@ -8,7 +8,7 @@ import '../../core/base/result.dart';
 import '../../data/repositories/notification_repository.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/repositories/auth_repository.dart';
-import '../../data/services/nostr_data_service.dart';
+import '../../data/services/data_service.dart';
 import '../../data/services/user_batch_fetcher.dart';
 import '../../models/notification_model.dart';
 import '../../models/user_model.dart';
@@ -17,13 +17,13 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
   final NotificationRepository _notificationRepository;
   final UserRepository _userRepository;
   final AuthRepository _authRepository;
-  final NostrDataService _nostrDataService;
+  final DataService _nostrDataService;
 
   NotificationViewModel({
     required NotificationRepository notificationRepository,
     required UserRepository userRepository,
     required AuthRepository authRepository,
-    required NostrDataService nostrDataService,
+    required DataService nostrDataService,
   })  : _notificationRepository = notificationRepository,
         _userRepository = userRepository,
         _authRepository = authRepository,

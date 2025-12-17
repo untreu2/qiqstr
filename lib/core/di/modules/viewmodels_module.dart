@@ -13,7 +13,7 @@ import '../../../data/repositories/user_repository.dart';
 import '../../../data/repositories/notification_repository.dart';
 import '../../../data/repositories/dm_repository.dart';
 import '../../../data/services/validation_service.dart';
-import '../../../data/services/nostr_data_service.dart';
+import '../../../data/services/data_service.dart';
 import '../../../data/services/feed_loader_service.dart';
 
 class ViewModelsModule extends DIModule {
@@ -42,7 +42,7 @@ class ViewModelsModule extends DIModule {
           notificationRepository: AppDI.get<NotificationRepository>(),
           userRepository: AppDI.get<UserRepository>(),
           authRepository: AppDI.get<AuthRepository>(),
-          nostrDataService: AppDI.get<NostrDataService>(),
+          nostrDataService: AppDI.get<DataService>(),
         ));
 
     AppDI.registerFactory<ThreadViewModel>(() => ThreadViewModel(

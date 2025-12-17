@@ -6,7 +6,7 @@ import '../../models/user_model.dart';
 import '../repositories/note_repository.dart';
 import '../repositories/user_repository.dart';
 import 'user_batch_fetcher.dart';
-import 'nostr_data_service.dart';
+import 'data_service.dart';
 
 enum FeedType {
   feed,
@@ -59,12 +59,12 @@ class FeedLoaderService {
   final NoteRepository _noteRepository;
   final UserRepository _userRepository;
   final LoggingService _logger;
-  final NostrDataService _nostrDataService;
+  final DataService _nostrDataService;
 
   FeedLoaderService({
     required NoteRepository noteRepository,
     required UserRepository userRepository,
-    required NostrDataService nostrDataService,
+    required DataService nostrDataService,
     LoggingService? logger,
   })  : _noteRepository = noteRepository,
         _userRepository = userRepository,

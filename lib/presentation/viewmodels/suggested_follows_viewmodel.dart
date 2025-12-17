@@ -4,18 +4,18 @@ import '../../core/base/ui_state.dart';
 import '../../models/user_model.dart';
 import '../../data/repositories/user_repository.dart';
 import '../../data/repositories/auth_repository.dart';
-import '../../data/services/nostr_data_service.dart';
+import '../../data/services/data_service.dart';
 import '../../data/services/user_batch_fetcher.dart';
 import '../../constants/suggestions.dart';
 
 class SuggestedFollowsViewModel extends BaseViewModel with CommandMixin {
   final UserRepository _userRepository;
-  final NostrDataService _nostrDataService;
+  final DataService _nostrDataService;
 
   SuggestedFollowsViewModel({
     required UserRepository userRepository,
     required AuthRepository authRepository,
-    required NostrDataService nostrDataService,
+    required DataService nostrDataService,
   })  : _userRepository = userRepository,
         _nostrDataService = nostrDataService;
 

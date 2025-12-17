@@ -7,7 +7,7 @@ import '../../../models/user_model.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
-import '../../../data/services/nostr_data_service.dart';
+import '../../../data/services/data_service.dart';
 import '../profile/profile_page.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/title_widget.dart';
@@ -27,7 +27,7 @@ class NoteStatisticsPage extends StatefulWidget {
 
 class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
   late final UserRepository _userRepository;
-  late final NostrDataService _nostrDataService;
+  late final DataService _nostrDataService;
   late ScrollController _scrollController;
   bool _showInteractionsBubble = false;
   
@@ -39,7 +39,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
   void initState() {
     super.initState();
     _userRepository = AppDI.get<UserRepository>();
-    _nostrDataService = AppDI.get<NostrDataService>();
+    _nostrDataService = AppDI.get<DataService>();
     _scrollController = ScrollController()..addListener(_scrollListener);
 
     _notesSubscription = _nostrDataService.notesStream.listen((notes) {
