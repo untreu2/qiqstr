@@ -10,6 +10,7 @@ import 'package:qiqstr/ui/widgets/note/note_widget.dart';
 import 'package:qiqstr/ui/widgets/note/focused_note_widget.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/common_buttons.dart';
+import '../../widgets/common/floating_bubble_widget.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/ui/ui_state_builder.dart';
 import '../../../core/di/app_di.dart';
@@ -101,34 +102,23 @@ class _ThreadPageState extends State<ThreadPage> {
               _buildContent(context, viewModel),
               const BackButtonWidget.floating(),
               _buildShareButton(context, topPadding, viewModel),
-              Positioned(
-                top: topPadding + 10,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: GestureDetector(
-                    onTap: () {
-                      _scrollController.animateTo(
-                        0,
-                        duration: const Duration(milliseconds: 300),
-                        curve: Curves.easeOut,
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: context.colors.textPrimary,
-                        borderRadius: BorderRadius.circular(40),
-                      ),
-                      child: Text(
-                        'Thread',
-                        style: TextStyle(
-                          color: context.colors.background,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
+              FloatingBubbleWidget(
+                position: FloatingBubblePosition.top,
+                isVisible: true,
+                topOffset: 10,
+                onTap: () {
+                  _scrollController.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOut,
+                  );
+                },
+                child: Text(
+                  'Thread',
+                  style: TextStyle(
+                    color: context.colors.background,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),

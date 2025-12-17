@@ -8,6 +8,7 @@ import '../../../models/note_model.dart';
 import '../../widgets/user/profile_info_widget.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/common_buttons.dart';
+import '../../widgets/common/floating_bubble_widget.dart';
 import 'package:qiqstr/ui/widgets/note/note_list_widget.dart' as widgets;
 import '../../../core/di/app_di.dart';
 import '../../../presentation/viewmodels/profile_viewmodel.dart';
@@ -100,74 +101,51 @@ class _ProfilePageState extends State<ProfilePage> {
             topOffset: 6,
           ),
           _buildShareButton(context, topPadding),
-          Positioned(
-            top: topPadding + 8,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: ValueListenableBuilder<bool>(
-                valueListenable: _showUsernameBubbleNotifier,
-                builder: (context, showBubble, child) {
-                  return AnimatedOpacity(
-                    opacity: showBubble ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 200),
-                    child: IgnorePointer(
-                      ignoring: !showBubble,
-                      child: GestureDetector(
-                        onTap: () {
-                          _scrollController.animateTo(
-                            0,
-                            duration: const Duration(milliseconds: 300),
-                            curve: Curves.easeOut,
-                          );
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: colors.textPrimary,
-                            borderRadius: BorderRadius.circular(40),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 24,
-                                height: 24,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: colors.avatarPlaceholder,
-                                  image: widget.user.profileImage.isNotEmpty
-                                      ? DecorationImage(
-                                          image: CachedNetworkImageProvider(widget.user.profileImage),
-                                          fit: BoxFit.cover,
-                                        )
-                                      : null,
-                                ),
-                                child: widget.user.profileImage.isEmpty
-                                    ? Icon(
-                                        Icons.person,
-                                        size: 14,
-                                        color: colors.textSecondary,
-                                      )
-                                    : null,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                widget.user.name.isNotEmpty ? widget.user.name : widget.user.npub.substring(0, 8),
-                                style: TextStyle(
-                                  color: colors.background,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
+          FloatingBubbleWidget(
+            position: FloatingBubblePosition.top,
+            visibilityNotifier: _showUsernameBubbleNotifier,
+            topOffset: 6,
+            onTap: () {
+              _scrollController.animateTo(
+                0,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+              );
+            },
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: colors.avatarPlaceholder,
+                    image: widget.user.profileImage.isNotEmpty
+                        ? DecorationImage(
+                            image: CachedNetworkImageProvider(widget.user.profileImage),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
+                  ),
+                  child: widget.user.profileImage.isEmpty
+                      ? Icon(
+                          Icons.person,
+                          size: 14,
+                          color: colors.textSecondary,
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  widget.user.name.isNotEmpty ? widget.user.name : widget.user.npub.substring(0, 8),
+                  style: TextStyle(
+                    color: colors.background,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
             ),
           ),
         ],

@@ -11,6 +11,7 @@ import '../../../data/services/nostr_data_service.dart';
 import '../profile/profile_page.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/title_widget.dart';
+import '../../widgets/common/floating_bubble_widget.dart';
 
 class NoteStatisticsPage extends StatefulWidget {
   final NoteModel note;
@@ -384,38 +385,23 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
             ],
           ),
           const BackButtonWidget.floating(),
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 8,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: AnimatedOpacity(
-                opacity: _showInteractionsBubble ? 1.0 : 0.0,
+          FloatingBubbleWidget(
+            position: FloatingBubblePosition.top,
+            isVisible: _showInteractionsBubble,
+            topOffset: 8,
+            onTap: () {
+              _scrollController.animateTo(
+                0,
                 duration: const Duration(milliseconds: 300),
-                child: GestureDetector(
-                  onTap: () {
-                    _scrollController.animateTo(
-                      0,
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeOut,
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: context.colors.textPrimary,
-                      borderRadius: BorderRadius.circular(40),
-                    ),
-                    child: Text(
-                      'Interactions',
-                      style: TextStyle(
-                        color: context.colors.background,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
+                curve: Curves.easeOut,
+              );
+            },
+            child: Text(
+              'Interactions',
+              style: TextStyle(
+                color: context.colors.background,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),

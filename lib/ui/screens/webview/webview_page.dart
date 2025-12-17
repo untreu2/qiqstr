@@ -5,6 +5,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../theme/theme_manager.dart';
+import '../../widgets/common/floating_bubble_widget.dart';
 
 class WebViewPage extends StatefulWidget {
   final String url;
@@ -136,47 +137,38 @@ class _WebViewPageState extends State<WebViewPage> {
               ),
             ),
           ),
-          Positioned(
-            bottom: bottomPadding + 14,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: colors.textPrimary,
-                  borderRadius: BorderRadius.circular(40),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_isLoading)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
-                          ),
-                        ),
-                      ),
-                    Flexible(
-                      child: Text(
-                        _getDisplayUrl(),
-                        style: TextStyle(
-                          color: colors.background,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+          FloatingBubbleWidget(
+            position: FloatingBubblePosition.bottom,
+            isVisible: true,
+            bottomOffset: 10,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_isLoading)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(colors.accent),
                       ),
                     ),
-                  ],
+                  ),
+                Flexible(
+                  child: Text(
+                    _getDisplayUrl(),
+                    style: TextStyle(
+                      color: colors.background,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
           Positioned(

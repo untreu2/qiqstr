@@ -10,6 +10,7 @@ import '../../../models/dm_message_model.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/custom_input_field.dart';
+import '../../widgets/common/floating_bubble_widget.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../core/di/app_di.dart';
 import '../../../models/user_model.dart';
@@ -337,7 +338,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
             ),
           ),
           BackButtonWidget.floating(
-            topOffset: 10,
+            topOffset: 6,
             onPressed: () {
               setState(() {
                 _selectedChatPubkeyHex = null;
@@ -345,53 +346,44 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
               viewModel.clearCurrentChat();
             },
           ),
-          Positioned(
-            top: topPadding + 10,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: context.colors.textPrimary,
-                  borderRadius: BorderRadius.circular(40),
+          FloatingBubbleWidget(
+            position: FloatingBubblePosition.top,
+            isVisible: true,
+            topOffset: 6,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: context.colors.avatarPlaceholder,
+                    image: otherUser?.profileImage != null && otherUser!.profileImage.isNotEmpty
+                        ? DecorationImage(
+                            image: CachedNetworkImageProvider(otherUser.profileImage),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
+                  ),
+                  child: otherUser?.profileImage == null || otherUser!.profileImage.isEmpty
+                      ? Icon(
+                          CarbonIcons.user,
+                          size: 14,
+                          color: context.colors.textSecondary,
+                        )
+                      : null,
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: context.colors.avatarPlaceholder,
-                        image: otherUser?.profileImage != null && otherUser!.profileImage.isNotEmpty
-                            ? DecorationImage(
-                                image: CachedNetworkImageProvider(otherUser.profileImage),
-                                fit: BoxFit.cover,
-                              )
-                            : null,
-                      ),
-                      child: otherUser?.profileImage == null || otherUser!.profileImage.isEmpty
-                          ? Icon(
-                              CarbonIcons.user,
-                              size: 14,
-                              color: context.colors.textSecondary,
-                            )
-                          : null,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      otherUser?.name.isNotEmpty == true ? otherUser!.name : otherUserNpub.substring(0, 8),
-                      style: TextStyle(
-                        color: context.colors.background,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+                const SizedBox(width: 8),
+                Text(
+                  otherUser?.name.isNotEmpty == true ? otherUser!.name : otherUserNpub.substring(0, 8),
+                  style: TextStyle(
+                    color: context.colors.background,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
           Positioned(
