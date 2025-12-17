@@ -124,7 +124,7 @@ class _NoteWidgetState extends State<NoteWidget> {
       UserModel? authorUser = widget.profiles[_authorId];
       UserModel? reposterUser = _reposterId != null ? widget.profiles[_reposterId] : null;
 
-      authorUser ??= UserModel(
+      authorUser ??= UserModel.create(
         pubkeyHex: _authorId,
         name: _authorId.length > 8 ? _authorId.substring(0, 8) : _authorId,
         about: '',
@@ -139,7 +139,7 @@ class _NoteWidgetState extends State<NoteWidget> {
 
       if (_reposterId != null && reposterUser == null) {
         final reposterId = _reposterId;
-        reposterUser = UserModel(
+        reposterUser = UserModel.create(
           pubkeyHex: reposterId,
           name: reposterId.length > 8 ? reposterId.substring(0, 8) : reposterId,
           about: '',
@@ -282,7 +282,7 @@ class _NoteWidgetState extends State<NoteWidget> {
       UserModel? authorUser = widget.profiles[_authorId];
       UserModel? reposterUser = _reposterId != null ? widget.profiles[_reposterId] : null;
 
-      authorUser ??= UserModel(
+      authorUser ??= UserModel.create(
         pubkeyHex: _authorId,
         name: _authorId.length > 8 ? _authorId.substring(0, 8) : _authorId,
         about: '',
@@ -297,7 +297,7 @@ class _NoteWidgetState extends State<NoteWidget> {
 
       if (_reposterId != null && reposterUser == null) {
         final reposterId = _reposterId;
-        reposterUser = UserModel(
+        reposterUser = UserModel.create(
           pubkeyHex: reposterId,
           name: reposterId.length > 8 ? reposterId.substring(0, 8) : reposterId,
           about: '',
@@ -435,7 +435,7 @@ class _NoteWidgetState extends State<NoteWidget> {
       if (!mounted || _isDisposed || !_isInitialized) return;
       
       final user = widget.profiles[npub] ??
-          UserModel(
+          UserModel.create(
             pubkeyHex: npub,
             name: npub.length > 8 ? npub.substring(0, 8) : npub,
             about: '',

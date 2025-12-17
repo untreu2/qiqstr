@@ -85,7 +85,7 @@ class SuggestedFollowsViewModel extends BaseViewModel with CommandMixin {
           },
           (error) {
             debugPrint('[SuggestedFollowsViewModel] ✗ Failed to load ${entry.key}: $error');
-            final fallbackUser = UserModel(
+            final fallbackUser = UserModel.create(
               pubkeyHex: entry.key,
               name: 'Nostr User',
               about: 'A Nostr user',

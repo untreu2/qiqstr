@@ -63,7 +63,7 @@ class UserRepository {
       return profileResult.fold(
         (user) => Result.success(user),
         (error) {
-          final basicUser = UserModel(
+          final basicUser = UserModel.create(
             pubkeyHex: npub,
             name: npub.substring(0, 8),
             profileImage: '',
@@ -210,15 +210,14 @@ class UserRepository {
         }
       }
 
-      final updatedUser = UserModel(
-        pubkeyHex: currentUser.pubkeyHex,
-        name: name ?? currentUser.name,
-        about: about ?? currentUser.about,
-        profileImage: profileImage ?? currentUser.profileImage,
-        banner: banner ?? currentUser.banner,
-        website: website ?? currentUser.website,
-        nip05: nip05 ?? currentUser.nip05,
-        lud16: lud16 ?? currentUser.lud16,
+      final updatedUser = currentUser.copyWith(
+        name: name,
+        about: about,
+        profileImage: profileImage,
+        banner: banner,
+        website: website,
+        nip05: nip05,
+        lud16: lud16,
         updatedAt: DateTime.now(),
       );
 
@@ -528,7 +527,7 @@ class UserRepository {
             debugPrint('[UserRepository] Error converting hex to npub for $hexKey: $e');
           }
 
-          final basicUser = UserModel(
+          final basicUser = UserModel.create(
             pubkeyHex: npub,
             name: npub.substring(0, 8),
             profileImage: '',

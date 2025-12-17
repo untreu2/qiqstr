@@ -305,7 +305,7 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
             _userProfiles[entry.key] = user;
           },
           (error) {
-            _userProfiles[entry.key] = UserModel(
+            _userProfiles[entry.key] = UserModel.create(
               pubkeyHex: entry.key,
               name: entry.key.length > 8 ? entry.key.substring(0, 8) : entry.key,
               about: '',

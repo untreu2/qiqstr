@@ -178,7 +178,7 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
 
   UserModel _createFallbackUser(String npub) {
     final shortName = npub.length > 8 ? npub.substring(0, 8) : npub;
-    return UserModel(
+    return UserModel.create(
       pubkeyHex: npub,
       name: shortName,
       about: '',

@@ -440,7 +440,7 @@ class NostrDataService {
     _profileCache[pubkey] = CachedProfile(dataToCache, timestamp);
     _cleanupCacheIfNeeded();
 
-    final user = UserModel(
+    final user = UserModel.create(
       pubkeyHex: pubkey,
       name: dataToCache['name']!,
       about: dataToCache['about']!,
@@ -2021,7 +2021,7 @@ class NostrDataService {
         return Result.success(cachedUser);
       }
 
-      final basicUser = UserModel(
+      final basicUser = UserModel.create(
         pubkeyHex: npub,
         name: npub.substring(0, 8),
         about: '',
@@ -2538,7 +2538,7 @@ class NostrDataService {
       final updatedAt = DateTime.fromMillisecondsSinceEpoch(eventJson['created_at'] * 1000);
       final pubkeyHex = eventJson['pubkey'] as String;
 
-      final updatedUser = UserModel(
+      final updatedUser = UserModel.create(
         pubkeyHex: user.pubkeyHex,
         name: user.name,
         about: user.about,

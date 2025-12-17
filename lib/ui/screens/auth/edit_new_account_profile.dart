@@ -104,7 +104,7 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
     setState(() => _isSaving = true);
 
     try {
-      final updatedUser = UserModel(
+      final updatedUser = UserModel.create(
         pubkeyHex: widget.npub,
         name: _nameController.text.trim().isNotEmpty ? _nameController.text.trim() : 'New User',
         about: _aboutController.text.trim(),

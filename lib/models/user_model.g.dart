@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'user_model_isar.dart';
+part of 'user_model.dart';
 
 // **************************************************************************
 // IsarCollectionGenerator
@@ -9,13 +9,13 @@ part of 'user_model_isar.dart';
 // coverage:ignore-file
 // ignore_for_file: duplicate_ignore, non_constant_identifier_names, constant_identifier_names, invalid_use_of_protected_member, unnecessary_cast, prefer_const_constructors, lines_longer_than_80_chars, require_trailing_commas, inference_failure_on_function_invocation, unnecessary_parenthesis, unnecessary_raw_strings, unnecessary_null_checks, join_return_with_assignment, prefer_final_locals, avoid_js_rounded_ints, avoid_positional_boolean_parameters, always_specify_types
 
-extension GetUserModelIsarCollection on Isar {
-  IsarCollection<UserModelIsar> get userModelIsars => this.collection();
+extension GetUserModelCollection on Isar {
+  IsarCollection<UserModel> get userModels => this.collection();
 }
 
-const UserModelIsarSchema = CollectionSchema(
-  name: r'UserModelIsar',
-  id: 8996353237581133000,
+const UserModelSchema = CollectionSchema(
+  name: r'UserModel',
+  id: 7195426469378571114,
   properties: {
     r'about': PropertySchema(
       id: 0,
@@ -57,31 +57,36 @@ const UserModelIsarSchema = CollectionSchema(
       name: r'nip05Verified',
       type: IsarType.bool,
     ),
-    r'profileImage': PropertySchema(
+    r'npub': PropertySchema(
       id: 8,
+      name: r'npub',
+      type: IsarType.string,
+    ),
+    r'profileImage': PropertySchema(
+      id: 9,
       name: r'profileImage',
       type: IsarType.string,
     ),
     r'pubkeyHex': PropertySchema(
-      id: 9,
+      id: 10,
       name: r'pubkeyHex',
       type: IsarType.string,
     ),
     r'updatedAt': PropertySchema(
-      id: 10,
+      id: 11,
       name: r'updatedAt',
       type: IsarType.dateTime,
     ),
     r'website': PropertySchema(
-      id: 11,
+      id: 12,
       name: r'website',
       type: IsarType.string,
     )
   },
-  estimateSize: _userModelIsarEstimateSize,
-  serialize: _userModelIsarSerialize,
-  deserialize: _userModelIsarDeserialize,
-  deserializeProp: _userModelIsarDeserializeProp,
+  estimateSize: _userModelEstimateSize,
+  serialize: _userModelSerialize,
+  deserialize: _userModelDeserialize,
+  deserializeProp: _userModelDeserializeProp,
   idName: r'id',
   indexes: {
     r'pubkeyHex': IndexSchema(
@@ -100,14 +105,14 @@ const UserModelIsarSchema = CollectionSchema(
   },
   links: {},
   embeddedSchemas: {},
-  getId: _userModelIsarGetId,
-  getLinks: _userModelIsarGetLinks,
-  attach: _userModelIsarAttach,
+  getId: _userModelGetId,
+  getLinks: _userModelGetLinks,
+  attach: _userModelAttach,
   version: '3.1.0+1',
 );
 
-int _userModelIsarEstimateSize(
-  UserModelIsar object,
+int _userModelEstimateSize(
+  UserModel object,
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
@@ -117,14 +122,15 @@ int _userModelIsarEstimateSize(
   bytesCount += 3 + object.lud16.length * 3;
   bytesCount += 3 + object.name.length * 3;
   bytesCount += 3 + object.nip05.length * 3;
+  bytesCount += 3 + object.npub.length * 3;
   bytesCount += 3 + object.profileImage.length * 3;
   bytesCount += 3 + object.pubkeyHex.length * 3;
   bytesCount += 3 + object.website.length * 3;
   return bytesCount;
 }
 
-void _userModelIsarSerialize(
-  UserModelIsar object,
+void _userModelSerialize(
+  UserModel object,
   IsarWriter writer,
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
@@ -137,19 +143,20 @@ void _userModelIsarSerialize(
   writer.writeString(offsets[5], object.name);
   writer.writeString(offsets[6], object.nip05);
   writer.writeBool(offsets[7], object.nip05Verified);
-  writer.writeString(offsets[8], object.profileImage);
-  writer.writeString(offsets[9], object.pubkeyHex);
-  writer.writeDateTime(offsets[10], object.updatedAt);
-  writer.writeString(offsets[11], object.website);
+  writer.writeString(offsets[8], object.npub);
+  writer.writeString(offsets[9], object.profileImage);
+  writer.writeString(offsets[10], object.pubkeyHex);
+  writer.writeDateTime(offsets[11], object.updatedAt);
+  writer.writeString(offsets[12], object.website);
 }
 
-UserModelIsar _userModelIsarDeserialize(
+UserModel _userModelDeserialize(
   Id id,
   IsarReader reader,
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  final object = UserModelIsar();
+  final object = UserModel();
   object.about = reader.readString(offsets[0]);
   object.banner = reader.readString(offsets[1]);
   object.cachedAt = reader.readDateTime(offsets[2]);
@@ -159,14 +166,14 @@ UserModelIsar _userModelIsarDeserialize(
   object.name = reader.readString(offsets[5]);
   object.nip05 = reader.readString(offsets[6]);
   object.nip05Verified = reader.readBool(offsets[7]);
-  object.profileImage = reader.readString(offsets[8]);
-  object.pubkeyHex = reader.readString(offsets[9]);
-  object.updatedAt = reader.readDateTime(offsets[10]);
-  object.website = reader.readString(offsets[11]);
+  object.profileImage = reader.readString(offsets[9]);
+  object.pubkeyHex = reader.readString(offsets[10]);
+  object.updatedAt = reader.readDateTime(offsets[11]);
+  object.website = reader.readString(offsets[12]);
   return object;
 }
 
-P _userModelIsarDeserializeProp<P>(
+P _userModelDeserializeProp<P>(
   IsarReader reader,
   int propertyId,
   int offset,
@@ -194,33 +201,34 @@ P _userModelIsarDeserializeProp<P>(
     case 9:
       return (reader.readString(offset)) as P;
     case 10:
-      return (reader.readDateTime(offset)) as P;
+      return (reader.readString(offset)) as P;
     case 11:
+      return (reader.readDateTime(offset)) as P;
+    case 12:
       return (reader.readString(offset)) as P;
     default:
       throw IsarError('Unknown property with id $propertyId');
   }
 }
 
-Id _userModelIsarGetId(UserModelIsar object) {
+Id _userModelGetId(UserModel object) {
   return object.id;
 }
 
-List<IsarLinkBase<dynamic>> _userModelIsarGetLinks(UserModelIsar object) {
+List<IsarLinkBase<dynamic>> _userModelGetLinks(UserModel object) {
   return [];
 }
 
-void _userModelIsarAttach(
-    IsarCollection<dynamic> col, Id id, UserModelIsar object) {
+void _userModelAttach(IsarCollection<dynamic> col, Id id, UserModel object) {
   object.id = id;
 }
 
-extension UserModelIsarByIndex on IsarCollection<UserModelIsar> {
-  Future<UserModelIsar?> getByPubkeyHex(String pubkeyHex) {
+extension UserModelByIndex on IsarCollection<UserModel> {
+  Future<UserModel?> getByPubkeyHex(String pubkeyHex) {
     return getByIndex(r'pubkeyHex', [pubkeyHex]);
   }
 
-  UserModelIsar? getByPubkeyHexSync(String pubkeyHex) {
+  UserModel? getByPubkeyHexSync(String pubkeyHex) {
     return getByIndexSync(r'pubkeyHex', [pubkeyHex]);
   }
 
@@ -232,12 +240,12 @@ extension UserModelIsarByIndex on IsarCollection<UserModelIsar> {
     return deleteByIndexSync(r'pubkeyHex', [pubkeyHex]);
   }
 
-  Future<List<UserModelIsar?>> getAllByPubkeyHex(List<String> pubkeyHexValues) {
+  Future<List<UserModel?>> getAllByPubkeyHex(List<String> pubkeyHexValues) {
     final values = pubkeyHexValues.map((e) => [e]).toList();
     return getAllByIndex(r'pubkeyHex', values);
   }
 
-  List<UserModelIsar?> getAllByPubkeyHexSync(List<String> pubkeyHexValues) {
+  List<UserModel?> getAllByPubkeyHexSync(List<String> pubkeyHexValues) {
     final values = pubkeyHexValues.map((e) => [e]).toList();
     return getAllByIndexSync(r'pubkeyHex', values);
   }
@@ -252,37 +260,36 @@ extension UserModelIsarByIndex on IsarCollection<UserModelIsar> {
     return deleteAllByIndexSync(r'pubkeyHex', values);
   }
 
-  Future<Id> putByPubkeyHex(UserModelIsar object) {
+  Future<Id> putByPubkeyHex(UserModel object) {
     return putByIndex(r'pubkeyHex', object);
   }
 
-  Id putByPubkeyHexSync(UserModelIsar object, {bool saveLinks = true}) {
+  Id putByPubkeyHexSync(UserModel object, {bool saveLinks = true}) {
     return putByIndexSync(r'pubkeyHex', object, saveLinks: saveLinks);
   }
 
-  Future<List<Id>> putAllByPubkeyHex(List<UserModelIsar> objects) {
+  Future<List<Id>> putAllByPubkeyHex(List<UserModel> objects) {
     return putAllByIndex(r'pubkeyHex', objects);
   }
 
-  List<Id> putAllByPubkeyHexSync(List<UserModelIsar> objects,
+  List<Id> putAllByPubkeyHexSync(List<UserModel> objects,
       {bool saveLinks = true}) {
     return putAllByIndexSync(r'pubkeyHex', objects, saveLinks: saveLinks);
   }
 }
 
-extension UserModelIsarQueryWhereSort
-    on QueryBuilder<UserModelIsar, UserModelIsar, QWhere> {
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterWhere> anyId() {
+extension UserModelQueryWhereSort
+    on QueryBuilder<UserModel, UserModel, QWhere> {
+  QueryBuilder<UserModel, UserModel, QAfterWhere> anyId() {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(const IdWhereClause.any());
     });
   }
 }
 
-extension UserModelIsarQueryWhere
-    on QueryBuilder<UserModelIsar, UserModelIsar, QWhereClause> {
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterWhereClause> idEqualTo(
-      Id id) {
+extension UserModelQueryWhere
+    on QueryBuilder<UserModel, UserModel, QWhereClause> {
+  QueryBuilder<UserModel, UserModel, QAfterWhereClause> idEqualTo(Id id) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IdWhereClause.between(
         lower: id,
@@ -291,8 +298,7 @@ extension UserModelIsarQueryWhere
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterWhereClause> idNotEqualTo(
-      Id id) {
+  QueryBuilder<UserModel, UserModel, QAfterWhereClause> idNotEqualTo(Id id) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
@@ -314,8 +320,7 @@ extension UserModelIsarQueryWhere
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterWhereClause> idGreaterThan(
-      Id id,
+  QueryBuilder<UserModel, UserModel, QAfterWhereClause> idGreaterThan(Id id,
       {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
@@ -324,8 +329,7 @@ extension UserModelIsarQueryWhere
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterWhereClause> idLessThan(
-      Id id,
+  QueryBuilder<UserModel, UserModel, QAfterWhereClause> idLessThan(Id id,
       {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(
@@ -334,7 +338,7 @@ extension UserModelIsarQueryWhere
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterWhereClause> idBetween(
+  QueryBuilder<UserModel, UserModel, QAfterWhereClause> idBetween(
     Id lowerId,
     Id upperId, {
     bool includeLower = true,
@@ -350,8 +354,8 @@ extension UserModelIsarQueryWhere
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterWhereClause>
-      pubkeyHexEqualTo(String pubkeyHex) {
+  QueryBuilder<UserModel, UserModel, QAfterWhereClause> pubkeyHexEqualTo(
+      String pubkeyHex) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
         indexName: r'pubkeyHex',
@@ -360,8 +364,8 @@ extension UserModelIsarQueryWhere
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterWhereClause>
-      pubkeyHexNotEqualTo(String pubkeyHex) {
+  QueryBuilder<UserModel, UserModel, QAfterWhereClause> pubkeyHexNotEqualTo(
+      String pubkeyHex) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
         return query
@@ -396,10 +400,9 @@ extension UserModelIsarQueryWhere
   }
 }
 
-extension UserModelIsarQueryFilter
-    on QueryBuilder<UserModelIsar, UserModelIsar, QFilterCondition> {
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      aboutEqualTo(
+extension UserModelQueryFilter
+    on QueryBuilder<UserModel, UserModel, QFilterCondition> {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> aboutEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -412,8 +415,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      aboutGreaterThan(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> aboutGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -428,8 +430,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      aboutLessThan(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> aboutLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -444,8 +445,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      aboutBetween(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> aboutBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -464,8 +464,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      aboutStartsWith(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> aboutStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -478,8 +477,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      aboutEndsWith(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> aboutEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -492,8 +490,9 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      aboutContains(String value, {bool caseSensitive = true}) {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> aboutContains(
+      String value,
+      {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
         property: r'about',
@@ -503,8 +502,9 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      aboutMatches(String pattern, {bool caseSensitive = true}) {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> aboutMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
         property: r'about',
@@ -514,8 +514,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      aboutIsEmpty() {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> aboutIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'about',
@@ -524,8 +523,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      aboutIsNotEmpty() {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> aboutIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'about',
@@ -534,8 +532,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      bannerEqualTo(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> bannerEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -548,8 +545,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      bannerGreaterThan(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> bannerGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -564,8 +560,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      bannerLessThan(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> bannerLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -580,8 +575,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      bannerBetween(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> bannerBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -600,8 +594,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      bannerStartsWith(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> bannerStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -614,8 +607,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      bannerEndsWith(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> bannerEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -628,8 +620,9 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      bannerContains(String value, {bool caseSensitive = true}) {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> bannerContains(
+      String value,
+      {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
         property: r'banner',
@@ -639,8 +632,9 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      bannerMatches(String pattern, {bool caseSensitive = true}) {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> bannerMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
         property: r'banner',
@@ -650,8 +644,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      bannerIsEmpty() {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> bannerIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'banner',
@@ -660,8 +653,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      bannerIsNotEmpty() {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> bannerIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'banner',
@@ -670,8 +662,8 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      cachedAtEqualTo(DateTime value) {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> cachedAtEqualTo(
+      DateTime value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'cachedAt',
@@ -680,8 +672,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      cachedAtGreaterThan(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> cachedAtGreaterThan(
     DateTime value, {
     bool include = false,
   }) {
@@ -694,8 +685,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      cachedAtLessThan(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> cachedAtLessThan(
     DateTime value, {
     bool include = false,
   }) {
@@ -708,8 +698,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      cachedAtBetween(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> cachedAtBetween(
     DateTime lower,
     DateTime upper, {
     bool includeLower = true,
@@ -726,7 +715,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition>
       followerCountIsNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNull(
@@ -735,7 +724,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition>
       followerCountIsNotNull() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(const FilterCondition.isNotNull(
@@ -744,7 +733,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition>
       followerCountEqualTo(int? value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -754,7 +743,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition>
       followerCountGreaterThan(
     int? value, {
     bool include = false,
@@ -768,7 +757,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition>
       followerCountLessThan(
     int? value, {
     bool include = false,
@@ -782,7 +771,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition>
       followerCountBetween(
     int? lower,
     int? upper, {
@@ -800,7 +789,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition> idEqualTo(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> idEqualTo(
       Id value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -810,8 +799,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      idGreaterThan(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> idGreaterThan(
     Id value, {
     bool include = false,
   }) {
@@ -824,7 +812,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition> idLessThan(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> idLessThan(
     Id value, {
     bool include = false,
   }) {
@@ -837,7 +825,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition> idBetween(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> idBetween(
     Id lower,
     Id upper, {
     bool includeLower = true,
@@ -854,8 +842,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      lud16EqualTo(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> lud16EqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -868,8 +855,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      lud16GreaterThan(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> lud16GreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -884,8 +870,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      lud16LessThan(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> lud16LessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -900,8 +885,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      lud16Between(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> lud16Between(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -920,8 +904,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      lud16StartsWith(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> lud16StartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -934,8 +917,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      lud16EndsWith(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> lud16EndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -948,8 +930,9 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      lud16Contains(String value, {bool caseSensitive = true}) {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> lud16Contains(
+      String value,
+      {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
         property: r'lud16',
@@ -959,8 +942,9 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      lud16Matches(String pattern, {bool caseSensitive = true}) {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> lud16Matches(
+      String pattern,
+      {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
         property: r'lud16',
@@ -970,8 +954,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      lud16IsEmpty() {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> lud16IsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'lud16',
@@ -980,8 +963,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      lud16IsNotEmpty() {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> lud16IsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'lud16',
@@ -990,7 +972,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition> nameEqualTo(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nameEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -1003,8 +985,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      nameGreaterThan(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nameGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -1019,8 +1000,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      nameLessThan(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nameLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -1035,7 +1015,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition> nameBetween(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nameBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -1054,8 +1034,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      nameStartsWith(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nameStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -1068,8 +1047,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      nameEndsWith(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nameEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -1082,8 +1060,9 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      nameContains(String value, {bool caseSensitive = true}) {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nameContains(
+      String value,
+      {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
         property: r'name',
@@ -1093,7 +1072,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition> nameMatches(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nameMatches(
       String pattern,
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
@@ -1105,8 +1084,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      nameIsEmpty() {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nameIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'name',
@@ -1115,8 +1093,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      nameIsNotEmpty() {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nameIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'name',
@@ -1125,8 +1102,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      nip05EqualTo(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nip05EqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -1139,8 +1115,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      nip05GreaterThan(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nip05GreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -1155,8 +1130,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      nip05LessThan(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nip05LessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -1171,8 +1145,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      nip05Between(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nip05Between(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -1191,8 +1164,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      nip05StartsWith(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nip05StartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -1205,8 +1177,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      nip05EndsWith(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nip05EndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -1219,8 +1190,9 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      nip05Contains(String value, {bool caseSensitive = true}) {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nip05Contains(
+      String value,
+      {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
         property: r'nip05',
@@ -1230,8 +1202,9 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      nip05Matches(String pattern, {bool caseSensitive = true}) {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nip05Matches(
+      String pattern,
+      {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
         property: r'nip05',
@@ -1241,8 +1214,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      nip05IsEmpty() {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nip05IsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'nip05',
@@ -1251,8 +1223,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      nip05IsNotEmpty() {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> nip05IsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
         property: r'nip05',
@@ -1261,7 +1232,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition>
       nip05VerifiedEqualTo(bool value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -1271,8 +1242,137 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      profileImageEqualTo(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> npubEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'npub',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> npubGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'npub',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> npubLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'npub',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> npubBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'npub',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> npubStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'npub',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> npubEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'npub',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> npubContains(
+      String value,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'npub',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> npubMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'npub',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> npubIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'npub',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> npubIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'npub',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> profileImageEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -1285,7 +1385,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition>
       profileImageGreaterThan(
     String value, {
     bool include = false,
@@ -1301,7 +1401,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition>
       profileImageLessThan(
     String value, {
     bool include = false,
@@ -1317,8 +1417,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      profileImageBetween(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> profileImageBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -1337,7 +1436,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition>
       profileImageStartsWith(
     String value, {
     bool caseSensitive = true,
@@ -1351,7 +1450,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition>
       profileImageEndsWith(
     String value, {
     bool caseSensitive = true,
@@ -1365,7 +1464,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition>
       profileImageContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
@@ -1376,8 +1475,9 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      profileImageMatches(String pattern, {bool caseSensitive = true}) {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> profileImageMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
         property: r'profileImage',
@@ -1387,7 +1487,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition>
       profileImageIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -1397,7 +1497,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition>
       profileImageIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
@@ -1407,8 +1507,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      pubkeyHexEqualTo(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> pubkeyHexEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -1421,7 +1520,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition>
       pubkeyHexGreaterThan(
     String value, {
     bool include = false,
@@ -1437,8 +1536,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      pubkeyHexLessThan(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> pubkeyHexLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -1453,8 +1551,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      pubkeyHexBetween(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> pubkeyHexBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -1473,8 +1570,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      pubkeyHexStartsWith(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> pubkeyHexStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -1487,8 +1583,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      pubkeyHexEndsWith(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> pubkeyHexEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -1501,8 +1596,9 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      pubkeyHexContains(String value, {bool caseSensitive = true}) {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> pubkeyHexContains(
+      String value,
+      {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
         property: r'pubkeyHex',
@@ -1512,8 +1608,9 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      pubkeyHexMatches(String pattern, {bool caseSensitive = true}) {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> pubkeyHexMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
         property: r'pubkeyHex',
@@ -1523,8 +1620,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      pubkeyHexIsEmpty() {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> pubkeyHexIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'pubkeyHex',
@@ -1533,7 +1629,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition>
       pubkeyHexIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
@@ -1543,8 +1639,8 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      updatedAtEqualTo(DateTime value) {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> updatedAtEqualTo(
+      DateTime value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'updatedAt',
@@ -1553,7 +1649,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition>
       updatedAtGreaterThan(
     DateTime value, {
     bool include = false,
@@ -1567,8 +1663,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      updatedAtLessThan(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> updatedAtLessThan(
     DateTime value, {
     bool include = false,
   }) {
@@ -1581,8 +1676,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      updatedAtBetween(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> updatedAtBetween(
     DateTime lower,
     DateTime upper, {
     bool includeLower = true,
@@ -1599,8 +1693,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      websiteEqualTo(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> websiteEqualTo(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -1613,8 +1706,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      websiteGreaterThan(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> websiteGreaterThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -1629,8 +1721,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      websiteLessThan(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> websiteLessThan(
     String value, {
     bool include = false,
     bool caseSensitive = true,
@@ -1645,8 +1736,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      websiteBetween(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> websiteBetween(
     String lower,
     String upper, {
     bool includeLower = true,
@@ -1665,8 +1755,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      websiteStartsWith(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> websiteStartsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -1679,8 +1768,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      websiteEndsWith(
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> websiteEndsWith(
     String value, {
     bool caseSensitive = true,
   }) {
@@ -1693,8 +1781,9 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      websiteContains(String value, {bool caseSensitive = true}) {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> websiteContains(
+      String value,
+      {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
         property: r'website',
@@ -1704,8 +1793,9 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      websiteMatches(String pattern, {bool caseSensitive = true}) {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> websiteMatches(
+      String pattern,
+      {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
         property: r'website',
@@ -1715,8 +1805,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
-      websiteIsEmpty() {
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition> websiteIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
         property: r'website',
@@ -1725,7 +1814,7 @@ extension UserModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterFilterCondition>
+  QueryBuilder<UserModel, UserModel, QAfterFilterCondition>
       websiteIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
@@ -1736,414 +1825,424 @@ extension UserModelIsarQueryFilter
   }
 }
 
-extension UserModelIsarQueryObject
-    on QueryBuilder<UserModelIsar, UserModelIsar, QFilterCondition> {}
+extension UserModelQueryObject
+    on QueryBuilder<UserModel, UserModel, QFilterCondition> {}
 
-extension UserModelIsarQueryLinks
-    on QueryBuilder<UserModelIsar, UserModelIsar, QFilterCondition> {}
+extension UserModelQueryLinks
+    on QueryBuilder<UserModel, UserModel, QFilterCondition> {}
 
-extension UserModelIsarQuerySortBy
-    on QueryBuilder<UserModelIsar, UserModelIsar, QSortBy> {
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> sortByAbout() {
+extension UserModelQuerySortBy on QueryBuilder<UserModel, UserModel, QSortBy> {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByAbout() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'about', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> sortByAboutDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByAboutDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'about', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> sortByBanner() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByBanner() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'banner', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> sortByBannerDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByBannerDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'banner', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> sortByCachedAt() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByCachedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'cachedAt', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
-      sortByCachedAtDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByCachedAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'cachedAt', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
-      sortByFollowerCount() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByFollowerCount() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'followerCount', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
-      sortByFollowerCountDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByFollowerCountDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'followerCount', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> sortByLud16() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByLud16() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'lud16', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> sortByLud16Desc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByLud16Desc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'lud16', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> sortByName() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByName() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> sortByNameDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByNameDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> sortByNip05() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByNip05() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'nip05', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> sortByNip05Desc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByNip05Desc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'nip05', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
-      sortByNip05Verified() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByNip05Verified() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'nip05Verified', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
-      sortByNip05VerifiedDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByNip05VerifiedDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'nip05Verified', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
-      sortByProfileImage() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByNpub() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'npub', Sort.asc);
+    });
+  }
+
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByNpubDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'npub', Sort.desc);
+    });
+  }
+
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByProfileImage() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'profileImage', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
-      sortByProfileImageDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByProfileImageDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'profileImage', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> sortByPubkeyHex() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByPubkeyHex() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'pubkeyHex', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
-      sortByPubkeyHexDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByPubkeyHexDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'pubkeyHex', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> sortByUpdatedAt() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByUpdatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'updatedAt', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
-      sortByUpdatedAtDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByUpdatedAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'updatedAt', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> sortByWebsite() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByWebsite() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'website', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> sortByWebsiteDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> sortByWebsiteDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'website', Sort.desc);
     });
   }
 }
 
-extension UserModelIsarQuerySortThenBy
-    on QueryBuilder<UserModelIsar, UserModelIsar, QSortThenBy> {
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> thenByAbout() {
+extension UserModelQuerySortThenBy
+    on QueryBuilder<UserModel, UserModel, QSortThenBy> {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByAbout() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'about', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> thenByAboutDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByAboutDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'about', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> thenByBanner() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByBanner() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'banner', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> thenByBannerDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByBannerDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'banner', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> thenByCachedAt() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByCachedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'cachedAt', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
-      thenByCachedAtDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByCachedAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'cachedAt', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
-      thenByFollowerCount() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByFollowerCount() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'followerCount', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
-      thenByFollowerCountDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByFollowerCountDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'followerCount', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> thenById() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenById() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> thenByIdDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> thenByLud16() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByLud16() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'lud16', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> thenByLud16Desc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByLud16Desc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'lud16', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> thenByName() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByName() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> thenByNameDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByNameDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'name', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> thenByNip05() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByNip05() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'nip05', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> thenByNip05Desc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByNip05Desc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'nip05', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
-      thenByNip05Verified() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByNip05Verified() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'nip05Verified', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
-      thenByNip05VerifiedDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByNip05VerifiedDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'nip05Verified', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
-      thenByProfileImage() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByNpub() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'npub', Sort.asc);
+    });
+  }
+
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByNpubDesc() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addSortBy(r'npub', Sort.desc);
+    });
+  }
+
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByProfileImage() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'profileImage', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
-      thenByProfileImageDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByProfileImageDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'profileImage', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> thenByPubkeyHex() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByPubkeyHex() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'pubkeyHex', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
-      thenByPubkeyHexDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByPubkeyHexDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'pubkeyHex', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> thenByUpdatedAt() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByUpdatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'updatedAt', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy>
-      thenByUpdatedAtDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByUpdatedAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'updatedAt', Sort.desc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> thenByWebsite() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByWebsite() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'website', Sort.asc);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QAfterSortBy> thenByWebsiteDesc() {
+  QueryBuilder<UserModel, UserModel, QAfterSortBy> thenByWebsiteDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'website', Sort.desc);
     });
   }
 }
 
-extension UserModelIsarQueryWhereDistinct
-    on QueryBuilder<UserModelIsar, UserModelIsar, QDistinct> {
-  QueryBuilder<UserModelIsar, UserModelIsar, QDistinct> distinctByAbout(
+extension UserModelQueryWhereDistinct
+    on QueryBuilder<UserModel, UserModel, QDistinct> {
+  QueryBuilder<UserModel, UserModel, QDistinct> distinctByAbout(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'about', caseSensitive: caseSensitive);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QDistinct> distinctByBanner(
+  QueryBuilder<UserModel, UserModel, QDistinct> distinctByBanner(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'banner', caseSensitive: caseSensitive);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QDistinct> distinctByCachedAt() {
+  QueryBuilder<UserModel, UserModel, QDistinct> distinctByCachedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'cachedAt');
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QDistinct>
-      distinctByFollowerCount() {
+  QueryBuilder<UserModel, UserModel, QDistinct> distinctByFollowerCount() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'followerCount');
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QDistinct> distinctByLud16(
+  QueryBuilder<UserModel, UserModel, QDistinct> distinctByLud16(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'lud16', caseSensitive: caseSensitive);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QDistinct> distinctByName(
+  QueryBuilder<UserModel, UserModel, QDistinct> distinctByName(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'name', caseSensitive: caseSensitive);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QDistinct> distinctByNip05(
+  QueryBuilder<UserModel, UserModel, QDistinct> distinctByNip05(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'nip05', caseSensitive: caseSensitive);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QDistinct>
-      distinctByNip05Verified() {
+  QueryBuilder<UserModel, UserModel, QDistinct> distinctByNip05Verified() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'nip05Verified');
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QDistinct> distinctByProfileImage(
+  QueryBuilder<UserModel, UserModel, QDistinct> distinctByNpub(
+      {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addDistinctBy(r'npub', caseSensitive: caseSensitive);
+    });
+  }
+
+  QueryBuilder<UserModel, UserModel, QDistinct> distinctByProfileImage(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'profileImage', caseSensitive: caseSensitive);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QDistinct> distinctByPubkeyHex(
+  QueryBuilder<UserModel, UserModel, QDistinct> distinctByPubkeyHex(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'pubkeyHex', caseSensitive: caseSensitive);
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QDistinct> distinctByUpdatedAt() {
+  QueryBuilder<UserModel, UserModel, QDistinct> distinctByUpdatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'updatedAt');
     });
   }
 
-  QueryBuilder<UserModelIsar, UserModelIsar, QDistinct> distinctByWebsite(
+  QueryBuilder<UserModel, UserModel, QDistinct> distinctByWebsite(
       {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'website', caseSensitive: caseSensitive);
@@ -2151,81 +2250,87 @@ extension UserModelIsarQueryWhereDistinct
   }
 }
 
-extension UserModelIsarQueryProperty
-    on QueryBuilder<UserModelIsar, UserModelIsar, QQueryProperty> {
-  QueryBuilder<UserModelIsar, int, QQueryOperations> idProperty() {
+extension UserModelQueryProperty
+    on QueryBuilder<UserModel, UserModel, QQueryProperty> {
+  QueryBuilder<UserModel, int, QQueryOperations> idProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'id');
     });
   }
 
-  QueryBuilder<UserModelIsar, String, QQueryOperations> aboutProperty() {
+  QueryBuilder<UserModel, String, QQueryOperations> aboutProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'about');
     });
   }
 
-  QueryBuilder<UserModelIsar, String, QQueryOperations> bannerProperty() {
+  QueryBuilder<UserModel, String, QQueryOperations> bannerProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'banner');
     });
   }
 
-  QueryBuilder<UserModelIsar, DateTime, QQueryOperations> cachedAtProperty() {
+  QueryBuilder<UserModel, DateTime, QQueryOperations> cachedAtProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'cachedAt');
     });
   }
 
-  QueryBuilder<UserModelIsar, int?, QQueryOperations> followerCountProperty() {
+  QueryBuilder<UserModel, int?, QQueryOperations> followerCountProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'followerCount');
     });
   }
 
-  QueryBuilder<UserModelIsar, String, QQueryOperations> lud16Property() {
+  QueryBuilder<UserModel, String, QQueryOperations> lud16Property() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'lud16');
     });
   }
 
-  QueryBuilder<UserModelIsar, String, QQueryOperations> nameProperty() {
+  QueryBuilder<UserModel, String, QQueryOperations> nameProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'name');
     });
   }
 
-  QueryBuilder<UserModelIsar, String, QQueryOperations> nip05Property() {
+  QueryBuilder<UserModel, String, QQueryOperations> nip05Property() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'nip05');
     });
   }
 
-  QueryBuilder<UserModelIsar, bool, QQueryOperations> nip05VerifiedProperty() {
+  QueryBuilder<UserModel, bool, QQueryOperations> nip05VerifiedProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'nip05Verified');
     });
   }
 
-  QueryBuilder<UserModelIsar, String, QQueryOperations> profileImageProperty() {
+  QueryBuilder<UserModel, String, QQueryOperations> npubProperty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addPropertyName(r'npub');
+    });
+  }
+
+  QueryBuilder<UserModel, String, QQueryOperations> profileImageProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'profileImage');
     });
   }
 
-  QueryBuilder<UserModelIsar, String, QQueryOperations> pubkeyHexProperty() {
+  QueryBuilder<UserModel, String, QQueryOperations> pubkeyHexProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'pubkeyHex');
     });
   }
 
-  QueryBuilder<UserModelIsar, DateTime, QQueryOperations> updatedAtProperty() {
+  QueryBuilder<UserModel, DateTime, QQueryOperations> updatedAtProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'updatedAt');
     });
   }
 
-  QueryBuilder<UserModelIsar, String, QQueryOperations> websiteProperty() {
+  QueryBuilder<UserModel, String, QQueryOperations> websiteProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'website');
     });

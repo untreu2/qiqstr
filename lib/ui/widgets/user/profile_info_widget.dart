@@ -50,17 +50,9 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   String? _userHexKey;
 
-  final ValueNotifier<UserModel> _userNotifier = ValueNotifier(UserModel(
+  final ValueNotifier<UserModel> _userNotifier = ValueNotifier(UserModel.create(
     pubkeyHex: '',
     name: '',
-    about: '',
-    profileImage: '',
-    banner: '',
-    website: '',
-    nip05: '',
-    lud16: '',
-    updatedAt: DateTime.now(),
-    nip05Verified: false,
   ));
 
   bool _isLoadingProfile = false;

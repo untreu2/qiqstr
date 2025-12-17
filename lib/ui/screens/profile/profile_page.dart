@@ -174,17 +174,9 @@ class _ProfilePageState extends State<ProfilePage> {
                   context,
                   MaterialPageRoute(
                     builder: (_) => ProfilePage(
-                      user: UserModel(
+                      user: UserModel.create(
                         pubkeyHex: npub,
                         name: npub.length > 8 ? npub.substring(0, 8) : npub,
-                        about: '',
-                        profileImage: '',
-                        banner: '',
-                        website: '',
-                        nip05: '',
-                        lud16: '',
-                        updatedAt: DateTime.now(),
-                        nip05Verified: false,
                       ),
                     ),
                   ),

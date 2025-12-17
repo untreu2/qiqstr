@@ -77,7 +77,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
     final result = await _userRepository.getUserProfile(npub);
     return result.fold(
       (user) => user,
-      (error) => UserModel(
+      (error) => UserModel.create(
         pubkeyHex: npub,
         name: '',
         about: '',

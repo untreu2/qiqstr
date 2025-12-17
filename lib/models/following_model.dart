@@ -1,43 +1,43 @@
 import 'package:isar/isar.dart';
 
-part 'mute_model_isar.g.dart';
+part 'following_model.g.dart';
 
 @collection
-class MuteModelIsar {
+class FollowingModel {
   Id id = Isar.autoIncrement;
 
   @Index(unique: true, type: IndexType.hash)
   late String userPubkeyHex;
 
-  late List<String> mutedPubkeys;
+  late List<String> followingPubkeys;
   late DateTime updatedAt;
   late DateTime cachedAt;
 
-  static MuteModelIsar fromMuteModel(String userPubkeyHex, List<String> mutedPubkeys) {
-    return MuteModelIsar()
+  static FollowingModel fromFollowingModel(String userPubkeyHex, List<String> followingPubkeys) {
+    return FollowingModel()
       ..userPubkeyHex = userPubkeyHex
-      ..mutedPubkeys = mutedPubkeys
+      ..followingPubkeys = followingPubkeys
       ..updatedAt = DateTime.now()
       ..cachedAt = DateTime.now();
   }
 
-  List<String> toMuteList() {
-    return List<String>.from(mutedPubkeys);
+  List<String> toFollowingList() {
+    return List<String>.from(followingPubkeys);
   }
 
   bool isExpired(Duration ttl) {
     return DateTime.now().difference(cachedAt) > ttl;
   }
 
-  MuteModelIsar copyWith({
+  FollowingModel copyWith({
     String? userPubkeyHex,
-    List<String>? mutedPubkeys,
+    List<String>? followingPubkeys,
     DateTime? updatedAt,
     DateTime? cachedAt,
   }) {
-    return MuteModelIsar()
+    return FollowingModel()
       ..userPubkeyHex = userPubkeyHex ?? this.userPubkeyHex
-      ..mutedPubkeys = mutedPubkeys ?? this.mutedPubkeys
+      ..followingPubkeys = followingPubkeys ?? this.followingPubkeys
       ..updatedAt = updatedAt ?? this.updatedAt
       ..cachedAt = cachedAt ?? this.cachedAt;
   }

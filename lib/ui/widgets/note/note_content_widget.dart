@@ -96,7 +96,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
   }
 
   static UserModel _createPlaceholderUser(String pubkey) {
-    return UserModel(
+    return UserModel.create(
       pubkeyHex: pubkey,
       name: pubkey.length > 8 ? pubkey.substring(0, 8) : pubkey,
       about: '',

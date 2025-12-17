@@ -217,7 +217,7 @@ class NotificationRepository {
         return Result.success(_userProfilesCache[npub]);
       }
 
-      final user = UserModel(
+      final user = UserModel.create(
         pubkeyHex: npub,
         name: npub.substring(0, 8),
         about: '',

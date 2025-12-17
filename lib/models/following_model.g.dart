@@ -1,6 +1,6 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'mute_model_isar.dart';
+part of 'following_model.dart';
 
 // **************************************************************************
 // IsarCollectionGenerator
@@ -9,22 +9,22 @@ part of 'mute_model_isar.dart';
 // coverage:ignore-file
 // ignore_for_file: duplicate_ignore, non_constant_identifier_names, constant_identifier_names, invalid_use_of_protected_member, unnecessary_cast, prefer_const_constructors, lines_longer_than_80_chars, require_trailing_commas, inference_failure_on_function_invocation, unnecessary_parenthesis, unnecessary_raw_strings, unnecessary_null_checks, join_return_with_assignment, prefer_final_locals, avoid_js_rounded_ints, avoid_positional_boolean_parameters, always_specify_types
 
-extension GetMuteModelIsarCollection on Isar {
-  IsarCollection<MuteModelIsar> get muteModelIsars => this.collection();
+extension GetFollowingModelCollection on Isar {
+  IsarCollection<FollowingModel> get followingModels => this.collection();
 }
 
-const MuteModelIsarSchema = CollectionSchema(
-  name: r'MuteModelIsar',
-  id: -712695253317615430,
+const FollowingModelSchema = CollectionSchema(
+  name: r'FollowingModel',
+  id: 4322624184509111460,
   properties: {
     r'cachedAt': PropertySchema(
       id: 0,
       name: r'cachedAt',
       type: IsarType.dateTime,
     ),
-    r'mutedPubkeys': PropertySchema(
+    r'followingPubkeys': PropertySchema(
       id: 1,
-      name: r'mutedPubkeys',
+      name: r'followingPubkeys',
       type: IsarType.stringList,
     ),
     r'updatedAt': PropertySchema(
@@ -38,10 +38,10 @@ const MuteModelIsarSchema = CollectionSchema(
       type: IsarType.string,
     )
   },
-  estimateSize: _muteModelIsarEstimateSize,
-  serialize: _muteModelIsarSerialize,
-  deserialize: _muteModelIsarDeserialize,
-  deserializeProp: _muteModelIsarDeserializeProp,
+  estimateSize: _followingModelEstimateSize,
+  serialize: _followingModelSerialize,
+  deserialize: _followingModelDeserialize,
+  deserializeProp: _followingModelDeserializeProp,
   idName: r'id',
   indexes: {
     r'userPubkeyHex': IndexSchema(
@@ -60,22 +60,22 @@ const MuteModelIsarSchema = CollectionSchema(
   },
   links: {},
   embeddedSchemas: {},
-  getId: _muteModelIsarGetId,
-  getLinks: _muteModelIsarGetLinks,
-  attach: _muteModelIsarAttach,
+  getId: _followingModelGetId,
+  getLinks: _followingModelGetLinks,
+  attach: _followingModelAttach,
   version: '3.1.0+1',
 );
 
-int _muteModelIsarEstimateSize(
-  MuteModelIsar object,
+int _followingModelEstimateSize(
+  FollowingModel object,
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
   var bytesCount = offsets.last;
-  bytesCount += 3 + object.mutedPubkeys.length * 3;
+  bytesCount += 3 + object.followingPubkeys.length * 3;
   {
-    for (var i = 0; i < object.mutedPubkeys.length; i++) {
-      final value = object.mutedPubkeys[i];
+    for (var i = 0; i < object.followingPubkeys.length; i++) {
+      final value = object.followingPubkeys[i];
       bytesCount += value.length * 3;
     }
   }
@@ -83,34 +83,34 @@ int _muteModelIsarEstimateSize(
   return bytesCount;
 }
 
-void _muteModelIsarSerialize(
-  MuteModelIsar object,
+void _followingModelSerialize(
+  FollowingModel object,
   IsarWriter writer,
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
   writer.writeDateTime(offsets[0], object.cachedAt);
-  writer.writeStringList(offsets[1], object.mutedPubkeys);
+  writer.writeStringList(offsets[1], object.followingPubkeys);
   writer.writeDateTime(offsets[2], object.updatedAt);
   writer.writeString(offsets[3], object.userPubkeyHex);
 }
 
-MuteModelIsar _muteModelIsarDeserialize(
+FollowingModel _followingModelDeserialize(
   Id id,
   IsarReader reader,
   List<int> offsets,
   Map<Type, List<int>> allOffsets,
 ) {
-  final object = MuteModelIsar();
+  final object = FollowingModel();
   object.cachedAt = reader.readDateTime(offsets[0]);
+  object.followingPubkeys = reader.readStringList(offsets[1]) ?? [];
   object.id = id;
-  object.mutedPubkeys = reader.readStringList(offsets[1]) ?? [];
   object.updatedAt = reader.readDateTime(offsets[2]);
   object.userPubkeyHex = reader.readString(offsets[3]);
   return object;
 }
 
-P _muteModelIsarDeserializeProp<P>(
+P _followingModelDeserializeProp<P>(
   IsarReader reader,
   int propertyId,
   int offset,
@@ -130,25 +130,25 @@ P _muteModelIsarDeserializeProp<P>(
   }
 }
 
-Id _muteModelIsarGetId(MuteModelIsar object) {
+Id _followingModelGetId(FollowingModel object) {
   return object.id;
 }
 
-List<IsarLinkBase<dynamic>> _muteModelIsarGetLinks(MuteModelIsar object) {
+List<IsarLinkBase<dynamic>> _followingModelGetLinks(FollowingModel object) {
   return [];
 }
 
-void _muteModelIsarAttach(
-    IsarCollection<dynamic> col, Id id, MuteModelIsar object) {
+void _followingModelAttach(
+    IsarCollection<dynamic> col, Id id, FollowingModel object) {
   object.id = id;
 }
 
-extension MuteModelIsarByIndex on IsarCollection<MuteModelIsar> {
-  Future<MuteModelIsar?> getByUserPubkeyHex(String userPubkeyHex) {
+extension FollowingModelByIndex on IsarCollection<FollowingModel> {
+  Future<FollowingModel?> getByUserPubkeyHex(String userPubkeyHex) {
     return getByIndex(r'userPubkeyHex', [userPubkeyHex]);
   }
 
-  MuteModelIsar? getByUserPubkeyHexSync(String userPubkeyHex) {
+  FollowingModel? getByUserPubkeyHexSync(String userPubkeyHex) {
     return getByIndexSync(r'userPubkeyHex', [userPubkeyHex]);
   }
 
@@ -160,13 +160,13 @@ extension MuteModelIsarByIndex on IsarCollection<MuteModelIsar> {
     return deleteByIndexSync(r'userPubkeyHex', [userPubkeyHex]);
   }
 
-  Future<List<MuteModelIsar?>> getAllByUserPubkeyHex(
+  Future<List<FollowingModel?>> getAllByUserPubkeyHex(
       List<String> userPubkeyHexValues) {
     final values = userPubkeyHexValues.map((e) => [e]).toList();
     return getAllByIndex(r'userPubkeyHex', values);
   }
 
-  List<MuteModelIsar?> getAllByUserPubkeyHexSync(
+  List<FollowingModel?> getAllByUserPubkeyHexSync(
       List<String> userPubkeyHexValues) {
     final values = userPubkeyHexValues.map((e) => [e]).toList();
     return getAllByIndexSync(r'userPubkeyHex', values);
@@ -182,36 +182,36 @@ extension MuteModelIsarByIndex on IsarCollection<MuteModelIsar> {
     return deleteAllByIndexSync(r'userPubkeyHex', values);
   }
 
-  Future<Id> putByUserPubkeyHex(MuteModelIsar object) {
+  Future<Id> putByUserPubkeyHex(FollowingModel object) {
     return putByIndex(r'userPubkeyHex', object);
   }
 
-  Id putByUserPubkeyHexSync(MuteModelIsar object, {bool saveLinks = true}) {
+  Id putByUserPubkeyHexSync(FollowingModel object, {bool saveLinks = true}) {
     return putByIndexSync(r'userPubkeyHex', object, saveLinks: saveLinks);
   }
 
-  Future<List<Id>> putAllByUserPubkeyHex(List<MuteModelIsar> objects) {
+  Future<List<Id>> putAllByUserPubkeyHex(List<FollowingModel> objects) {
     return putAllByIndex(r'userPubkeyHex', objects);
   }
 
-  List<Id> putAllByUserPubkeyHexSync(List<MuteModelIsar> objects,
+  List<Id> putAllByUserPubkeyHexSync(List<FollowingModel> objects,
       {bool saveLinks = true}) {
     return putAllByIndexSync(r'userPubkeyHex', objects, saveLinks: saveLinks);
   }
 }
 
-extension MuteModelIsarQueryWhereSort
-    on QueryBuilder<MuteModelIsar, MuteModelIsar, QWhere> {
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterWhere> anyId() {
+extension FollowingModelQueryWhereSort
+    on QueryBuilder<FollowingModel, FollowingModel, QWhere> {
+  QueryBuilder<FollowingModel, FollowingModel, QAfterWhere> anyId() {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(const IdWhereClause.any());
     });
   }
 }
 
-extension MuteModelIsarQueryWhere
-    on QueryBuilder<MuteModelIsar, MuteModelIsar, QWhereClause> {
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterWhereClause> idEqualTo(
+extension FollowingModelQueryWhere
+    on QueryBuilder<FollowingModel, FollowingModel, QWhereClause> {
+  QueryBuilder<FollowingModel, FollowingModel, QAfterWhereClause> idEqualTo(
       Id id) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IdWhereClause.between(
@@ -221,7 +221,7 @@ extension MuteModelIsarQueryWhere
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterWhereClause> idNotEqualTo(
+  QueryBuilder<FollowingModel, FollowingModel, QAfterWhereClause> idNotEqualTo(
       Id id) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
@@ -244,7 +244,7 @@ extension MuteModelIsarQueryWhere
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterWhereClause> idGreaterThan(
+  QueryBuilder<FollowingModel, FollowingModel, QAfterWhereClause> idGreaterThan(
       Id id,
       {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
@@ -254,7 +254,7 @@ extension MuteModelIsarQueryWhere
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterWhereClause> idLessThan(
+  QueryBuilder<FollowingModel, FollowingModel, QAfterWhereClause> idLessThan(
       Id id,
       {bool include = false}) {
     return QueryBuilder.apply(this, (query) {
@@ -264,7 +264,7 @@ extension MuteModelIsarQueryWhere
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterWhereClause> idBetween(
+  QueryBuilder<FollowingModel, FollowingModel, QAfterWhereClause> idBetween(
     Id lowerId,
     Id upperId, {
     bool includeLower = true,
@@ -280,7 +280,7 @@ extension MuteModelIsarQueryWhere
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterWhereClause>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterWhereClause>
       userPubkeyHexEqualTo(String userPubkeyHex) {
     return QueryBuilder.apply(this, (query) {
       return query.addWhereClause(IndexWhereClause.equalTo(
@@ -290,7 +290,7 @@ extension MuteModelIsarQueryWhere
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterWhereClause>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterWhereClause>
       userPubkeyHexNotEqualTo(String userPubkeyHex) {
     return QueryBuilder.apply(this, (query) {
       if (query.whereSort == Sort.asc) {
@@ -326,9 +326,9 @@ extension MuteModelIsarQueryWhere
   }
 }
 
-extension MuteModelIsarQueryFilter
-    on QueryBuilder<MuteModelIsar, MuteModelIsar, QFilterCondition> {
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+extension FollowingModelQueryFilter
+    on QueryBuilder<FollowingModel, FollowingModel, QFilterCondition> {
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       cachedAtEqualTo(DateTime value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -338,7 +338,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       cachedAtGreaterThan(
     DateTime value, {
     bool include = false,
@@ -352,7 +352,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       cachedAtLessThan(
     DateTime value, {
     bool include = false,
@@ -366,7 +366,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       cachedAtBetween(
     DateTime lower,
     DateTime upper, {
@@ -384,7 +384,234 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition> idEqualTo(
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
+      followingPubkeysElementEqualTo(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'followingPubkeys',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
+      followingPubkeysElementGreaterThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        include: include,
+        property: r'followingPubkeys',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
+      followingPubkeysElementLessThan(
+    String value, {
+    bool include = false,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.lessThan(
+        include: include,
+        property: r'followingPubkeys',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
+      followingPubkeysElementBetween(
+    String lower,
+    String upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.between(
+        property: r'followingPubkeys',
+        lower: lower,
+        includeLower: includeLower,
+        upper: upper,
+        includeUpper: includeUpper,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
+      followingPubkeysElementStartsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.startsWith(
+        property: r'followingPubkeys',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
+      followingPubkeysElementEndsWith(
+    String value, {
+    bool caseSensitive = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.endsWith(
+        property: r'followingPubkeys',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
+      followingPubkeysElementContains(String value,
+          {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.contains(
+        property: r'followingPubkeys',
+        value: value,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
+      followingPubkeysElementMatches(String pattern,
+          {bool caseSensitive = true}) {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.matches(
+        property: r'followingPubkeys',
+        wildcard: pattern,
+        caseSensitive: caseSensitive,
+      ));
+    });
+  }
+
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
+      followingPubkeysElementIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.equalTo(
+        property: r'followingPubkeys',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
+      followingPubkeysElementIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.addFilterCondition(FilterCondition.greaterThan(
+        property: r'followingPubkeys',
+        value: '',
+      ));
+    });
+  }
+
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
+      followingPubkeysLengthEqualTo(int length) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'followingPubkeys',
+        length,
+        true,
+        length,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
+      followingPubkeysIsEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'followingPubkeys',
+        0,
+        true,
+        0,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
+      followingPubkeysIsNotEmpty() {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'followingPubkeys',
+        0,
+        false,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
+      followingPubkeysLengthLessThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'followingPubkeys',
+        0,
+        true,
+        length,
+        include,
+      );
+    });
+  }
+
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
+      followingPubkeysLengthGreaterThan(
+    int length, {
+    bool include = false,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'followingPubkeys',
+        length,
+        include,
+        999999,
+        true,
+      );
+    });
+  }
+
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
+      followingPubkeysLengthBetween(
+    int lower,
+    int upper, {
+    bool includeLower = true,
+    bool includeUpper = true,
+  }) {
+    return QueryBuilder.apply(this, (query) {
+      return query.listLength(
+        r'followingPubkeys',
+        lower,
+        includeLower,
+        upper,
+        includeUpper,
+      );
+    });
+  }
+
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition> idEqualTo(
       Id value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -394,7 +621,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       idGreaterThan(
     Id value, {
     bool include = false,
@@ -408,7 +635,8 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition> idLessThan(
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
+      idLessThan(
     Id value, {
     bool include = false,
   }) {
@@ -421,7 +649,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition> idBetween(
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition> idBetween(
     Id lower,
     Id upper, {
     bool includeLower = true,
@@ -438,232 +666,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
-      mutedPubkeysElementEqualTo(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'mutedPubkeys',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
-      mutedPubkeysElementGreaterThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        include: include,
-        property: r'mutedPubkeys',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
-      mutedPubkeysElementLessThan(
-    String value, {
-    bool include = false,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.lessThan(
-        include: include,
-        property: r'mutedPubkeys',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
-      mutedPubkeysElementBetween(
-    String lower,
-    String upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.between(
-        property: r'mutedPubkeys',
-        lower: lower,
-        includeLower: includeLower,
-        upper: upper,
-        includeUpper: includeUpper,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
-      mutedPubkeysElementStartsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.startsWith(
-        property: r'mutedPubkeys',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
-      mutedPubkeysElementEndsWith(
-    String value, {
-    bool caseSensitive = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.endsWith(
-        property: r'mutedPubkeys',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
-      mutedPubkeysElementContains(String value, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.contains(
-        property: r'mutedPubkeys',
-        value: value,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
-      mutedPubkeysElementMatches(String pattern, {bool caseSensitive = true}) {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.matches(
-        property: r'mutedPubkeys',
-        wildcard: pattern,
-        caseSensitive: caseSensitive,
-      ));
-    });
-  }
-
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
-      mutedPubkeysElementIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.equalTo(
-        property: r'mutedPubkeys',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
-      mutedPubkeysElementIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.addFilterCondition(FilterCondition.greaterThan(
-        property: r'mutedPubkeys',
-        value: '',
-      ));
-    });
-  }
-
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
-      mutedPubkeysLengthEqualTo(int length) {
-    return QueryBuilder.apply(this, (query) {
-      return query.listLength(
-        r'mutedPubkeys',
-        length,
-        true,
-        length,
-        true,
-      );
-    });
-  }
-
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
-      mutedPubkeysIsEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.listLength(
-        r'mutedPubkeys',
-        0,
-        true,
-        0,
-        true,
-      );
-    });
-  }
-
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
-      mutedPubkeysIsNotEmpty() {
-    return QueryBuilder.apply(this, (query) {
-      return query.listLength(
-        r'mutedPubkeys',
-        0,
-        false,
-        999999,
-        true,
-      );
-    });
-  }
-
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
-      mutedPubkeysLengthLessThan(
-    int length, {
-    bool include = false,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.listLength(
-        r'mutedPubkeys',
-        0,
-        true,
-        length,
-        include,
-      );
-    });
-  }
-
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
-      mutedPubkeysLengthGreaterThan(
-    int length, {
-    bool include = false,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.listLength(
-        r'mutedPubkeys',
-        length,
-        include,
-        999999,
-        true,
-      );
-    });
-  }
-
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
-      mutedPubkeysLengthBetween(
-    int lower,
-    int upper, {
-    bool includeLower = true,
-    bool includeUpper = true,
-  }) {
-    return QueryBuilder.apply(this, (query) {
-      return query.listLength(
-        r'mutedPubkeys',
-        lower,
-        includeLower,
-        upper,
-        includeUpper,
-      );
-    });
-  }
-
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       updatedAtEqualTo(DateTime value) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -673,7 +676,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       updatedAtGreaterThan(
     DateTime value, {
     bool include = false,
@@ -687,7 +690,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       updatedAtLessThan(
     DateTime value, {
     bool include = false,
@@ -701,7 +704,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       updatedAtBetween(
     DateTime lower,
     DateTime upper, {
@@ -719,7 +722,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       userPubkeyHexEqualTo(
     String value, {
     bool caseSensitive = true,
@@ -733,7 +736,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       userPubkeyHexGreaterThan(
     String value, {
     bool include = false,
@@ -749,7 +752,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       userPubkeyHexLessThan(
     String value, {
     bool include = false,
@@ -765,7 +768,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       userPubkeyHexBetween(
     String lower,
     String upper, {
@@ -785,7 +788,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       userPubkeyHexStartsWith(
     String value, {
     bool caseSensitive = true,
@@ -799,7 +802,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       userPubkeyHexEndsWith(
     String value, {
     bool caseSensitive = true,
@@ -813,7 +816,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       userPubkeyHexContains(String value, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.contains(
@@ -824,7 +827,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       userPubkeyHexMatches(String pattern, {bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.matches(
@@ -835,7 +838,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       userPubkeyHexIsEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.equalTo(
@@ -845,7 +848,7 @@ extension MuteModelIsarQueryFilter
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterFilterCondition>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterFilterCondition>
       userPubkeyHexIsNotEmpty() {
     return QueryBuilder.apply(this, (query) {
       return query.addFilterCondition(FilterCondition.greaterThan(
@@ -856,48 +859,48 @@ extension MuteModelIsarQueryFilter
   }
 }
 
-extension MuteModelIsarQueryObject
-    on QueryBuilder<MuteModelIsar, MuteModelIsar, QFilterCondition> {}
+extension FollowingModelQueryObject
+    on QueryBuilder<FollowingModel, FollowingModel, QFilterCondition> {}
 
-extension MuteModelIsarQueryLinks
-    on QueryBuilder<MuteModelIsar, MuteModelIsar, QFilterCondition> {}
+extension FollowingModelQueryLinks
+    on QueryBuilder<FollowingModel, FollowingModel, QFilterCondition> {}
 
-extension MuteModelIsarQuerySortBy
-    on QueryBuilder<MuteModelIsar, MuteModelIsar, QSortBy> {
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterSortBy> sortByCachedAt() {
+extension FollowingModelQuerySortBy
+    on QueryBuilder<FollowingModel, FollowingModel, QSortBy> {
+  QueryBuilder<FollowingModel, FollowingModel, QAfterSortBy> sortByCachedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'cachedAt', Sort.asc);
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterSortBy>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterSortBy>
       sortByCachedAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'cachedAt', Sort.desc);
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterSortBy> sortByUpdatedAt() {
+  QueryBuilder<FollowingModel, FollowingModel, QAfterSortBy> sortByUpdatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'updatedAt', Sort.asc);
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterSortBy>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterSortBy>
       sortByUpdatedAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'updatedAt', Sort.desc);
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterSortBy>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterSortBy>
       sortByUserPubkeyHex() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'userPubkeyHex', Sort.asc);
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterSortBy>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterSortBy>
       sortByUserPubkeyHexDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'userPubkeyHex', Sort.desc);
@@ -905,54 +908,54 @@ extension MuteModelIsarQuerySortBy
   }
 }
 
-extension MuteModelIsarQuerySortThenBy
-    on QueryBuilder<MuteModelIsar, MuteModelIsar, QSortThenBy> {
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterSortBy> thenByCachedAt() {
+extension FollowingModelQuerySortThenBy
+    on QueryBuilder<FollowingModel, FollowingModel, QSortThenBy> {
+  QueryBuilder<FollowingModel, FollowingModel, QAfterSortBy> thenByCachedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'cachedAt', Sort.asc);
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterSortBy>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterSortBy>
       thenByCachedAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'cachedAt', Sort.desc);
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterSortBy> thenById() {
+  QueryBuilder<FollowingModel, FollowingModel, QAfterSortBy> thenById() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.asc);
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterSortBy> thenByIdDesc() {
+  QueryBuilder<FollowingModel, FollowingModel, QAfterSortBy> thenByIdDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'id', Sort.desc);
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterSortBy> thenByUpdatedAt() {
+  QueryBuilder<FollowingModel, FollowingModel, QAfterSortBy> thenByUpdatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'updatedAt', Sort.asc);
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterSortBy>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterSortBy>
       thenByUpdatedAtDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'updatedAt', Sort.desc);
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterSortBy>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterSortBy>
       thenByUserPubkeyHex() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'userPubkeyHex', Sort.asc);
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QAfterSortBy>
+  QueryBuilder<FollowingModel, FollowingModel, QAfterSortBy>
       thenByUserPubkeyHexDesc() {
     return QueryBuilder.apply(this, (query) {
       return query.addSortBy(r'userPubkeyHex', Sort.desc);
@@ -960,29 +963,30 @@ extension MuteModelIsarQuerySortThenBy
   }
 }
 
-extension MuteModelIsarQueryWhereDistinct
-    on QueryBuilder<MuteModelIsar, MuteModelIsar, QDistinct> {
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QDistinct> distinctByCachedAt() {
+extension FollowingModelQueryWhereDistinct
+    on QueryBuilder<FollowingModel, FollowingModel, QDistinct> {
+  QueryBuilder<FollowingModel, FollowingModel, QDistinct> distinctByCachedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'cachedAt');
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QDistinct>
-      distinctByMutedPubkeys() {
+  QueryBuilder<FollowingModel, FollowingModel, QDistinct>
+      distinctByFollowingPubkeys() {
     return QueryBuilder.apply(this, (query) {
-      return query.addDistinctBy(r'mutedPubkeys');
+      return query.addDistinctBy(r'followingPubkeys');
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QDistinct> distinctByUpdatedAt() {
+  QueryBuilder<FollowingModel, FollowingModel, QDistinct>
+      distinctByUpdatedAt() {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'updatedAt');
     });
   }
 
-  QueryBuilder<MuteModelIsar, MuteModelIsar, QDistinct> distinctByUserPubkeyHex(
-      {bool caseSensitive = true}) {
+  QueryBuilder<FollowingModel, FollowingModel, QDistinct>
+      distinctByUserPubkeyHex({bool caseSensitive = true}) {
     return QueryBuilder.apply(this, (query) {
       return query.addDistinctBy(r'userPubkeyHex',
           caseSensitive: caseSensitive);
@@ -990,34 +994,34 @@ extension MuteModelIsarQueryWhereDistinct
   }
 }
 
-extension MuteModelIsarQueryProperty
-    on QueryBuilder<MuteModelIsar, MuteModelIsar, QQueryProperty> {
-  QueryBuilder<MuteModelIsar, int, QQueryOperations> idProperty() {
+extension FollowingModelQueryProperty
+    on QueryBuilder<FollowingModel, FollowingModel, QQueryProperty> {
+  QueryBuilder<FollowingModel, int, QQueryOperations> idProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'id');
     });
   }
 
-  QueryBuilder<MuteModelIsar, DateTime, QQueryOperations> cachedAtProperty() {
+  QueryBuilder<FollowingModel, DateTime, QQueryOperations> cachedAtProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'cachedAt');
     });
   }
 
-  QueryBuilder<MuteModelIsar, List<String>, QQueryOperations>
-      mutedPubkeysProperty() {
+  QueryBuilder<FollowingModel, List<String>, QQueryOperations>
+      followingPubkeysProperty() {
     return QueryBuilder.apply(this, (query) {
-      return query.addPropertyName(r'mutedPubkeys');
+      return query.addPropertyName(r'followingPubkeys');
     });
   }
 
-  QueryBuilder<MuteModelIsar, DateTime, QQueryOperations> updatedAtProperty() {
+  QueryBuilder<FollowingModel, DateTime, QQueryOperations> updatedAtProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'updatedAt');
     });
   }
 
-  QueryBuilder<MuteModelIsar, String, QQueryOperations>
+  QueryBuilder<FollowingModel, String, QQueryOperations>
       userPubkeyHexProperty() {
     return QueryBuilder.apply(this, (query) {
       return query.addPropertyName(r'userPubkeyHex');

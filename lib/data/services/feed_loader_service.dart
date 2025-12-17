@@ -344,7 +344,7 @@ class FeedLoaderService {
           },
           (error) {
             if (!profiles.containsKey(entry.key)) {
-              profiles[entry.key] = UserModel(
+              profiles[entry.key] = UserModel.create(
                 pubkeyHex: entry.key,
                 name: entry.key.length > 8 ? entry.key.substring(0, 8) : entry.key,
                 about: '',

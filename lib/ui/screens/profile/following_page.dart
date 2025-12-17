@@ -111,7 +111,7 @@ class _FollowingPageState extends State<FollowingPage> {
               }
             },
             (error) {
-              _loadedUsers[npub] = UserModel(
+              _loadedUsers[npub] = UserModel.create(
                 pubkeyHex: npub,
                 name: npub.length > 8 ? npub.substring(0, 8) : npub,
                 about: '',
