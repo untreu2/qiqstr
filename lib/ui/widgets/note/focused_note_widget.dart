@@ -4,7 +4,6 @@ import '../../../models/note_model.dart';
 import '../../../models/user_model.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
-import '../../../data/services/time_service.dart';
 import '../../theme/theme_manager.dart';
 import '../../screens/profile/profile_page.dart';
 import 'note_content_widget.dart';
@@ -46,7 +45,6 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
   late final String _content;
   late final String _widgetKey;
 
-  late final String _formattedTimestamp;
   late final Map<String, dynamic> _parsedContent;
 
   final ValueNotifier<_FocusedNoteState> _stateNotifier = ValueNotifier(_FocusedNoteState.initial());
@@ -78,8 +76,6 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
     _timestamp = widget.note.timestamp;
     _content = widget.note.content;
     _widgetKey = '${_noteId}_${_authorId}_focused';
-
-    _formattedTimestamp = _calculateTimestamp(_timestamp);
 
     try {
       _parsedContent = widget.note.parsedContentLazy;
@@ -236,20 +232,17 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
     }
   }
 
-  String _calculateTimestamp(DateTime timestamp) {
+  String _formatFullDateTime(DateTime timestamp) {
     try {
-      final d = timeService.difference(timestamp);
-      if (d.inSeconds < 5) return 'now';
-      if (d.inSeconds < 60) return '${d.inSeconds}s';
-      if (d.inMinutes < 60) return '${d.inMinutes}m';
-      if (d.inHours < 24) return '${d.inHours}h';
-      if (d.inDays < 7) return '${d.inDays}d';
-      if (d.inDays < 30) return '${(d.inDays / 7).floor()}w';
-      if (d.inDays < 365) return '${(d.inDays / 30).floor()}mo';
-      return '${(d.inDays / 365).floor()}y';
+      final year = timestamp.year;
+      final month = timestamp.month.toString().padLeft(2, '0');
+      final day = timestamp.day.toString().padLeft(2, '0');
+      final hour = timestamp.hour.toString().padLeft(2, '0');
+      final minute = timestamp.minute.toString().padLeft(2, '0');
+      return '$hour:$minute — $year-$month-$day';
     } catch (e) {
-      debugPrint('[FocusedNoteWidget] Calculate timestamp error: $e');
-      return 'unknown';
+      debugPrint('[FocusedNoteWidget] Format full date time error: $e');
+      return '';
     }
   }
 
@@ -343,12 +336,10 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
                   onReposterTap: _reposterId != null ? () => _navigateToProfile(_reposterId) : null,
                   colors: colors,
                   widgetKey: _widgetKey,
-                  formattedTimestamp: _formattedTimestamp,
                 ),
                 const SizedBox(height: 8),
                 _FocusedUserInfoSection(
                   stateNotifier: _stateNotifier,
-                  formattedTimestamp: _formattedTimestamp,
                   colors: colors,
                 ),
                 RepaintBoundary(
@@ -360,6 +351,17 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
                     authorProfileImageUrl: _stateNotifier.value.authorUser?.profileImage,
                     authorId: _authorId,
                     isSelectable: widget.isSelectable,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 5.0),
+                  child: Text(
+                    _formatFullDateTime(_timestamp),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: colors.textSecondary,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -427,7 +429,6 @@ class _FocusedProfileSection extends StatelessWidget {
   final VoidCallback? onReposterTap;
   final dynamic colors;
   final String widgetKey;
-  final String formattedTimestamp;
 
   static final Map<String, Widget> _avatarCache = <String, Widget>{};
 
@@ -438,7 +439,6 @@ class _FocusedProfileSection extends StatelessWidget {
     required this.onReposterTap,
     required this.colors,
     required this.widgetKey,
-    required this.formattedTimestamp,
   });
 
   Widget _getCachedAvatar(String imageUrl, double radius, String cacheKey) {
@@ -532,10 +532,6 @@ class _FocusedProfileSection extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.only(left: 6),
-                        child: Text('• $formattedTimestamp', style: TextStyle(fontSize: 12.5, color: colors.secondary)),
-                      ),
                     ],
                   ),
                 ),
@@ -553,12 +549,10 @@ class _FocusedProfileSection extends StatelessWidget {
 
 class _FocusedUserInfoSection extends StatelessWidget {
   final ValueNotifier<_FocusedNoteState> stateNotifier;
-  final String formattedTimestamp;
   final dynamic colors;
 
   const _FocusedUserInfoSection({
     required this.stateNotifier,
-    required this.formattedTimestamp,
     required this.colors,
   });
 
