@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:collection';
 import 'dart:io';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -65,6 +64,12 @@ class DataService {
   bool _notificationSubscriptionActive = false;
   String? _notificationSubscriptionId;
 
+  final Set<String> _pendingInteractionFetch = {};
+  Timer? _interactionFetchTimer;
+  Timer? _periodicInteractionFetchTimer;
+  static const Duration _interactionFetchDebounce = Duration(seconds: 1);
+  static const Duration _periodicInteractionFetchInterval = Duration(seconds: 30);
+
   DataService({
     required AuthService authService,
     WebSocketManager? relayManager,
@@ -72,6 +77,7 @@ class DataService {
         _relayManager = relayManager ?? WebSocketManager.instance {
     _setupRelayEventHandling();
     _startCacheCleanup();
+    _startPeriodicInteractionFetch();
   }
 
   Stream<List<NoteModel>> get notesStream => _notesController.stream;
@@ -135,14 +141,11 @@ class DataService {
 
         await _fetchFeedNotesFromFollowList();
       } else {
-        debugPrint('[DataService] No user logged in, skipping feed fetch');
       }
     } catch (e) {
-      debugPrint('[DataService] Error initializing lists: $e');
       try {
         await _fetchFeedNotesFromFollowList();
       } catch (feedError) {
-        debugPrint('[DataService] Error fetching feed notes: $feedError');
       }
     }
   }
@@ -155,14 +158,12 @@ class DataService {
         final currentUserHex = _authService.npubToHex(currentUserNpub);
         
         if (currentUserHex == null) {
-          debugPrint('[DataService] Cannot convert npub to hex, skipping feed fetch');
           return;
         }
 
         final followList = await _followCacheService.get(currentUserHex);
         
         if (followList == null || followList.isEmpty) {
-          debugPrint('[DataService] No follow list available, skipping feed fetch');
           return;
         }
 
@@ -179,7 +180,6 @@ class DataService {
         await _relayManager.broadcast(NostrService.serializeRequest(request));
       }
     } catch (e) {
-      debugPrint('[DataService] Error in _fetchFeedNotesFromFollowList: $e');
     }
   }
 
@@ -198,7 +198,6 @@ class DataService {
         }
       }
     } catch (e) {
-      debugPrint('[DataService] Error updating lists from network: $e');
     }
   }
 
@@ -246,7 +245,6 @@ class DataService {
                       userProfile!['pubkey'] = pubkeyHex;
                       userProfile!['created_at'] = eventData['created_at'];
                     } catch (e) {
-                      debugPrint('[DataService] Error parsing profile: $e');
                     }
                   }
                 } else if (eventKind == 3) {
@@ -266,14 +264,12 @@ class DataService {
                 }
               }
             } catch (e) {
-              debugPrint('[DataService] Error processing combined data: $e');
             }
           },
         );
 
         await completer.future;
       } catch (e) {
-        debugPrint('[DataService] Error fetching combined data: $e');
       }
     }));
 
@@ -322,7 +318,6 @@ class DataService {
         }
       }
     } catch (e) {
-      debugPrint('[DataService] Error handling relay event: $e');
     }
   }
 
@@ -391,7 +386,6 @@ class DataService {
 
       _eventProcessingLock.remove(eventId);
     } catch (e) {
-      debugPrint('[DataService] Error processing event: $e');
     }
   }
 
@@ -420,7 +414,6 @@ class DataService {
         _verifyAndCacheProfile(pubkey, profileData, timestamp, nip05);
       }
     } catch (e) {
-      debugPrint('[DataService] Error processing profile event: $e');
     }
   }
 
@@ -457,7 +450,6 @@ class DataService {
         await _userCacheService.invalidate(pubkey);
         await _userCacheService.put(user);
       } catch (e) {
-        debugPrint('[DataService] Error caching profile: $e');
       }
 
       if (!_usersController.isClosed) {
@@ -483,7 +475,6 @@ class DataService {
         await _processNoteEvent(eventData);
       }
     } catch (e) {
-      debugPrint('[DataService] Error processing kind 1 event: $e');
     }
   }
 
@@ -580,8 +571,7 @@ class DataService {
         tTags: tTags,
       );
 
-      _noteCache[id] = note;
-      _eventIds.add(id);
+      _addNoteToCache(note);
 
       if (isReply) {
         if (parentId != null) {
@@ -592,7 +582,6 @@ class DataService {
         }
       }
     } catch (e) {
-      debugPrint('[DataService] Error processing note event: $e');
     }
   }
 
@@ -650,13 +639,11 @@ class DataService {
 
           await completer.future;
         } catch (e) {
-          debugPrint('[DataService] Error fetching thread replies: $e');
         }
       }));
 
       _pendingThreadFetches.remove(rootNoteId);
     } catch (e) {
-      debugPrint('[DataService] Error fetching thread replies for $rootNoteId: $e');
       _pendingThreadFetches.remove(rootNoteId);
     }
   }
@@ -738,8 +725,7 @@ class DataService {
         zapAmount: 0,
       );
 
-      _noteCache[id] = replyNote;
-      _eventIds.add(id);
+      _addNoteToCache(replyNote);
 
       _ensureProfileExists(pubkey, authorNpub);
 
@@ -747,7 +733,6 @@ class DataService {
 
       _scheduleUIUpdate();
     } catch (e) {
-      debugPrint('[DataService] Error processing reply event: $e');
     }
   }
 
@@ -791,7 +776,6 @@ class DataService {
         }
       }
     } catch (e) {
-      debugPrint('[DataService] Error processing reaction event: $e');
     }
   }
 
@@ -843,10 +827,6 @@ class DataService {
           _ensureProfileExists(originalAuthorHex, originalAuthorNpub);
         }
 
-        debugPrint(' [DataService] Processing repost $id by $reposterNpub');
-        debugPrint(' [DataService] Original event ID: $originalEventId');
-        debugPrint(' [DataService] Original author hex: $originalAuthorHex');
-        debugPrint(' [DataService] Repost content length: ${content.length}');
 
         bool detectedIsReply = false;
         String? detectedRootId;
@@ -856,9 +836,7 @@ class DataService {
         String displayContent = 'Reposted note';
         String displayAuthor = originalAuthorHex != null ? (_authService.hexToNpub(originalAuthorHex) ?? originalAuthorHex) : 'Unknown';
 
-        debugPrint(' [DataService] Original note in cache: ${originalNote != null}');
         if (originalNote != null) {
-          debugPrint(' [DataService] Original note isReply: ${originalNote.isReply}');
           detectedIsReply = originalNote.isReply;
           detectedRootId = originalNote.rootId;
           detectedParentId = originalNote.parentId;
@@ -868,14 +846,9 @@ class DataService {
           displayContent = originalNote.content;
           displayAuthor = originalNote.author;
         } else if (content.isNotEmpty) {
-          debugPrint(' [DataService] Parsing content since original not in cache...');
-          debugPrint(' [DataService] Content to parse (first 300 chars): ${content.substring(0, math.min(300, content.length))}');
 
           try {
             final originalContent = jsonDecode(content) as Map<String, dynamic>;
-            debugPrint('[DataService] Successfully parsed repost JSON content');
-            debugPrint(' [DataService] Original content field: ${originalContent['content']}');
-            debugPrint(' [DataService] Original tags field: ${originalContent['tags']}');
 
             displayContent = originalContent['content'] as String? ?? displayContent;
             if (originalAuthorHex != null) {
@@ -884,47 +857,35 @@ class DataService {
 
             final originalTags = originalContent['tags'] as List<dynamic>? ?? [];
 
-            debugPrint(' [DataService] Checking if original note is reply. Tags count: ${originalTags.length}');
-            debugPrint(' [DataService] All tags: $originalTags');
 
             for (int i = 0; i < originalTags.length; i++) {
               final tag = originalTags[i];
-              debugPrint('   Tag[$i]: $tag (type: ${tag.runtimeType})');
 
               if (tag is List && tag.length >= 2 && tag[0] == 'e') {
                 final eventId = tag[1] as String;
-                debugPrint('   E-tag[$i]: eventId=$eventId, length=${tag.length}');
 
                 if (tag.length >= 4) {
                   final marker = tag[3] as String;
-                  debugPrint('   Marker[$i]: "$marker"');
                   if (marker == 'root') {
                     detectedRootId = eventId;
                     detectedParentId = eventId;
                     detectedIsReply = true;
-                    debugPrint('  ROOT marker found - this is a direct reply! rootId: $detectedRootId, parentId: $detectedParentId');
                   } else if (marker == 'reply') {
                     detectedParentId = eventId;
                     detectedIsReply = true;
-                    debugPrint('  REPLY marker found - this is a reply! parentId: $detectedParentId');
                   } else if (marker == 'mention') {
-                    debugPrint('  ℹ MENTION marker - not a reply indicator');
                   } else {
-                    debugPrint('   Unknown marker: "$marker"');
                   }
                 } else {
                   if (detectedParentId == null) {
                     detectedParentId = eventId;
                     detectedRootId = eventId;
                     detectedIsReply = true;
-                    debugPrint('  Legacy e-tag found - this is a reply! eventId: $detectedParentId');
                   }
                 }
               }
             }
 
-            debugPrint(' [DataService] PARSED Original note reply status: isReply=$detectedIsReply');
-            debugPrint(' [DataService] PARSED rootId=$detectedRootId, parentId=$detectedParentId');
 
             if (originalAuthorHex != null && !_noteCache.containsKey(originalEventId)) {
               final originalNoteFromRepost = NoteModel(
@@ -943,14 +904,9 @@ class DataService {
                 rawWs: content,
               );
 
-              _noteCache[originalEventId] = originalNoteFromRepost;
-              _eventIds.add(originalEventId);
-              debugPrint(' [DataService] Cached original ${detectedIsReply ? "REPLY" : "NOTE"}: $originalEventId');
-              debugPrint(' [DataService] Original note parentId: $detectedParentId, rootId: $detectedRootId');
+              _addNoteToCache(originalNoteFromRepost);
             }
           } catch (e) {
-            debugPrint(' [DataService] Failed to parse repost content as JSON: $e');
-            debugPrint(' Content that failed: $content');
             displayContent = content.isNotEmpty ? content : displayContent;
           }
         }
@@ -959,8 +915,6 @@ class DataService {
         final finalRootId = detectedRootId;
         final finalParentId = detectedParentId;
 
-        debugPrint(' [DataService] FINAL repost determination: isReply=$finalIsReply');
-        debugPrint(' [DataService] FINAL rootId=$finalRootId, parentId=$finalParentId');
 
         final repostNote = NoteModel(
           id: id,
@@ -980,34 +934,21 @@ class DataService {
           rawWs: jsonEncode(eventData),
         );
 
-        debugPrint(' [DataService] Created repost note: id=$id');
-        debugPrint(' [DataService]   - isReply=${repostNote.isReply}');
-        debugPrint(' [DataService]   - isRepost=${repostNote.isRepost}');
-        debugPrint(' [DataService]   - rootId=${repostNote.rootId}');
-        debugPrint(' [DataService]   - parentId=${repostNote.parentId}');
-        debugPrint(' [DataService]   - repostedBy=${repostNote.repostedBy}');
-        debugPrint(' [DataService]   - content preview: ${displayContent.substring(0, math.min(50, displayContent.length))}...');
 
         if (repostNote.isReply && repostNote.parentId != null) {
-          debugPrint('[DataService] This repost note SHOULD show "Reply to..." text in UI');
         } else {
-          debugPrint(' [DataService] This repost note will NOT show "Reply to..." text');
-          debugPrint(' [DataService]   isReply=${repostNote.isReply}, parentId=${repostNote.parentId}');
         }
 
-        _noteCache[id] = repostNote;
-        _eventIds.add(id);
+        _addNoteToCache(repostNote);
 
         final targetNote = _noteCache[originalEventId];
         if (targetNote != null) {
           targetNote.repostCount = _repostsMap[originalEventId]?.length ?? 0;
-          debugPrint(' [DataService] Updated original note $originalEventId repost count: ${targetNote.repostCount}');
         }
       
         _scheduleUIUpdate();
       }
     } catch (e) {
-      debugPrint('[DataService] Error processing repost event: $e');
     }
   }
 
@@ -1046,14 +987,11 @@ class DataService {
           final targetNote = _noteCache[originalEventId];
           if (targetNote != null) {
             targetNote.repostCount = _repostsMap[originalEventId]!.length;
-            debugPrint(' [DataService] Updated repost count for $originalEventId: ${targetNote.repostCount}');
           }
 
-          debugPrint(' [DataService] Tracked repost count: ${_repostsMap[originalEventId]!.length} reposts for $originalEventId');
         }
       }
     } catch (e) {
-      debugPrint('[DataService] Error tracking repost for count: $e');
     }
   }
 
@@ -1072,10 +1010,8 @@ class DataService {
       try {
         await _followCacheService.put(pubkey, newFollowing);
       } catch (e) {
-        debugPrint('[DataService] Error updating follow cache: $e');
       }
     } catch (e) {
-      debugPrint('[DataService] Error processing follow event: $e');
     }
   }
 
@@ -1094,10 +1030,8 @@ class DataService {
       try {
         await _muteCacheService.put(pubkey, newMuted);
       } catch (e) {
-        debugPrint('[DataService] Error updating mute cache: $e');
       }
     } catch (e) {
-      debugPrint('[DataService] Error processing mute event: $e');
     }
   }
 
@@ -1123,7 +1057,6 @@ class DataService {
         }
       }
     } catch (e) {
-      debugPrint('[DataService] Error processing deletion event: $e');
     }
   }
 
@@ -1187,21 +1120,17 @@ class DataService {
 
           if (zapRequest.containsKey('pubkey')) {
             realZapperPubkey = zapRequest['pubkey'] as String;
-            debugPrint('[DataService] Extracted real zapper from description: $realZapperPubkey');
           }
 
           if (zapRequest.containsKey('content')) {
             final requestContent = zapRequest['content'] as String;
             if (requestContent.isNotEmpty) {
               zapComment = requestContent;
-              debugPrint('[DataService] Extracted zap comment: $zapComment');
             }
           }
         } catch (e) {
-          debugPrint('[DataService]  Failed to parse zap description, using wallet pubkey: $e');
         }
       } else {
-        debugPrint('[DataService]  No description tag found in zap receipt, using wallet pubkey');
       }
 
       if (amount == 0 && bolt11.isNotEmpty) {
@@ -1237,7 +1166,6 @@ class DataService {
         }
       }
     } catch (e) {
-      debugPrint('[DataService] Error processing zap event: $e');
     }
   }
 
@@ -1306,15 +1234,47 @@ class DataService {
         }
       }
     } catch (e) {
-      debugPrint('[DataService]  Error creating notification: $e');
     }
   }
 
   void _handleRelayDisconnection(String relayUrl) {
-    debugPrint('[DataService] Relay disconnected: $relayUrl');
   }
 
   void _startCacheCleanup() {}
+
+  void _startPeriodicInteractionFetch() {
+    _periodicInteractionFetchTimer?.cancel();
+    _periodicInteractionFetchTimer = Timer.periodic(_periodicInteractionFetchInterval, (_) {
+      if (!_isClosed && _noteCache.isNotEmpty) {
+        unawaited(fetchInteractionsForNotesBatchWithEOSE(null));
+      }
+    });
+  }
+
+  void _scheduleInteractionFetch(String noteId) {
+    if (_isClosed) return;
+    
+    _pendingInteractionFetch.add(noteId);
+    
+    _interactionFetchTimer?.cancel();
+    _interactionFetchTimer = Timer(_interactionFetchDebounce, () {
+      if (_isClosed || _pendingInteractionFetch.isEmpty) return;
+      
+      final noteIds = _pendingInteractionFetch.toList();
+      _pendingInteractionFetch.clear();
+      
+      unawaited(fetchInteractionsForNotesBatchWithEOSE(noteIds));
+    });
+  }
+
+  void _addNoteToCache(NoteModel note) {
+    if (_noteCache.containsKey(note.id)) return;
+    
+    _noteCache[note.id] = note;
+    _eventIds.add(note.id);
+    
+    _scheduleInteractionFetch(note.id);
+  }
 
   void _cleanupCacheIfNeeded() {
     if (_profileCache.length > 2000) {
@@ -1422,7 +1382,6 @@ class DataService {
 
       unawaited(_fetchUserProfile(npub));
     } catch (e) {
-      debugPrint('[DataService] Error ensuring profile exists: $e');
     }
   }
 
@@ -1445,7 +1404,6 @@ class DataService {
       final request = NostrService.createRequest(filter);
       await _relayManager.broadcast(NostrService.serializeRequest(request));
     } catch (e) {
-      debugPrint('[DataService] Error fetching user profile: $e');
     }
   }
 
@@ -1466,45 +1424,26 @@ class DataService {
       List<String> targetAuthors = [];
 
       if (authorHexKeys.isEmpty) {
-        debugPrint('[DataService] No authors provided - returning empty result');
         return Result.success([]);
       } else if (authorHexKeys.length == 1 && authorHexKeys.first == _authService.npubToHex(_currentUserNpub)) {
-        debugPrint('[DataService] Feed mode - fetching follow list first (NIP-02)');
 
         final currentUserHex = _authService.npubToHex(_currentUserNpub);
         if (currentUserHex == null) {
-          debugPrint(' [DataService] Cannot convert current user npub to hex: $_currentUserNpub');
           return const Result.error('Invalid current user npub format');
         }
 
-        debugPrint('[DataService] Current user hex: $currentUserHex');
 
-        debugPrint('[DataService]  Getting follow list for: $_currentUserNpub (hex: $currentUserHex)');
         final followingResult = await getFollowingList(_currentUserNpub);
-
-        debugPrint(
-            '[DataService]  Follow list result: success=${followingResult.isSuccess}, data=${followingResult.data?.length ?? 0}');
 
         if (followingResult.isSuccess && followingResult.data != null && followingResult.data!.isNotEmpty) {
           targetAuthors = List<String>.from(followingResult.data!);
           targetAuthors.add(currentUserHex);
-          debugPrint('[DataService] Following list found: ${targetAuthors.length} hex pubkeys');
-          debugPrint('[DataService]  Target authors (hex): ${targetAuthors.take(5).toList()}... (showing first 5)');
 
-          for (int i = 0; i < targetAuthors.length && i < 10; i++) {
-            final hexPubkey = targetAuthors[i];
-            final npub = _authService.hexToNpub(hexPubkey) ?? 'unknown';
-            debugPrint('[DataService]   - Following[$i]: $hexPubkey -> $npub');
-          }
         } else {
-          debugPrint('[DataService]  No follow list found - returning empty feed');
-          debugPrint('[DataService] Follow result error: ${followingResult.error}');
           return Result.success([]);
         }
       } else {
         targetAuthors = authorHexKeys;
-        debugPrint('[DataService] Profile mode - fetching notes for: ${authorHexKeys.length} hex pubkeys');
-        debugPrint('[DataService] Profile authors (hex): $targetAuthors');
       }
 
       if (targetAuthors.isEmpty) {
@@ -1578,22 +1517,17 @@ class DataService {
                   }
                 }
               } catch (e) {
-                debugPrint('[DataService] Error processing profile event: $e');
               }
             },
           );
 
           await completer.future.timeout(const Duration(seconds: 30), onTimeout: () {});
         } catch (e) {
-          debugPrint('[DataService] Error querying relay $relayUrl: $e');
         }
       }));
 
       for (final note in fetchedNotes.values) {
-        if (!_eventIds.contains(note.id)) {
-          _noteCache[note.id] = note;
-          _eventIds.add(note.id);
-        }
+        _addNoteToCache(note);
       }
 
       final allProfileNotes = _noteCache.values.where((note) {
@@ -1628,7 +1562,6 @@ class DataService {
 
       return null;
     } catch (e) {
-      debugPrint('[DataService] PROFILE: Error processing event: $e');
       return null;
     }
   }
@@ -1749,7 +1682,6 @@ class DataService {
             }
           }
         } catch (e) {
-          debugPrint('[DataService] PROFILE: Failed to parse repost content: $e');
         }
       }
 
@@ -1825,8 +1757,7 @@ class DataService {
                   } else {
                     final note = _processHashtagEventDirectlySync(eventData);
                     if (note != null) {
-                      _noteCache[eventId] = note;
-                      _eventIds.add(eventId);
+                      _addNoteToCache(note);
                       if (!hashtagNotes.any((n) => n.id == eventId)) {
                         hashtagNotes.add(note);
                       }
@@ -1834,14 +1765,12 @@ class DataService {
                   }
                 }
               } catch (e) {
-                debugPrint('[DataService] Error processing hashtag event: $e');
               }
             },
           );
 
           await completer.future.timeout(const Duration(seconds: 30), onTimeout: () {});
         } catch (e) {
-          debugPrint('[DataService] Error querying relay $relayUrl: $e');
         }
       }));
 
@@ -2045,21 +1974,17 @@ class DataService {
     List<List<String>>? tags,
   }) async {
     try {
-      debugPrint('[DataService] Starting note post: ${content.length > 30 ? content.substring(0, 30) : content}...');
 
       final privateKeyResult = await _authService.getCurrentUserPrivateKey();
       if (privateKeyResult.isError) {
-        debugPrint('[DataService ERROR] Authentication error: ${privateKeyResult.error}');
         return Result.error('Private key not found: ${privateKeyResult.error}');
       }
 
       final privateKey = privateKeyResult.data;
       if (privateKey == null || privateKey.isEmpty) {
-        debugPrint('[DataService ERROR] Authentication credentials invalid');
         return const Result.error('Private key not found.');
       }
 
-      debugPrint('[DataService] Credentials validated, creating note event...');
 
       dynamic event;
       try {
@@ -2068,17 +1993,12 @@ class DataService {
           privateKey: privateKey,
           tags: tags,
         );
-        debugPrint(
-            '[DataService] Note event created successfully (id: ${event.id.substring(0, 8)}...), ensuring relay connections...');
-      } catch (e, st) {
-        debugPrint('[DataService ERROR] Failed to create note event: $e');
-        debugPrint('[DataService ERROR] Stack trace: $st');
+      } catch (e) {
         return Result.error('Failed to create note event: $e');
       }
 
       try {
         if (_relayManager.activeSockets.isEmpty) {
-          debugPrint('[DataService] No active relay connections, attempting to connect...');
           await _relayManager.connectRelays(
             [],
             onEvent: _handleRelayEvent,
@@ -2087,11 +2007,9 @@ class DataService {
           );
         }
       } catch (e) {
-        debugPrint('[DataService] Relay connection failed: $e, continuing anyway');
       }
 
       await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
-      debugPrint('[DataService] Note broadcasted IMMEDIATELY to ${_relayManager.activeSockets.length} relays');
 
       final userResult = await _authService.getCurrentUserNpub();
       final authorNpub = userResult.data ?? '';
@@ -2113,15 +2031,12 @@ class DataService {
         rawWs: jsonEncode(NostrService.eventToJson(event)),
       );
 
-      _noteCache[note.id] = note;
-      _eventIds.add(note.id);
+      _addNoteToCache(note);
 
       _scheduleUIUpdate();
 
-      debugPrint('[DataService] Note posted and cached successfully');
       return Result.success(note);
     } catch (e) {
-      debugPrint('[DataService ERROR] Error posting note: $e');
       return Result.error('Failed to post note: $e');
     }
   }
@@ -2184,7 +2099,6 @@ class DataService {
     String? content,
   }) async {
     try {
-      debugPrint('[DataService] Starting repost of note: $noteId');
 
       final privateKeyResult = await _authService.getCurrentUserPrivateKey();
       if (privateKeyResult.isError) {
@@ -2208,7 +2122,6 @@ class DataService {
                 'tags': [],
               }));
 
-      debugPrint('[DataService] Creating repost event...');
 
       final event = NostrService.createRepostEvent(
         noteId: noteId,
@@ -2219,7 +2132,6 @@ class DataService {
 
       try {
         if (_relayManager.activeSockets.isEmpty) {
-          debugPrint('[DataService] No active relay connections, attempting to connect...');
           await _relayManager.connectRelays(
             [],
             onEvent: _handleRelayEvent,
@@ -2228,11 +2140,9 @@ class DataService {
           );
         }
       } catch (e) {
-        debugPrint('[DataService] Relay connection failed: $e, continuing anyway');
       }
 
       await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
-      debugPrint('[DataService] Repost broadcasted IMMEDIATELY to ${_relayManager.activeSockets.length} relays');
 
       final userResult = await _authService.getCurrentUserNpub();
       final reposterNpub = userResult.data ?? '';
@@ -2302,17 +2212,14 @@ class DataService {
         rawWs: jsonEncode(NostrService.eventToJson(event)),
       );
 
-      _noteCache[event.id] = repostNote;
-      _eventIds.add(event.id);
+      _addNoteToCache(repostNote);
 
       _trackRepostForCount(NostrService.eventToJson(event));
 
       _scheduleUIUpdate();
 
-      debugPrint('[DataService] Repost completed successfully');
       return const Result.success(null);
     } catch (e) {
-      debugPrint('[DataService ERROR] Error reposting note: $e');
       return Result.error('Failed to repost note: $e');
     }
   }
@@ -2327,7 +2234,6 @@ class DataService {
   }) async {
     try {
       final parentEventId = replyId ?? rootId;
-      debugPrint('[DataService] Starting reply post to parentEventId: $parentEventId');
 
       final privateKeyResult = await _authService.getCurrentUserPrivateKey();
       if (privateKeyResult.isError) {
@@ -2342,13 +2248,9 @@ class DataService {
       final parentNote = _noteCache.values.where((note) => note.id == parentEventId).firstOrNull;
 
       if (parentNote == null) {
-        debugPrint('[DataService] Parent note not found: $parentEventId');
         return const Result.error('Parent note not found.');
       }
 
-      debugPrint('[DataService] Found parent note: ${parentNote.id}');
-      debugPrint('[DataService] Parent note author: ${parentNote.author}');
-      debugPrint('[DataService] Building reply tags EXACTLY like working code...');
 
       String actualRootId;
       String actualReplyId = parentEventId;
@@ -2362,7 +2264,6 @@ class DataService {
         replyMarker = 'root';
       }
 
-      debugPrint('[DataService] Reply logic: rootId=$actualRootId, replyId=$actualReplyId, marker=$replyMarker');
 
       List<List<String>> tags = [];
 
@@ -2419,10 +2320,8 @@ class DataService {
 
       if (additionalTags != null && additionalTags.isNotEmpty) {
         tags.addAll(additionalTags);
-        debugPrint('[DataService] Added ${additionalTags.length} additional tags to reply');
       }
 
-      debugPrint('[DataService] Creating NIP-10 compliant reply event...');
 
       final event = NostrService.createReplyEvent(
         content: content,
@@ -2433,20 +2332,15 @@ class DataService {
       final serializedEvent = NostrService.serializeEvent(event);
       final activeSockets = _relayManager.activeSockets;
 
-      debugPrint('[DataService] Broadcasting reply to ${activeSockets.length} active sockets...');
       for (final ws in activeSockets) {
         if (ws.readyState == WebSocket.open) {
           try {
             ws.add(serializedEvent);
-            debugPrint('[DataService] Reply sent to relay via WebSocket');
           } catch (e) {
-            debugPrint('[DataService] Error sending reply to WebSocket: $e');
           }
         } else {
-          debugPrint('[DataService] WebSocket not open, state: ${ws.readyState}');
         }
       }
-      debugPrint('[DataService] Reply broadcasted DIRECTLY to ${activeSockets.length} relays like working code');
 
       final userResult = await _authService.getCurrentUserNpub();
       final authorNpub = userResult.data ?? '';
@@ -2471,21 +2365,17 @@ class DataService {
         replyMarker: replyMarker,
       );
 
-      _noteCache[reply.id] = reply;
-      _eventIds.add(reply.id);
+      _addNoteToCache(reply);
       _scheduleUIUpdate();
 
-      debugPrint('[DataService] NIP-10 compliant reply posted successfully');
       return Result.success(reply);
     } catch (e) {
-      debugPrint('[DataService ERROR] Error posting reply: $e');
       return Result.error('Failed to post reply: $e');
     }
   }
 
   Future<Result<UserModel>> updateUserProfile(UserModel user) async {
     try {
-      debugPrint('[DataService] Starting profile update for: ${user.name}');
 
       final privateKeyResult = await _authService.getCurrentUserPrivateKey();
       if (privateKeyResult.isError) {
@@ -2508,18 +2398,15 @@ class DataService {
       if (user.lud16.isNotEmpty) profileContent['lud16'] = user.lud16;
       if (user.website.isNotEmpty) profileContent['website'] = user.website;
 
-      debugPrint('[DataService] Profile content: $profileContent');
 
       final event = NostrService.createProfileEvent(
         profileContent: profileContent,
         privateKey: privateKey,
       );
 
-      debugPrint('[DataService] Profile event created, broadcasting to relays...');
 
       try {
         if (_relayManager.activeSockets.isEmpty) {
-          debugPrint('[DataService] No active relay connections, attempting to connect...');
           await _relayManager.connectRelays(
             [],
             onEvent: _handleRelayEvent,
@@ -2528,11 +2415,9 @@ class DataService {
           );
         }
       } catch (e) {
-        debugPrint('[DataService] Relay connection failed: $e, continuing anyway');
       }
 
       await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
-      debugPrint('[DataService] Profile event broadcasted IMMEDIATELY to ${_relayManager.activeSockets.length} relays');
 
       final eventJson = NostrService.eventToJson(event);
       final updatedAt = DateTime.fromMillisecondsSinceEpoch(eventJson['created_at'] * 1000);
@@ -2560,10 +2445,8 @@ class DataService {
 
       _usersController.add(_getUsersList());
 
-      debugPrint('[DataService] Profile updated, cache invalidated, and cached successfully.');
       return Result.success(updatedUser);
-    } catch (e, st) {
-      debugPrint('[DataService ERROR] Error updating profile: $e\n$st');
+    } catch (e) {
       return Result.error('Failed to update profile: $e');
     }
   }
@@ -2573,7 +2456,6 @@ class DataService {
     DateTime? since,
   }) async {
     try {
-      debugPrint('[DataService]  Fetching notifications...');
 
       final userResult = await _authService.getCurrentUserPublicKeyHex();
       if (userResult.isError) {
@@ -2587,8 +2469,6 @@ class DataService {
 
       _currentUserNpub = (await _authService.getCurrentUserNpub()).data ?? '';
 
-      debugPrint('[DataService]  Fetching notifications for user hex: $pubkeyHex');
-      debugPrint('[DataService]  User npub: $_currentUserNpub');
 
       int? sinceTimestamp;
       if (since != null) {
@@ -2597,10 +2477,8 @@ class DataService {
         sinceTimestamp = timeService.subtract(const Duration(days: 7)).millisecondsSinceEpoch ~/ 1000;
       }
 
-      debugPrint('[DataService]  Notification filter since: $sinceTimestamp');
 
       if (_notificationSubscriptionActive && _notificationSubscriptionId != null) {
-        debugPrint('[DataService]  Closing existing notification subscription: $_notificationSubscriptionId');
         await _relayManager.broadcast(jsonEncode(['CLOSE', _notificationSubscriptionId]));
       }
 
@@ -2614,25 +2492,21 @@ class DataService {
       _notificationSubscriptionId = 'notifications_persistent';
       final request = ['REQ', _notificationSubscriptionId, filter];
 
-      debugPrint('[DataService]  Broadcasting persistent notification request: $request');
 
       await _relayManager.broadcast(jsonEncode(request));
       _notificationSubscriptionActive = true;
 
       final notifications = _notificationCache[_currentUserNpub] ?? [];
 
-      debugPrint('[DataService]  Returning ${notifications.length} cached notifications (subscription remains active)');
 
       return Result.success(notifications.take(limit).toList());
     } catch (e) {
-      debugPrint('[DataService]  Error fetching notifications: $e');
       return Result.error('Failed to fetch notifications: $e');
     }
   }
 
   Future<void> stopNotificationSubscription() async {
     if (_notificationSubscriptionActive && _notificationSubscriptionId != null) {
-      debugPrint('[DataService]  Stopping notification subscription: $_notificationSubscriptionId');
       await _relayManager.broadcast(jsonEncode(['CLOSE', _notificationSubscriptionId]));
       _notificationSubscriptionActive = false;
       _notificationSubscriptionId = null;
@@ -2686,23 +2560,19 @@ class DataService {
                   }
                 }
               } catch (e) {
-                debugPrint('[DataService] Error processing follow list: $e');
               }
             },
           );
 
           await completer.future;
         } catch (e) {
-          debugPrint('[DataService] Error fetching follow list: $e');
         }
       }));
 
       final uniqueFollowing = following.toList();
-      debugPrint('[DataService] Follow list: ${uniqueFollowing.length} users');
 
       return Result.success(uniqueFollowing);
     } catch (e) {
-      debugPrint('[DataService] Error in getFollowingList: $e');
       return Result.error('Failed to get following list: $e');
     }
   }
@@ -2744,8 +2614,7 @@ class DataService {
                     final userNpub = _authService.hexToNpub(pubkeyHex) ?? pubkeyHex;
                     final note = _processProfileEventDirectlySync(eventData, userNpub);
                     if (note != null) {
-                      _noteCache[eventId] = note;
-                      _eventIds.add(eventId);
+                      _addNoteToCache(note);
                       noteFound = true;
                     }
                   }
@@ -2778,7 +2647,6 @@ class DataService {
 
       await _relayManager.broadcast(NostrService.serializeRequest(request));
     } catch (e) {
-      debugPrint('[DataService] Error fetching specific notes: $e');
     }
   }
 
@@ -2809,7 +2677,6 @@ class DataService {
         }
       }
     } catch (e) {
-      debugPrint('[DataService] Error handling COUNT response: $e');
     }
   }
 
@@ -2833,7 +2700,6 @@ class DataService {
         _pendingCountRequests.remove(subscriptionId);
       }
     } catch (e) {
-      debugPrint('[DataService] Error handling CLOSED message: $e');
     }
   }
 
@@ -2888,7 +2754,6 @@ class DataService {
         return 0;
       }
     } catch (e) {
-      debugPrint('[DataService] Exception in follower COUNT request for $pubkeyHex: $e');
       return 0;
     }
   }
@@ -2897,16 +2762,23 @@ class DataService {
     await fetchInteractionsForNotesBatchWithEOSE([noteId]);
   }
 
-  Future<void> fetchInteractionsForNotesBatchWithEOSE(List<String> noteIds) async {
-    if (_isClosed || noteIds.isEmpty) return;
+  Future<void> fetchInteractionsForNotesBatchWithEOSE(List<String>? noteIds) async {
+    if (_isClosed) return;
 
     try {
       final allRelays = _relayManager.relayUrls.toList();
       if (allRelays.isEmpty) return;
 
-      final processedInteractionIds = <String>{};
-      final sortedNoteIds = noteIds.toSet().toList()..sort();
+      final List<String> targetNoteIds;
+      if (noteIds?.isNotEmpty == true) {
+        targetNoteIds = noteIds!.toSet().toList()..sort();
+      } else {
+        targetNoteIds = _noteCache.keys.toList()..sort();
+      }
 
+      if (targetNoteIds.isEmpty) return;
+
+      final processedInteractionIds = <String>{};
       final interactionKinds = [1, 7, 6, 9735];
       final deletionKinds = [5];
       final quoteKinds = [1];
@@ -2917,19 +2789,19 @@ class DataService {
 
           final quoteFilter = NostrService.createQuoteFilter(
             kinds: quoteKinds,
-            quotedEventIds: sortedNoteIds,
+            quotedEventIds: targetNoteIds,
             limit: 1000,
           );
 
           final filters = [
             NostrService.createInteractionFilter(
               kinds: interactionKinds,
-              eventIds: sortedNoteIds,
+              eventIds: targetNoteIds,
               limit: 1000,
             ),
             NostrService.createInteractionFilter(
               kinds: deletionKinds,
-              eventIds: sortedNoteIds,
+              eventIds: targetNoteIds,
               limit: 100,
             ),
             quoteFilter,
@@ -2962,11 +2834,10 @@ class DataService {
 
           await completer.future;
         } catch (e) {
-          debugPrint('[DataService] Error fetching interactions from $relayUrl: $e');
         }
       }));
 
-      for (final noteId in noteIds) {
+      for (final noteId in targetNoteIds) {
         final note = _noteCache[noteId];
         if (note != null) {
           note.reactionCount = _reactionsMap[noteId]?.length ?? 0;
@@ -2978,7 +2849,6 @@ class DataService {
 
       _scheduleUIUpdate();
     } catch (e) {
-      debugPrint('[DataService] Error fetching interactions with EOSE: $e');
     }
   }
 
@@ -2992,7 +2862,6 @@ class DataService {
         parentNote.replyCount = replyCount;
       }
     } catch (e) {
-      debugPrint('[DataService] Error updating parent note reply count: $e');
     }
   }
 
@@ -3007,7 +2876,6 @@ class DataService {
         }
       }
     } catch (e) {
-      debugPrint('[DataService] Error updating note reply count: $e');
     }
   }
 
@@ -3019,7 +2887,6 @@ class DataService {
     List<List<String>>? additionalTags,
   }) async {
     try {
-      debugPrint('[DataService] Starting quote post of event: $quotedEventId');
 
       final privateKeyResult = await _authService.getCurrentUserPrivateKey();
       if (privateKeyResult.isError) {
@@ -3031,7 +2898,6 @@ class DataService {
         return const Result.error('Authentication credentials not available.');
       }
 
-      debugPrint('[DataService] Creating quote event...');
 
       final event = NostrService.createQuoteEvent(
         content: content,
@@ -3044,7 +2910,6 @@ class DataService {
 
       try {
         if (_relayManager.activeSockets.isEmpty) {
-          debugPrint('[DataService] No active relay connections, attempting to connect...');
           await _relayManager.connectRelays(
             [],
             onEvent: _handleRelayEvent,
@@ -3053,11 +2918,9 @@ class DataService {
           );
         }
       } catch (e) {
-        debugPrint('[DataService] Relay connection failed: $e, continuing anyway');
       }
 
       await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
-      debugPrint('[DataService] Quote note broadcasted IMMEDIATELY to ${_relayManager.activeSockets.length} relays');
 
       final userResult = await _authService.getCurrentUserNpub();
       final authorNpub = userResult.data ?? '';
@@ -3079,14 +2942,11 @@ class DataService {
         rawWs: jsonEncode(NostrService.eventToJson(event)),
       );
 
-      _noteCache[note.id] = note;
-      _eventIds.add(note.id);
+      _addNoteToCache(note);
       _scheduleUIUpdate();
 
-      debugPrint('[DataService] Quote note posted successfully');
       return Result.success(note);
     } catch (e) {
-      debugPrint('[DataService ERROR] Error posting quote: $e');
       return Result.error('Failed to post quote: $e');
     }
   }
@@ -3122,7 +2982,6 @@ class DataService {
           );
         }
       } catch (e) {
-        debugPrint('[DataService] Relay connection failed: $e, continuing anyway');
       }
 
       await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
@@ -3137,17 +2996,14 @@ class DataService {
         _noteDeletedController.add(noteId);
       }
 
-      debugPrint('[DataService] Note deleted: $noteId');
       return const Result.success(null);
     } catch (e) {
-      debugPrint('[DataService ERROR] Error deleting note: $e');
       return Result.error('Failed to delete note: $e');
     }
   }
 
   Future<Result<String>> sendMedia(String filePath, String blossomUrl) async {
     try {
-      debugPrint('[DataService] Starting media upload to Blossom: $filePath -> $blossomUrl');
 
       final privateKeyResult = await _authService.getCurrentUserPrivateKey();
       if (privateKeyResult.isError) {
@@ -3159,17 +3015,14 @@ class DataService {
         return const Result.error('Authentication credentials not available.');
       }
 
-      debugPrint('[DataService] Uploading to: $blossomUrl');
       final url = await NostrService.sendMedia(
         filePath: filePath,
         blossomUrl: blossomUrl,
         privateKey: privateKey,
       );
 
-      debugPrint('[DataService] Media uploaded successfully: $url');
       return Result.success(url);
     } catch (e) {
-      debugPrint('[DataService ERROR] Error uploading media: $e');
       return Result.error('Failed to upload media: $e');
     }
   }
@@ -3179,7 +3032,6 @@ class DataService {
     required String privateKey,
   }) async {
     try {
-      debugPrint('[DataService] Publishing kind 3 follow event with ${followingHexList.length} following');
 
       final currentUserResult = await _authService.getCurrentUserNpub();
       if (currentUserResult.isError || currentUserResult.data == null) {
@@ -3190,7 +3042,6 @@ class DataService {
 
       try {
         if (_relayManager.activeSockets.isEmpty) {
-          debugPrint('[DataService] No active relay connections, attempting to connect...');
           await _relayManager.connectRelays(
             [],
             onEvent: _handleRelayEvent,
@@ -3199,7 +3050,6 @@ class DataService {
           );
         }
       } catch (e) {
-        debugPrint('[DataService] Relay connection failed: $e, continuing anyway');
       }
 
       final event = NostrService.createFollowEvent(
@@ -3210,14 +3060,11 @@ class DataService {
       final serializedEvent = NostrService.serializeEvent(event);
       final activeSockets = _relayManager.activeSockets;
 
-      debugPrint('[DataService] Broadcasting follow event to ${activeSockets.length} active sockets...');
       for (final ws in activeSockets) {
         if (ws.readyState == WebSocket.open) {
           try {
             ws.add(serializedEvent);
-            debugPrint('[DataService] Follow event sent to relay via WebSocket');
           } catch (e) {
-            debugPrint('[DataService] Error sending follow event to WebSocket: $e');
           }
         }
       }
@@ -3225,15 +3072,11 @@ class DataService {
       try {
         final currentUserHex = _authService.npubToHex(currentUserNpub) ?? currentUserNpub;
         await _followCacheService.put(currentUserHex, followingHexList);
-        debugPrint('[DataService] Follow event broadcasted DIRECTLY and cached locally');
-        debugPrint('[DataService] Updated follow cache for $currentUserNpub: ${followingHexList.length} following');
       } catch (e) {
-        debugPrint('[DataService] Error caching follow list: $e');
       }
 
       return const Result.success(null);
     } catch (e) {
-      debugPrint('[DataService] Failed to publish follow event: $e');
       return Result.error('Failed to publish follow event: $e');
     }
   }
@@ -3285,19 +3128,16 @@ class DataService {
                   }
                 }
               } catch (e) {
-                debugPrint('[DataService] Error processing mute list: $e');
               }
             },
           );
 
           await completer.future;
         } catch (e) {
-          debugPrint('[DataService] Error fetching mute list: $e');
         }
       }));
 
       final uniqueMuted = muted.toList();
-      debugPrint('[DataService] Mute list: ${uniqueMuted.length} users');
 
       if (uniqueMuted.isNotEmpty) {
         await _muteCacheService.put(pubkeyHex, uniqueMuted);
@@ -3305,7 +3145,6 @@ class DataService {
 
       return Result.success(uniqueMuted);
     } catch (e) {
-      debugPrint('[DataService] Error getting mute list: $e');
       return Result.error('Failed to get mute list: $e');
     }
   }
@@ -3315,7 +3154,6 @@ class DataService {
     required String privateKey,
   }) async {
     try {
-      debugPrint('[DataService] Publishing kind 10000 mute event with ${mutedHexList.length} muted');
 
       final currentUserResult = await _authService.getCurrentUserNpub();
       if (currentUserResult.isError || currentUserResult.data == null) {
@@ -3326,7 +3164,6 @@ class DataService {
 
       try {
         if (_relayManager.activeSockets.isEmpty) {
-          debugPrint('[DataService] No active relay connections, attempting to connect...');
           await _relayManager.connectRelays(
             [],
             onEvent: _handleRelayEvent,
@@ -3335,7 +3172,6 @@ class DataService {
           );
         }
       } catch (e) {
-        debugPrint('[DataService] Relay connection failed: $e, continuing anyway');
       }
 
       final event = NostrService.createMuteEvent(
@@ -3346,14 +3182,11 @@ class DataService {
       final serializedEvent = NostrService.serializeEvent(event);
       final activeSockets = _relayManager.activeSockets;
 
-      debugPrint('[DataService] Broadcasting mute event to ${activeSockets.length} active sockets...');
       for (final ws in activeSockets) {
         if (ws.readyState == WebSocket.open) {
           try {
             ws.add(serializedEvent);
-            debugPrint('[DataService] Mute event sent to relay via WebSocket');
           } catch (e) {
-            debugPrint('[DataService] Error sending mute event to WebSocket: $e');
           }
         }
       }
@@ -3361,15 +3194,11 @@ class DataService {
       try {
         final currentUserHex = _authService.npubToHex(currentUserNpub) ?? currentUserNpub;
         await _muteCacheService.put(currentUserHex, mutedHexList);
-        debugPrint('[DataService] Mute event broadcasted DIRECTLY and cached locally');
-        debugPrint('[DataService] Updated mute cache for $currentUserNpub: ${mutedHexList.length} muted');
       } catch (e) {
-        debugPrint('[DataService] Error caching mute list: $e');
       }
 
       return const Result.success(null);
     } catch (e) {
-      debugPrint('[DataService] Failed to publish mute event: $e');
       return Result.error('Failed to publish mute event: $e');
     }
   }
@@ -3400,11 +3229,9 @@ class DataService {
       }
 
       if (removedCount > 0) {
-        debugPrint('[DataService] Cleaned $removedCount muted notes from cache');
         _scheduleUIUpdate();
       }
     } catch (e) {
-      debugPrint('[DataService] Error cleaning muted notes from cache: $e');
     }
   }
 
@@ -3439,7 +3266,6 @@ class DataService {
       final reactions = _reactionsMap[noteId] ?? [];
       return reactions.any((reaction) => reaction.author == userNpub);
     } catch (e) {
-      debugPrint('[DataService] Error checking user reaction: $e');
       return false;
     }
   }
@@ -3449,7 +3275,6 @@ class DataService {
       final reposts = _repostsMap[noteId] ?? [];
       return reposts.any((repost) => repost.author == userNpub);
     } catch (e) {
-      debugPrint('[DataService] Error checking user repost: $e');
       return false;
     }
   }
@@ -3459,7 +3284,6 @@ class DataService {
       final zaps = _zapsMap[noteId] ?? [];
       return zaps.any((zap) => zap.sender == userNpub);
     } catch (e) {
-      debugPrint('[DataService] Error checking user zap: $e');
       return false;
     }
   }
@@ -3485,31 +3309,25 @@ class DataService {
       }
 
       final mutedSet = mutedList.toSet();
-      debugPrint('[DataService] Filtering ${notes.length} notes by mute list with ${mutedSet.length} muted users');
 
       final filteredNotes = notes.where((note) {
         if (note.isRepost && note.repostedBy != null) {
           final reposterHex = _authService.npubToHex(note.repostedBy!) ?? note.repostedBy!;
           if (mutedSet.contains(reposterHex)) {
-            debugPrint('[DataService] Excluding repost by muted user: ${note.repostedBy}');
             return false;
           }
         }
 
         final noteAuthorHex = _authService.npubToHex(note.author) ?? note.author;
         if (mutedSet.contains(noteAuthorHex)) {
-          debugPrint('[DataService] Excluding note by muted user: ${note.author}');
           return false;
         }
 
         return true;
       }).toList();
 
-      debugPrint(
-          '[DataService] Mute filtered result: ${filteredNotes.length} notes (${notes.length - filteredNotes.length} excluded)');
       return filteredNotes;
     } catch (e) {
-      debugPrint('[DataService] Error filtering notes by mute list: $e');
       return notes;
     }
   }
@@ -3518,6 +3336,8 @@ class DataService {
     _isClosed = true;
     _batchProcessingTimer?.cancel();
     _uiUpdateThrottleTimer?.cancel();
+    _interactionFetchTimer?.cancel();
+    _periodicInteractionFetchTimer?.cancel();
     _relayManager.unregisterService('nostr_data_service');
     _notesController.close();
     _usersController.close();

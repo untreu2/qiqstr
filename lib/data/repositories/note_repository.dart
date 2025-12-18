@@ -749,36 +749,7 @@ class NoteRepository {
     return null;
   }
 
-  Future<void> fetchInteractionsForNoteWithEOSE(String noteId) async {
-    try {
-      await _nostrDataService.fetchInteractionsForNotesWithEOSE(noteId);
-        _updateNoteReplyCount(noteId);
-    } catch (e) {
-      _logger.error('Error fetching interactions for note', 'NoteRepository', e);
-    }
-  }
 
-  void _updateNoteReplyCount(String noteId) {
-    try {
-      final note = _notesCache[noteId];
-      if (note != null) {
-        final cachedNotes = _nostrDataService.cachedNotes;
-        int replyCount = 0;
-        for (final reply in cachedNotes) {
-          if (reply.isReply && (reply.parentId == noteId || reply.rootId == noteId)) {
-            replyCount++;
-          }
-        }
-
-        if (note.replyCount != replyCount) {
-          note.replyCount = replyCount;
-          _throttledUpdate();
-        }
-      }
-    } catch (e) {
-      _logger.error('Error updating note reply count', 'NoteRepository', e);
-    }
-  }
 
   bool hasUserReacted(String noteId, String userHex) {
     try {

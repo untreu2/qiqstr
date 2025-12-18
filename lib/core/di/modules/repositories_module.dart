@@ -38,7 +38,6 @@ class RepositoriesModule extends DIModule {
     AppDI.registerLazySingleton<FeedLoaderService>(() => FeedLoaderService(
           noteRepository: AppDI.get<NoteRepository>(),
           userRepository: AppDI.get<UserRepository>(),
-          nostrDataService: AppDI.get<DataService>(),
         ));
 
     AppDI.registerLazySingleton<NotificationRepository>(() => NotificationRepository(

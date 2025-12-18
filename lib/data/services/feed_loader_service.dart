@@ -6,7 +6,6 @@ import '../../models/user_model.dart';
 import '../repositories/note_repository.dart';
 import '../repositories/user_repository.dart';
 import 'user_batch_fetcher.dart';
-import 'data_service.dart';
 
 enum FeedType {
   feed,
@@ -59,17 +58,14 @@ class FeedLoaderService {
   final NoteRepository _noteRepository;
   final UserRepository _userRepository;
   final LoggingService _logger;
-  final DataService _nostrDataService;
 
   FeedLoaderService({
     required NoteRepository noteRepository,
     required UserRepository userRepository,
-    required DataService nostrDataService,
     LoggingService? logger,
   })  : _noteRepository = noteRepository,
         _userRepository = userRepository,
-        _logger = logger ?? LoggingService.instance,
-        _nostrDataService = nostrDataService;
+        _logger = logger ?? LoggingService.instance;
 
   Future<FeedLoadResult> loadFeed(FeedLoadParams params) async {
     try {
@@ -122,18 +118,6 @@ class FeedLoaderService {
           }
 
           final processedNotes = _processNotes(notes);
-          
-          if (processedNotes.isNotEmpty) {
-            final noteIds = processedNotes.map((note) {
-              return note.isRepost && note.rootId != null && note.rootId!.isNotEmpty 
-                  ? note.rootId! 
-                  : note.id;
-            }).toSet().toList();
-            
-            if (noteIds.isNotEmpty) {
-              unawaited(_nostrDataService.fetchInteractionsForNotesBatchWithEOSE(noteIds));
-            }
-          }
           
           return FeedLoadResult(
             notes: processedNotes,
