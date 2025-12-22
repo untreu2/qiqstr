@@ -90,7 +90,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         return result['type_0_main'];
       }
     } catch (e) {
-      debugPrint('[NoteContentWidget] Bech32 decode error: $e');
+      return null;
     }
     return null;
   }
@@ -114,15 +114,20 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     final mentionIds = _textParts.where((part) => part['type'] == 'mention').map((part) => part['id'] as String).toSet();
 
     for (final mentionId in mentionIds) {
-      final actualPubkey = _extractPubkey(mentionId) ?? mentionId;
+      final actualPubkey = _extractPubkey(mentionId);
+      if (actualPubkey == null) continue;
       
-      final npubEncoded = encodeBasicBech32(actualPubkey, 'npub');
-      final cachedUser = _userRepository.getCachedUserSync(npubEncoded);
-      
-      if (cachedUser != null) {
-        _mentionUsers[actualPubkey] = cachedUser;
-      } else {
-        _mentionUsers[actualPubkey] = _createPlaceholderUser(actualPubkey);
+      try {
+        final npubEncoded = encodeBasicBech32(actualPubkey, 'npub');
+        final cachedUser = _userRepository.getCachedUserSync(npubEncoded);
+        
+        if (cachedUser != null) {
+          _mentionUsers[actualPubkey] = cachedUser;
+        } else {
+          _mentionUsers[actualPubkey] = _createPlaceholderUser(actualPubkey);
+        }
+      } catch (e) {
+        continue;
       }
     }
   }
@@ -136,12 +141,17 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     final npubsToFetch = <String>[];
     
     for (final mentionId in mentionIds) {
-      final actualPubkey = _extractPubkey(mentionId) ?? mentionId;
+      final actualPubkey = _extractPubkey(mentionId);
+      if (actualPubkey == null) continue;
       
-      if (!_mentionUsers.containsKey(actualPubkey) || _mentionUsers[actualPubkey]!.name == actualPubkey.substring(0, 8)) {
-        final npubEncoded = encodeBasicBech32(actualPubkey, 'npub');
-        pubkeyHexToNpubMap[actualPubkey] = npubEncoded;
-        npubsToFetch.add(npubEncoded);
+      try {
+        if (!_mentionUsers.containsKey(actualPubkey) || _mentionUsers[actualPubkey]!.name == actualPubkey.substring(0, 8)) {
+          final npubEncoded = encodeBasicBech32(actualPubkey, 'npub');
+          pubkeyHexToNpubMap[actualPubkey] = npubEncoded;
+          npubsToFetch.add(npubEncoded);
+        }
+      } catch (e) {
+        continue;
       }
     }
     
@@ -187,7 +197,6 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         _loadMentionUsersBatch(missingNpubs, pubkeyHexToNpubMap);
       }
     } catch (e) {
-      debugPrint('[NoteContentWidget] Preload cached profiles error: $e');
       _loadMentionUsersBatch(npubsToFetch, pubkeyHexToNpubMap);
     }
   }
@@ -231,7 +240,6 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         setState(() {});
       }
     } catch (e) {
-      debugPrint('[NoteContentWidget] Batch load error: $e');
     }
   }
 
@@ -401,7 +409,9 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         }
       } else if (p['type'] == 'mention') {
         final id = p['id'] as String;
-        final actualPubkey = _extractPubkey(id) ?? id;
+        final actualPubkey = _extractPubkey(id);
+        if (actualPubkey == null) continue;
+        
         final user = _mentionUsers[actualPubkey];
         final isLoading = _mentionLoadingStates[actualPubkey] == true;
 
@@ -420,8 +430,11 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
 
         final recognizer = TapGestureRecognizer()
           ..onTap = () {
-            final npubForNavigation = encodeBasicBech32(actualPubkey, 'npub');
-            widget.onNavigateToMentionProfile?.call(npubForNavigation);
+            try {
+              final npubForNavigation = encodeBasicBech32(actualPubkey, 'npub');
+              widget.onNavigateToMentionProfile?.call(npubForNavigation);
+            } catch (e) {
+            }
           };
         _gestureRecognizers.add(recognizer);
 

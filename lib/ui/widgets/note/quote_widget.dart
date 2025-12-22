@@ -35,7 +35,7 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
 
   late final NoteRepository _noteRepository;
   late final UserRepository _userRepository;
-  late final String? _eventId;
+  String? _eventId;
 
   String? _formattedTime;
   Map<String, dynamic>? _parsedContent;
@@ -54,65 +54,49 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
       _userRepository = AppDI.get<UserRepository>();
       _eventId = _extractEventId(widget.bech32);
     } catch (e) {
-      debugPrint('[QuoteWidget] Service init error: $e');
       _setError();
     }
   }
 
   String? _extractEventId(String bech32) {
     try {
-      debugPrint('[QuoteWidget] Extracting eventId from: $bech32');
-
       if (bech32.startsWith('note1')) {
-        final decoded = decodeBasicBech32(bech32, 'note');
-        debugPrint('[QuoteWidget] note1 decoded to: $decoded');
-        return decoded;
+        return decodeBasicBech32(bech32, 'note');
       } else if (bech32.startsWith('nevent1')) {
-        debugPrint('[QuoteWidget] Decoding nevent1...');
         final result = decodeTlvBech32Full(bech32, 'nevent');
-        debugPrint('[QuoteWidget] nevent1 full result: $result');
-
-        final eventId = result['type_0_main'];
-        debugPrint('[QuoteWidget] nevent1 extracted eventId: $eventId');
-        return eventId;
+        return result['type_0_main'];
       }
-
-      debugPrint('[QuoteWidget] Unknown bech32 format: $bech32');
     } catch (e) {
-      debugPrint('[QuoteWidget] Bech32 decode error: $e');
-      debugPrint('[QuoteWidget] Error type: ${e.runtimeType}');
+      return null;
     }
     return null;
   }
 
   void _loadQuoteData() async {
-    if (_eventId == null) {
+    final eventId = _eventId;
+    if (eventId == null) {
       _setError();
       return;
     }
 
     try {
-      final result = await _noteRepository.getNoteById(_eventId);
+      final result = await _noteRepository.getNoteById(eventId);
       
       if (_isDisposed || !mounted) return;
 
       result.fold(
         (note) {
           if (note != null) {
-            debugPrint('[QuoteWidget] Found note: $_eventId');
             _setNote(note);
           } else {
-            debugPrint('[QuoteWidget] Note not found: $_eventId');
             _setError();
           }
         },
         (error) {
-          debugPrint('[QuoteWidget] Error fetching note: $error');
           _setError();
         },
       );
     } catch (e) {
-      debugPrint('[QuoteWidget] Exception loading quote data: $e');
       _setError();
     }
   }
@@ -145,7 +129,6 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
       _parsedContent = note.parsedContentLazy;
       _shouldTruncate = _checkTruncation(_parsedContent);
     } catch (e) {
-      debugPrint('[QuoteWidget] Precompute error: $e');
       _parsedContent = {
         'textParts': [
           {'type': 'text', 'text': note.content}
@@ -251,7 +234,7 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
               builder: (context) => ProfilePage(user: user),
             ),
           ),
-          (error) => debugPrint('[QuoteWidget] Mention navigation error: $error'),
+          (error) {},
         );
       });
     }
