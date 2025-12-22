@@ -19,6 +19,7 @@ import 'auth_service.dart';
 import 'user_cache_service.dart';
 import 'follow_cache_service.dart';
 import 'mute_cache_service.dart';
+import 'primal_cache_service.dart';
 
 class DataService {
   final AuthService _authService;
@@ -2704,6 +2705,16 @@ class DataService {
   }
 
   Future<int> fetchFollowerCount(String pubkeyHex, {int maxRetries = 3, int attempt = 1}) async {
+    try {
+      final primalService = PrimalCacheService.instance;
+      final primalCount = await primalService.fetchFollowerCount(pubkeyHex);
+      
+      if (primalCount > 0) {
+        return primalCount;
+      }
+    } catch (e) {
+    }
+
     try {
       final filterMap = <String, dynamic>{
         'kinds': [3],

@@ -9,6 +9,7 @@ const List<String> _defaultRelaySetMainSockets = [
 ];
 
 const String countRelayUrl = 'wss://relay.nostr.band/';
+const String primalCacheUrl = 'wss://cache2.primal.net/v1';
 
 Future<List<String>> getRelaySetMainSockets() async {
   try {
