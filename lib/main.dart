@@ -14,6 +14,7 @@ import 'data/services/auth_service.dart';
 import 'data/services/memory_trimming_service.dart';
 import 'data/services/lifecycle_manager.dart';
 import 'data/services/event_parser_isolate.dart';
+import 'presentation/viewmodels/wallet_viewmodel.dart';
 
 void main() {
   runZonedGuarded(() async {
@@ -57,6 +58,8 @@ void main() {
 
     final lifecycleManager = LifecycleManager();
     lifecycleManager.initialize();
+
+    AppDI.get<WalletViewModel>();
 
     final initialHome = await _determineInitialHome();
 

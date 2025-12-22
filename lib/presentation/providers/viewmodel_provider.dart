@@ -9,6 +9,7 @@ import '../viewmodels/notification_viewmodel.dart';
 import '../viewmodels/thread_viewmodel.dart';
 import '../viewmodels/compose_viewmodel.dart';
 import '../viewmodels/dm_viewmodel.dart';
+import '../viewmodels/wallet_viewmodel.dart';
 
 class ViewModelProvider {
   static Widget login({
@@ -211,6 +212,30 @@ class ViewModelProvider {
         final viewModel = Provider.of<DmViewModel>(context, listen: false);
         return builder(context, viewModel);
       },
+    );
+  }
+
+  static Widget wallet({
+    required Widget Function(BuildContext context, WalletViewModel viewModel) builder,
+  }) {
+    return ChangeNotifierProvider<WalletViewModel>.value(
+      value: AppDI.get<WalletViewModel>(),
+      child: Consumer<WalletViewModel>(
+        builder: (context, viewModel, child) => builder(context, viewModel),
+      ),
+    );
+  }
+
+  static Widget walletConsumer({
+    required Widget Function(BuildContext context, WalletViewModel viewModel, Widget? child) builder,
+    Widget? child,
+  }) {
+    return ChangeNotifierProvider<WalletViewModel>.value(
+      value: AppDI.get<WalletViewModel>(),
+      child: Consumer<WalletViewModel>(
+        builder: builder,
+        child: child,
+      ),
     );
   }
 }

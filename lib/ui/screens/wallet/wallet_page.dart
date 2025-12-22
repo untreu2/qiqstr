@@ -1,12 +1,12 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/wallet_repository.dart';
 import '../../../models/wallet_model.dart';
+import '../../../presentation/providers/viewmodel_provider.dart';
+import '../../../presentation/viewmodels/wallet_viewmodel.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/dialogs/receive_dialog.dart';
 import '../../widgets/dialogs/send_dialog.dart';
@@ -21,144 +21,8 @@ class WalletPage extends StatefulWidget {
 class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMixin {
   final _walletRepository = AppDI.get<WalletRepository>();
 
-  CoinosUser? _user;
-  CoinosBalance? _balance;
-  List<CoinosPayment>? _transactions;
-  bool _isConnecting = false;
-  bool _isLoadingTransactions = false;
-  String? _error;
-  Timer? _balanceTimer;
-
   @override
   bool get wantKeepAlive => true;
-
-  @override
-  void initState() {
-    super.initState();
-    _autoConnect();
-  }
-
-  Future<void> _autoConnect() async {
-    final result = await _walletRepository.autoConnect();
-    result.fold(
-      (user) {
-        if (user != null) {
-          setState(() {
-            _user = user;
-          });
-          _getBalance();
-          _getTransactions();
-          _startBalanceTimer();
-        }
-      },
-      (error) {},
-    );
-  }
-
-  Future<void> _getBalance() async {
-    final result = await _walletRepository.getBalance();
-
-    result.fold(
-      (balance) {
-        if (mounted) {
-          setState(() {
-            _balance = balance;
-          });
-        }
-      },
-      (error) {
-        _setError('Failed to get balance: $error');
-      },
-    );
-  }
-
-  Future<void> _getTransactions() async {
-    setState(() {
-      _isLoadingTransactions = true;
-    });
-
-    final result = await _walletRepository.listTransactions();
-
-    result.fold(
-      (transactions) {
-        setState(() {
-          _transactions = transactions;
-          _isLoadingTransactions = false;
-        });
-      },
-      (error) {
-        setState(() {
-          _isLoadingTransactions = false;
-        });
-        debugPrint('Failed to get transactions: $error');
-      },
-    );
-  }
-
-  void _startBalanceTimer() {
-    _balanceTimer?.cancel();
-
-    _balanceTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
-      if (_user != null && mounted) {
-        _getBalance();
-      }
-    });
-  }
-
-  void _stopBalanceTimer() {
-    _balanceTimer?.cancel();
-    _balanceTimer = null;
-  }
-
-  void _setError(String error) {
-    setState(() {
-      _error = error;
-      _isConnecting = false;
-    });
-  }
-
-  Future<void> _connectWithNostr() async {
-    setState(() {
-      _isConnecting = true;
-      _error = null;
-    });
-
-    try {
-      final result = await _walletRepository.authenticateWithNostr();
-
-      if (mounted) {
-        result.fold(
-          (user) {
-            setState(() {
-              _user = user;
-              _isConnecting = false;
-            });
-            _getBalance();
-            _getTransactions();
-            _startBalanceTimer();
-          },
-          (error) {
-            setState(() {
-              _error = error;
-              _isConnecting = false;
-            });
-          },
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = 'Failed to connect: $e';
-          _isConnecting = false;
-        });
-      }
-    }
-  }
-
-  String? _getCoinosLud16() {
-    if (_user == null) return null;
-    return _user!.lud16;
-  }
 
   Widget _buildHeader(BuildContext context) {
     return Padding(
@@ -180,7 +44,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
     );
   }
 
-  Widget _buildConnectionBottomBar(BuildContext context) {
+  Widget _buildConnectionBottomBar(BuildContext context, WalletViewModel viewModel) {
     return Positioned(
       left: 0,
       right: 0,
@@ -203,7 +67,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
           bottom: MediaQuery.of(context).padding.bottom + 12,
         ),
         child: GestureDetector(
-          onTap: _isConnecting ? null : _connectWithNostr,
+          onTap: viewModel.isConnecting ? null : () => viewModel.connectWithNostr(),
           child: Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -212,7 +76,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
               color: context.colors.textPrimary,
               borderRadius: BorderRadius.circular(40),
             ),
-            child: _isConnecting
+            child: viewModel.isConnecting
                 ? SizedBox(
                     width: 20,
                     height: 20,
@@ -272,8 +136,8 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
     );
   }
 
-  Widget _buildMainContent(BuildContext context) {
-    if (_user == null) {
+  Widget _buildMainContent(BuildContext context, WalletViewModel viewModel) {
+    if (viewModel.user == null) {
       return const SizedBox.shrink();
     }
 
@@ -291,7 +155,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
                   mainAxisAlignment: MainAxisAlignment.start,
                   children: [
                     Text(
-                      _balance != null ? _balance!.balance.toString() : '0',
+                      viewModel.balance != null ? viewModel.balance!.balance.toString() : '0',
                       style: TextStyle(
                         fontSize: 72,
                         fontWeight: FontWeight.w600,
@@ -314,7 +178,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
             ),
           ),
           Expanded(
-            child: _buildTransactionsList(context),
+            child: _buildTransactionsList(context, viewModel),
           ),
           const SizedBox(height: 80),
         ],
@@ -322,14 +186,14 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
     );
   }
 
-  Widget _buildTransactionsList(BuildContext context) {
-    if (_isLoadingTransactions) {
+  Widget _buildTransactionsList(BuildContext context, WalletViewModel viewModel) {
+    if (viewModel.isLoadingTransactions) {
       return Center(
         child: CircularProgressIndicator(color: context.colors.textPrimary),
       );
     }
 
-    if (_transactions == null || _transactions!.isEmpty) {
+    if (viewModel.transactions == null || viewModel.transactions!.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -348,7 +212,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
       );
     }
 
-    final recentTransactions = _transactions!.take(6).toList();
+    final recentTransactions = viewModel.transactions!.take(6).toList();
 
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: 100),
@@ -413,7 +277,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
     );
   }
 
-  void _showReceiveDialog() {
+  void _showReceiveDialog(WalletViewModel viewModel) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -423,12 +287,12 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
       ),
       builder: (context) => ReceiveDialog(
         walletRepository: _walletRepository,
-        lud16: _getCoinosLud16(),
+        lud16: viewModel.getCoinosLud16(),
       ),
     );
   }
 
-  void _showSendDialog() {
+  void _showSendDialog(WalletViewModel viewModel) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -438,16 +302,13 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
       ),
       builder: (context) => SendDialog(
         walletRepository: _walletRepository,
-        onPaymentSuccess: () {
-          _getBalance();
-          _getTransactions();
-        },
+        onPaymentSuccess: () => viewModel.onPaymentSuccess(),
       ),
     );
   }
 
-  Widget _buildError(BuildContext context) {
-    if (_error == null) return const SizedBox.shrink();
+  Widget _buildError(BuildContext context, WalletViewModel viewModel) {
+    if (viewModel.error == null) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -464,7 +325,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                _error!,
+                viewModel.error!,
                 style: TextStyle(
                   color: Colors.red,
                   fontSize: 14,
@@ -478,35 +339,31 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
   }
 
   @override
-  void dispose() {
-    _stopBalanceTimer();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Consumer<ThemeManager>(
-      builder: (context, themeManager, child) {
-        return Scaffold(
-          backgroundColor: context.colors.background,
-          body: Stack(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    return ViewModelProvider.walletConsumer(
+      builder: (context, viewModel, child) {
+        return Consumer<ThemeManager>(
+          builder: (context, themeManager, child) {
+            return Scaffold(
+              backgroundColor: context.colors.background,
+              body: Stack(
                 children: [
-                  _buildHeader(context),
-                  if (_user == null) ...[
-                    Expanded(child: _buildEmptyWalletState(context)),
-                    const SizedBox(height: 80),
-                  ] else ...[
-                    _buildMainContent(context),
-                  ],
-                  _buildError(context),
-                ],
-              ),
-              if (_user == null) _buildConnectionBottomBar(context),
-              if (_user != null)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(context),
+                      if (viewModel.user == null) ...[
+                        Expanded(child: _buildEmptyWalletState(context)),
+                        const SizedBox(height: 80),
+                      ] else ...[
+                        _buildMainContent(context, viewModel),
+                      ],
+                      _buildError(context, viewModel),
+                    ],
+                  ),
+                  if (viewModel.user == null) _buildConnectionBottomBar(context, viewModel),
+                  if (viewModel.user != null)
                 Positioned(
                   left: 0,
                   right: 0,
@@ -532,7 +389,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
                       children: [
                         Expanded(
                           child: GestureDetector(
-                            onTap: _showReceiveDialog,
+                            onTap: () => _showReceiveDialog(viewModel),
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
                               alignment: Alignment.center,
@@ -561,7 +418,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
                         const SizedBox(width: 12),
                         Expanded(
                           child: GestureDetector(
-                            onTap: _showSendDialog,
+                            onTap: () => _showSendDialog(viewModel),
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
                               alignment: Alignment.center,
@@ -593,6 +450,8 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
                 ),
             ],
           ),
+        );
+          },
         );
       },
     );
