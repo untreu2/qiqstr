@@ -210,12 +210,11 @@ class UserBatchFetcher {
       final completer = Completer<Map<String, UserModel>>();
       final receivedProfiles = <String, UserModel>{};
 
-      void handleEvent(dynamic event, String relayUrl) {
+      void handleEvent(List<dynamic> decoded, String relayUrl) {
         try {
           if (completer.isCompleted) return;
 
-          final decoded = jsonDecode(event);
-          if (decoded is List && decoded.length >= 3 && decoded[0] == 'EVENT') {
+          if (decoded.length >= 3 && decoded[0] == 'EVENT') {
             final eventData = decoded[2];
             if (eventData['kind'] == 0) {
               final pubkey = eventData['pubkey'] as String?;

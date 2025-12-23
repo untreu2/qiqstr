@@ -20,7 +20,6 @@ import 'user_cache_service.dart';
 import 'follow_cache_service.dart';
 import 'mute_cache_service.dart';
 import 'primal_cache_service.dart';
-import 'event_parser_isolate.dart';
 
 class DataService {
   final AuthService _authService;
@@ -293,37 +292,31 @@ class DataService {
   }
 
 
-  Future<void> _handleRelayEvent(dynamic rawEvent, String relayUrl) async {
+  Future<void> _handleRelayEvent(List<dynamic> decoded, String relayUrl) async {
     try {
-      if (rawEvent == null) return;
-      final parsed = await EventParserIsolate.instance.parseJson(rawEvent.toString());
-      final eventData = parsed['data'];
+      if (decoded.isEmpty) return;
+      final messageType = decoded[0];
 
-      if (eventData is List && eventData.isNotEmpty) {
-        final messageType = eventData[0];
+      if (messageType == 'EVENT' && decoded.length >= 3) {
+        final event = decoded[2] as Map<String, dynamic>;
 
-        if (messageType == 'EVENT' && eventData.length >= 3) {
-          final event = eventData[2] as Map<String, dynamic>;
+        _eventQueue.add({
+          'eventData': event,
+          'relayUrl': relayUrl,
+          'timestamp': timeService.millisecondsSinceEpoch,
+        });
 
-          _eventQueue.add({
-            'eventData': event,
-            'relayUrl': relayUrl,
-            'timestamp': timeService.millisecondsSinceEpoch,
-          });
-
-          if (_eventQueue.length >= _maxBatchSize) {
-            _flushEventQueue();
-          } else {
-            _batchProcessingTimer ??= Timer(_batchTimeout, _flushEventQueue);
-          }
-        } else if (messageType == 'COUNT' && eventData.length >= 3) {
-          _handleCountResponse(eventData);
-        } else if (messageType == 'CLOSED' && eventData.length >= 2) {
-          _handleClosedMessage(eventData);
+        if (_eventQueue.length >= _maxBatchSize) {
+          _flushEventQueue();
+        } else {
+          _batchProcessingTimer ??= Timer(_batchTimeout, _flushEventQueue);
         }
+      } else if (messageType == 'COUNT' && decoded.length >= 3) {
+        _handleCountResponse(decoded);
+      } else if (messageType == 'CLOSED' && decoded.length >= 2) {
+        _handleClosedMessage(decoded);
       }
-    } catch (e) {
-    }
+    } catch (_) {}
   }
 
   void _flushEventQueue() {
@@ -1508,7 +1501,7 @@ class DataService {
             timeout: const Duration(seconds: 30),
             onEvent: (data, url) {
               try {
-                final eventData = data is Map<String, dynamic> ? data : jsonDecode(data.toString()) as Map<String, dynamic>;
+                final eventData = data;
                 final eventAuthor = eventData['pubkey'] as String? ?? '';
                 final eventKind = eventData['kind'] as int? ?? 0;
                 final eventId = eventData['id'] as String? ?? '';
@@ -1749,7 +1742,7 @@ class DataService {
             timeout: const Duration(seconds: 30),
             onEvent: (data, url) {
               try {
-                final eventData = data is Map<String, dynamic> ? data : jsonDecode(data.toString()) as Map<String, dynamic>;
+                final eventData = data;
                 final eventId = eventData['id'] as String? ?? '';
                 final eventKind = eventData['kind'] as int? ?? 0;
 

@@ -1,10 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:collection';
 import 'package:flutter/foundation.dart';
 import 'package:qiqstr/constants/relays.dart';
+import 'event_parser_isolate.dart';
+import 'event_handler.dart';
 
 class RelayConnectionStats {
   int connectAttempts = 0;
@@ -26,7 +27,7 @@ class RelayConnectionState {
   bool isConnecting = false;
   DateTime? lastConnectAttempt;
   StreamSubscription? subscription;
-  final List<Function(dynamic, String)> eventHandlers = [];
+  final List<Function(List<dynamic>, String)> eventHandlers = [];
   final List<Function(String)> disconnectHandlers = [];
   
   bool get isConnected => socket != null && socket!.readyState == WebSocket.open;
@@ -53,7 +54,7 @@ class WebSocketManager {
   final Queue<String> _messageQueue = Queue();
   bool _isProcessingMessages = false;
   
-  final Map<String, Function(dynamic event, String relayUrl)?> _globalEventHandlers = {};
+  final Map<String, Function(List<dynamic> decoded, String relayUrl)?> _globalEventHandlers = {};
   final Map<String, Function(String relayUrl)?> _globalDisconnectHandlers = {};
 
   WebSocketManager._internal() {
@@ -141,7 +142,7 @@ class WebSocketManager {
   }
   
   Future<WebSocket?> getOrCreateConnection(String relayUrl, {
-    Function(dynamic event, String relayUrl)? onEvent,
+    Function(List<dynamic> decoded, String relayUrl)? onEvent,
     Function(String relayUrl)? onDisconnected,
   }) async {
     await _ensureInitialized();
@@ -180,7 +181,7 @@ class WebSocketManager {
 
   Future<void> connectRelays(
     List<String> targetNpubs, {
-    Function(dynamic event, String relayUrl)? onEvent,
+    Function(List<dynamic> decoded, String relayUrl)? onEvent,
     Function(String relayUrl)? onDisconnected,
     String? serviceId,
   }) async {
@@ -208,7 +209,7 @@ class WebSocketManager {
 
   Future<WebSocket?> _connectSingleRelay(
     String relayUrl,
-    Function(dynamic event, String relayUrl)? onEvent,
+    Function(List<dynamic> decoded, String relayUrl)? onEvent,
     Function(String relayUrl)? onDisconnected,
   ) async {
     if (_isClosed) return null;
@@ -278,69 +279,52 @@ class WebSocketManager {
       }
 
       state.subscription = ws.listen(
-        (event) {
+        (event) async {
           try {
             final currentState = _connections[relayUrl];
-            if (!_isClosed && currentState != null && currentState.isConnected) {
-              stats.messagesReceived++;
+            if (_isClosed || currentState == null || !currentState.isConnected) return;
 
-              try {
-                final decoded = jsonDecode(event) as List<dynamic>;
-                if (decoded.length >= 2 && decoded[0] == 'EVENT') {
-                  final subscriptionId = decoded[1] as String;
-                  final subscriptionHandlers = _subscriptionHandlers[relayUrl];
-                  if (subscriptionHandlers != null && subscriptionHandlers.containsKey(subscriptionId)) {
-                    try {
-                      subscriptionHandlers[subscriptionId]!(event, relayUrl);
-                    } catch (e) {
-                      if (kDebugMode) {
-                        print('[WebSocketManager] Error in subscription handler: $e');
-                      }
-                    }
-                  }
-                } else if (decoded.length >= 2 && (decoded[0] == 'EOSE' || decoded[0] == 'CLOSED')) {
-                  final subscriptionId = decoded[1] as String;
-                  final subscriptionHandlers = _subscriptionHandlers[relayUrl];
-                  if (subscriptionHandlers != null && subscriptionHandlers.containsKey(subscriptionId)) {
-                    try {
-                      subscriptionHandlers[subscriptionId]!(event, relayUrl);
-                    } catch (e) {
-                      if (kDebugMode) {
-                        print('[WebSocketManager] Error in subscription handler: $e');
-                      }
-                    }
-                  }
-                }
-              } catch (_) {}
+            stats.messagesReceived++;
 
-              for (final handler in _globalEventHandlers.values) {
-                if (handler != null) {
-                  try {
-                    handler(event, relayUrl);
-                  } catch (e) {
-                    if (kDebugMode) {
-                      print('[WebSocketManager] Error in global event handler: $e');
-                    }
-                  }
-                }
-              }
+            List<dynamic>? decoded;
+            try {
+              final parsed = await EventParserIsolate.instance.parseJson(event is String ? event : event.toString());
+              decoded = parsed['data'] as List<dynamic>?;
+            } catch (_) {}
 
-              final currentState = _connections[relayUrl];
-              if (currentState != null) {
-                for (final handler in currentState.eventHandlers) {
-                  try {
-                    handler(event, relayUrl);
-                  } catch (e) {
-                    if (kDebugMode) {
-                      print('[WebSocketManager] Error in event handler: $e');
-                    }
+            if (decoded != null && decoded.isNotEmpty) {
+              EventHandler.route(
+                decoded,
+                relayUrl,
+                subscriptionHandlers: _subscriptionHandlers,
+              );
+            }
+
+            for (final handler in _globalEventHandlers.values) {
+              if (handler != null && decoded != null) {
+                try {
+                  handler(decoded, relayUrl);
+                } catch (e) {
+                  if (kDebugMode) {
+                    print('[WebSocketManager] Error in global event handler: $e');
                   }
                 }
               }
             }
-          } catch (e) {
-            
-          }
+
+            final currentStateAfter = _connections[relayUrl];
+            if (currentStateAfter != null && decoded != null) {
+              for (final handler in currentStateAfter.eventHandlers) {
+                try {
+                  handler(decoded, relayUrl);
+                } catch (e) {
+                  if (kDebugMode) {
+                    print('[WebSocketManager] Error in event handler: $e');
+                  }
+                }
+              }
+            }
+          } catch (_) {}
         },
         onDone: () {
           try {
@@ -447,9 +431,9 @@ class WebSocketManager {
     return false;
   }
   
-  final Map<String, Map<String, Function(dynamic, String)>> _subscriptionHandlers = {};
+  final Map<String, Map<String, Function(List<dynamic>, String)>> _subscriptionHandlers = {};
   
-  void registerSubscriptionHandler(String relayUrl, String subscriptionId, Function(dynamic, String) handler) {
+  void registerSubscriptionHandler(String relayUrl, String subscriptionId, Function(List<dynamic>, String) handler) {
     if (!_subscriptionHandlers.containsKey(relayUrl)) {
       _subscriptionHandlers[relayUrl] = {};
     }
@@ -464,7 +448,7 @@ class WebSocketManager {
   }
   
   Future<Completer<void>> sendQuery(String relayUrl, String request, String subscriptionId, {
-    required Function(dynamic, String) onEvent,
+    required Function(Map<String, dynamic>, String) onEvent,
     Duration timeout = const Duration(seconds: 30),
   }) async {
     final completer = Completer<void>();
@@ -477,13 +461,12 @@ class WebSocketManager {
       return completer;
     }
     
-    final handler = (dynamic event, String url) {
+    final handler = (List<dynamic> decoded, String url) async {
       try {
-        final eventStr = event is String ? event : event.toString();
-        final decoded = jsonDecode(eventStr) as List<dynamic>;
         if (decoded.length >= 2 && decoded[1] == subscriptionId) {
-          if (decoded[0] == 'EVENT') {
-            onEvent(decoded[2], url);
+          if (decoded[0] == 'EVENT' && decoded.length >= 3) {
+            final eventMap = decoded[2] as Map<String, dynamic>;
+            onEvent(eventMap, url);
           } else if (decoded[0] == 'EOSE') {
             if (!eoseReceived && !completer.isCompleted) {
               eoseReceived = true;

@@ -20,17 +20,14 @@ class PrimalCacheService {
   final Map<String, Completer<Map<String, Map<String, dynamic>>>> _pendingProfileRequests = {};
   int _subscriptionCounter = 0;
 
-  void _handleMessage(dynamic message, String relayUrl) {
+  void _handleMessage(List<dynamic> decoded, String relayUrl) {
     try {
-      final messageStr = message is String ? message : message.toString();
-      final data = jsonDecode(messageStr);
-      if (data is! List || data.length < 2) return;
+      if (decoded.length < 2) return;
+      final messageType = decoded[0] as String;
+      final subscriptionId = decoded[1] as String;
 
-      final messageType = data[0] as String;
-      final subscriptionId = data[1] as String;
-
-      if (messageType == 'EVENT' && data.length >= 3) {
-        final event = data[2] as Map<String, dynamic>;
+      if (messageType == 'EVENT' && decoded.length >= 3) {
+        final event = decoded[2] as Map<String, dynamic>;
         final kind = event['kind'] as int?;
 
         if (kind == USER_FOLLOWER_COUNTS && _pendingCountRequests.containsKey(subscriptionId)) {
