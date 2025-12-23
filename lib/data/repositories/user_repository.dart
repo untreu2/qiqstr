@@ -12,6 +12,7 @@ import '../services/user_batch_fetcher.dart';
 import '../services/isar_database_service.dart';
 import '../services/follow_cache_service.dart';
 import '../services/mute_cache_service.dart';
+import '../services/primal_cache_service.dart';
 
 class UserRepository {
   final AuthService _authService;
@@ -21,6 +22,7 @@ class UserRepository {
   final UserBatchFetcher _batchFetcher;
   final FollowCacheService _followCacheService;
   final MuteCacheService _muteCacheService;
+  final PrimalCacheService _primalCacheService = PrimalCacheService.instance;
 
   final StreamController<UserModel> _currentUserController = StreamController<UserModel>.broadcast();
   final StreamController<List<UserModel>> _followingListController = StreamController<List<UserModel>>.broadcast();
@@ -103,6 +105,15 @@ class UserRepository {
         return Result.success(user);
       }
 
+      try {
+        final primalProfiles = await _primalCacheService.fetchUserInfos([pubkeyHex]);
+        if (primalProfiles.containsKey(pubkeyHex)) {
+          final userModel = _mapPrimalProfileToUser(pubkeyHex, primalProfiles[pubkeyHex]!);
+          await _cacheService.put(userModel);
+          return Result.success(userModel);
+        }
+      } catch (_) {}
+
       final directResult = await _nostrDataService.fetchUserProfile(npub);
       if (directResult.isSuccess && directResult.data != null) {
         _cacheService.put(directResult.data!);
@@ -139,23 +150,40 @@ class UserRepository {
         results[npub] = Result.success(entry.value);
       }
 
-      final missingHexKeys = pubkeyHexMap.keys.where((hex) => !cachedUsers.containsKey(hex)).toList();
+      var missingHexKeys = pubkeyHexMap.keys.where((hex) => !cachedUsers.containsKey(hex)).toList();
 
       if (missingHexKeys.isNotEmpty) {
         debugPrint('[UserRepository] Batch fetching ${missingHexKeys.length} missing profiles');
 
-        final fetchedUsers = await _batchFetcher.fetchUsers(
-          missingHexKeys,
-          priority: priority,
-        );
+        try {
+          final primalProfiles = await _primalCacheService.fetchUserInfos(missingHexKeys);
+          if (primalProfiles.isNotEmpty) {
+            for (final entry in primalProfiles.entries) {
+              final npub = pubkeyHexMap[entry.key];
+              if (npub != null) {
+                final userModel = _mapPrimalProfileToUser(entry.key, entry.value);
+                await _cacheService.put(userModel);
+                results[npub] = Result.success(userModel);
+              }
+            }
+          }
+          missingHexKeys = missingHexKeys.where((hex) => !primalProfiles.containsKey(hex)).toList();
+        } catch (_) {}
 
-        for (final entry in fetchedUsers.entries) {
-          final npub = pubkeyHexMap[entry.key]!;
-          if (entry.value != null) {
-            await _cacheService.put(entry.value!);
-            results[npub] = Result.success(entry.value!);
-          } else {
-            results[npub] = const Result.error('User not found');
+        if (missingHexKeys.isNotEmpty) {
+          final fetchedUsers = await _batchFetcher.fetchUsers(
+            missingHexKeys,
+            priority: priority,
+          );
+
+          for (final entry in fetchedUsers.entries) {
+            final npub = pubkeyHexMap[entry.key]!;
+            if (entry.value != null) {
+              await _cacheService.put(entry.value!);
+              results[npub] = Result.success(entry.value!);
+            } else {
+              results[npub] = const Result.error('User not found');
+            }
           }
         }
       }
@@ -934,5 +962,37 @@ class UserRepository {
     _currentUserController.close();
     _followingListController.close();
     await _cacheService.dispose();
+  }
+
+  UserModel _mapPrimalProfileToUser(String pubkeyHex, Map<String, dynamic> data) {
+    String _string(dynamic v) => v is String ? v : (v?.toString() ?? '');
+    final name = _string(data['name']).isNotEmpty
+        ? _string(data['name'])
+        : (_string(data['display_name']).isNotEmpty ? _string(data['display_name']) : pubkeyHex.substring(0, 8));
+    final profileImage = _string(data['picture']);
+    final banner = _string(data['banner']);
+    final about = _string(data['about']);
+    final website = _string(data['website']);
+    final nip05 = _string(data['nip05']);
+    final lud16 = _string(data['lud16']);
+    final followerCountRaw = data['followers_count'];
+    final followerCount = followerCountRaw is int ? followerCountRaw : int.tryParse(_string(followerCountRaw));
+    final nip05VerifiedRaw = data['nip05_verified'];
+    final nip05Verified = nip05VerifiedRaw is bool ? nip05VerifiedRaw : nip05VerifiedRaw == 'true';
+
+    return UserModel.create(
+      pubkeyHex: pubkeyHex,
+      name: name,
+      about: about,
+      profileImage: profileImage,
+      banner: banner,
+      website: website,
+      nip05: nip05,
+      lud16: lud16,
+      updatedAt: DateTime.now(),
+      nip05Verified: nip05Verified,
+    ).copyWith(
+      followerCount: followerCount,
+    );
   }
 }

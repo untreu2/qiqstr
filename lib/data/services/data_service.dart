@@ -20,6 +20,7 @@ import 'user_cache_service.dart';
 import 'follow_cache_service.dart';
 import 'mute_cache_service.dart';
 import 'primal_cache_service.dart';
+import 'event_parser_isolate.dart';
 
 class DataService {
   final AuthService _authService;
@@ -292,9 +293,12 @@ class DataService {
   }
 
 
-  void _handleRelayEvent(dynamic rawEvent, String relayUrl) {
+  Future<void> _handleRelayEvent(dynamic rawEvent, String relayUrl) async {
     try {
-      final eventData = jsonDecode(rawEvent);
+      if (rawEvent == null) return;
+      final parsed = await EventParserIsolate.instance.parseJson(rawEvent.toString());
+      final eventData = parsed['data'];
+
       if (eventData is List && eventData.isNotEmpty) {
         final messageType = eventData[0];
 
