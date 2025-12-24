@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:carbon_icons/carbon_icons.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../theme/theme_manager.dart';
 import '../../../models/user_model.dart';
 import '../../../models/note_model.dart';
 import '../../widgets/user/profile_info_widget.dart';
-import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/common_buttons.dart';
-import '../../widgets/common/floating_bubble_widget.dart';
+import '../../widgets/common/top_action_bar_widget.dart';
 import 'package:qiqstr/ui/widgets/note/note_list_widget.dart' as widgets;
 import '../../../core/di/app_di.dart';
 import '../../../presentation/viewmodels/profile_viewmodel.dart';
@@ -89,7 +87,6 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    final double topPadding = MediaQuery.of(context).padding.top;
     final colors = context.colors;
 
     return Scaffold(
@@ -97,22 +94,10 @@ class _ProfilePageState extends State<ProfilePage> {
       body: Stack(
         children: [
           _buildContent(context),
-          const BackButtonWidget.floating(
+          TopActionBarWidget(
             topOffset: 6,
-          ),
-          _buildShareButton(context, topPadding),
-          FloatingBubbleWidget(
-            position: FloatingBubblePosition.top,
-            visibilityNotifier: _showUsernameBubbleNotifier,
-            topOffset: 6,
-            onTap: () {
-              _scrollController.animateTo(
-                0,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOut,
-              );
-            },
-            child: Row(
+            onBackPressed: () => Navigator.pop(context),
+            centerBubble: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
@@ -147,6 +132,15 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
               ],
             ),
+            centerBubbleVisibility: _showUsernameBubbleNotifier,
+            onCenterBubbleTap: () {
+              _scrollController.animateTo(
+                0,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+              );
+            },
+            onSharePressed: () => _handleShare(context),
           ),
         ],
       ),
@@ -265,48 +259,22 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildShareButton(BuildContext context, double topPadding) {
-    return Positioned(
-      top: topPadding + 6,
-      right: 16,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: context.colors.textPrimary,
-          borderRadius: BorderRadius.circular(22.0),
+  Future<void> _handleShare(BuildContext context) async {
+    try {
+      final npub = widget.user.npub;
+      final nostrLink = 'nostr:$npub';
+      
+      final box = context.findRenderObject() as RenderBox?;
+      await SharePlus.instance.share(
+        ShareParams(
+          text: nostrLink,
+          sharePositionOrigin: box != null 
+              ? box.localToGlobal(Offset.zero) & box.size 
+              : null,
         ),
-        child: GestureDetector(
-          onTap: () async {
-            try {
-              final npub = widget.user.npub;
-              final nostrLink = 'nostr:$npub';
-              
-              final box = context.findRenderObject() as RenderBox?;
-              await SharePlus.instance.share(
-                ShareParams(
-                  text: nostrLink,
-                  sharePositionOrigin: box != null 
-                      ? box.localToGlobal(Offset.zero) & box.size 
-                      : null,
-                ),
-              );
-            } catch (e) {
-              debugPrint('[ProfilePage] Share error: $e');
-            }
-          },
-          behavior: HitTestBehavior.opaque,
-          child: Semantics(
-            label: 'Share',
-            button: true,
-            child: Icon(
-              CarbonIcons.share,
-              color: context.colors.background,
-              size: 20,
-            ),
-          ),
-        ),
-      ),
-    );
+      );
+    } catch (e) {
+      debugPrint('[ProfilePage] Share error: $e');
+    }
   }
 }

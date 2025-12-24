@@ -2,15 +2,13 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:carbon_icons/carbon_icons.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:qiqstr/models/note_model.dart';
 import 'package:qiqstr/ui/widgets/note/note_widget.dart';
 import 'package:qiqstr/ui/widgets/note/focused_note_widget.dart';
-import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/common_buttons.dart';
-import '../../widgets/common/floating_bubble_widget.dart';
+import '../../widgets/common/top_action_bar_widget.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/ui/ui_state_builder.dart';
 import '../../../core/di/app_di.dart';
@@ -94,26 +92,14 @@ class _ThreadPageState extends State<ThreadPage> {
       },
       builder: (context, viewModel) {
         _viewModel = viewModel;
-        final double topPadding = MediaQuery.of(context).padding.top;
         return Scaffold(
           backgroundColor: context.colors.background,
           body: Stack(
             children: [
               _buildContent(context, viewModel),
-              const BackButtonWidget.floating(),
-              _buildShareButton(context, topPadding, viewModel),
-              FloatingBubbleWidget(
-                position: FloatingBubblePosition.top,
-                isVisible: true,
-                topOffset: 10,
-                onTap: () {
-                  _scrollController.animateTo(
-                    0,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeOut,
-                  );
-                },
-                child: Text(
+              TopActionBarWidget(
+                onBackPressed: () => Navigator.pop(context),
+                centerBubble: Text(
                   'Thread',
                   style: TextStyle(
                     color: context.colors.background,
@@ -121,6 +107,14 @@ class _ThreadPageState extends State<ThreadPage> {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
+                onCenterBubbleTap: () {
+                  _scrollController.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOut,
+                  );
+                },
+                onSharePressed: () => _handleShare(context, viewModel),
               ),
             ],
           ),
@@ -868,57 +862,31 @@ class _ThreadPageState extends State<ThreadPage> {
   }
 
 
-  Widget _buildShareButton(BuildContext context, double topPadding, ThreadViewModel viewModel) {
-    return Positioned(
-      top: topPadding + 14,
-      right: 16,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: context.colors.textPrimary,
-          borderRadius: BorderRadius.circular(22.0),
-        ),
-        child: GestureDetector(
-          onTap: () async {
-            final rootNote = viewModel.rootNoteState.data;
-            if (rootNote == null) return;
+  Future<void> _handleShare(BuildContext context, ThreadViewModel viewModel) async {
+    final rootNote = viewModel.rootNoteState.data;
+    if (rootNote == null) return;
 
-            try {
-              String noteId;
-              if (rootNote.id.startsWith('note1')) {
-                noteId = rootNote.id;
-              } else {
-                noteId = encodeBasicBech32(rootNote.id, 'note');
-              }
-              
-              final nostrLink = 'nostr:$noteId';
-              
-              final box = context.findRenderObject() as RenderBox?;
-              await SharePlus.instance.share(
-                ShareParams(
-                  text: nostrLink,
-                  sharePositionOrigin: box != null 
-                      ? box.localToGlobal(Offset.zero) & box.size 
-                      : null,
-                ),
-              );
-            } catch (e) {
-              debugPrint('[ThreadPage] Share error: $e');
-            }
-          },
-          behavior: HitTestBehavior.opaque,
-          child: Semantics(
-            label: 'Share',
-            button: true,
-            child: Icon(
-              CarbonIcons.share,
-              color: context.colors.background,
-              size: 20,
-            ),
-          ),
+    try {
+      String noteId;
+      if (rootNote.id.startsWith('note1')) {
+        noteId = rootNote.id;
+      } else {
+        noteId = encodeBasicBech32(rootNote.id, 'note');
+      }
+      
+      final nostrLink = 'nostr:$noteId';
+      
+      final box = context.findRenderObject() as RenderBox?;
+      await SharePlus.instance.share(
+        ShareParams(
+          text: nostrLink,
+          sharePositionOrigin: box != null 
+              ? box.localToGlobal(Offset.zero) & box.size 
+              : null,
         ),
-      ),
-    );
+      );
+    } catch (e) {
+      debugPrint('[ThreadPage] Share error: $e');
+    }
   }
 }

@@ -9,9 +9,8 @@ import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../data/services/data_service.dart';
 import '../profile/profile_page.dart';
-import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/title_widget.dart';
-import '../../widgets/common/floating_bubble_widget.dart';
+import '../../widgets/common/top_action_bar_widget.dart';
 
 class NoteStatisticsPage extends StatefulWidget {
   final NoteModel note;
@@ -29,7 +28,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
   late final UserRepository _userRepository;
   late final DataService _nostrDataService;
   late ScrollController _scrollController;
-  bool _showInteractionsBubble = false;
+  final ValueNotifier<bool> _showInteractionsBubble = ValueNotifier(false);
   
   List<Map<String, dynamic>>? _cachedInteractions;
   String? _lastNoteId;
@@ -58,10 +57,8 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
   void _scrollListener() {
     if (_scrollController.hasClients) {
       final shouldShow = _scrollController.offset > 100;
-      if (_showInteractionsBubble != shouldShow) {
-        setState(() {
-          _showInteractionsBubble = shouldShow;
-        });
+      if (_showInteractionsBubble.value != shouldShow) {
+        _showInteractionsBubble.value = shouldShow;
       }
     }
   }
@@ -70,6 +67,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
   void dispose() {
     _notesSubscription?.cancel();
     _scrollController.dispose();
+    _showInteractionsBubble.dispose();
     super.dispose();
   }
 
@@ -384,19 +382,9 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
               ),
             ],
           ),
-          const BackButtonWidget.floating(),
-          FloatingBubbleWidget(
-            position: FloatingBubblePosition.top,
-            isVisible: _showInteractionsBubble,
-            topOffset: 8,
-            onTap: () {
-              _scrollController.animateTo(
-                0,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOut,
-              );
-            },
-            child: Text(
+          TopActionBarWidget(
+            onBackPressed: () => Navigator.pop(context),
+            centerBubble: Text(
               'Interactions',
               style: TextStyle(
                 color: context.colors.background,
@@ -404,6 +392,15 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
                 fontWeight: FontWeight.w600,
               ),
             ),
+            centerBubbleVisibility: _showInteractionsBubble,
+            onCenterBubbleTap: () {
+              _scrollController.animateTo(
+                0,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+              );
+            },
+            showShareButton: false,
           ),
         ],
       ),

@@ -327,7 +327,7 @@ class FeedPageState extends State<FeedPage> {
                             ),
                           ),
                         SliverToBoxAdapter(
-                          child: SizedBox(height: isHashtagMode ? topPadding + 85 : 10),
+                          child: SizedBox(height: isHashtagMode ? topPadding + 70 : 4),
                         ),
                         widgets.NoteListWidget(
                           notes: notes,

@@ -8,9 +8,8 @@ import '../../../presentation/providers/viewmodel_provider.dart';
 import '../../../presentation/viewmodels/dm_viewmodel.dart';
 import '../../../models/dm_message_model.dart';
 import '../../widgets/common/title_widget.dart';
-import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/custom_input_field.dart';
-import '../../widgets/common/floating_bubble_widget.dart';
+import '../../widgets/common/top_action_bar_widget.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../core/di/app_di.dart';
 import '../../../models/user_model.dart';
@@ -337,20 +336,15 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
               ),
             ),
           ),
-          BackButtonWidget.floating(
+          TopActionBarWidget(
             topOffset: 6,
-            onPressed: () {
+            onBackPressed: () {
               setState(() {
                 _selectedChatPubkeyHex = null;
               });
               viewModel.clearCurrentChat();
             },
-          ),
-          FloatingBubbleWidget(
-            position: FloatingBubblePosition.top,
-            isVisible: true,
-            topOffset: 6,
-            child: Row(
+            centerBubble: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
@@ -385,6 +379,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
                 ),
               ],
             ),
+            showShareButton: false,
           ),
           Positioned(
             bottom: 0,
