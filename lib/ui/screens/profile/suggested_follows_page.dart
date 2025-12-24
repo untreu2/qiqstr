@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../../models/user_model.dart';
-import '../home_navigator.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/title_widget.dart';
@@ -302,12 +302,7 @@ class SuggestedFollowsPage extends StatelessWidget {
   }
 
   void _navigateToHome(BuildContext context) {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => HomeNavigator(npub: npub),
-      ),
-    );
+    context.go('/home?npub=${Uri.encodeComponent(npub)}');
   }
 }
 

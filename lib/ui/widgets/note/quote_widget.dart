@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import '../../theme/theme_manager.dart';
 import '../../../models/note_model.dart';
 import '../../../models/user_model.dart';
-import '../../screens/note/thread_page.dart';
-import '../../screens/profile/profile_page.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../data/repositories/note_repository.dart';
@@ -204,23 +203,13 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
 
   void _navigateToThread() {
     if (_note != null && mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ThreadPage(rootNoteId: _note!.id),
-        ),
-      );
+      context.push('/thread?rootNoteId=${Uri.encodeComponent(_note!.id)}');
     }
   }
 
   void _navigateToProfile() {
     if (_user != null && mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ProfilePage(user: _user!),
-        ),
-      );
+      context.push('/profile?npub=${Uri.encodeComponent(_user!.npub)}&pubkeyHex=${Uri.encodeComponent(_user!.pubkeyHex)}');
     }
   }
 
@@ -228,12 +217,7 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
     if (mounted) {
       _userRepository.getUserProfile(npub).then((result) {
         result.fold(
-          (user) => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => ProfilePage(user: user),
-            ),
-          ),
+          (user) => context.push('/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}'),
           (error) {},
         );
       });

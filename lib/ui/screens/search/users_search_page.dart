@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
@@ -11,7 +12,6 @@ import '../../../models/user_model.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
-import '../../screens/profile/profile_page.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/dialogs/unfollow_user_dialog.dart';
 
@@ -690,14 +690,9 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
           onTap: () {
             if (widget.onUserSelected != null) {
               widget.onUserSelected!(widget.user);
-              Navigator.of(context).pop();
+              context.pop();
             } else {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ProfilePage(user: widget.user),
-              ),
-            );
+              context.push('/profile?npub=${Uri.encodeComponent(widget.user.npub)}&pubkeyHex=${Uri.encodeComponent(widget.user.pubkeyHex)}');
             }
           },
           child: Padding(

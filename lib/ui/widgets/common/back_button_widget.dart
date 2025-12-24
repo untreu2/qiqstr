@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../theme/theme_manager.dart';
 import 'common_buttons.dart';
 
@@ -66,7 +67,7 @@ class BackButtonWidget extends StatelessWidget {
         child: IconActionButton(
           icon: Icons.arrow_back_ios_new_rounded,
           iconColor: iconColor ?? context.colors.textPrimary,
-          onPressed: onPressed ?? () => Navigator.pop(context),
+          onPressed: onPressed ?? () => context.pop(),
           tooltip: tooltip ?? 'Go back',
           size: ButtonSize.small,
         ),
@@ -88,7 +89,7 @@ class BackButtonWidget extends StatelessWidget {
           borderRadius: BorderRadius.circular(22.0),
         ),
         child: GestureDetector(
-          onTap: onPressed ?? () => Navigator.pop(context),
+          onTap: onPressed ?? () => context.pop(),
           behavior: HitTestBehavior.opaque,
           child: Semantics(
             label: semanticsLabel ?? 'Go back to previous screen',

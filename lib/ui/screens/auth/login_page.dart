@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:qiqstr/data/services/auth_service.dart';
-import '../home_navigator.dart';
-import 'edit_new_account_profile.dart';
-import '../settings/keys_info_page.dart';
 
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/common_buttons.dart';
@@ -132,41 +130,22 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   Future<void> _navigateToKeysInfo(String npub, String mnemonic) async {
     if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => KeysInfoPage(
-            npub: npub,
-            mnemonic: mnemonic,
-          ),
-        ),
+      context.go(
+        '/keys-info?npub=${Uri.encodeComponent(npub)}',
+        extra: {'mnemonic': mnemonic},
       );
     }
   }
 
   Future<void> _navigateToProfileSetup(String npub) async {
     if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => EditNewAccountProfilePage(
-            npub: npub,
-          ),
-        ),
-      );
+      context.go('/profile-setup?npub=${Uri.encodeComponent(npub)}');
     }
   }
 
   Future<void> _navigateToHome(String npub) async {
     if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => HomeNavigator(
-            npub: npub,
-          ),
-        ),
-      );
+      context.go('/home?npub=${Uri.encodeComponent(npub)}');
     }
   }
 

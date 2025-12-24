@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../theme/theme_manager.dart';
@@ -94,53 +95,63 @@ class _ProfilePageState extends State<ProfilePage> {
       body: Stack(
         children: [
           _buildContent(context),
-          TopActionBarWidget(
-            topOffset: 6,
-            onBackPressed: () => Navigator.pop(context),
-            centerBubble: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: colors.avatarPlaceholder,
-                    image: widget.user.profileImage.isNotEmpty
-                        ? DecorationImage(
-                            image: CachedNetworkImageProvider(widget.user.profileImage),
-                            fit: BoxFit.cover,
-                          )
-                        : null,
-                  ),
-                  child: widget.user.profileImage.isEmpty
-                      ? Icon(
-                          Icons.person,
-                          size: 14,
-                          color: colors.textSecondary,
-                        )
-                      : null,
+          AnimatedBuilder(
+            animation: _profileViewModel,
+            builder: (context, child) {
+              final currentUser = _profileViewModel.currentProfile ?? widget.user;
+              return TopActionBarWidget(
+                topOffset: 6,
+                onBackPressed: () => context.pop(),
+                centerBubble: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: colors.avatarPlaceholder,
+                        image: currentUser.profileImage.isNotEmpty
+                            ? DecorationImage(
+                                image: CachedNetworkImageProvider(currentUser.profileImage),
+                                fit: BoxFit.cover,
+                              )
+                            : null,
+                      ),
+                      child: currentUser.profileImage.isEmpty
+                          ? Icon(
+                              Icons.person,
+                              size: 14,
+                              color: colors.textSecondary,
+                            )
+                          : null,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      currentUser.name.isNotEmpty 
+                          ? currentUser.name 
+                          : (currentUser.nip05.isNotEmpty 
+                              ? currentUser.nip05.split('@').first 
+                              : 'Anonymous'),
+                      style: TextStyle(
+                        color: colors.background,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  widget.user.name.isNotEmpty ? widget.user.name : widget.user.npub.substring(0, 8),
-                  style: TextStyle(
-                    color: colors.background,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            centerBubbleVisibility: _showUsernameBubbleNotifier,
-            onCenterBubbleTap: () {
-              _scrollController.animateTo(
-                0,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOut,
+                centerBubbleVisibility: _showUsernameBubbleNotifier,
+                onCenterBubbleTap: () {
+                  _scrollController.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOut,
+                  );
+                },
+                onSharePressed: () => _handleShare(context),
               );
             },
-            onSharePressed: () => _handleShare(context),
           ),
         ],
       ),
@@ -161,18 +172,40 @@ class _ProfilePageState extends State<ProfilePage> {
         cacheExtent: 1200,
         slivers: [
           SliverToBoxAdapter(
-            child: ProfileInfoWidget(
-              user: widget.user,
-              onNavigateToProfile: (npub) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ProfilePage(
-                      user: UserModel.create(
-                        pubkeyHex: npub,
-                        name: npub.length > 8 ? npub.substring(0, 8) : npub,
-                      ),
-                    ),
+            child: AnimatedBuilder(
+              animation: _profileViewModel,
+              builder: (context, child) {
+                return UIStateBuilder<UserModel>(
+                  state: _profileViewModel.profileState,
+                  builder: (context, loadedUser) {
+                    return ProfileInfoWidget(
+                      key: ValueKey(loadedUser.pubkeyHex),
+                      user: loadedUser,
+                      onNavigateToProfile: (npub) {
+                        context.push('/profile?npub=${Uri.encodeComponent(npub)}&pubkeyHex=${Uri.encodeComponent(npub)}');
+                      },
+                    );
+                  },
+                  loading: () => ProfileInfoWidget(
+                    key: ValueKey(widget.user.pubkeyHex),
+                    user: widget.user,
+                    onNavigateToProfile: (npub) {
+                      context.push('/profile?npub=${Uri.encodeComponent(npub)}&pubkeyHex=${Uri.encodeComponent(npub)}');
+                    },
+                  ),
+                  error: (error) => ProfileInfoWidget(
+                    key: ValueKey(widget.user.pubkeyHex),
+                    user: widget.user,
+                    onNavigateToProfile: (npub) {
+                      context.push('/profile?npub=${Uri.encodeComponent(npub)}&pubkeyHex=${Uri.encodeComponent(npub)}');
+                    },
+                  ),
+                  empty: (message) => ProfileInfoWidget(
+                    key: ValueKey(widget.user.pubkeyHex),
+                    user: widget.user,
+                    onNavigateToProfile: (npub) {
+                      context.push('/profile?npub=${Uri.encodeComponent(npub)}&pubkeyHex=${Uri.encodeComponent(npub)}');
+                    },
                   ),
                 );
               },

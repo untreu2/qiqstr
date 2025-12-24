@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../models/note_model.dart';
 import '../../../models/user_model.dart';
@@ -8,7 +9,6 @@ import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../data/services/data_service.dart';
-import '../profile/profile_page.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 
@@ -97,12 +97,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
         final user = await _getUser(npub);
 
         if (mounted) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ProfilePage(user: user),
-            ),
-          );
+          context.push('/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
         }
       }
     } catch (e) {
@@ -383,7 +378,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
             ],
           ),
           TopActionBarWidget(
-            onBackPressed: () => Navigator.pop(context),
+            onBackPressed: () => context.pop(),
             centerBubble: Text(
               'Interactions',
               style: TextStyle(

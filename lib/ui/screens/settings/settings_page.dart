@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/back_button_widget.dart';
-import 'relay_page.dart';
-import 'keys_page.dart';
-import 'display_page.dart';
 import '../../../utils/logout.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -65,12 +63,7 @@ class _SettingsPageState extends State<SettingsPage> {
             title: 'Relays',
             subtitle: '',
             svgAsset: 'assets/relay_1.svg',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const RelayPage(),
-              ),
-            ),
+            onTap: () => context.push('/relays'),
           ),
           const SizedBox(height: 8),
           _buildSettingsItem(
@@ -78,12 +71,7 @@ class _SettingsPageState extends State<SettingsPage> {
             title: 'Keys',
             subtitle: '',
             icon: CarbonIcons.password,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const KeysPage(),
-              ),
-            ),
+            onTap: () => context.push('/keys'),
           ),
           const SizedBox(height: 8),
           _buildSettingsItem(
@@ -91,12 +79,7 @@ class _SettingsPageState extends State<SettingsPage> {
             title: 'Display',
             subtitle: '',
             icon: CarbonIcons.view,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const DisplayPage(),
-              ),
-            ),
+            onTap: () => context.push('/display'),
           ),
           const SizedBox(height: 8),
           _buildLogoutItem(context),

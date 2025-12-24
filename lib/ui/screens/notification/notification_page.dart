@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
@@ -13,8 +14,6 @@ import '../../../data/repositories/notification_repository.dart';
 import '../../widgets/note/note_content_widget.dart';
 import '../../widgets/note/quote_widget.dart';
 import '../../widgets/common/common_buttons.dart';
-import '../profile/profile_page.dart';
-import '../note/thread_page.dart';
 import '../../../utils/string_optimizer.dart';
 
 class NotificationPage extends StatefulWidget {
@@ -422,12 +421,7 @@ class _NotificationPageState extends State<NotificationPage> {
       userResult.fold(
         (user) {
           if (context.mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ProfilePage(user: user),
-              ),
-            );
+            context.push('/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
           }
         },
         (error) {
@@ -446,12 +440,7 @@ class _NotificationPageState extends State<NotificationPage> {
 
   void _navigateToTargetNote(String targetEventId) {
     if (targetEventId.isNotEmpty) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ThreadPage(rootNoteId: targetEventId),
-        ),
-      );
+      context.push('/thread?rootNoteId=${Uri.encodeComponent(targetEventId)}');
     }
   }
 

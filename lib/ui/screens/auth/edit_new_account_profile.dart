@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../theme/theme_manager.dart';
 import '../../../models/user_model.dart';
-import '../profile/suggested_follows_page.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../data/services/media_service.dart';
@@ -137,27 +137,13 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
       await Future.delayed(const Duration(milliseconds: 500));
 
       if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => SuggestedFollowsPage(
-              npub: widget.npub,
-            ),
-          ),
-        );
+        context.go('/suggested-follows?npub=${Uri.encodeComponent(widget.npub)}');
       }
     } catch (e) {
       debugPrint('[EditNewAccountProfile] Error saving profile: $e');
       if (mounted) {
         AppSnackbar.error(context, 'Failed to update profile: ${e.toString()}');
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => SuggestedFollowsPage(
-              npub: widget.npub,
-            ),
-          ),
-        );
+        context.go('/suggested-follows?npub=${Uri.encodeComponent(widget.npub)}');
       }
     } finally {
       setState(() => _isSaving = false);

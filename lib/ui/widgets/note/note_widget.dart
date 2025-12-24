@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../../models/note_model.dart';
@@ -9,8 +10,6 @@ import '../../../data/repositories/user_repository.dart';
 import '../../../data/services/time_service.dart';
 import '../../../data/services/note_widget_calculator.dart';
 import '../../theme/theme_manager.dart';
-import '../../screens/note/thread_page.dart';
-import '../../screens/profile/profile_page.dart';
 import 'note_content_widget.dart';
 import 'interaction_bar_widget.dart';
 
@@ -448,12 +447,7 @@ class _NoteWidgetState extends State<NoteWidget> {
             nip05Verified: false,
           );
 
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ProfilePage(user: user),
-        ),
-      );
+      context.push('/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
     } catch (e) {
       debugPrint('[NoteWidget] Navigate to profile error: $e');
     }
@@ -488,15 +482,7 @@ class _NoteWidgetState extends State<NoteWidget> {
       if (widget.onNoteTap != null) {
         widget.onNoteTap!(_noteId, rootId);
       } else {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ThreadPage(
-              rootNoteId: rootId,
-              focusedNoteId: focusedId,
-            ),
-          ),
-        );
+        context.push('/thread?rootNoteId=${Uri.encodeComponent(rootId)}${focusedId != null ? '&focusedNoteId=${Uri.encodeComponent(focusedId)}' : ''}');
       }
     } catch (e) {
       debugPrint('[NoteWidget] Navigate to thread error: $e');

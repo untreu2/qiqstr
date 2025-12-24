@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import '../../theme/theme_manager.dart';
 import '../../../models/user_model.dart';
-import '../../screens/profile/profile_page.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
@@ -265,12 +265,7 @@ class _UserTileState extends State<UserTile> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             child: GestureDetector(
               onTap: widget.onTap ?? () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ProfilePage(user: widget.user),
-                  ),
-                );
+                context.push('/profile?npub=${Uri.encodeComponent(widget.user.npub)}&pubkeyHex=${Uri.encodeComponent(widget.user.pubkeyHex)}');
               },
               child: Container(
                 width: double.infinity,

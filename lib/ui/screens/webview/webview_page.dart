@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../theme/theme_manager.dart';
@@ -111,7 +112,7 @@ class _WebViewPageState extends State<WebViewPage> {
             ],
           ),
           TopActionBarWidget(
-            onBackPressed: () => Navigator.of(context).pop(),
+            onBackPressed: () => context.pop(),
             centerBubble: Row(
               mainAxisSize: MainAxisSize.min,
               children: [

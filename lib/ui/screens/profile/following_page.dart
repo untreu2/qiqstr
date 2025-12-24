@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../models/user_model.dart';
-import 'profile_page.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/user_repository.dart';
 import '../../../data/services/user_batch_fetcher.dart';
@@ -163,12 +163,7 @@ class _FollowingPageState extends State<FollowingPage> {
       children: [
         GestureDetector(
           onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ProfilePage(user: loadedUser),
-              ),
-            );
+            context.push('/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
           },
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),

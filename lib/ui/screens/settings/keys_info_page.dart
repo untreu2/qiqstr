@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:qiqstr/ui/theme/theme_manager.dart';
 import '../../widgets/common/title_widget.dart';
-import '../auth/edit_new_account_profile.dart';
 
 class KeysInfoPage extends StatefulWidget {
   final String mnemonic;
@@ -208,13 +208,6 @@ class _KeysInfoPageState extends State<KeysInfoPage> {
   }
 
   void _continueToProfile() {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (_) => EditNewAccountProfilePage(
-          npub: widget.npub,
-        ),
-      ),
-    );
+    context.go('/profile-setup?npub=${Uri.encodeComponent(widget.npub)}');
   }
 }

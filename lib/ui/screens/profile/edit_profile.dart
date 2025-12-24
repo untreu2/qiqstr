@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
 import '../../../core/di/app_di.dart';
@@ -186,7 +187,7 @@ class _EditProfileContentState extends State<_EditProfileContent> {
       if (mounted) {
         result.fold(
           (updatedUser) {
-            Navigator.pop(context);
+            context.pop();
           },
           (error) {
             AppSnackbar.error(context, 'Failed to update profile: $error');

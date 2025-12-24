@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import 'package:share_plus/share_plus.dart';
@@ -98,7 +99,7 @@ class _ThreadPageState extends State<ThreadPage> {
             children: [
               _buildContent(context, viewModel),
               TopActionBarWidget(
-                onBackPressed: () => Navigator.pop(context),
+                onBackPressed: () => context.pop(),
                 centerBubble: Text(
                   'Thread',
                   style: TextStyle(
@@ -750,15 +751,7 @@ class _ThreadPageState extends State<ThreadPage> {
     }
     
     if (targetRootId != widget.rootNoteId) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ThreadPage(
-            rootNoteId: targetRootId,
-            focusedNoteId: targetFocusedId,
-          ),
-        ),
-      );
+      context.go('/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}${targetFocusedId != null ? '&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}' : ''}');
       return;
     }
     

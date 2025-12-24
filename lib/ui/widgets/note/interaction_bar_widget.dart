@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import '../../screens/note/share_note.dart';
-import '../../screens/note/note_statistics_page.dart';
 import '../../../models/note_model.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/note_repository.dart';
@@ -434,12 +434,7 @@ class _InteractionBarState extends State<InteractionBar> {
     
     final noteForStats = _findNote() ?? widget.note!;
     
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => NoteStatisticsPage(note: noteForStats),
-      ),
-    );
+    context.push('/note-statistics', extra: noteForStats);
   }
 
   void _handleDeleteTap() {

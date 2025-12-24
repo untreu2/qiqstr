@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 
@@ -51,7 +52,7 @@ class TopActionBarWidget extends StatelessWidget {
                   borderRadius: BorderRadius.circular(22.0),
                 ),
                 child: GestureDetector(
-                  onTap: onBackPressed ?? () => Navigator.pop(context),
+                  onTap: onBackPressed ?? () => context.pop(),
                   behavior: HitTestBehavior.opaque,
                   child: Semantics(
                     label: 'Go back to previous screen',

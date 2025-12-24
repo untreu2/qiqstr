@@ -1,9 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../models/user_model.dart';
-import '../../screens/profile/profile_page.dart';
-import '../../screens/settings/settings_page.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../theme/theme_manager.dart';
 import 'package:carbon_icons/carbon_icons.dart';
@@ -358,12 +357,7 @@ class _SidebarContent extends StatelessWidget {
                         colors: colors,
                         svgAsset: 'assets/profile_button.svg',
                         label: 'Profile',
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ProfilePage(user: user),
-                          ),
-                        ),
+                        onTap: () => context.push('/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}'),
                       ),
                     ]),
                   ),
@@ -378,12 +372,7 @@ class _SidebarContent extends StatelessWidget {
                           colors: colors,
                           icon: CarbonIcons.settings,
                           label: 'Settings',
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const SettingsPage(),
-                            ),
-                    ),
+                          onTap: () => context.push('/settings'),
                   ),
                 ),
                 const SizedBox(height: 75),

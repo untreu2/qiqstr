@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
@@ -8,8 +9,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../models/user_model.dart';
 import '../../theme/theme_manager.dart';
-import '../../screens/profile/edit_profile.dart';
-import '../../screens/profile/following_page.dart';
 import '../media/photo_viewer_widget.dart';
 import '../note/note_content_widget.dart';
 import '../common/snackbar_widget.dart';
@@ -110,6 +109,17 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   @override
   void didUpdateWidget(ProfileInfoWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.user.pubkeyHex != widget.user.pubkeyHex) {
+      _userHexKey = _convertToHex(widget.user.pubkeyHex);
+      _userNotifier.value = widget.user;
+      _loadUserProfileAsync();
+      _initFollowStatusAsync();
+      _loadFollowerCounts();
+    } else if (oldWidget.user.name != widget.user.name ||
+        oldWidget.user.profileImage != widget.user.profileImage ||
+        oldWidget.user.about != widget.user.about) {
+      _userNotifier.value = widget.user;
+    }
   }
 
   void _startProgressiveInitialization() {
@@ -136,10 +146,10 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
     try {
       _isLoadingProfile = true;
-      debugPrint('[ProfileInfoWidget] Loading fresh profile data for: ${_userNotifier.value.pubkeyHex}');
+      debugPrint('[ProfileInfoWidget] Loading fresh profile data for: ${_userNotifier.value.npub}');
 
-      await _userRepository.invalidateUserCache(_userNotifier.value.pubkeyHex);
-      final result = await _userRepository.getUserProfile(_userNotifier.value.pubkeyHex);
+      await _userRepository.invalidateUserCache(_userNotifier.value.npub);
+      final result = await _userRepository.getUserProfile(_userNotifier.value.npub);
 
       result.fold(
         (updatedUser) {
@@ -213,11 +223,11 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     try {
       if (_currentUserNpub == null) return;
 
-      final followStatusResult = await _userRepository.isFollowing(_userNotifier.value.pubkeyHex);
+      final followStatusResult = await _userRepository.isFollowing(_userNotifier.value.npub);
 
       followStatusResult.fold(
         (isFollowing) {
-          debugPrint('[ProfileInfoWidget] Follow check result: $isFollowing for ${_userNotifier.value.pubkeyHex}');
+          debugPrint('[ProfileInfoWidget] Follow check result: $isFollowing for ${_userNotifier.value.npub}');
 
           if (mounted) {
             setState(() {
@@ -243,11 +253,11 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     try {
       if (_currentUserNpub == null) return;
 
-      final muteStatusResult = await _userRepository.isMuted(_userNotifier.value.pubkeyHex);
+      final muteStatusResult = await _userRepository.isMuted(_userNotifier.value.npub);
 
       muteStatusResult.fold(
         (isMuted) {
-          debugPrint('[ProfileInfoWidget] Mute check result: $isMuted for ${_userNotifier.value.pubkeyHex}');
+          debugPrint('[ProfileInfoWidget] Mute check result: $isMuted for ${_userNotifier.value.npub}');
 
           if (mounted) {
             setState(() {
@@ -273,9 +283,9 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     try {
       if (_currentUserNpub == null) return;
 
-      debugPrint('[ProfileInfoWidget] Checking if ${_userNotifier.value.pubkeyHex} follows $_currentUserNpub');
+      debugPrint('[ProfileInfoWidget] Checking if ${_userNotifier.value.npub} follows $_currentUserNpub');
 
-      final followingResult = await _userRepository.getFollowingListForUser(_userNotifier.value.pubkeyHex);
+      final followingResult = await _userRepository.getFollowingListForUser(_userNotifier.value.npub);
 
       followingResult.fold(
         (followingUsers) {
@@ -284,7 +294,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
           final doesFollow = currentUserHex != null && followingHexList.contains(currentUserHex);
 
-          debugPrint('[ProfileInfoWidget] Does ${_userNotifier.value.pubkeyHex} follow $_currentUserNpub? $doesFollow');
+          debugPrint('[ProfileInfoWidget] Does ${_userNotifier.value.npub} follow $_currentUserNpub? $doesFollow');
           debugPrint('[ProfileInfoWidget] Current user hex: $currentUserHex');
           debugPrint('[ProfileInfoWidget] Following list length: ${followingHexList.length}');
 
@@ -367,7 +377,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     debugPrint('=== [ProfileInfoWidget] FOLLOW OPERATION START ===');
     debugPrint('[ProfileInfoWidget] Original follow state: $originalFollowState');
     debugPrint('[ProfileInfoWidget] Current user npub: $_currentUserNpub');
-    debugPrint('[ProfileInfoWidget] Target user npub: ${_userNotifier.value.pubkeyHex}');
+    debugPrint('[ProfileInfoWidget] Target user npub: ${_userNotifier.value.npub}');
     debugPrint('[ProfileInfoWidget] Target user hex: $_userHexKey');
 
     setState(() {
@@ -377,12 +387,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     debugPrint('[ProfileInfoWidget] UI optimistically updated to: $_isFollowing');
 
     try {
-      final currentUser = _userNotifier.value;
-      final targetNpub = currentUser.pubkeyHex.startsWith('npub1')
-          ? currentUser.pubkeyHex
-          : (_userHexKey != null && _userHexKey!.length == 64)
-              ? _getNpubBech32(_userHexKey!)
-              : currentUser.pubkeyHex;
+      final targetNpub = _userNotifier.value.npub;
 
       debugPrint('[ProfileInfoWidget] Using npub for operation: $targetNpub');
 
@@ -429,7 +434,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     debugPrint('=== [ProfileInfoWidget] UNFOLLOW OPERATION START ===');
     debugPrint('[ProfileInfoWidget] Original follow state: $originalFollowState');
     debugPrint('[ProfileInfoWidget] Current user npub: $_currentUserNpub');
-    debugPrint('[ProfileInfoWidget] Target user npub: ${_userNotifier.value.pubkeyHex}');
+    debugPrint('[ProfileInfoWidget] Target user npub: ${_userNotifier.value.npub}');
     debugPrint('[ProfileInfoWidget] Target user hex: $_userHexKey');
 
     setState(() {
@@ -483,7 +488,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
   Future<void> _loadFollowerCounts() async {
     try {
-      final followingResult = await _userRepository.getFollowingListForUser(_userNotifier.value.pubkeyHex);
+      final followingResult = await _userRepository.getFollowingListForUser(_userNotifier.value.npub);
 
       followingResult.fold(
         (followingUsers) {
@@ -820,12 +825,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   Widget _buildEditProfileButton(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const EditOwnProfilePage(),
-          ),
-        );
+        context.push('/edit-profile');
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -1089,14 +1089,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           ),
           GestureDetector(
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => FollowingPage(
-                    user: _userNotifier.value,
-                  ),
-                ),
-              );
+              context.push('/following', extra: _userNotifier.value);
             },
             child: Row(
               mainAxisSize: MainAxisSize.min,

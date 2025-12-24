@@ -6,15 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as provider;
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'ui/theme/theme_manager.dart' as theme;
-import 'ui/screens/home_navigator.dart';
-import 'ui/screens/auth/login_page.dart';
 import 'data/services/logging_service.dart';
 import 'core/di/app_di.dart';
-import 'data/services/auth_service.dart';
 import 'data/services/memory_trimming_service.dart';
 import 'data/services/lifecycle_manager.dart';
 import 'data/services/event_parser_isolate.dart';
 import 'presentation/viewmodels/wallet_viewmodel.dart';
+import 'core/router/app_router.dart';
 
 void main() {
   runZonedGuarded(() async {
@@ -61,7 +59,7 @@ void main() {
 
     AppDI.get<WalletViewModel>();
 
-    final initialHome = await _determineInitialHome();
+    FlutterNativeSplash.remove();
 
     runApp(
       provider.MultiProvider(
@@ -69,7 +67,7 @@ void main() {
           provider.ChangeNotifierProvider(create: (context) => theme.ThemeManager()),
         ],
         child: ProviderScope(
-          child: QiqstrApp(home: initialHome),
+          child: const QiqstrApp(),
         ),
       ),
     );
@@ -81,35 +79,12 @@ void main() {
   });
 }
 
-Future<Widget> _determineInitialHome() async {
-  try {
-    final authService = AppDI.get<AuthService>();
-    final nsecResult = await authService.getUserNsec();
-
-    if (nsecResult.isSuccess && nsecResult.data != null && nsecResult.data!.isNotEmpty) {
-      final npubResult = await authService.getCurrentUserNpub();
-
-      if (npubResult.isSuccess && npubResult.data != null && npubResult.data!.isNotEmpty) {
-        FlutterNativeSplash.remove();
-        return HomeNavigator(npub: npubResult.data!);
-      }
-    }
-
-    FlutterNativeSplash.remove();
-    return const LoginPage();
-  } catch (e) {
-    FlutterNativeSplash.remove();
-    return const LoginPage();
-  }
-}
-
 void unawaited(Future<void> future) {
   future.catchError((error) {});
 }
 
 class QiqstrApp extends ConsumerWidget {
-  final Widget home;
-  const QiqstrApp({super.key, required this.home});
+  const QiqstrApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -118,8 +93,9 @@ class QiqstrApp extends ConsumerWidget {
         final colors = themeManager.colors;
         final isDark = themeManager.isDarkMode;
 
-        return MaterialApp(
+        return MaterialApp.router(
           title: 'Qiqstr',
+          routerConfig: AppRouter.router,
           theme: ThemeData(
             brightness: isDark ? Brightness.dark : Brightness.light,
             scaffoldBackgroundColor: colors.background,
@@ -174,7 +150,6 @@ class QiqstrApp extends ConsumerWidget {
               textTheme: ButtonTextTheme.primary,
             ),
           ),
-          home: home,
         );
       },
     );
