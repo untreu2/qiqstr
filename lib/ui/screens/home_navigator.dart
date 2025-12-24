@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -53,10 +54,10 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
     final navOrder = themeManager?.bottomNavOrder ?? [0, 1, 2, 3];
 
     final navItems = [
-      {'icon': 'assets/home_gap.svg', 'index': 0, 'type': 'svg'},
-      {'icon': '', 'index': 1, 'type': 'carbon'},
-      {'icon': 'assets/wallet_icon.svg', 'index': 2, 'type': 'svg'},
-      {'icon': 'assets/notification_button.svg', 'index': 3, 'type': 'svg'},
+      {'icon': 'assets/house.svg', 'iconSelected': 'assets/house_fill.svg', 'index': 0, 'type': 'svg'},
+      {'icon': 'assets/chat.svg', 'iconSelected': 'assets/chat_fill.svg', 'index': 1, 'type': 'svg'},
+      {'icon': 'assets/wallet.svg', 'iconSelected': 'assets/wallet_fill.svg', 'index': 2, 'type': 'svg'},
+      {'icon': 'assets/bell.svg', 'iconSelected': 'assets/bell_fill.svg', 'index': 3, 'type': 'svg'},
     ];
 
     final orderedNavItems = navOrder.map((index) => navItems[index]).toList();
@@ -69,11 +70,14 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
       orderedNavItems[3],
     ];
 
-    return Container(
-      decoration: BoxDecoration(
-        color: context.colors.surface,
-      ),
-      child: SafeArea(
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+        child: Container(
+          decoration: BoxDecoration(
+            color: context.colors.surface.withValues(alpha: 0.8),
+          ),
+          child: SafeArea(
         child: Container(
           height: 60,
           padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -124,28 +128,27 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                     _handleNavigation(pageViewIndex);
                   },
                   behavior: HitTestBehavior.opaque,
-                  child: originalIndex == 3
-                      ? _buildNotificationIcon(item['icon'] as String, isSelected)
-                      : originalIndex == 2
-                          ? _buildWalletIcon(item['icon'] as String, isSelected)
-                          : originalIndex == 1
-                              ? _buildExploreIcon(isSelected)
-                              : _buildRegularIcon(item, isSelected),
+                  child: Center(
+                    child: originalIndex == 3
+                        ? _buildNotificationIcon(item['icon'] as String, isSelected)
+                        : originalIndex == 2
+                            ? _buildWalletIcon(item['icon'] as String, isSelected)
+                            : originalIndex == 1
+                                ? _buildExploreIcon(item['icon'] as String, item['iconSelected'] as String?, isSelected)
+                                : _buildRegularIcon(item, isSelected),
+                  ),
                 ),
               );
             }).toList(),
+          ),
+        ),
           ),
         ),
       ),
     );
   }
 
-  static const double _iconSizeSelected = 25.0;
-  static const double _iconSizeUnselected = 21.0;
-  static const double _homeIconSizeSelected = 26.0;
-  static const double _homeIconSizeUnselected = 24.0;
-  static const double _sendAltIconSize = 28.0;
-  static const double _sendAltIconSizeSelected = 30.0;
+  static const double _iconSize = 22.0;
 
   Widget _buildIcon({
     required String iconPath,
@@ -153,147 +156,35 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
     required IconData carbonIcon,
     required int index,
     String? iconType,
+    String? iconSelectedPath,
     bool isHome = false,
     bool isExplore = false,
     bool isWallet = false,
     bool isNotification = false,
   }) {
-    final iconSize =
-        isHome ? (isSelected ? _homeIconSizeSelected : _homeIconSizeUnselected) : (isSelected ? _iconSizeSelected : _iconSizeUnselected);
+    final iconSize = _iconSize;
 
     if (_isFirstBuild) {
-      final themeManager = context.themeManager;
-      final isDarkMode = themeManager?.isDarkMode ?? false;
-
       return SizedBox(
         width: iconSize,
         height: iconSize,
         child: isSelected
-            ? (isHome
-                ? isDarkMode
-                    ? ColorFiltered(
-                        colorFilter: const ColorFilter.matrix([
-                          -1,
-                          0,
-                          0,
-                          0,
-                          255,
-                          0,
-                          -1,
-                          0,
-                          0,
-                          255,
-                          0,
-                          0,
-                          -1,
-                          0,
-                          255,
-                          0,
-                          0,
-                          0,
-                          1,
-                          0,
-                        ]),
-                        child: Image.asset(
-                          'assets/home_filled.png',
-                          width: iconSize,
-                          height: iconSize,
-                          fit: BoxFit.contain,
-                        ),
-                      )
-                    : Image.asset(
-                        'assets/home_filled.png',
-                        width: iconSize,
-                        height: iconSize,
-                        fit: BoxFit.contain,
-                      )
-                : isExplore
-                    ? Icon(
-                        isSelected ? CarbonIcons.send_alt_filled : CarbonIcons.send_alt,
-                        size: isSelected ? _sendAltIconSizeSelected : _sendAltIconSize,
-                        color: context.colors.textPrimary,
-                      )
-                    : isWallet
-                        ? isDarkMode
-                            ? ColorFiltered(
-                                colorFilter: const ColorFilter.matrix([
-                                  -1,
-                                  0,
-                                  0,
-                                  0,
-                                  255,
-                                  0,
-                                  -1,
-                                  0,
-                                  0,
-                                  255,
-                                  0,
-                                  0,
-                                  -1,
-                                  0,
-                                  255,
-                                  0,
-                                  0,
-                                  0,
-                                  1,
-                                  0,
-                                ]),
-                                child: Image.asset(
-                                  'assets/wallet_filled.png',
-                                  width: iconSize,
-                                  height: iconSize,
-                                  fit: BoxFit.contain,
-                                ),
-                              )
-                            : Image.asset(
-                                'assets/wallet_filled.png',
-                                width: iconSize,
-                                height: iconSize,
-                                fit: BoxFit.contain,
-                              )
-                        : isNotification
-                            ? isDarkMode
-                                ? ColorFiltered(
-                                    colorFilter: const ColorFilter.matrix([
-                                      -1,
-                                      0,
-                                      0,
-                                      0,
-                                      255,
-                                      0,
-                                      -1,
-                                      0,
-                                      0,
-                                      255,
-                                      0,
-                                      0,
-                                      -1,
-                                      0,
-                                      255,
-                                      0,
-                                      0,
-                                      0,
-                                      1,
-                                      0,
-                                    ]),
-                                    child: Image.asset(
-                                      'assets/notification_filled.png',
-                                      width: iconSize,
-                                      height: iconSize,
-                                      fit: BoxFit.contain,
-                                    ),
-                                  )
-                                : Image.asset(
-                                    'assets/notification_filled.png',
-                                    width: iconSize,
-                                    height: iconSize,
-                                    fit: BoxFit.contain,
-                                  )
-                            : Icon(
-                                carbonIcon,
-                                size: iconSize,
-                                color: context.colors.accent,
-                              ))
+            ? (iconSelectedPath != null && iconSelectedPath.isNotEmpty
+                ? SvgPicture.asset(
+                    iconSelectedPath,
+                    width: iconSize,
+                    height: iconSize,
+                    fit: BoxFit.contain,
+                    colorFilter: ColorFilter.mode(
+                      context.colors.textPrimary,
+                      BlendMode.srcIn,
+                    ),
+                  )
+                : Icon(
+                    carbonIcon,
+                    size: iconSize,
+                    color: context.colors.textPrimary,
+                  ))
             : iconPath.isNotEmpty
                 ? SvgPicture.asset(
                     iconPath,
@@ -320,166 +211,46 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
       transitionBuilder: (Widget child, Animation<double> animation) {
         return FadeTransition(
           opacity: animation,
-          child: Transform.scale(
-            scale: isSelected ? 1.0 + (animation.value * 0.1) : 1.0,
-            child: child,
-          ),
+          child: child,
         );
       },
-      child: Builder(
-        builder: (context) {
-          final themeManager = context.themeManager;
-          final isDarkMode = themeManager?.isDarkMode ?? false;
-
-          return SizedBox(
-            key: ValueKey(
-                '${isSelected ? (isHome ? 'home_filled' : isExplore ? 'explore' : isWallet ? 'wallet_filled' : isNotification ? 'notification_filled' : 'carbon') : 'svg'}_${iconType ?? index}_${isDarkMode ? 'dark' : 'light'}'),
-            width: iconSize,
-            height: iconSize,
-            child: isSelected
-                ? (isHome
-                    ? isDarkMode
-                        ? ColorFiltered(
-                            colorFilter: const ColorFilter.matrix([
-                              -1,
-                              0,
-                              0,
-                              0,
-                              255,
-                              0,
-                              -1,
-                              0,
-                              0,
-                              255,
-                              0,
-                              0,
-                              -1,
-                              0,
-                              255,
-                              0,
-                              0,
-                              0,
-                              1,
-                              0,
-                            ]),
-                            child: Image.asset(
-                              'assets/home_filled.png',
-                              width: iconSize,
-                              height: iconSize,
-                              fit: BoxFit.contain,
-                            ),
-                          )
-                        : Image.asset(
-                            'assets/home_filled.png',
-                            width: iconSize,
-                            height: iconSize,
-                            fit: BoxFit.contain,
-                          )
-                    : isExplore
-                        ? Icon(
-                            isSelected ? CarbonIcons.send_alt_filled : CarbonIcons.send_alt,
-                            size: isSelected ? _sendAltIconSizeSelected : _sendAltIconSize,
-                            color: context.colors.textPrimary,
-                          )
-                        : isWallet
-                            ? isDarkMode
-                                ? ColorFiltered(
-                                    colorFilter: const ColorFilter.matrix([
-                                      -1,
-                                      0,
-                                      0,
-                                      0,
-                                      255,
-                                      0,
-                                      -1,
-                                      0,
-                                      0,
-                                      255,
-                                      0,
-                                      0,
-                                      -1,
-                                      0,
-                                      255,
-                                      0,
-                                      0,
-                                      0,
-                                      1,
-                                      0,
-                                    ]),
-                                    child: Image.asset(
-                                      'assets/wallet_filled.png',
-                                      width: iconSize,
-                                      height: iconSize,
-                                      fit: BoxFit.contain,
-                                    ),
-                                  )
-                                : Image.asset(
-                                    'assets/wallet_filled.png',
-                                    width: iconSize,
-                                    height: iconSize,
-                                    fit: BoxFit.contain,
-                                  )
-                            : isNotification
-                                ? isDarkMode
-                                    ? ColorFiltered(
-                                        colorFilter: const ColorFilter.matrix([
-                                          -1,
-                                          0,
-                                          0,
-                                          0,
-                                          255,
-                                          0,
-                                          -1,
-                                          0,
-                                          0,
-                                          255,
-                                          0,
-                                          0,
-                                          -1,
-                                          0,
-                                          255,
-                                          0,
-                                          0,
-                                          0,
-                                          1,
-                                          0,
-                                        ]),
-                                        child: Image.asset(
-                                          'assets/notification_filled.png',
-                                          width: iconSize,
-                                          height: iconSize,
-                                          fit: BoxFit.contain,
-                                        ),
-                                      )
-                                    : Image.asset(
-                                        'assets/notification_filled.png',
-                                        width: iconSize,
-                                        height: iconSize,
-                                        fit: BoxFit.contain,
-                                      )
-                                : Icon(
-                                    carbonIcon,
-                                    size: iconSize,
-                                    color: context.colors.accent,
-                                  ))
-                : iconPath.isNotEmpty
-                    ? SvgPicture.asset(
-                        iconPath,
-                        width: iconSize,
-                        height: iconSize,
-                        fit: BoxFit.contain,
-                        colorFilter: ColorFilter.mode(
-                          context.colors.textPrimary,
-                          BlendMode.srcIn,
-                        ),
-                      )
-                    : Icon(
-                        carbonIcon,
-                        size: iconSize,
-                        color: context.colors.textPrimary,
-                      ),
-          );
-        },
+      child: SizedBox(
+        key: ValueKey('${isSelected ? (iconSelectedPath ?? iconPath) : iconPath}_${iconType ?? index}'),
+        width: iconSize,
+        height: iconSize,
+        child: isSelected
+            ? (iconSelectedPath != null && iconSelectedPath.isNotEmpty
+                ? SvgPicture.asset(
+                    iconSelectedPath,
+                    width: iconSize,
+                    height: iconSize,
+                    fit: BoxFit.contain,
+                    colorFilter: ColorFilter.mode(
+                      context.colors.textPrimary,
+                      BlendMode.srcIn,
+                    ),
+                  )
+                : Icon(
+                    carbonIcon,
+                    size: iconSize,
+                    color: context.colors.textPrimary,
+                  ))
+            : iconPath.isNotEmpty
+                ? SvgPicture.asset(
+                    iconPath,
+                    width: iconSize,
+                    height: iconSize,
+                    fit: BoxFit.contain,
+                    colorFilter: ColorFilter.mode(
+                      context.colors.textPrimary,
+                      BlendMode.srcIn,
+                    ),
+                  )
+                : Icon(
+                    carbonIcon,
+                    size: iconSize,
+                    color: context.colors.textPrimary,
+                  ),
       ),
     );
   }
@@ -491,6 +262,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
       carbonIcon: CarbonIcons.notification,
       index: 3,
       iconType: 'notification',
+      iconSelectedPath: 'assets/bell_fill.svg',
       isNotification: true,
     );
   }
@@ -502,20 +274,26 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
       carbonIcon: CarbonIcons.wallet,
       index: 2,
       iconType: 'wallet',
+      iconSelectedPath: 'assets/wallet_fill.svg',
       isWallet: true,
     );
   }
 
-  Widget _buildExploreIcon(bool isSelected) {
-    return Icon(
-      isSelected ? CarbonIcons.send_alt_filled : CarbonIcons.send_alt,
-      size: isSelected ? _sendAltIconSizeSelected : _sendAltIconSize,
-      color: context.colors.textPrimary,
+  Widget _buildExploreIcon(String iconPath, String? iconSelectedPath, bool isSelected) {
+    return _buildIcon(
+      iconPath: iconPath,
+      isSelected: isSelected,
+      carbonIcon: CarbonIcons.chat,
+      index: 1,
+      iconType: 'explore',
+      iconSelectedPath: iconSelectedPath,
+      isExplore: true,
     );
   }
 
   Widget _buildRegularIcon(Map<String, dynamic> item, bool isSelected) {
     final String iconPath = item['icon'] as String;
+    final String? iconSelectedPath = item['iconSelected'] as String?;
     final int index = item['index'] as int;
 
     IconData carbonIcon;
@@ -530,6 +308,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
       isSelected: isSelected,
       carbonIcon: carbonIcon,
       index: index,
+      iconSelectedPath: iconSelectedPath,
       isHome: index == 0,
     );
   }

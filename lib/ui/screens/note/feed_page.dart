@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -156,10 +157,13 @@ class FeedPageState extends State<FeedPage> {
     final colors = context.colors;
     final isHashtagMode = widget.hashtag != null;
 
-    return Container(
-      width: double.infinity,
-      color: colors.background.withValues(alpha: 0.8),
-      padding: EdgeInsets.fromLTRB(16, topPadding + 4, 16, 0),
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+        child: Container(
+          width: double.infinity,
+          color: colors.background.withValues(alpha: 0.8),
+          padding: EdgeInsets.fromLTRB(16, topPadding + 4, 16, 0),
       child: Column(
         children: [
           SizedBox(
@@ -277,6 +281,8 @@ class FeedPageState extends State<FeedPage> {
                   ),
           ),
         ],
+      ),
+        ),
       ),
     );
   }
