@@ -86,12 +86,12 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
     return await _userRepository.getUserProfile(npub);
   }
 
-  Future<void> loadNotifications({int limit = 20}) async {
+  Future<void> loadNotifications() async {
     await executeOperation('loadNotifications', () async {
       _notificationsState = const LoadingState();
       safeNotifyListeners();
 
-      final result = await _notificationRepository.getNotifications(limit: limit);
+      final result = await _notificationRepository.getNotifications();
 
       result.fold(
         (notifications) async {
@@ -109,7 +109,7 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
     });
   }
 
-  Future<void> refreshNotifications({int limit = 20}) async {
+  Future<void> refreshNotifications() async {
     await executeOperation('refreshNotifications', () async {
       _notificationsState = const LoadingState(LoadingType.refreshing);
       safeNotifyListeners();
@@ -155,24 +155,74 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
   Future<void> _loadUserProfilesInBackground(List<NotificationModel> notifications) async {
     try {
       final authorNpubs = notifications.map((n) => n.author).toSet().toList();
-      final missingNpubs = authorNpubs.where((npub) => !_userProfiles.containsKey(npub)).toList();
+      final missingNpubs = <String>[];
+      
+      bool hasSyncUpdates = false;
+      for (final npub in authorNpubs) {
+        final cachedProfile = _userProfiles[npub];
+        if (cachedProfile == null || cachedProfile.profileImage.isEmpty || cachedProfile.name.isEmpty || cachedProfile.name == npub.substring(0, npub.length > 8 ? 8 : npub.length)) {
+          final syncCached = _userRepository.getCachedUserSync(npub);
+          if (syncCached != null && syncCached.profileImage.isNotEmpty && syncCached.name.isNotEmpty) {
+            _userProfiles[npub] = syncCached;
+            hasSyncUpdates = true;
+          } else {
+            missingNpubs.add(npub);
+          }
+        }
+      }
 
-      if (missingNpubs.isEmpty) return;
+      if (hasSyncUpdates) {
+        safeNotifyListeners();
+      }
 
-      final results = await _userRepository.getUserProfiles(
+      if (missingNpubs.isEmpty) {
+        return;
+      }
+
+      final fetchedProfiles = await _userRepository.getUserProfiles(
         missingNpubs,
-        priority: FetchPriority.low,
+        priority: FetchPriority.urgent,
       );
 
-      for (final entry in results.entries) {
+      bool hasUpdates = false;
+      for (final entry in fetchedProfiles.entries) {
         entry.value.fold(
-          (user) => _userProfiles[entry.key] = user,
-          (_) {},
+          (user) {
+            final existingProfile = _userProfiles[entry.key];
+            if (existingProfile == null || 
+                existingProfile.profileImage.isEmpty || 
+                existingProfile.name.isEmpty ||
+                existingProfile.name == entry.key.substring(0, entry.key.length > 8 ? 8 : entry.key.length)) {
+              _userProfiles[entry.key] = user;
+              hasUpdates = true;
+            }
+          },
+          (error) {
+            if (!_userProfiles.containsKey(entry.key)) {
+              _userProfiles[entry.key] = UserModel.create(
+                pubkeyHex: entry.key,
+                name: entry.key.length > 8 ? entry.key.substring(0, 8) : entry.key,
+                about: '',
+                profileImage: '',
+                banner: '',
+                website: '',
+                nip05: '',
+                lud16: '',
+                updatedAt: DateTime.now(),
+                nip05Verified: false,
+              );
+              hasUpdates = true;
+            }
+          },
         );
       }
 
-      safeNotifyListeners();
-    } catch (e) {}
+      if (hasUpdates) {
+        safeNotifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[NotificationViewModel] Error loading user profiles: $e');
+    }
   }
 
   Future<void> _fetchTargetEventsInBackground(List<NotificationModel> notifications) async {

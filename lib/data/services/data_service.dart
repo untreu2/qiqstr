@@ -2450,11 +2450,9 @@ class DataService {
   }
 
   Future<Result<List<NotificationModel>>> fetchNotifications({
-    int limit = 50,
     DateTime? since,
   }) async {
     try {
-
       final userResult = await _authService.getCurrentUserPublicKeyHex();
       if (userResult.isError) {
         return Result.error('Not authenticated: ${userResult.error}');
@@ -2467,39 +2465,183 @@ class DataService {
 
       _currentUserNpub = (await _authService.getCurrentUserNpub()).data ?? '';
 
-
-      int? sinceTimestamp;
-      if (since != null) {
-        sinceTimestamp = since.millisecondsSinceEpoch ~/ 1000;
-      } else {
-        sinceTimestamp = timeService.subtract(const Duration(days: 7)).millisecondsSinceEpoch ~/ 1000;
-      }
-
-
-      if (_notificationSubscriptionActive && _notificationSubscriptionId != null) {
-        await _relayManager.broadcast(jsonEncode(['CLOSE', _notificationSubscriptionId]));
-      }
-
-      final filter = {
+      final filter = <String, dynamic>{
         'kinds': [1, 6, 7, 9735],
         '#p': [pubkeyHex],
-        'since': sinceTimestamp,
-        'limit': limit,
       };
 
-      _notificationSubscriptionId = 'notifications_persistent';
-      final request = ['REQ', _notificationSubscriptionId, filter];
+      if (since != null) {
+        filter['since'] = since.millisecondsSinceEpoch ~/ 1000;
+      }
 
+      final subscriptionId = NostrService.generateUUID();
+      final request = ['REQ', subscriptionId, filter];
+      final serializedRequest = jsonEncode(request);
 
-      await _relayManager.broadcast(jsonEncode(request));
-      _notificationSubscriptionActive = true;
+      final allRelays = _relayManager.relayUrls.toList();
+      if (allRelays.isEmpty) {
+        return const Result.error('No relays available');
+      }
 
-      final notifications = _notificationCache[_currentUserNpub] ?? [];
+      final fetchedNotifications = <String, NotificationModel>{};
 
+      await Future.wait(allRelays.map((relayUrl) async {
+        try {
+          final completer = await _relayManager.sendQuery(
+            relayUrl,
+            serializedRequest,
+            subscriptionId,
+            timeout: const Duration(seconds: 30),
+            onEvent: (eventData, url) {
+              try {
+                final eventId = eventData['id'] as String? ?? '';
+                final eventKind = eventData['kind'] as int? ?? 0;
+                final eventPubkey = eventData['pubkey'] as String? ?? '';
+                final eventCreatedAt = eventData['created_at'] as int? ?? 0;
+                final eventTags = eventData['tags'] as List<dynamic>? ?? [];
+                final eventContent = eventData['content'] as String? ?? '';
 
-      return Result.success(notifications.take(limit).toList());
+                if (eventId.isEmpty || eventPubkey.isEmpty) return;
+
+                final notification = _processNotificationEvent(
+                  eventId: eventId,
+                  eventKind: eventKind,
+                  eventPubkey: eventPubkey,
+                  eventCreatedAt: eventCreatedAt,
+                  eventTags: eventTags,
+                  eventContent: eventContent,
+                  targetUserHex: pubkeyHex,
+                );
+
+                if (notification != null && !fetchedNotifications.containsKey(notification.id)) {
+                  fetchedNotifications[notification.id] = notification;
+                }
+              } catch (e) {
+              }
+            },
+          );
+
+          await completer.future.timeout(const Duration(seconds: 30), onTimeout: () {});
+        } catch (e) {
+        }
+      }));
+
+      final notificationsList = fetchedNotifications.values.toList();
+      notificationsList.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+      final notifications = _notificationCache.putIfAbsent(_currentUserNpub, () => []);
+      notifications.clear();
+      notifications.addAll(notificationsList);
+      notifications.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+      if (!_notificationsController.isClosed) {
+        _notificationsController.add(List.unmodifiable(notifications));
+      }
+
+      return Result.success(notificationsList);
     } catch (e) {
       return Result.error('Failed to fetch notifications: $e');
+    }
+  }
+
+  NotificationModel? _processNotificationEvent({
+    required String eventId,
+    required int eventKind,
+    required String eventPubkey,
+    required int eventCreatedAt,
+    required List<dynamic> eventTags,
+    required String eventContent,
+    required String targetUserHex,
+  }) {
+    try {
+      if (eventPubkey == targetUserHex) {
+        return null;
+      }
+
+      String? targetEventId;
+      String notificationType = 'mention';
+      int zapAmount = 0;
+      String actualAuthor = eventPubkey;
+
+      if (eventKind == 1) {
+        final pTags = eventTags.where((tag) => tag is List && tag.isNotEmpty && tag[0] == 'p').toList();
+        if (pTags.isNotEmpty && (pTags.first as List)[1] == targetUserHex) {
+          notificationType = 'mention';
+          final eTags = eventTags.where((tag) => tag is List && tag.isNotEmpty && tag[0] == 'e').toList();
+          if (eTags.isNotEmpty) {
+            targetEventId = (eTags.first as List)[1] as String?;
+          }
+          if (targetEventId == null) {
+            targetEventId = eventId;
+          }
+        } else {
+          return null;
+        }
+      } else if (eventKind == 6) {
+        notificationType = 'repost';
+        final eTags = eventTags.where((tag) => tag is List && tag.isNotEmpty && tag[0] == 'e').toList();
+        if (eTags.isNotEmpty) {
+          targetEventId = (eTags.first as List)[1] as String?;
+        }
+      } else if (eventKind == 7) {
+        notificationType = 'reaction';
+        final eTags = eventTags.where((tag) => tag is List && tag.isNotEmpty && tag[0] == 'e').toList();
+        if (eTags.isNotEmpty) {
+          targetEventId = (eTags.first as List)[1] as String?;
+        }
+      } else if (eventKind == 9735) {
+        notificationType = 'zap';
+        final eTags = eventTags.where((tag) => tag is List && tag.isNotEmpty && tag[0] == 'e').toList();
+        if (eTags.isNotEmpty) {
+          targetEventId = (eTags.first as List)[1] as String?;
+        }
+
+        String getTagValue(String key) {
+          try {
+            final tag = eventTags.firstWhere(
+              (t) => t is List && t.isNotEmpty && t[0] == key,
+              orElse: () => [key, ''],
+            );
+            return (tag as List).length > 1 ? (tag[1] as String? ?? '') : '';
+          } catch (e) {
+            return '';
+          }
+        }
+
+        final bolt11 = getTagValue('bolt11');
+        final descriptionJson = getTagValue('description');
+
+        zapAmount = parseAmountFromBolt11(bolt11);
+
+        try {
+          final decoded = jsonDecode(descriptionJson);
+          if (decoded is Map<String, dynamic> && decoded.containsKey('pubkey')) {
+            actualAuthor = decoded['pubkey'] as String;
+          }
+        } catch (e) {
+        }
+      } else {
+        return null;
+      }
+
+      final timestamp = DateTime.fromMillisecondsSinceEpoch(eventCreatedAt * 1000);
+      targetEventId ??= eventId;
+
+      final authorNpub = _authService.hexToNpub(actualAuthor) ?? actualAuthor;
+
+      return NotificationModel(
+        id: eventId,
+        type: notificationType,
+        author: authorNpub,
+        targetEventId: targetEventId,
+        timestamp: timestamp,
+        content: eventContent,
+        fetchedAt: DateTime.now(),
+        isRead: false,
+        amount: zapAmount,
+      );
+    } catch (e) {
+      return null;
     }
   }
 

@@ -550,6 +550,17 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
           widget.navigationShell.goBranch(pageViewIndex);
         }
       }
+    } else if (originalIndex == 3) {
+      if (widget.navigationShell.currentIndex == pageViewIndex) {
+        final npub = widget.npub;
+        context.go('/home/notifications?npub=${Uri.encodeComponent(npub)}');
+      } else {
+        if (mounted) {
+          _iconAnimationController.reset();
+          _iconAnimationController.forward();
+          widget.navigationShell.goBranch(pageViewIndex);
+        }
+      }
     } else {
       if (mounted) {
         _iconAnimationController.reset();

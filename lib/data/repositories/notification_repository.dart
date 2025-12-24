@@ -130,7 +130,6 @@ class NotificationRepository {
   }
 
   Future<Result<List<NotificationModel>>> getNotifications({
-    int limit = 20,
     DateTime? since,
   }) async {
     try {
@@ -142,7 +141,6 @@ class NotificationRepository {
       }
 
       final result = await _nostrDataService.fetchNotifications(
-        limit: limit,
         since: since,
       );
 
