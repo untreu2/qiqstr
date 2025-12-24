@@ -8,6 +8,7 @@ class CustomInputField extends StatelessWidget {
   final TextStyle? labelStyle;
   final TextStyle? hintStyle;
   final TextStyle? style;
+  final Widget? prefixIcon;
   final Widget? suffixIcon;
   final VoidCallback? onTap;
   final bool autofocus;
@@ -30,6 +31,7 @@ class CustomInputField extends StatelessWidget {
     this.labelStyle,
     this.hintStyle,
     this.style,
+    this.prefixIcon,
     this.suffixIcon,
     this.onTap,
     this.autofocus = false,
@@ -62,6 +64,7 @@ class CustomInputField extends StatelessWidget {
         fontWeight: FontWeight.w600,
         color: colors.textSecondary,
       ),
+      prefixIcon: prefixIcon,
       suffixIcon: suffixIcon,
       filled: true,
       fillColor: effectiveFillColor,

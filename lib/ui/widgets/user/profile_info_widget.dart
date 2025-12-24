@@ -683,8 +683,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
         if (currentUser.profileImage.isNotEmpty) {
           return GestureDetector(
             onTap: () {
-              Navigator.push(
-                context,
+              Navigator.of(context, rootNavigator: true).push(
                 MaterialPageRoute(
                   builder: (_) => PhotoViewerWidget(imageUrls: [currentUser.profileImage]),
                 ),
@@ -746,8 +745,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     return GestureDetector(
       onTap: () {
         if (user.banner.isNotEmpty) {
-          Navigator.push(
-            context,
+          Navigator.of(context, rootNavigator: true).push(
             MaterialPageRoute(
               builder: (_) => PhotoViewerWidget(imageUrls: [user.banner]),
             ),
@@ -1089,7 +1087,16 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
           ),
           GestureDetector(
             onTap: () {
-              context.push('/following', extra: _userNotifier.value);
+              final currentLocation = GoRouterState.of(context).matchedLocation;
+              if (currentLocation.startsWith('/home/feed')) {
+                context.push('/home/feed/following', extra: _userNotifier.value);
+              } else if (currentLocation.startsWith('/home/notifications')) {
+                context.push('/home/notifications/following', extra: _userNotifier.value);
+              } else if (currentLocation.startsWith('/home/dm')) {
+                context.push('/home/dm/following', extra: _userNotifier.value);
+              } else {
+                context.push('/following', extra: _userNotifier.value);
+              }
             },
             child: Row(
               mainAxisSize: MainAxisSize.min,

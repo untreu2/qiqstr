@@ -280,6 +280,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
   void _showReceiveDialog(WalletViewModel viewModel) {
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: context.colors.background,
       shape: const RoundedRectangleBorder(
@@ -295,6 +296,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
   void _showSendDialog(WalletViewModel viewModel) {
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: context.colors.background,
       shape: const RoundedRectangleBorder(

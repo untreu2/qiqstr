@@ -203,13 +203,29 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
 
   void _navigateToThread() {
     if (_note != null && mounted) {
-      context.push('/thread?rootNoteId=${Uri.encodeComponent(_note!.id)}');
+      final currentLocation = GoRouterState.of(context).matchedLocation;
+      if (currentLocation.startsWith('/home/feed')) {
+        context.push('/home/feed/thread?rootNoteId=${Uri.encodeComponent(_note!.id)}');
+      } else if (currentLocation.startsWith('/home/notifications')) {
+        context.push('/home/notifications/thread?rootNoteId=${Uri.encodeComponent(_note!.id)}');
+      } else {
+        context.push('/thread?rootNoteId=${Uri.encodeComponent(_note!.id)}');
+      }
     }
   }
 
   void _navigateToProfile() {
     if (_user != null && mounted) {
-      context.push('/profile?npub=${Uri.encodeComponent(_user!.npub)}&pubkeyHex=${Uri.encodeComponent(_user!.pubkeyHex)}');
+      final currentLocation = GoRouterState.of(context).matchedLocation;
+      if (currentLocation.startsWith('/home/feed')) {
+        context.push('/home/feed/profile?npub=${Uri.encodeComponent(_user!.npub)}&pubkeyHex=${Uri.encodeComponent(_user!.pubkeyHex)}');
+      } else if (currentLocation.startsWith('/home/notifications')) {
+        context.push('/home/notifications/profile?npub=${Uri.encodeComponent(_user!.npub)}&pubkeyHex=${Uri.encodeComponent(_user!.pubkeyHex)}');
+      } else if (currentLocation.startsWith('/home/dm')) {
+        context.push('/home/dm/profile?npub=${Uri.encodeComponent(_user!.npub)}&pubkeyHex=${Uri.encodeComponent(_user!.pubkeyHex)}');
+      } else {
+        context.push('/profile?npub=${Uri.encodeComponent(_user!.npub)}&pubkeyHex=${Uri.encodeComponent(_user!.pubkeyHex)}');
+      }
     }
   }
 
@@ -217,7 +233,18 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
     if (mounted) {
       _userRepository.getUserProfile(npub).then((result) {
         result.fold(
-          (user) => context.push('/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}'),
+          (user) {
+            final currentLocation = GoRouterState.of(context).matchedLocation;
+            if (currentLocation.startsWith('/home/feed')) {
+              context.push('/home/feed/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+            } else if (currentLocation.startsWith('/home/notifications')) {
+              context.push('/home/notifications/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+            } else if (currentLocation.startsWith('/home/dm')) {
+              context.push('/home/dm/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+            } else {
+              context.push('/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+            }
+          },
           (error) {},
         );
       });

@@ -9,6 +9,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:qiqstr/ui/widgets/note/note_list_widget.dart' as widgets;
 import 'package:qiqstr/ui/widgets/common/back_button_widget.dart';
+import 'package:qiqstr/ui/widgets/common/sidebar_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../theme/theme_manager.dart';
 import '../../../models/note_model.dart';
@@ -141,12 +142,13 @@ class FeedPageState extends State<FeedPage> {
   void _showSearchPopup(BuildContext context) {
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: context.colors.background,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (context) => const UserSearchPage(),
+      builder: (dialogContext) => UserSearchPage(parentContext: context),
     );
   }
 
@@ -167,8 +169,7 @@ class FeedPageState extends State<FeedPage> {
                     children: [
                       GestureDetector(
                         onTap: () {
-                          final rootScaffold = context.findRootAncestorStateOfType<ScaffoldState>();
-                          rootScaffold?.openDrawer();
+                          Scaffold.of(context).openDrawer();
                         },
                         child: viewModel.currentUser != null
                             ? Container(
@@ -295,6 +296,7 @@ class FeedPageState extends State<FeedPage> {
       builder: (context, viewModel) {
         return Scaffold(
           backgroundColor: colors.background,
+          drawer: const SidebarWidget(),
           body: Stack(
             children: [
               UIStateBuilder<List<NoteModel>>(

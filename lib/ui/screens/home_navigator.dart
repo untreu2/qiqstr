@@ -3,21 +3,19 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 
-import 'package:qiqstr/ui/screens/note/feed_page.dart';
-import 'package:qiqstr/ui/screens/notification/notification_page.dart';
-import 'package:qiqstr/ui/screens/wallet/wallet_page.dart';
-import 'package:qiqstr/ui/screens/dm/dm_page.dart';
 import 'package:qiqstr/ui/screens/note/share_note.dart';
-import 'package:qiqstr/ui/widgets/common/sidebar_widget.dart';
 import '../theme/theme_manager.dart';
 
 class HomeNavigator extends StatefulWidget {
   final String npub;
+  final StatefulNavigationShell navigationShell;
 
   const HomeNavigator({
     super.key,
     required this.npub,
+    required this.navigationShell,
   });
 
   @override
@@ -25,33 +23,9 @@ class HomeNavigator extends StatefulWidget {
 }
 
 class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateMixin {
-  int _currentIndex = 0;
-  final GlobalKey<FeedPageState> _feedPageKey = GlobalKey<FeedPageState>();
   late AnimationController _iconAnimationController;
   late AnimationController _exploreRotationController;
   bool _isFirstBuild = true;
-
-  final Map<int, Widget> _pageCache = {};
-
-  Widget _getPage(int index) {
-    if (!_pageCache.containsKey(index)) {
-      switch (index) {
-        case 0:
-          _pageCache[index] = FeedPage(key: _feedPageKey, npub: widget.npub);
-          break;
-        case 1:
-          _pageCache[index] = const DmPage();
-          break;
-        case 2:
-          _pageCache[index] = const WalletPage();
-          break;
-        case 3:
-          _pageCache[index] = const NotificationPage();
-          break;
-      }
-    }
-    return _pageCache[index]!;
-  }
 
 
   @override
@@ -138,7 +112,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
               final themeManager = context.themeManager;
               final navOrder = themeManager?.bottomNavOrder ?? [0, 1, 2, 3];
               final pageViewIndex = navOrder.indexOf(originalIndex);
-              final bool isSelected = _currentIndex == pageViewIndex;
+              final bool isSelected = widget.navigationShell.currentIndex == pageViewIndex;
 
               return Expanded(
                 child: GestureDetector(
@@ -566,24 +540,21 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
     final originalIndex = navOrder[pageViewIndex];
 
     if (originalIndex == 0) {
-      if (_currentIndex == pageViewIndex) {
-        _feedPageKey.currentState?.scrollToTop();
+      if (widget.navigationShell.currentIndex == pageViewIndex) {
+        final npub = widget.npub;
+        context.go('/home/feed?npub=${Uri.encodeComponent(npub)}');
       } else {
         if (mounted) {
           _iconAnimationController.reset();
           _iconAnimationController.forward();
-          setState(() {
-            _currentIndex = pageViewIndex;
-          });
+          widget.navigationShell.goBranch(pageViewIndex);
         }
       }
     } else {
       if (mounted) {
         _iconAnimationController.reset();
         _iconAnimationController.forward();
-        setState(() {
-          _currentIndex = pageViewIndex;
-        });
+        widget.navigationShell.goBranch(pageViewIndex);
       }
     }
   }
@@ -602,22 +573,11 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
 
     return Consumer<ThemeManager>(
       builder: (context, themeManager, child) {
-        final navOrder = themeManager.bottomNavOrder;
-
         return Scaffold(
           extendBody: true,
-          drawer: const SidebarWidget(),
           body: PageStorage(
             bucket: PageStorageBucket(),
-            child: IndexedStack(
-              index: _currentIndex,
-              children: navOrder.map((originalIndex) {
-                if (navOrder.indexOf(originalIndex) <= _currentIndex || originalIndex == 0) {
-                  return _getPage(originalIndex);
-                }
-                return const SizedBox.shrink();
-              }).toList(),
-            ),
+            child: widget.navigationShell,
           ),
           bottomNavigationBar: RepaintBoundary(
             child: _buildCustomBottomBar(),

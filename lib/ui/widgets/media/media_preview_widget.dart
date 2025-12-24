@@ -275,7 +275,7 @@ class _MediaPreviewWidgetState extends State<MediaPreviewWidget> {
     return RepaintBoundary(
       child: GestureDetector(
         onTap: () {
-          Navigator.of(context).push(
+          Navigator.of(context, rootNavigator: true).push(
             PageRouteBuilder(
               transitionDuration: const Duration(milliseconds: 300),
               reverseTransitionDuration: const Duration(milliseconds: 200),

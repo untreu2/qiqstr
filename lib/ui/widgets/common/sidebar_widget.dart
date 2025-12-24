@@ -357,7 +357,18 @@ class _SidebarContent extends StatelessWidget {
                         colors: colors,
                         svgAsset: 'assets/profile_button.svg',
                         label: 'Profile',
-                        onTap: () => context.push('/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}'),
+                        onTap: () {
+                          final currentLocation = GoRouterState.of(context).matchedLocation;
+                          if (currentLocation.startsWith('/home/feed')) {
+                            context.push('/home/feed/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+                          } else if (currentLocation.startsWith('/home/notifications')) {
+                            context.push('/home/notifications/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+                          } else if (currentLocation.startsWith('/home/dm')) {
+                            context.push('/home/dm/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+                          } else {
+                            context.push('/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+                          }
+                        },
                       ),
                     ]),
                   ),
@@ -375,7 +386,7 @@ class _SidebarContent extends StatelessWidget {
                           onTap: () => context.push('/settings'),
                   ),
                 ),
-                const SizedBox(height: 75),
+                const SizedBox(height: 150),
               ],
             ),
           ),

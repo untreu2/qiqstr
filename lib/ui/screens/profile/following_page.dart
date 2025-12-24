@@ -163,7 +163,16 @@ class _FollowingPageState extends State<FollowingPage> {
       children: [
         GestureDetector(
           onTap: () {
-            context.push('/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
+            final currentLocation = GoRouterState.of(context).matchedLocation;
+            if (currentLocation.startsWith('/home/feed')) {
+              context.push('/home/feed/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
+            } else if (currentLocation.startsWith('/home/notifications')) {
+              context.push('/home/notifications/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
+            } else if (currentLocation.startsWith('/home/dm')) {
+              context.push('/home/dm/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
+            } else {
+              context.push('/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
+            }
           },
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),

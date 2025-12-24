@@ -302,7 +302,7 @@ class SuggestedFollowsPage extends StatelessWidget {
   }
 
   void _navigateToHome(BuildContext context) {
-    context.go('/home?npub=${Uri.encodeComponent(npub)}');
+    context.go('/home/feed?npub=${Uri.encodeComponent(npub)}');
   }
 }
 

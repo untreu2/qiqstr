@@ -30,6 +30,7 @@ class ShareNotePage extends StatefulWidget {
   static Future<bool?> show(BuildContext context, {String? initialText, String? replyToNoteId}) {
     return showModalBottomSheet<bool>(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => ShareNotePage(
@@ -814,29 +815,33 @@ class _ShareNotePageState extends State<ShareNotePage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-              _buildCloseButton(),
+          _buildCancelButton(),
           _buildAppBarActions(),
         ],
       ),
     );
   }
 
-  Widget _buildCloseButton() {
+  Widget _buildCancelButton() {
     return Semantics(
-      label: 'Close dialog',
+      label: 'Cancel',
       button: true,
       child: GestureDetector(
         onTap: () => Navigator.of(context).pop(),
         child: Container(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: context.colors.overlayLight,
-            shape: BoxShape.circle,
+            color: context.colors.error.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(40),
           ),
-          child: Icon(
-            Icons.close,
-            size: 20,
-            color: context.colors.textPrimary,
+          child: Text(
+            'Cancel',
+            style: TextStyle(
+              color: context.colors.error,
+              fontSize: _smallFontSize,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ),

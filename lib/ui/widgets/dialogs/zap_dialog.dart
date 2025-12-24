@@ -259,6 +259,7 @@ Future<Map<String, dynamic>> showZapDialog({
 
   final result = await showModalBottomSheet<Map<String, dynamic>>(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     backgroundColor: colors.background,
     shape: const RoundedRectangleBorder(

@@ -17,10 +17,12 @@ import '../../widgets/dialogs/unfollow_user_dialog.dart';
 
 class UserSearchPage extends StatefulWidget {
   final Function(UserModel)? onUserSelected;
+  final BuildContext? parentContext;
 
   const UserSearchPage({
     super.key,
     this.onUserSelected,
+    this.parentContext,
   });
 
   @override
@@ -307,6 +309,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
     return _UserItemWidget(
       user: user,
       onUserSelected: widget.onUserSelected,
+      parentContext: widget.parentContext,
     );
   }
 
@@ -316,7 +319,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
     super.dispose();
   }
 
-  Widget _buildCloseButton() {
+  Widget _buildCancelButton() {
     return Semantics(
       label: 'Close dialog',
       button: true,
@@ -337,6 +340,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
       ),
     );
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -361,32 +365,32 @@ class _UserSearchPageState extends State<UserSearchPage> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: Row(
               children: [
-                _buildCloseButton(),
+                _buildCancelButton(),
                 const SizedBox(width: 12),
                 Expanded(
                   child: CustomInputField(
-                        controller: _searchController,
+                    controller: _searchController,
                     autofocus: true,
-                          hintText: 'Search by name or npub...',
-                          suffixIcon: Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: GestureDetector(
-                              onTap: _pasteFromClipboard,
-                              child: Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: context.colors.background,
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  Icons.content_paste,
-                                  color: context.colors.textPrimary,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
+                    hintText: 'Search by name or npub...',
+                    suffixIcon: Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: GestureDetector(
+                        onTap: _pasteFromClipboard,
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: context.colors.background,
+                            shape: BoxShape.circle,
                           ),
+                          child: Icon(
+                            Icons.content_paste,
+                            color: context.colors.textPrimary,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -405,10 +409,12 @@ class _UserSearchPageState extends State<UserSearchPage> {
 class _UserItemWidget extends StatefulWidget {
   final UserModel user;
   final Function(UserModel)? onUserSelected;
+  final BuildContext? parentContext;
 
   const _UserItemWidget({
     required this.user,
     this.onUserSelected,
+    this.parentContext,
   });
 
   @override
@@ -690,9 +696,29 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
           onTap: () {
             if (widget.onUserSelected != null) {
               widget.onUserSelected!(widget.user);
-              context.pop();
+              Navigator.of(context, rootNavigator: true).pop();
             } else {
-              context.push('/profile?npub=${Uri.encodeComponent(widget.user.npub)}&pubkeyHex=${Uri.encodeComponent(widget.user.pubkeyHex)}');
+              Navigator.of(context, rootNavigator: true).pop();
+              final navContext = widget.parentContext;
+              if (navContext != null && navContext.mounted) {
+                Future.microtask(() {
+                  try {
+                    final router = GoRouter.of(navContext);
+                    final currentLocation = router.routerDelegate.currentConfiguration.uri.path;
+                    if (currentLocation.startsWith('/home/feed')) {
+                      navContext.push('/home/feed/profile?npub=${Uri.encodeComponent(widget.user.npub)}&pubkeyHex=${Uri.encodeComponent(widget.user.pubkeyHex)}');
+                    } else if (currentLocation.startsWith('/home/notifications')) {
+                      navContext.push('/home/notifications/profile?npub=${Uri.encodeComponent(widget.user.npub)}&pubkeyHex=${Uri.encodeComponent(widget.user.pubkeyHex)}');
+                    } else if (currentLocation.startsWith('/home/dm')) {
+                      navContext.push('/home/dm/profile?npub=${Uri.encodeComponent(widget.user.npub)}&pubkeyHex=${Uri.encodeComponent(widget.user.pubkeyHex)}');
+                    } else {
+                      navContext.push('/profile?npub=${Uri.encodeComponent(widget.user.npub)}&pubkeyHex=${Uri.encodeComponent(widget.user.pubkeyHex)}');
+                    }
+                  } catch (e) {
+                    debugPrint('[UserItemWidget] Navigation error: $e');
+                  }
+                });
+              }
             }
           },
           child: Padding(

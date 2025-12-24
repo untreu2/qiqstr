@@ -750,29 +750,13 @@ class _ThreadPageState extends State<ThreadPage> {
       }
     }
     
-    if (targetRootId != widget.rootNoteId) {
-      context.go('/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}${targetFocusedId != null ? '&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}' : ''}');
-      return;
-    }
-    
-    setState(() {
-      _currentFocusedNoteId = targetFocusedId;
-    });
-    
-    viewModel.changeFocusedNote(targetFocusedId);
-    
-    if (targetFocusedId != null) {
-      Future.delayed(const Duration(milliseconds: 100), () {
-        if (mounted) {
-          _scheduleScrollToFocusedNote(targetFocusedId!);
-        }
-      });
+    final currentLocation = GoRouterState.of(context).matchedLocation;
+    if (currentLocation.startsWith('/home/feed')) {
+      context.push('/home/feed/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}${targetFocusedId != null ? '&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}' : ''}');
+    } else if (currentLocation.startsWith('/home/notifications')) {
+      context.push('/home/notifications/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}${targetFocusedId != null ? '&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}' : ''}');
     } else {
-      _scrollController.animateTo(
-        0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+      context.push('/thread?rootNoteId=${Uri.encodeComponent(targetRootId)}${targetFocusedId != null ? '&focusedNoteId=${Uri.encodeComponent(targetFocusedId)}' : ''}');
     }
   }
 

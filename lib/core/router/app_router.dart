@@ -17,6 +17,9 @@ import '../../ui/screens/settings/keys_page.dart';
 import '../../ui/screens/settings/relay_page.dart';
 import '../../ui/screens/settings/display_page.dart';
 import '../../ui/screens/webview/webview_page.dart';
+import '../../ui/screens/dm/dm_page.dart';
+import '../../ui/screens/wallet/wallet_page.dart';
+import '../../ui/screens/notification/notification_page.dart';
 import '../../models/user_model.dart';
 import '../../models/note_model.dart';
 import '../../core/di/app_di.dart';
@@ -58,22 +61,315 @@ class AppRouter {
           return SuggestedFollowsPage(npub: npub);
         },
       ),
-      GoRoute(
-        path: '/home',
-        name: 'home',
-        builder: (context, state) {
-          final npub = state.uri.queryParameters['npub'] ?? '';
-          return HomeNavigator(npub: npub);
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) {
+          final location = state.uri.toString();
+          final uri = Uri.parse(location);
+          final npub = uri.queryParameters['npub'] ?? '';
+          return HomeNavigator(
+            npub: npub,
+            navigationShell: navigationShell,
+          );
         },
-      ),
-      GoRoute(
-        path: '/feed',
-        name: 'feed',
-        builder: (context, state) {
-          final npub = state.uri.queryParameters['npub'] ?? '';
-          final hashtag = state.uri.queryParameters['hashtag'];
-          return FeedPage(npub: npub, hashtag: hashtag);
-        },
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/home/feed',
+                name: 'feed',
+                builder: (context, state) {
+                  final location = state.uri.toString();
+                  final uri = Uri.parse(location);
+                  final npub = uri.queryParameters['npub'] ?? '';
+                  final hashtag = uri.queryParameters['hashtag'];
+                  return FeedPage(npub: npub, hashtag: hashtag);
+                },
+                routes: [
+                  GoRoute(
+                    path: 'profile',
+                    name: 'feed-profile',
+                    builder: (context, state) {
+                      final npubParam = state.uri.queryParameters['npub'] ?? '';
+                      final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
+                      String pubkeyHex;
+                      if (pubkeyHexParam.isNotEmpty) {
+                        pubkeyHex = pubkeyHexParam;
+                        if (pubkeyHex.startsWith('npub1')) {
+                          try {
+                            pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');
+                          } catch (e) {
+                            pubkeyHex = pubkeyHexParam;
+                          }
+                        }
+                      } else if (npubParam.isNotEmpty) {
+                        if (npubParam.startsWith('npub1')) {
+                          try {
+                            pubkeyHex = decodeBasicBech32(npubParam, 'npub');
+                          } catch (e) {
+                            pubkeyHex = npubParam;
+                          }
+                        } else {
+                          pubkeyHex = npubParam;
+                        }
+                      } else {
+                        pubkeyHex = '';
+                      }
+                      final displayName = pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex;
+                      final user = UserModel.create(
+                        pubkeyHex: pubkeyHex,
+                        name: displayName,
+                        about: '',
+                        profileImage: '',
+                        banner: '',
+                        website: '',
+                        nip05: '',
+                        lud16: '',
+                        updatedAt: DateTime.now(),
+                        nip05Verified: false,
+                      );
+                      return ProfilePage(user: user);
+                    },
+                  ),
+                  GoRoute(
+                    path: 'thread',
+                    name: 'feed-thread',
+                    builder: (context, state) {
+                      final rootNoteId = state.uri.queryParameters['rootNoteId'] ?? '';
+                      final focusedNoteId = state.uri.queryParameters['focusedNoteId'];
+                      return ThreadPage(
+                        rootNoteId: rootNoteId,
+                        focusedNoteId: focusedNoteId,
+                      );
+                    },
+                  ),
+                  GoRoute(
+                    path: 'note-statistics',
+                    name: 'feed-note-statistics',
+                    builder: (context, state) {
+                      final note = state.extra as NoteModel?;
+                      if (note == null) {
+                        return const Scaffold(
+                          body: Center(child: Text('Note not found')),
+                        );
+                      }
+                      return NoteStatisticsPage(note: note);
+                    },
+                  ),
+                  GoRoute(
+                    path: 'following',
+                    name: 'feed-following',
+                    builder: (context, state) {
+                      final user = state.extra as UserModel?;
+                      if (user == null) {
+                        final npub = state.uri.queryParameters['npub'] ?? '';
+                        final pubkeyHex = state.uri.queryParameters['pubkeyHex'] ?? npub;
+                        final defaultUser = UserModel.create(
+                          pubkeyHex: pubkeyHex,
+                          name: pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex,
+                        );
+                        return FollowingPage(user: defaultUser);
+                      }
+                      return FollowingPage(user: user);
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/home/dm',
+                name: 'dm',
+                builder: (context, state) => const DmPage(),
+                routes: [
+                  GoRoute(
+                    path: 'profile',
+                    name: 'dm-profile',
+                    builder: (context, state) {
+                      final npubParam = state.uri.queryParameters['npub'] ?? '';
+                      final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
+                      String pubkeyHex;
+                      if (pubkeyHexParam.isNotEmpty) {
+                        pubkeyHex = pubkeyHexParam;
+                        if (pubkeyHex.startsWith('npub1')) {
+                          try {
+                            pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');
+                          } catch (e) {
+                            pubkeyHex = pubkeyHexParam;
+                          }
+                        }
+                      } else if (npubParam.isNotEmpty) {
+                        if (npubParam.startsWith('npub1')) {
+                          try {
+                            pubkeyHex = decodeBasicBech32(npubParam, 'npub');
+                          } catch (e) {
+                            pubkeyHex = npubParam;
+                          }
+                        } else {
+                          pubkeyHex = npubParam;
+                        }
+                      } else {
+                        pubkeyHex = '';
+                      }
+                      final displayName = pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex;
+                      final user = UserModel.create(
+                        pubkeyHex: pubkeyHex,
+                        name: displayName,
+                        about: '',
+                        profileImage: '',
+                        banner: '',
+                        website: '',
+                        nip05: '',
+                        lud16: '',
+                        updatedAt: DateTime.now(),
+                        nip05Verified: false,
+                      );
+                      return ProfilePage(user: user);
+                    },
+                  ),
+                  GoRoute(
+                    path: 'note-statistics',
+                    name: 'dm-note-statistics',
+                    builder: (context, state) {
+                      final note = state.extra as NoteModel?;
+                      if (note == null) {
+                        return const Scaffold(
+                          body: Center(child: Text('Note not found')),
+                        );
+                      }
+                      return NoteStatisticsPage(note: note);
+                    },
+                  ),
+                  GoRoute(
+                    path: 'following',
+                    name: 'dm-following',
+                    builder: (context, state) {
+                      final user = state.extra as UserModel?;
+                      if (user == null) {
+                        final npub = state.uri.queryParameters['npub'] ?? '';
+                        final pubkeyHex = state.uri.queryParameters['pubkeyHex'] ?? npub;
+                        final defaultUser = UserModel.create(
+                          pubkeyHex: pubkeyHex,
+                          name: pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex,
+                        );
+                        return FollowingPage(user: defaultUser);
+                      }
+                      return FollowingPage(user: user);
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/home/wallet',
+                name: 'wallet',
+                builder: (context, state) => const WalletPage(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/home/notifications',
+                name: 'notifications',
+                builder: (context, state) => const NotificationPage(),
+                routes: [
+                  GoRoute(
+                    path: 'profile',
+                    name: 'notifications-profile',
+                    builder: (context, state) {
+                      final npubParam = state.uri.queryParameters['npub'] ?? '';
+                      final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
+                      String pubkeyHex;
+                      if (pubkeyHexParam.isNotEmpty) {
+                        pubkeyHex = pubkeyHexParam;
+                        if (pubkeyHex.startsWith('npub1')) {
+                          try {
+                            pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');
+                          } catch (e) {
+                            pubkeyHex = pubkeyHexParam;
+                          }
+                        }
+                      } else if (npubParam.isNotEmpty) {
+                        if (npubParam.startsWith('npub1')) {
+                          try {
+                            pubkeyHex = decodeBasicBech32(npubParam, 'npub');
+                          } catch (e) {
+                            pubkeyHex = npubParam;
+                          }
+                        } else {
+                          pubkeyHex = npubParam;
+                        }
+                      } else {
+                        pubkeyHex = '';
+                      }
+                      final displayName = pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex;
+                      final user = UserModel.create(
+                        pubkeyHex: pubkeyHex,
+                        name: displayName,
+                        about: '',
+                        profileImage: '',
+                        banner: '',
+                        website: '',
+                        nip05: '',
+                        lud16: '',
+                        updatedAt: DateTime.now(),
+                        nip05Verified: false,
+                      );
+                      return ProfilePage(user: user);
+                    },
+                  ),
+                  GoRoute(
+                    path: 'thread',
+                    name: 'notifications-thread',
+                    builder: (context, state) {
+                      final rootNoteId = state.uri.queryParameters['rootNoteId'] ?? '';
+                      final focusedNoteId = state.uri.queryParameters['focusedNoteId'];
+                      return ThreadPage(
+                        rootNoteId: rootNoteId,
+                        focusedNoteId: focusedNoteId,
+                      );
+                    },
+                  ),
+                  GoRoute(
+                    path: 'note-statistics',
+                    name: 'notifications-note-statistics',
+                    builder: (context, state) {
+                      final note = state.extra as NoteModel?;
+                      if (note == null) {
+                        return const Scaffold(
+                          body: Center(child: Text('Note not found')),
+                        );
+                      }
+                      return NoteStatisticsPage(note: note);
+                    },
+                  ),
+                  GoRoute(
+                    path: 'following',
+                    name: 'notifications-following',
+                    builder: (context, state) {
+                      final user = state.extra as UserModel?;
+                      if (user == null) {
+                        final npub = state.uri.queryParameters['npub'] ?? '';
+                        final pubkeyHex = state.uri.queryParameters['pubkeyHex'] ?? npub;
+                        final defaultUser = UserModel.create(
+                          pubkeyHex: pubkeyHex,
+                          name: pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex,
+                        );
+                        return FollowingPage(user: defaultUser);
+                      }
+                      return FollowingPage(user: user);
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
       ),
       GoRoute(
         path: '/profile',
@@ -81,7 +377,6 @@ class AppRouter {
         builder: (context, state) {
           final npubParam = state.uri.queryParameters['npub'] ?? '';
           final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
-          
           String pubkeyHex;
           if (pubkeyHexParam.isNotEmpty) {
             pubkeyHex = pubkeyHexParam;
@@ -105,7 +400,6 @@ class AppRouter {
           } else {
             pubkeyHex = '';
           }
-          
           final displayName = pubkeyHex.length > 8 ? pubkeyHex.substring(0, 8) : pubkeyHex;
           final user = UserModel.create(
             pubkeyHex: pubkeyHex,
@@ -221,7 +515,7 @@ class AppRouter {
     if (isAuthenticated && isLoginRoute) {
       final npubResult = await authService.getCurrentUserNpub();
       if (npubResult.isSuccess && npubResult.data != null && npubResult.data!.isNotEmpty) {
-        return '/home?npub=${Uri.encodeComponent(npubResult.data!)}';
+        return '/home/feed?npub=${Uri.encodeComponent(npubResult.data!)}';
       }
     }
     

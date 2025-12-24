@@ -10,6 +10,7 @@ Future<void> showUnfollowUserDialog({
   final colors = context.colors;
   return showModalBottomSheet(
     context: context,
+    useRootNavigator: true,
     isScrollControlled: true,
     backgroundColor: colors.background,
     shape: const RoundedRectangleBorder(

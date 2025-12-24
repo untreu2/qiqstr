@@ -567,6 +567,7 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
   void _showUserSearchDialog(BuildContext context, DmViewModel viewModel) {
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => UserSearchPage(

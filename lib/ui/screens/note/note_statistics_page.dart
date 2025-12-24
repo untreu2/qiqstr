@@ -97,7 +97,16 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
         final user = await _getUser(npub);
 
         if (mounted) {
-          context.push('/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+          final currentLocation = GoRouterState.of(context).matchedLocation;
+          if (currentLocation.startsWith('/home/feed')) {
+            context.push('/home/feed/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+          } else if (currentLocation.startsWith('/home/notifications')) {
+            context.push('/home/notifications/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+          } else if (currentLocation.startsWith('/home/dm')) {
+            context.push('/home/dm/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+          } else {
+            context.push('/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+          }
         }
       }
     } catch (e) {

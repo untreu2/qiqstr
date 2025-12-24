@@ -259,7 +259,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
           backgroundColor: Colors.transparent,
           enableDrag: false,
           isDismissible: true,
-          useRootNavigator: false,
+          useRootNavigator: true,
           builder: (context) => WebViewPage(url: url.toString()),
         );
       }

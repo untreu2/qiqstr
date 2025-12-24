@@ -92,7 +92,7 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
 
   void _handleVerticalDragEnd(DragEndDetails details) {
     if (_dragOffset.abs() > 100) {
-      Navigator.of(context).pop();
+      Navigator.of(context, rootNavigator: true).pop();
     } else {
       setState(() => _dragOffset = 0);
     }
@@ -169,7 +169,12 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
                         ),
                         child: Row(
                           children: [
-                            const SizedBox(width: 48),
+                            IconActionButton(
+                              icon: CarbonIcons.close,
+                              onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+                              size: ButtonSize.small,
+                              isCircular: true,
+                            ),
                             Expanded(
                               child: Center(
                                 child: Text(
@@ -185,11 +190,6 @@ class _PhotoViewerWidgetState extends State<PhotoViewerWidget> {
                             IconActionButton(
                               icon: _isDownloading ? CarbonIcons.download : CarbonIcons.download,
                               onPressed: _isDownloading ? null : () => _downloadImage(widget.imageUrls[currentIndex]),
-                              size: ButtonSize.small,
-                            ),
-                            IconActionButton(
-                              icon: CarbonIcons.close,
-                              onPressed: () => Navigator.of(context).pop(),
                               size: ButtonSize.small,
                             ),
                           ],

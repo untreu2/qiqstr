@@ -219,7 +219,7 @@ class _LinkPreviewWidgetState extends State<LinkPreviewWidget> {
         backgroundColor: Colors.transparent,
         enableDrag: false,
         isDismissible: true,
-        useRootNavigator: false,
+        useRootNavigator: true,
         builder: (context) => WebViewPage(url: url),
       );
     }

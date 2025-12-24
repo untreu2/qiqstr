@@ -421,7 +421,7 @@ class _NotificationPageState extends State<NotificationPage> {
       userResult.fold(
         (user) {
           if (context.mounted) {
-            context.push('/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+            context.push('/home/notifications/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
           }
         },
         (error) {
@@ -440,7 +440,7 @@ class _NotificationPageState extends State<NotificationPage> {
 
   void _navigateToTargetNote(String targetEventId) {
     if (targetEventId.isNotEmpty) {
-      context.push('/thread?rootNoteId=${Uri.encodeComponent(targetEventId)}');
+      context.push('/home/notifications/thread?rootNoteId=${Uri.encodeComponent(targetEventId)}');
     }
   }
 

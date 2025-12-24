@@ -207,7 +207,7 @@ class _MiniLinkPreviewWidgetState extends State<MiniLinkPreviewWidget> {
         backgroundColor: Colors.transparent,
         enableDrag: false,
         isDismissible: true,
-        useRootNavigator: false,
+        useRootNavigator: true,
         builder: (context) => WebViewPage(url: url),
       );
     }

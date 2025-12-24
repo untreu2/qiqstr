@@ -434,7 +434,16 @@ class _InteractionBarState extends State<InteractionBar> {
     
     final noteForStats = _findNote() ?? widget.note!;
     
-    context.push('/note-statistics', extra: noteForStats);
+    final currentLocation = GoRouterState.of(context).matchedLocation;
+    if (currentLocation.startsWith('/home/feed')) {
+      context.push('/home/feed/note-statistics', extra: noteForStats);
+    } else if (currentLocation.startsWith('/home/notifications')) {
+      context.push('/home/notifications/note-statistics', extra: noteForStats);
+    } else if (currentLocation.startsWith('/home/dm')) {
+      context.push('/home/dm/note-statistics', extra: noteForStats);
+    } else {
+      context.push('/note-statistics', extra: noteForStats);
+    }
   }
 
   void _handleDeleteTap() {

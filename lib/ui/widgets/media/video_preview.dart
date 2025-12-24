@@ -127,7 +127,7 @@ class _VPState extends State<VP> with WidgetsBindingObserver {
       });
     }
     
-    Navigator.of(context).push(
+    Navigator.of(context, rootNavigator: true).push(
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 300),
         reverseTransitionDuration: const Duration(milliseconds: 200),
@@ -450,7 +450,7 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
 
   void _handleVerticalDragEnd(DragEndDetails details) {
     if (_dragOffset.abs() > 100) {
-      Navigator.of(context).pop();
+      Navigator.of(context, rootNavigator: true).pop();
     } else {
       setState(() => _dragOffset = 0);
     }
@@ -548,6 +548,12 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                               ),
                               child: Row(
                                 children: [
+                                  IconActionButton(
+                                    icon: CarbonIcons.close,
+                                    onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+                                    size: ButtonSize.small,
+                                    isCircular: true,
+                                  ),
                                   IconButton(
                                     icon: Icon(
                                       _controller.value.isPlaying ? CarbonIcons.pause : CarbonIcons.play,
@@ -601,11 +607,6 @@ class _FullScreenVideoPlayerState extends State<FullScreenVideoPlayer> {
                                   IconActionButton(
                                     icon: _isDownloading ? CarbonIcons.download : CarbonIcons.download,
                                     onPressed: _isDownloading ? null : _downloadVideo,
-                                    size: ButtonSize.small,
-                                  ),
-                                  IconActionButton(
-                                    icon: CarbonIcons.close,
-                                    onPressed: () => Navigator.pop(context),
                                     size: ButtonSize.small,
                                   ),
                                 ],
