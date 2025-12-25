@@ -136,97 +136,86 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
     );
   }
 
-  Widget _buildMainContent(BuildContext context, WalletViewModel viewModel) {
-    if (viewModel.user == null) {
-      return const SizedBox.shrink();
-    }
-
-    return Expanded(
+  Widget _buildBalanceSection(BuildContext context, WalletViewModel viewModel) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 8, 16, 16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    Text(
-                      viewModel.balance != null ? viewModel.balance!.balance.toString() : '0',
-                      style: TextStyle(
-                        fontSize: 72,
-                        fontWeight: FontWeight.w600,
-                        color: context.colors.textPrimary,
-                        height: 1.0,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'sats',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w400,
-                        color: context.colors.textSecondary,
-                      ),
-                    ),
-                  ],
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              Text(
+                viewModel.balance != null ? viewModel.balance!.balance.toString() : '0',
+                style: TextStyle(
+                  fontSize: 72,
+                  fontWeight: FontWeight.w600,
+                  color: context.colors.textPrimary,
+                  height: 1.0,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'sats',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w400,
+                  color: context.colors.textSecondary,
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: _buildTransactionsList(context, viewModel),
-          ),
-          const SizedBox(height: 80),
         ],
       ),
     );
   }
 
-  Widget _buildTransactionsList(BuildContext context, WalletViewModel viewModel) {
+  Widget _buildTransactionsSliver(BuildContext context, WalletViewModel viewModel) {
     if (viewModel.isLoadingTransactions) {
-      return Center(
-        child: CircularProgressIndicator(color: context.colors.textPrimary),
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: Center(
+          child: CircularProgressIndicator(color: context.colors.textPrimary),
+        ),
       );
     }
 
     if (viewModel.transactions == null || viewModel.transactions!.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.receipt_long, color: context.colors.textTertiary, size: 48),
-            const SizedBox(height: 12),
-            Text(
-              'No transactions yet',
-              style: TextStyle(
-                color: context.colors.textSecondary,
-                fontSize: 14,
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.receipt_long, color: context.colors.textTertiary, size: 48),
+              const SizedBox(height: 12),
+              Text(
+                'No transactions yet',
+                style: TextStyle(
+                  color: context.colors.textSecondary,
+                  fontSize: 14,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
 
     final recentTransactions = viewModel.transactions!.take(6).toList();
 
-    return ListView.builder(
+    return SliverPadding(
       padding: const EdgeInsets.only(bottom: 100),
-      itemCount: recentTransactions.length,
-      itemBuilder: (context, index) {
-        final tx = recentTransactions[index];
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildTransactionTile(context, tx),
-            if (index < recentTransactions.length - 1) const _TransactionSeparator(),
-          ],
-        );
-      },
+      sliver: SliverList.separated(
+        itemCount: recentTransactions.length,
+        itemBuilder: (context, index) {
+          final tx = recentTransactions[index];
+          return _buildTransactionTile(context, tx);
+        },
+        separatorBuilder: (_, __) => const _TransactionSeparator(),
+      ),
     );
   }
 
@@ -351,17 +340,29 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
               backgroundColor: context.colors.background,
               body: Stack(
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildHeader(context),
+                  CustomScrollView(
+                    slivers: [
+                      SliverToBoxAdapter(
+                        child: _buildHeader(context),
+                      ),
                       if (viewModel.user == null) ...[
-                        Expanded(child: _buildEmptyWalletState(context)),
-                        const SizedBox(height: 80),
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: _buildEmptyWalletState(context),
+                        ),
+                        const SliverToBoxAdapter(
+                          child: SizedBox(height: 80),
+                        ),
                       ] else ...[
-                        _buildMainContent(context, viewModel),
+                        SliverToBoxAdapter(
+                          child: _buildBalanceSection(context, viewModel),
+                        ),
+                        _buildTransactionsSliver(context, viewModel),
                       ],
-                      _buildError(context, viewModel),
+                      if (viewModel.error != null)
+                        SliverToBoxAdapter(
+                          child: _buildError(context, viewModel),
+                        ),
                     ],
                   ),
                   if (viewModel.user == null) _buildConnectionBottomBar(context, viewModel),

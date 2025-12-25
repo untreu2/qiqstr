@@ -72,54 +72,111 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
       backgroundColor: context.colors.background,
       body: Stack(
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TitleWidget(
-                title: 'Messages',
-                fontSize: 32,
-                useTopPadding: true,
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  MediaQuery.of(context).padding.top + 70,
-                  16,
-                  0,
-                ),
-              ),
-              Expanded(
-                child: UIStateBuilder<List<DmConversationModel>>(
-                  state: viewModel.conversationsState,
-                  builder: (context, conversations) {
-                    if (conversations.isEmpty) {
-                      return _buildEmptyState(context);
-                    }
-                    return RefreshIndicator(
-                      onRefresh: () async {
-                        await viewModel.refreshConversations();
-                      },
-                      color: context.colors.textPrimary,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.only(top: 0, bottom: 8),
+          UIStateBuilder<List<DmConversationModel>>(
+            state: viewModel.conversationsState,
+            builder: (context, conversations) {
+              if (conversations.isEmpty) {
+                return CustomScrollView(
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: TitleWidget(
+                        title: 'Messages',
+                        fontSize: 32,
+                        useTopPadding: true,
+                        padding: EdgeInsets.fromLTRB(
+                          16,
+                          MediaQuery.of(context).padding.top + 70,
+                          16,
+                          0,
+                        ),
+                      ),
+                    ),
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: _buildEmptyState(context),
+                    ),
+                  ],
+                );
+              }
+              return RefreshIndicator(
+                onRefresh: () async {
+                  await viewModel.refreshConversations();
+                },
+                color: context.colors.textPrimary,
+                child: CustomScrollView(
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: TitleWidget(
+                        title: 'Messages',
+                        fontSize: 32,
+                        useTopPadding: true,
+                        padding: EdgeInsets.fromLTRB(
+                          16,
+                          MediaQuery.of(context).padding.top + 70,
+                          16,
+                          0,
+                        ),
+                      ),
+                    ),
+                    SliverPadding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      sliver: SliverList.separated(
                         itemCount: conversations.length,
                         itemBuilder: (context, index) {
-                          return Column(
-                            children: [
-                              _buildConversationTile(
-                                context,
-                                conversations[index],
-                                viewModel,
-                              ),
-                              if (index < conversations.length - 1) const _ConversationSeparator(),
-                            ],
+                          return _buildConversationTile(
+                            context,
+                            conversations[index],
+                            viewModel,
                           );
                         },
+                        separatorBuilder: (_, __) => const _ConversationSeparator(),
                       ),
-                    );
-                  },
-                  loading: () => const Center(
+                    ),
+                  ],
+                ),
+              );
+            },
+            loading: () => CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: TitleWidget(
+                    title: 'Messages',
+                    fontSize: 32,
+                    useTopPadding: true,
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      MediaQuery.of(context).padding.top + 70,
+                      16,
+                      0,
+                    ),
+                  ),
+                ),
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
                     child: CircularProgressIndicator(),
                   ),
-                  error: (error) => Center(
+                ),
+              ],
+            ),
+            error: (error) => CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: TitleWidget(
+                    title: 'Messages',
+                    fontSize: 32,
+                    useTopPadding: true,
+                    padding: EdgeInsets.fromLTRB(
+                      16,
+                      MediaQuery.of(context).padding.top + 70,
+                      16,
+                      0,
+                    ),
+                  ),
+                ),
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -136,8 +193,8 @@ class _DmPageState extends State<DmPage> with AutomaticKeepAliveClientMixin {
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           _buildTopBar(context, viewModel),
         ],

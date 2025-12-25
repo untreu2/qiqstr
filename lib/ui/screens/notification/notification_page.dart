@@ -55,30 +55,27 @@ class _NotificationPageState extends State<NotificationPage> {
 
         return Scaffold(
           backgroundColor: context.colors.background,
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Consumer<NotificationViewModel>(
-                builder: (context, vm, child) {
-                  return _buildHeader(context, viewModel);
-                },
-              ),
-              Expanded(
-                child: Consumer<NotificationViewModel>(
-                  builder: (context, vm, child) {
-                    return UIStateBuilder<List<dynamic>>(
-                      state: vm.notificationsState,
-                      builder: (context, notifications) {
-                        final filteredNotifications = notifications.where((item) => !_isSelfNotification(item, vm.currentUserNpub)).toList();
+          body: Consumer<NotificationViewModel>(
+            builder: (context, vm, child) {
+              return UIStateBuilder<List<dynamic>>(
+                state: vm.notificationsState,
+                builder: (context, notifications) {
+                  final filteredNotifications = notifications.where((item) => !_isSelfNotification(item, vm.currentUserNpub)).toList();
 
-                        return filteredNotifications.isEmpty
-                            ? _buildEmptyContent(context)
-                            : RefreshIndicator(
-                                onRefresh: () => vm.refreshNotificationsCommand.execute(),
-                                color: context.colors.textPrimary,
-                                child: ListView.separated(
-                                  padding: const EdgeInsets.only(bottom: 80),
-                                  physics: const AlwaysScrollableScrollPhysics(),
+                  return filteredNotifications.isEmpty
+                      ? _buildEmptyContent(context)
+                      : RefreshIndicator(
+                          onRefresh: () => vm.refreshNotificationsCommand.execute(),
+                          color: context.colors.textPrimary,
+                          child: CustomScrollView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            slivers: [
+                              SliverToBoxAdapter(
+                                child: _buildHeader(context, viewModel),
+                              ),
+                              SliverPadding(
+                                padding: const EdgeInsets.only(bottom: 80),
+                                sliver: SliverList.separated(
                                   itemCount: filteredNotifications.length,
                                   itemBuilder: (context, index) => _buildNotificationTile(
                                     filteredNotifications[index],
@@ -97,16 +94,16 @@ class _NotificationPageState extends State<NotificationPage> {
                                     ),
                                   ),
                                 ),
-                              );
-                      },
-                      loading: () => _buildLoadingContent(context),
-                      error: (message) => _buildErrorContent(context, message, vm),
-                      empty: (message) => _buildEmptyContent(context),
-                    );
-                  },
-                ),
-              ),
-            ],
+                              ),
+                            ],
+                          ),
+                        );
+                },
+                loading: () => _buildLoadingContent(context),
+                error: (message) => _buildErrorContent(context, message, vm),
+                empty: (message) => _buildEmptyContent(context),
+              );
+            },
           ),
         );
       },
