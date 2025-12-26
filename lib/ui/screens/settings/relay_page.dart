@@ -14,12 +14,13 @@ import '../../../core/di/app_di.dart';
 import '../../../data/repositories/auth_repository.dart';
 import '../../../data/services/nostr_service.dart';
 import '../../../data/services/relay_service.dart';
-import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/common/title_widget.dart';
+import '../../widgets/common/top_action_bar_widget.dart';
 import '../../widgets/dialogs/reset_relays_dialog.dart';
 import '../../widgets/dialogs/add_relay_dialog.dart';
+import '../../widgets/dialogs/following_relays_dialog.dart';
 
 class RelayInfo {
   final String? name;
@@ -89,6 +90,8 @@ class _RelayPageState extends State<RelayPage> {
   final Map<String, RelayInfo?> _relayInfos = {};
   final Map<String, bool> _expandedRelays = {};
   final Map<String, Map<String, dynamic>> _relayStats = {};
+  late ScrollController _scrollController;
+  final ValueNotifier<bool> _showTitleBubble = ValueNotifier(false);
 
   late AuthRepository _authRepository;
 
@@ -96,14 +99,26 @@ class _RelayPageState extends State<RelayPage> {
   void initState() {
     super.initState();
     _initializeServices();
+    _scrollController = ScrollController()..addListener(_scrollListener);
     _loadRelays();
     _loadRelayStats();
     _startStatsRefresh();
   }
 
+  void _scrollListener() {
+    if (_scrollController.hasClients) {
+      final shouldShow = _scrollController.offset > 100;
+      if (_showTitleBubble.value != shouldShow) {
+        _showTitleBubble.value = shouldShow;
+      }
+    }
+  }
+
   @override
   void dispose() {
     _disposed = true;
+    _scrollController.dispose();
+    _showTitleBubble.dispose();
     _addRelayController.dispose();
     super.dispose();
   }
@@ -485,6 +500,18 @@ class _RelayPageState extends State<RelayPage> {
     return trimmed.startsWith('wss://') || trimmed.startsWith('ws://');
   }
 
+  String _normalizeRelayUrl(String url) {
+    final trimmed = url.trim();
+    if (trimmed.endsWith('/') && !trimmed.endsWith('://')) {
+      return trimmed.substring(0, trimmed.length - 1);
+    }
+    return trimmed;
+  }
+
+  bool _isRelayUrlEqual(String url1, String url2) {
+    return _normalizeRelayUrl(url1) == _normalizeRelayUrl(url2);
+  }
+
   Future<void> _addRelay(bool isMainRelay) async {
     final url = _addRelayController.text.trim();
 
@@ -499,8 +526,9 @@ class _RelayPageState extends State<RelayPage> {
     }
 
     final targetList = _relays;
+    final normalizedUrl = _normalizeRelayUrl(url);
 
-    if (targetList.contains(url)) {
+    if (targetList.any((existingUrl) => _isRelayUrlEqual(existingUrl, normalizedUrl))) {
       AppSnackbar.error(context, 'Relay already exists in this category');
       return;
     }
@@ -567,12 +595,32 @@ class _RelayPageState extends State<RelayPage> {
     );
   }
 
+  void _showFollowingRelaysDialog() {
+    showFollowingRelaysDialog(
+      context: context,
+      currentRelays: _relays,
+      onAddRelay: (relayUrl) {
+        final normalizedUrl = _normalizeRelayUrl(relayUrl);
+        if (!_relays.any((existingUrl) => _isRelayUrlEqual(existingUrl, normalizedUrl))) {
+          setState(() {
+            _relays.add(normalizedUrl);
+          });
+          _saveRelays();
+          _fetchRelayInfo(normalizedUrl);
+          AppSnackbar.success(context, 'Relay added from following list');
+        } else {
+          AppSnackbar.info(context, 'Relay already exists in your list');
+        }
+      },
+    );
+  }
+
   Widget _buildHeader(BuildContext context) {
-    return TitleWidget(
+    return const TitleWidget(
       title: 'Relays',
       fontSize: 32,
       subtitle: "Manage your relay connections and publish your relay list.",
-      useTopPadding: true,
+      padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
     );
   }
 
@@ -622,13 +670,30 @@ class _RelayPageState extends State<RelayPage> {
                 ),
               ),
               const SizedBox(width: 12),
-              SecondaryButton(
-                label: 'Reset',
-                icon: Icons.refresh,
-                onPressed: _resetToDefaults,
-                backgroundColor: context.colors.overlayLight,
-                foregroundColor: context.colors.textPrimary,
-                size: ButtonSize.large,
+              Expanded(
+                child: SecondaryButton(
+                  label: 'Reset',
+                  icon: Icons.refresh,
+                  onPressed: _resetToDefaults,
+                  backgroundColor: context.colors.overlayLight,
+                  foregroundColor: context.colors.textPrimary,
+                  size: ButtonSize.large,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: SecondaryButton(
+                  label: 'Explore Relays',
+                  icon: Icons.people,
+                  onPressed: _showFollowingRelaysDialog,
+                  backgroundColor: context.colors.overlayLight,
+                  foregroundColor: context.colors.textPrimary,
+                  size: ButtonSize.large,
+                ),
               ),
             ],
           ),
@@ -637,28 +702,6 @@ class _RelayPageState extends State<RelayPage> {
     );
   }
 
-  Widget _buildRelaySection(String title, List<String> relays, bool isMainRelay) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (relays.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            child: Text(
-              'No relays in this category',
-              style: TextStyle(
-                color: context.colors.textTertiary,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          )
-        else
-          Column(
-            children: relays.map((relay) => _buildRelayTile(relay, isMainRelay)).toList(),
-          ),
-      ],
-    );
-  }
 
   Widget _buildRelayTile(String relay, bool isMainRelay) {
     final manager = WebSocketManager.instance;
@@ -670,7 +713,7 @@ class _RelayPageState extends State<RelayPage> {
 
     return RepaintBoundary(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.only(bottom: 8),
         child: Container(
           width: double.infinity,
           decoration: BoxDecoration(
@@ -964,29 +1007,76 @@ class _RelayPageState extends State<RelayPage> {
       );
     }
 
+    final relayWidgets = <Widget>[];
+    for (int i = 0; i < _relays.length; i++) {
+      relayWidgets.add(_buildRelayTile(_relays[i], true));
+      if (i < _relays.length - 1) {
+        relayWidgets.add(const SizedBox(height: 8));
+      }
+    }
+
     return Scaffold(
       backgroundColor: context.colors.background,
       body: Stack(
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(context),
-              _buildActionButtons(context),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 16),
-                      _buildRelaySection('Relays', _relays, true),
-                      const SizedBox(height: 24),
-                    ],
+          CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              SliverToBoxAdapter(
+                child: SizedBox(height: MediaQuery.of(context).padding.top + 60),
+              ),
+              SliverToBoxAdapter(
+                child: _buildHeader(context),
+              ),
+              SliverToBoxAdapter(
+                child: _buildActionButtons(context),
+              ),
+              if (_relays.isEmpty)
+                SliverToBoxAdapter(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 32),
+                      child: Text(
+                        'No relays in this category',
+                        style: TextStyle(color: context.colors.textTertiary),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                  sliver: SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) => relayWidgets[index],
+                      childCount: relayWidgets.length,
+                      addAutomaticKeepAlives: true,
+                      addRepaintBoundaries: false,
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
-          const BackButtonWidget.floating(),
+          TopActionBarWidget(
+            onBackPressed: () => context.pop(),
+            centerBubble: Text(
+              'Relays',
+              style: TextStyle(
+                color: context.colors.background,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            centerBubbleVisibility: _showTitleBubble,
+            onCenterBubbleTap: () {
+              _scrollController.animateTo(
+                0,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeOut,
+              );
+            },
+            showShareButton: false,
+          ),
         ],
       ),
     );
