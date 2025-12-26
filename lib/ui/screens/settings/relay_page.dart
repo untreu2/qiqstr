@@ -21,6 +21,8 @@ import '../../widgets/common/top_action_bar_widget.dart';
 import '../../widgets/dialogs/reset_relays_dialog.dart';
 import '../../widgets/dialogs/add_relay_dialog.dart';
 import '../../widgets/dialogs/following_relays_dialog.dart';
+import '../../widgets/dialogs/broadcast_events_dialog.dart';
+import '../../../data/services/event_counts_service.dart';
 
 class RelayInfo {
   final String? name;
@@ -439,13 +441,17 @@ class _RelayPageState extends State<RelayPage> {
     }
 
     try {
+      final previousRelays = Set<String>.from(_relays.map(_normalizeRelayUrl));
+      
       final writeRelays = _userRelays
           .where((relay) => relay['marker'] == '' || relay['marker'].contains('write') || relay['marker'].contains('read,write'))
           .map((relay) => relay['url'] as String)
           .toList();
 
+      final newRelays = writeRelays.isNotEmpty ? writeRelays : _userRelays.map((relay) => relay['url'] as String).take(4).toList();
+
       setState(() {
-        _relays = writeRelays.isNotEmpty ? writeRelays : _userRelays.map((relay) => relay['url'] as String).take(4).toList();
+        _relays = newRelays;
       });
 
       await _saveRelays();
@@ -454,7 +460,23 @@ class _RelayPageState extends State<RelayPage> {
       await prefs.setBool('using_user_relays', true);
 
       if (mounted) {
-        AppSnackbar.success(context, 'Now using your personal relays (${writeRelays.length} main relays)');
+        AppSnackbar.success(context, 'Now using your personal relays (${newRelays.length} main relays)');
+        
+        final newRelayUrls = newRelays
+            .where((relay) => !previousRelays.contains(_normalizeRelayUrl(relay)))
+            .toList();
+        
+        if (newRelayUrls.isNotEmpty && mounted) {
+          final shouldBroadcast = await showBroadcastEventsDialog(
+            context: context,
+            relayUrls: newRelayUrls,
+            relayCount: newRelayUrls.length,
+          );
+
+          if (shouldBroadcast && mounted) {
+            await _broadcastEventsToRelays(newRelayUrls);
+          }
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -547,6 +569,15 @@ class _RelayPageState extends State<RelayPage> {
       if (mounted) {
         context.pop();
         AppSnackbar.success(context, 'Relay added to Main list');
+        
+        final shouldBroadcast = await showBroadcastEventsDialog(
+          context: context,
+          relayUrl: normalizedUrl,
+        );
+
+        if (shouldBroadcast && mounted) {
+          await _broadcastEventsToRelay(normalizedUrl);
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -554,6 +585,50 @@ class _RelayPageState extends State<RelayPage> {
       }
     } finally {
       setState(() => _isAddingRelay = false);
+    }
+  }
+
+  Future<void> _broadcastEventsToRelay(String relayUrl) async {
+    await _broadcastEventsToRelays([relayUrl]);
+  }
+
+  Future<void> _broadcastEventsToRelays(List<String> relayUrls) async {
+    if (!mounted || relayUrls.isEmpty) return;
+
+    AppSnackbar.info(context, 'Fetching your events...');
+
+    try {
+      final result = await EventCountsService.instance.fetchAllEventsForUser(null);
+      
+      if (!mounted) return;
+
+      if (result == null || result.allEvents.isEmpty) {
+        AppSnackbar.info(context, 'No events found to broadcast');
+        return;
+      }
+
+      AppSnackbar.info(context, 'Broadcasting ${result.allEvents.length} events...');
+
+      final success = await EventCountsService.instance.rebroadcastEvents(
+        result.allEvents,
+        relayUrls: relayUrls,
+      );
+
+      if (!mounted) return;
+
+      if (success) {
+        final relayText = relayUrls.length == 1 ? 'the new relay' : '${relayUrls.length} new relays';
+        AppSnackbar.success(
+          context,
+          'Broadcasted ${result.allEvents.length} events to $relayText',
+        );
+      } else {
+        AppSnackbar.error(context, 'Error broadcasting events');
+      }
+    } catch (e) {
+      if (mounted) {
+        AppSnackbar.error(context, 'Error broadcasting events: ${e.toString()}');
+      }
     }
   }
 
@@ -575,12 +650,31 @@ class _RelayPageState extends State<RelayPage> {
     await showResetRelaysDialog(
       context: context,
       onConfirm: () async {
+        final previousRelays = Set<String>.from(_relays.map(_normalizeRelayUrl));
+        
         setState(() {
           _relays = List.from(relaySetMainSockets);
         });
         await _saveRelays();
+        
         if (mounted && context.mounted) {
           AppSnackbar.success(context, 'Relays reset to defaults');
+          
+          final newRelayUrls = _relays
+              .where((relay) => !previousRelays.contains(_normalizeRelayUrl(relay)))
+              .toList();
+          
+          if (newRelayUrls.isNotEmpty && mounted) {
+            final shouldBroadcast = await showBroadcastEventsDialog(
+              context: context,
+              relayUrls: newRelayUrls,
+              relayCount: newRelayUrls.length,
+            );
+
+            if (shouldBroadcast && mounted) {
+              await _broadcastEventsToRelays(newRelayUrls);
+            }
+          }
         }
       },
     );
@@ -599,15 +693,26 @@ class _RelayPageState extends State<RelayPage> {
     showFollowingRelaysDialog(
       context: context,
       currentRelays: _relays,
-      onAddRelay: (relayUrl) {
+      onAddRelay: (relayUrl) async {
         final normalizedUrl = _normalizeRelayUrl(relayUrl);
         if (!_relays.any((existingUrl) => _isRelayUrlEqual(existingUrl, normalizedUrl))) {
           setState(() {
             _relays.add(normalizedUrl);
           });
-          _saveRelays();
+          await _saveRelays();
           _fetchRelayInfo(normalizedUrl);
           AppSnackbar.success(context, 'Relay added from following list');
+          
+          if (mounted) {
+            final shouldBroadcast = await showBroadcastEventsDialog(
+              context: context,
+              relayUrl: normalizedUrl,
+            );
+
+            if (shouldBroadcast && mounted) {
+              await _broadcastEventsToRelay(normalizedUrl);
+            }
+          }
         } else {
           AppSnackbar.info(context, 'Relay already exists in your list');
         }

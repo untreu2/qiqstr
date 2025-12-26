@@ -734,7 +734,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                                       const SizedBox(width: 6),
                                       _ProfileAvatar(
                                         imageUrl: state.reposterUser?.profileImage ?? '',
-                                        radius: 12,
+                                        radius: 10,
                                         colors: colors,
                                       ),
                                       const SizedBox(width: 6),
@@ -787,7 +787,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                       },
                     ),
                     Padding(
-                      padding: EdgeInsets.only(top: (_isRepost || _isReply) ? 0 : 4),
+                      padding: EdgeInsets.only(top: (_isRepost || _isReply) ? 8 : 4),
                       child: _SafeProfileSection(
                         stateNotifier: _stateNotifier,
                         isRepost: _isRepost,
@@ -804,6 +804,7 @@ class _NoteWidgetState extends State<NoteWidget> {
                         formattedTimestamp: _formattedTimestamp,
                       ),
                     ),
+                    const SizedBox(height: 12),
                     Transform.translate(
                       offset: const Offset(0, -4),
                       child: Padding(
@@ -963,7 +964,7 @@ class _SafeProfileSection extends StatelessWidget {
             onTap: onAuthorTap,
             child: _ProfileAvatar(
               imageUrl: authorImageUrl,
-              radius: 20,
+              radius: 16,
               colors: colors,
             ),
           ),

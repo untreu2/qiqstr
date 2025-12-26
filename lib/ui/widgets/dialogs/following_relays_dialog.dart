@@ -30,7 +30,7 @@ String _normalizeRelayUrl(String url) {
 
 Future<void> showFollowingRelaysDialog({
   required BuildContext context,
-  required Function(String relayUrl) onAddRelay,
+  required Future<void> Function(String relayUrl) onAddRelay,
   required List<String> currentRelays,
 }) async {
   final colors = context.colors;
@@ -51,7 +51,7 @@ Future<void> showFollowingRelaysDialog({
 }
 
 class _FollowingRelaysDialogContent extends StatefulWidget {
-  final Function(String relayUrl) onAddRelay;
+  final Future<void> Function(String relayUrl) onAddRelay;
   final List<String> currentRelays;
 
   const _FollowingRelaysDialogContent({
@@ -229,7 +229,7 @@ class _FollowingRelaysDialogContentState extends State<_FollowingRelaysDialogCon
     });
 
     try {
-      widget.onAddRelay(relayUrl);
+      await widget.onAddRelay(relayUrl);
       if (mounted) {
         Navigator.of(context).pop();
       }

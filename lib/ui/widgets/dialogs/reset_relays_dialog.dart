@@ -29,20 +29,26 @@ Future<void> showResetRelaysDialog({
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 20),
-          SecondaryButton(
-            label: 'Reset to Defaults',
-            icon: Icons.refresh,
-            onPressed: () {
-              Navigator.pop(modalContext);
-              onConfirm();
-            },
-            size: ButtonSize.large,
+          SizedBox(
+            width: double.infinity,
+            child: SecondaryButton(
+              label: 'Reset to Defaults',
+              icon: Icons.refresh,
+              onPressed: () {
+                Navigator.pop(modalContext);
+                onConfirm();
+              },
+              size: ButtonSize.large,
+            ),
           ),
           const SizedBox(height: 12),
-          SecondaryButton(
-            label: 'Cancel',
-            onPressed: () => Navigator.pop(modalContext),
-            size: ButtonSize.large,
+          SizedBox(
+            width: double.infinity,
+            child: SecondaryButton(
+              label: 'Cancel',
+              onPressed: () => Navigator.pop(modalContext),
+              size: ButtonSize.large,
+            ),
           ),
         ],
       ),
