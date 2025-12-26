@@ -23,6 +23,7 @@ import '../../ui/screens/webview/webview_page.dart';
 import '../../ui/screens/dm/dm_page.dart';
 import '../../ui/screens/wallet/wallet_page.dart';
 import '../../ui/screens/notification/notification_page.dart';
+import '../../ui/screens/explore/explore_page.dart';
 import '../../models/user_model.dart';
 import '../../models/note_model.dart';
 import '../../core/di/app_di.dart';
@@ -174,6 +175,11 @@ class AppRouter {
                       }
                       return FollowingPage(user: user);
                     },
+                  ),
+                  GoRoute(
+                    path: 'explore',
+                    name: 'feed-explore',
+                    builder: (context, state) => const ExplorePage(),
                   ),
                 ],
               ),

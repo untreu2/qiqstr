@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
@@ -246,10 +247,24 @@ class FeedPageState extends State<FeedPage> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Icon(
-                        CarbonIcons.explore,
-                        size: 26,
-                        color: colors.textPrimary,
+                      GestureDetector(
+                        onTap: () {
+                          final currentLocation = GoRouterState.of(context).matchedLocation;
+                          if (currentLocation.startsWith('/home/feed')) {
+                            context.push('/home/feed/explore');
+                          } else if (currentLocation.startsWith('/home/notifications')) {
+                            context.push('/home/notifications/explore');
+                          } else if (currentLocation.startsWith('/home/dm')) {
+                            context.push('/home/dm/explore');
+                          } else {
+                            context.push('/explore');
+                          }
+                        },
+                        child: Icon(
+                          CarbonIcons.explore,
+                          size: 26,
+                          color: colors.textPrimary,
+                        ),
                       ),
                     ],
                   )
