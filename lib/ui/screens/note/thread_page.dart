@@ -157,7 +157,7 @@ class _ThreadPageState extends State<ThreadPage> {
         controller: _scrollController,
         slivers: [
           SliverToBoxAdapter(
-            child: SizedBox(height: MediaQuery.of(context).padding.top + 60),
+            child: SizedBox(height: MediaQuery.of(context).padding.top + 68),
           ),
           if (displayNote != null) ...[
             SliverToBoxAdapter(
@@ -199,7 +199,7 @@ class _ThreadPageState extends State<ThreadPage> {
             ),
           ],
           SliverToBoxAdapter(
-            child: const SizedBox(height: 24.0),
+            child: SizedBox(height: MediaQuery.of(context).padding.bottom + 120),
           ),
         ],
       ),
@@ -238,7 +238,7 @@ class _ThreadPageState extends State<ThreadPage> {
 
     return Container(
       key: isFocused ? noteKey : null,
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 6),
       child: FocusedNoteWidget(
         note: note,
         currentUserNpub: viewModel.currentUserNpub,
@@ -362,7 +362,17 @@ class _ThreadPageState extends State<ThreadPage> {
             directReplies.add(reply);
           }
         }
-        directReplies.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+        
+        final currentUserNpub = viewModel.currentUserNpub;
+        directReplies.sort((a, b) {
+          final aIsUserReply = a.author == currentUserNpub;
+          final bIsUserReply = b.author == currentUserNpub;
+          
+          if (aIsUserReply && !bIsUserReply) return -1;
+          if (!aIsUserReply && bIsUserReply) return 1;
+          
+          return a.timestamp.compareTo(b.timestamp);
+        });
 
         _ensureCacheTimerStarted(viewModel);
 
@@ -392,20 +402,24 @@ class _ThreadPageState extends State<ThreadPage> {
             (context, index) {
               if (index < visibleReplies.length) {
                 final reply = visibleReplies[index];
-                return Padding(
+                final showSeparator = index < visibleReplies.length - 1;
+                return Column(
                   key: ValueKey('reply_${reply.id}'),
-                  padding: const EdgeInsets.only(bottom: 8.0),
-                  child: _buildThreadReply(
-                    context,
-                    viewModel,
-                    reply,
-                    threadStructure,
-                    0,
-                  ),
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildThreadReply(
+                      context,
+                      viewModel,
+                      reply,
+                      threadStructure,
+                      0,
+                    ),
+                    if (showSeparator) _buildNoteSeparator(context),
+                  ],
                 );
               } else if (index == visibleReplies.length && hasMoreReplies) {
                 return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16.0),
+                  padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
                   child: _buildLoadMoreButton(context, directReplies.length),
                 );
               }
@@ -466,7 +480,7 @@ class _ThreadPageState extends State<ThreadPage> {
           });
         },
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
           child: Text(
             'Load more',
             style: TextStyle(
@@ -501,13 +515,22 @@ class _ThreadPageState extends State<ThreadPage> {
         nestedReplies.add(nestedReply);
       }
     }
+    
+    final currentUserNpub = viewModel.currentUserNpub;
+    nestedReplies.sort((a, b) {
+      final aIsUserReply = a.author == currentUserNpub;
+      final bIsUserReply = b.author == currentUserNpub;
+      
+      if (aIsUserReply && !bIsUserReply) return -1;
+      if (!aIsUserReply && bIsUserReply) return 1;
+      
+      return a.timestamp.compareTo(b.timestamp);
+    });
+    
     final hasNestedReplies = nestedReplies.isNotEmpty;
 
     return Container(
       key: ValueKey('reply_${reply.id}_$depth'),
-      margin: EdgeInsets.only(
-        bottom: depth == 0 ? 12.0 : 6.0,
-      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -516,20 +539,15 @@ class _ThreadPageState extends State<ThreadPage> {
             child: Column(
               key: isFocused ? noteKey : null,
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(height: 2),
-                Container(
-                  margin: const EdgeInsets.only(right: 8),
-                  child: _buildEnhancedNoteWidget(
-                    context,
-                    viewModel,
-                    reply,
-                    depth,
-                  ),
+                _buildEnhancedNoteWidget(
+                  context,
+                  viewModel,
+                  reply,
+                  depth,
                 ),
-                const SizedBox(height: 4),
                 if (depth < maxDepth && hasNestedReplies) ...[
-                  const SizedBox(height: 4),
                   ...nestedReplies.take(_maxNestedReplies).map(
                         (nestedReply) => _buildThreadReply(
                           context,
@@ -544,7 +562,6 @@ class _ThreadPageState extends State<ThreadPage> {
                       padding: EdgeInsets.only(
                         left: (depth + 1) * baseIndentWidth + 12,
                         top: 4,
-                        bottom: 8,
                       ),
                       child: Text(
                         '${nestedReplies.length - _maxNestedReplies} more replies...',
@@ -559,8 +576,7 @@ class _ThreadPageState extends State<ThreadPage> {
                   Padding(
                     padding: EdgeInsets.only(
                       left: currentIndent + 12,
-                      top: 8,
-                      bottom: 4,
+                      top: 4,
                     ),
                     child: Text(
                       'More replies... (${nestedReplies.length} nested)',
@@ -838,6 +854,20 @@ class _ThreadPageState extends State<ThreadPage> {
     });
   }
 
+
+  Widget _buildNoteSeparator(BuildContext context) {
+    return SizedBox(
+      height: 16,
+      child: Center(
+        child: Container(
+          height: 0.5,
+          decoration: BoxDecoration(
+            color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<void> _handleShare(BuildContext context, ThreadViewModel viewModel) async {
     final rootNote = viewModel.rootNoteState.data;

@@ -159,7 +159,7 @@ class _NoteListContent extends StatelessWidget {
       delegate: SliverChildBuilderDelegate(
         (context, index) {
           if (index >= notes.length) {
-            return const SizedBox.shrink();
+            return SizedBox(height: MediaQuery.of(context).padding.bottom + 120);
           }
 
           final note = notes[index];
@@ -177,7 +177,7 @@ class _NoteListContent extends StatelessWidget {
             ),
           );
         },
-        childCount: notes.length,
+        childCount: notes.length + 1,
         addAutomaticKeepAlives: true,
         addRepaintBoundaries: false,
         addSemanticIndexes: false,
