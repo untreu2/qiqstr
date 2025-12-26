@@ -17,6 +17,7 @@ import '../../ui/screens/settings/keys_page.dart';
 import '../../ui/screens/settings/relay_page.dart';
 import '../../ui/screens/settings/display_page.dart';
 import '../../ui/screens/settings/payments_page.dart';
+import '../../ui/screens/settings/muted_page.dart';
 import '../../ui/screens/settings/event_manager_page.dart';
 import '../../ui/screens/webview/webview_page.dart';
 import '../../ui/screens/dm/dm_page.dart';
@@ -491,6 +492,11 @@ class AppRouter {
         path: '/payments',
         name: 'payments',
         builder: (context, state) => const PaymentsPage(),
+      ),
+      GoRoute(
+        path: '/muted',
+        name: 'muted',
+        builder: (context, state) => const MutedPage(),
       ),
       GoRoute(
         path: '/event-manager',
