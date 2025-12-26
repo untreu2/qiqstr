@@ -89,8 +89,141 @@ class DataService {
   AuthService get authService => _authService;
   String get currentUserNpub => _currentUserNpub;
 
+  static const int _profileCacheMaxSize = 2000;
+  static const int _interactionFetchMaxSize = 3000;
+  static const int _eventProcessingLockMaxSize = 10000;
+  static const int _noteCacheMaxSize = 8000;
+  static const int _noteCacheKeepSize = 5000;
+  static const Duration _interactionCutoff = Duration(hours: 1);
+  static const int _queryTimeoutSeconds = 3;
+  static const int _longQueryTimeoutSeconds = 30;
+  static const int _followerCountTimeoutSeconds = 5;
+  static const int _profileFetchTimeoutMs = 1500;
+
   bool _shouldIncludeNoteInFeed(String authorHexPubkey, bool isRepost) {
     return true;
+  }
+
+  Map<String, String> _parseETag(List<dynamic> tag) {
+    return {
+      'eventId': tag[1] as String,
+      'relayUrl': tag.length > 2 ? (tag[2] as String? ?? '') : '',
+      'marker': tag.length >= 4 ? tag[3] as String : '',
+      'pubkey': tag.length > 4 ? (tag[4] as String? ?? '') : '',
+    };
+  }
+
+  Map<String, String> _parsePTag(List<dynamic> tag) {
+    return {
+      'pubkey': tag[1] as String,
+      'relayUrl': tag.length > 2 ? (tag[2] as String? ?? '') : '',
+      'petname': tag.length > 3 ? (tag[3] as String? ?? '') : '',
+    };
+  }
+
+  String? _getTagValue(List<dynamic> tags, String tagType, {int index = 1}) {
+    for (final tag in tags) {
+      if (tag is List && tag.isNotEmpty && tag[0] == tagType && tag.length > index) {
+        return tag[index] as String?;
+      }
+    }
+    return null;
+  }
+
+  List<String> _extractPTags(List<dynamic> tags) {
+    final result = <String>[];
+    for (final tag in tags) {
+      if (tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length >= 2) {
+        result.add(tag[1] as String);
+      }
+    }
+    return result;
+  }
+
+  ParsedTags _parseTags(List<dynamic> tags, {bool includeTTags = true}) {
+    final eTags = <Map<String, String>>[];
+    final pTags = <Map<String, String>>[];
+    final tTags = <String>{};
+    String? rootId;
+    String? parentId;
+
+    for (final tag in tags) {
+      if (tag is! List || tag.isEmpty) continue;
+      
+      final tagType = tag[0] as String?;
+      if (tagType == null || tag.length < 2) continue;
+
+      if (tagType == 'e') {
+        final eTag = _parseETag(tag);
+        eTags.add(eTag);
+        final marker = eTag['marker'] ?? '';
+        if (marker == 'root') {
+          rootId = eTag['eventId'];
+        } else if (marker == 'reply') {
+          parentId = eTag['eventId'];
+        }
+      } else if (tagType == 'p') {
+        pTags.add(_parsePTag(tag));
+      } else if (tagType == 't' && includeTTags) {
+        final hashtag = (tag[1] as String).toLowerCase();
+        tTags.add(hashtag);
+      }
+    }
+
+    return ParsedTags(
+      eTags: eTags,
+      pTags: pTags,
+      tTags: tTags.toList(),
+      rootId: rootId,
+      parentId: parentId,
+    );
+  }
+
+  Future<void> _ensureRelayConnection([String? serviceId]) async {
+    if (_relayManager.activeSockets.isEmpty) {
+      try {
+        await _relayManager.connectRelays(
+          [],
+          onEvent: _handleRelayEvent,
+          onDisconnected: _handleRelayDisconnection,
+          serviceId: serviceId ?? 'data_service_connection',
+        );
+      } catch (_) {}
+    }
+  }
+
+  List<String> get _allRelays => _relayManager.relayUrls.toList();
+
+  String _extractSubscriptionId(String serializedRequest) {
+    final requestJson = jsonDecode(serializedRequest) as List;
+    return requestJson[1] as String;
+  }
+
+  Future<void> _queryAllRelays({
+    required String request,
+    required String subscriptionId,
+    required Function(Map<String, dynamic>, String) onEvent,
+    Duration? timeout,
+    bool checkClosed = true,
+  }) async {
+    final allRelays = _allRelays;
+    if (allRelays.isEmpty) return;
+
+    await Future.wait(allRelays.map((relayUrl) async {
+      try {
+        if (checkClosed && _isClosed) return;
+
+        final completer = await _relayManager.sendQuery(
+          relayUrl,
+          request,
+          subscriptionId,
+          timeout: timeout ?? const Duration(seconds: _queryTimeoutSeconds),
+          onEvent: onEvent,
+        );
+
+        await completer.future;
+      } catch (_) {}
+    }));
   }
 
   void _setupRelayEventHandling() {
@@ -216,63 +349,37 @@ class DataService {
 
     final subscriptionId = NostrService.generateUUID();
     final request = jsonEncode(['REQ', subscriptionId, filter]);
-    final allRelays = _relayManager.relayUrls.toList();
 
-    await Future.wait(allRelays.map((relayUrl) async {
-      try {
-        if (_isClosed) {
-          return;
-        }
+    await _queryAllRelays(
+      request: request,
+      subscriptionId: subscriptionId,
+      onEvent: (eventData, url) {
+        try {
+          final eventId = eventData['id'] as String;
+          final eventKind = eventData['kind'] as int;
+          final eventAuthor = eventData['pubkey'] as String;
 
-        final completer = await _relayManager.sendQuery(
-          relayUrl,
-          request,
-          subscriptionId,
-          timeout: const Duration(seconds: 3),
-          onEvent: (eventData, url) {
-            try {
-              final eventId = eventData['id'] as String;
-              final eventKind = eventData['kind'] as int;
-              final eventAuthor = eventData['pubkey'] as String;
+          if (eventAuthor == pubkeyHex && !processedEventIds.contains(eventId)) {
+            processedEventIds.add(eventId);
 
-              if (eventAuthor == pubkeyHex && !processedEventIds.contains(eventId)) {
-                processedEventIds.add(eventId);
-
-                if (eventKind == 0) {
-                  final content = eventData['content'] as String;
-                  if (content.isNotEmpty && userProfile == null) {
-                    try {
-                      userProfile = jsonDecode(content) as Map<String, dynamic>;
-                      userProfile!['pubkey'] = pubkeyHex;
-                      userProfile!['created_at'] = eventData['created_at'];
-                    } catch (e) {
-                    }
-                  }
-                } else if (eventKind == 3) {
-                  final tags = eventData['tags'] as List<dynamic>;
-                  for (var tag in tags) {
-                    if (tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length >= 2) {
-                      following.add(tag[1] as String);
-                    }
-                  }
-                } else if (eventKind == 10000) {
-                  final tags = eventData['tags'] as List<dynamic>;
-                  for (var tag in tags) {
-                    if (tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length >= 2) {
-                      muted.add(tag[1] as String);
-                    }
-                  }
-                }
+            if (eventKind == 0) {
+              final content = eventData['content'] as String;
+              if (content.isNotEmpty && userProfile == null) {
+                try {
+                  userProfile = jsonDecode(content) as Map<String, dynamic>;
+                  userProfile!['pubkey'] = pubkeyHex;
+                  userProfile!['created_at'] = eventData['created_at'];
+                } catch (_) {}
               }
-            } catch (e) {
+            } else if (eventKind == 3) {
+              following.addAll(_extractPTags(eventData['tags'] as List<dynamic>));
+            } else if (eventKind == 10000) {
+              muted.addAll(_extractPTags(eventData['tags'] as List<dynamic>));
             }
-          },
-        );
-
-        await completer.future;
-      } catch (e) {
-      }
-    }));
+          }
+        } catch (_) {}
+      },
+    );
 
     if (userProfile != null) {
       final createdAt = userProfile!['created_at'] as int? ?? (DateTime.now().millisecondsSinceEpoch ~/ 1000);
@@ -505,49 +612,8 @@ class DataService {
 
       unawaited(_ensureProfileExists(pubkey, authorNpub));
 
-      String? rootId;
-      String? parentId;
-      final List<Map<String, String>> eTags = [];
-      final List<Map<String, String>> pTags = [];
-      final List<String> tTags = [];
-
-      for (final tag in tags) {
-        if (tag is List && tag.length >= 2) {
-          final tagType = tag[0] as String;
-          if (tagType == 'e') {
-            final eventId = tag[1] as String;
-            final relayUrl = tag.length > 2 ? (tag[2] as String? ?? '') : '';
-            final marker = tag.length >= 4 ? tag[3] as String : '';
-            final pubkeyTag = tag.length > 4 ? (tag[4] as String? ?? '') : '';
-
-            eTags.add({
-              'eventId': eventId,
-              'relayUrl': relayUrl,
-              'marker': marker,
-              'pubkey': pubkeyTag,
-            });
-
-            if (marker == 'root') {
-              rootId = eventId;
-            } else if (marker == 'reply') {
-              parentId = eventId;
-            }
-          } else if (tagType == 'p') {
-            pTags.add({
-              'pubkey': tag[1] as String,
-              'relayUrl': tag.length > 2 ? (tag[2] as String? ?? '') : '',
-              'petname': tag.length > 3 ? (tag[3] as String? ?? '') : '',
-            });
-          } else if (tagType == 't') {
-            final hashtag = (tag[1] as String).toLowerCase();
-            if (!tTags.contains(hashtag)) {
-              tTags.add(hashtag);
-            }
-          }
-        }
-      }
-
-      final bool isReply = rootId != null;
+      final parsedTags = _parseTags(tags);
+      final isReply = parsedTags.rootId != null;
 
       final note = NoteModel(
         id: id,
@@ -556,27 +622,27 @@ class DataService {
         timestamp: timestamp,
         isReply: isReply,
         isRepost: false,
-        rootId: rootId,
-        parentId: parentId,
+        rootId: parsedTags.rootId,
+        parentId: parsedTags.parentId,
         repostedBy: null,
         reactionCount: _reactionsMap[id]?.length ?? 0,
         replyCount: 0,
         repostCount: _repostsMap[id]?.length ?? 0,
         zapAmount: _zapsMap[id]?.fold<int>(0, (sum, zap) => sum + zap.amount) ?? 0,
         rawWs: jsonEncode(eventData),
-        eTags: eTags,
-        pTags: pTags,
-        tTags: tTags,
+        eTags: parsedTags.eTags,
+        pTags: parsedTags.pTags,
+        tTags: parsedTags.tTags,
       );
 
       _addNoteToCache(note);
 
       if (isReply) {
-        if (parentId != null) {
-          _noteCache[parentId]?.addReply(note);
+        if (parsedTags.parentId != null) {
+          _noteCache[parsedTags.parentId]?.addReply(note);
         }
-        if (rootId != parentId) {
-          _noteCache[rootId]?.addReply(note);
+        if (parsedTags.rootId != null && parsedTags.rootId != parsedTags.parentId) {
+          _noteCache[parsedTags.rootId]?.addReply(note);
         }
       }
     } catch (e) {
@@ -604,41 +670,25 @@ class DataService {
 
       final request = NostrService.createRequest(filter);
       final serializedRequest = NostrService.serializeRequest(request);
-      final requestJson = jsonDecode(serializedRequest) as List;
-      final actualSubscriptionId = requestJson[1] as String;
-
-      final allRelays = _relayManager.relayUrls.toList();
+      final actualSubscriptionId = _extractSubscriptionId(serializedRequest);
       final processedReplyIds = <String>{};
 
-      await Future.wait(allRelays.map((relayUrl) async {
-        try {
-          if (_isClosed) {
-            return;
-          }
+      await _queryAllRelays(
+        request: serializedRequest,
+        subscriptionId: actualSubscriptionId,
+        timeout: const Duration(seconds: _queryTimeoutSeconds),
+        onEvent: (eventData, url) {
+          try {
+            final eventId = eventData['id'] as String;
+            final eventKind = eventData['kind'] as int;
 
-          final completer = await _relayManager.sendQuery(
-            relayUrl,
-            serializedRequest,
-            actualSubscriptionId,
-            timeout: const Duration(seconds: 3),
-            onEvent: (eventData, url) {
-              try {
-                final eventId = eventData['id'] as String;
-                final eventKind = eventData['kind'] as int;
-
-                if (eventKind == 1 && !processedReplyIds.contains(eventId)) {
-                  processedReplyIds.add(eventId);
-                  unawaited(_processNostrEvent(eventData));
-                }
-              } catch (e) {
-              }
-            },
-          );
-
-          await completer.future;
-        } catch (e) {
-        }
-      }));
+            if (eventKind == 1 && !processedReplyIds.contains(eventId)) {
+              processedReplyIds.add(eventId);
+              unawaited(_processNostrEvent(eventData));
+            }
+          } catch (_) {}
+        },
+      );
 
       _pendingThreadFetches.remove(rootNoteId);
     } catch (e) {
@@ -660,49 +710,11 @@ class DataService {
       final authorNpub = _authService.hexToNpub(pubkey) ?? pubkey;
       final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
 
-      String? rootId;
-      String? actualParentId = parentEventId;
-      String? replyMarker;
-      final List<Map<String, String>> eTags = [];
-      final List<Map<String, String>> pTags = [];
-      final List<String> tTags = [];
-
-      for (var tag in tags) {
-        if (tag is List && tag.isNotEmpty) {
-          if (tag[0] == 'e' && tag.length >= 2) {
-            final eTag = <String, String>{
-              'eventId': tag[1] as String,
-              'relayUrl': tag.length > 2 ? (tag[2] as String? ?? '') : '',
-              'marker': tag.length > 3 ? (tag[3] as String? ?? '') : '',
-              'pubkey': tag.length > 4 ? (tag[4] as String? ?? '') : '',
-            };
-            eTags.add(eTag);
-
-            if (tag.length >= 4 && tag[3] == 'root') {
-              rootId = tag[1] as String;
-              replyMarker = 'root';
-            } else if (tag.length >= 4 && tag[3] == 'reply') {
-              actualParentId = tag[1] as String;
-              replyMarker = 'reply';
-            }
-          } else if (tag[0] == 'p' && tag.length >= 2) {
-            final pTag = <String, String>{
-              'pubkey': tag[1] as String,
-              'relayUrl': tag.length > 2 ? (tag[2] as String? ?? '') : '',
-              'petname': tag.length > 3 ? (tag[3] as String? ?? '') : '',
-            };
-            pTags.add(pTag);
-          } else if (tag[0] == 't' && tag.length >= 2) {
-            final hashtag = (tag[1] as String).toLowerCase();
-            if (!tTags.contains(hashtag)) {
-              tTags.add(hashtag);
-            }
-          }
-        }
-      }
-
-      final finalParentId = actualParentId ?? parentEventId;
-      final parentNote = _noteCache[finalParentId];
+      final parsedTags = _parseTags(tags);
+      final actualParentId = parsedTags.parentId ?? parentEventId;
+      final rootId = parsedTags.rootId;
+      final replyMarker = rootId != null ? 'root' : (parsedTags.parentId != null ? 'reply' : null);
+      final parentNote = _noteCache[actualParentId];
 
       final replyNote = NoteModel(
         id: id,
@@ -710,12 +722,12 @@ class DataService {
         author: authorNpub,
         timestamp: timestamp,
         isReply: true,
-        parentId: actualParentId ?? parentEventId,
+        parentId: actualParentId,
         rootId: rootId ?? parentNote?.rootId,
         rawWs: jsonEncode(eventData),
-        eTags: eTags,
-        pTags: pTags,
-        tTags: tTags,
+        eTags: parsedTags.eTags,
+        pTags: parsedTags.pTags,
+        tTags: parsedTags.tTags,
         replyMarker: replyMarker,
         reactionCount: 0,
         replyCount: 0,
@@ -727,7 +739,7 @@ class DataService {
 
       _ensureProfileExists(pubkey, authorNpub);
 
-      _updateParentNoteReplyCount(actualParentId ?? parentEventId);
+      _updateParentNoteReplyCount(actualParentId);
 
       _scheduleUIUpdate();
     } catch (e) {
@@ -748,13 +760,7 @@ class DataService {
       final createdAt = eventData['created_at'] as int;
       final tags = eventData['tags'] as List<dynamic>;
 
-      String? targetEventId;
-      for (final tag in tags) {
-        if (tag is List && tag.length >= 2 && tag[0] == 'e') {
-          targetEventId = tag[1] as String;
-          break;
-        }
-      }
+      final targetEventId = _getTagValue(tags, 'e');
 
       if (targetEventId != null) {
         final reaction = ReactionModel(
@@ -957,13 +963,7 @@ class DataService {
       final createdAt = eventData['created_at'] as int;
       final tags = eventData['tags'] as List<dynamic>;
 
-      String? originalEventId;
-      for (final tag in tags) {
-        if (tag is List && tag.isNotEmpty && tag[0] == 'e' && tag.length >= 2) {
-          originalEventId = tag[1] as String;
-          break;
-        }
-      }
+      final originalEventId = _getTagValue(tags, 'e');
 
       if (originalEventId != null) {
         final reposterNpub = _authService.hexToNpub(pubkey) ?? pubkey;
@@ -997,18 +997,11 @@ class DataService {
     try {
       final pubkey = eventData['pubkey'] as String;
       final tags = eventData['tags'] as List<dynamic>;
-
-      final List<String> newFollowing = [];
-      for (var tag in tags) {
-        if (tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length > 1) {
-          newFollowing.add(tag[1] as String);
-        }
-      }
+      final newFollowing = _extractPTags(tags);
 
       try {
         await _followCacheService.put(pubkey, newFollowing);
-      } catch (e) {
-      }
+      } catch (_) {}
     } catch (e) {
     }
   }
@@ -1017,18 +1010,11 @@ class DataService {
     try {
       final pubkey = eventData['pubkey'] as String;
       final tags = eventData['tags'] as List<dynamic>;
-
-      final List<String> newMuted = [];
-      for (var tag in tags) {
-        if (tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length > 1) {
-          newMuted.add(tag[1] as String);
-        }
-      }
+      final newMuted = _extractPTags(tags);
 
       try {
         await _muteCacheService.put(pubkey, newMuted);
-      } catch (e) {
-      }
+      } catch (_) {}
     } catch (e) {
     }
   }
@@ -1083,29 +1069,18 @@ class DataService {
       final createdAt = eventData['created_at'] as int;
       final tags = eventData['tags'] as List<dynamic>;
 
-      String? targetEventId;
-      String recipient = '';
-      String bolt11 = '';
-      String description = '';
+      final targetEventId = _getTagValue(tags, 'e');
+      final recipient = _getTagValue(tags, 'p') ?? '';
+      final bolt11 = _getTagValue(tags, 'bolt11') ?? '';
+      final description = _getTagValue(tags, 'description') ?? '';
+      
       int amount = 0;
-
-      for (final tag in tags) {
-        if (tag is List && tag.isNotEmpty) {
-          if (tag[0] == 'e' && tag.length >= 2) {
-            targetEventId = tag[1] as String;
-          } else if (tag[0] == 'p' && tag.length >= 2) {
-            recipient = tag[1] as String;
-          } else if (tag[0] == 'bolt11' && tag.length >= 2) {
-            bolt11 = tag[1] as String;
-          } else if (tag[0] == 'description' && tag.length >= 2) {
-            description = tag[1] as String;
-          } else if (tag[0] == 'amount' && tag.length >= 2) {
-            try {
-              amount = int.parse(tag[1] as String) ~/ 1000;
-            } catch (e) {
-              amount = 0;
-            }
-          }
+      final amountStr = _getTagValue(tags, 'amount');
+      if (amountStr != null) {
+        try {
+          amount = int.parse(amountStr) ~/ 1000;
+        } catch (_) {
+          amount = 0;
         }
       }
 
@@ -1115,26 +1090,18 @@ class DataService {
       if (description.isNotEmpty) {
         try {
           final zapRequest = jsonDecode(description) as Map<String, dynamic>;
-
-          if (zapRequest.containsKey('pubkey')) {
-            realZapperPubkey = zapRequest['pubkey'] as String;
+          realZapperPubkey = zapRequest['pubkey'] as String? ?? walletPubkey;
+          final requestContent = zapRequest['content'] as String?;
+          if (requestContent?.isNotEmpty == true) {
+            zapComment = requestContent;
           }
-
-          if (zapRequest.containsKey('content')) {
-            final requestContent = zapRequest['content'] as String;
-            if (requestContent.isNotEmpty) {
-              zapComment = requestContent;
-            }
-          }
-        } catch (e) {
-        }
-      } else {
+        } catch (_) {}
       }
 
       if (amount == 0 && bolt11.isNotEmpty) {
         try {
           amount = parseAmountFromBolt11(bolt11);
-        } catch (e) {
+        } catch (_) {
           amount = 0;
         }
       }
@@ -1275,27 +1242,27 @@ class DataService {
   }
 
   void _cleanupCacheIfNeeded() {
-    if (_profileCache.length > 2000) {
-      final now = timeService.now;
+    final now = timeService.now;
+    
+    if (_profileCache.length > _profileCacheMaxSize) {
       final cutoffTime = now.subtract(_profileCacheTTL);
       _profileCache.removeWhere((key, cached) => cached.fetchedAt.isBefore(cutoffTime));
     }
 
-    if (_lastInteractionFetch.length > 3000) {
-      final now = timeService.now;
-      final interactionCutoff = now.subtract(const Duration(hours: 1));
+    if (_lastInteractionFetch.length > _interactionFetchMaxSize) {
+      final interactionCutoff = now.subtract(_interactionCutoff);
       _lastInteractionFetch.removeWhere((key, timestamp) => timestamp.isBefore(interactionCutoff));
     }
 
-    if (_eventProcessingLock.length > 10000) {
+    if (_eventProcessingLock.length > _eventProcessingLockMaxSize) {
       _eventProcessingLock.clear();
     }
 
-    if (_noteCache.length > 8000) {
+    if (_noteCache.length > _noteCacheMaxSize) {
       final sortedNotes = _noteCache.values.toList()
         ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
       
-      final notesToRemove = sortedNotes.skip(5000).map((n) => n.id).toList();
+      final notesToRemove = sortedNotes.skip(_noteCacheKeepSize).map((n) => n.id).toList();
       for (final id in notesToRemove) {
         _noteCache.remove(id);
         _eventIds.remove(id);
@@ -1486,43 +1453,31 @@ class DataService {
       );
 
       final serializedRequest = NostrService.createRequest(filter);
-      final requestJson = jsonDecode(serializedRequest) as List;
-      final subscriptionId = requestJson[1] as String;
-      final allRelays = _relayManager.relayUrls.toList();
-
+      final subscriptionId = _extractSubscriptionId(serializedRequest);
       final fetchedNotes = <String, NoteModel>{};
 
-      await Future.wait(allRelays.map((relayUrl) async {
-        try {
-          final completer = await _relayManager.sendQuery(
-            relayUrl,
-            serializedRequest,
-            subscriptionId,
-            timeout: const Duration(seconds: 30),
-            onEvent: (data, url) {
-              try {
-                final eventData = data;
-                final eventAuthor = eventData['pubkey'] as String? ?? '';
-                final eventKind = eventData['kind'] as int? ?? 0;
-                final eventId = eventData['id'] as String? ?? '';
+      await _queryAllRelays(
+        request: serializedRequest,
+        subscriptionId: subscriptionId,
+        timeout: const Duration(seconds: _longQueryTimeoutSeconds),
+        onEvent: (data, url) {
+          try {
+            final eventData = data;
+            final eventAuthor = eventData['pubkey'] as String? ?? '';
+            final eventKind = eventData['kind'] as int? ?? 0;
+            final eventId = eventData['id'] as String? ?? '';
 
-                if (eventAuthor == pubkeyHex && (eventKind == 1 || eventKind == 6) && eventId.isNotEmpty) {
-                  if (!fetchedNotes.containsKey(eventId)) {
-                    final note = _processProfileEventDirectlySync(eventData, userNpub);
-                    if (note != null) {
-                      fetchedNotes[eventId] = note;
-                    }
-                  }
+            if (eventAuthor == pubkeyHex && (eventKind == 1 || eventKind == 6) && eventId.isNotEmpty) {
+              if (!fetchedNotes.containsKey(eventId)) {
+                final note = _processProfileEventDirectlySync(eventData, userNpub);
+                if (note != null) {
+                  fetchedNotes[eventId] = note;
                 }
-              } catch (e) {
               }
-            },
-          );
-
-          await completer.future.timeout(const Duration(seconds: 30), onTimeout: () {});
-        } catch (e) {
-        }
-      }));
+            }
+          } catch (_) {}
+        },
+      );
 
       for (final note in fetchedNotes.values) {
         _addNoteToCache(note);
@@ -1571,42 +1526,8 @@ class DataService {
       final content = eventData['content'] as String;
       final tags = eventData['tags'] as List<dynamic>? ?? [];
 
-      String? rootId;
-      String? parentId;
-      final List<Map<String, String>> eTags = [];
-      final List<Map<String, String>> pTags = [];
-
-      for (final tag in tags) {
-        if (tag is List && tag.isNotEmpty) {
-          if (tag[0] == 'e' && tag.length >= 2) {
-            final eventId = tag[1] as String;
-            final relayUrl = tag.length > 2 ? (tag[2] as String? ?? '') : '';
-            final marker = tag.length >= 4 ? tag[3] as String : '';
-            final pubkeyTag = tag.length > 4 ? (tag[4] as String? ?? '') : '';
-
-            eTags.add({
-              'eventId': eventId,
-              'relayUrl': relayUrl,
-              'marker': marker,
-              'pubkey': pubkeyTag,
-            });
-
-            if (marker == 'root') {
-              rootId = eventId;
-            } else if (marker == 'reply') {
-              parentId = eventId;
-            }
-          } else if (tag[0] == 'p' && tag.length >= 2) {
-            pTags.add({
-              'pubkey': tag[1] as String,
-              'relayUrl': tag.length > 2 ? (tag[2] as String? ?? '') : '',
-              'petname': tag.length > 3 ? (tag[3] as String? ?? '') : '',
-            });
-          }
-        }
-      }
-
-      final bool isReply = rootId != null;
+      final parsedTags = _parseTags(tags, includeTTags: false);
+      final isReply = parsedTags.rootId != null;
 
       final note = NoteModel(
         id: id,
@@ -1615,16 +1536,16 @@ class DataService {
         timestamp: timestamp,
         isReply: isReply,
         isRepost: false,
-        rootId: rootId,
-        parentId: parentId,
+        rootId: parsedTags.rootId,
+        parentId: parsedTags.parentId,
         repostedBy: null,
         reactionCount: 0,
         replyCount: 0,
         repostCount: 0,
         zapAmount: 0,
         rawWs: jsonEncode(eventData),
-        eTags: eTags,
-        pTags: pTags,
+        eTags: parsedTags.eTags,
+        pTags: parsedTags.pTags,
       );
 
       return note;
@@ -1719,7 +1640,6 @@ class DataService {
     try {
       final targetHashtag = hashtag.toLowerCase();
 
-      final allRelays = _relayManager.relayUrls.toList();
       final filterMap = {
         'kinds': [1],
         '#t': [targetHashtag],
@@ -1730,47 +1650,38 @@ class DataService {
 
       final subscriptionId = NostrService.generateUUID();
       final serializedRequest = jsonEncode(['REQ', subscriptionId, filterMap]);
-
       final hashtagNotes = <NoteModel>[];
 
-      await Future.wait(allRelays.map((relayUrl) async {
-        try {
-          final completer = await _relayManager.sendQuery(
-            relayUrl,
-            serializedRequest,
-            subscriptionId,
-            timeout: const Duration(seconds: 30),
-            onEvent: (data, url) {
-              try {
-                final eventData = data;
-                final eventId = eventData['id'] as String? ?? '';
-                final eventKind = eventData['kind'] as int? ?? 0;
+      await _queryAllRelays(
+        request: serializedRequest,
+        subscriptionId: subscriptionId,
+        timeout: const Duration(seconds: _longQueryTimeoutSeconds),
+        checkClosed: false,
+        onEvent: (data, url) {
+          try {
+            final eventData = data;
+            final eventId = eventData['id'] as String? ?? '';
+            final eventKind = eventData['kind'] as int? ?? 0;
 
-                if (eventKind == 1 && eventId.isNotEmpty) {
-                  if (_eventIds.contains(eventId)) {
-                    final cachedNote = _noteCache[eventId];
-                    if (cachedNote != null && !hashtagNotes.any((n) => n.id == eventId)) {
-                      hashtagNotes.add(cachedNote);
-                    }
-                  } else {
-                    final note = _processHashtagEventDirectlySync(eventData);
-                    if (note != null) {
-                      _addNoteToCache(note);
-                      if (!hashtagNotes.any((n) => n.id == eventId)) {
-                        hashtagNotes.add(note);
-                      }
-                    }
+            if (eventKind == 1 && eventId.isNotEmpty) {
+              if (_eventIds.contains(eventId)) {
+                final cachedNote = _noteCache[eventId];
+                if (cachedNote != null && !hashtagNotes.any((n) => n.id == eventId)) {
+                  hashtagNotes.add(cachedNote);
+                }
+              } else {
+                final note = _processHashtagEventDirectlySync(eventData);
+                if (note != null) {
+                  _addNoteToCache(note);
+                  if (!hashtagNotes.any((n) => n.id == eventId)) {
+                    hashtagNotes.add(note);
                   }
                 }
-              } catch (e) {
               }
-            },
-          );
-
-          await completer.future.timeout(const Duration(seconds: 30), onTimeout: () {});
-        } catch (e) {
-        }
-      }));
+            }
+          } catch (_) {}
+        },
+      );
 
       final validatedHashtagNotes = hashtagNotes.where((note) {
         if (note.tTags.isNotEmpty) {
@@ -1821,48 +1732,8 @@ class DataService {
       final authorNpub = _authService.hexToNpub(pubkey) ?? pubkey;
       final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
 
-      String? rootId;
-      String? parentId;
-      final List<Map<String, String>> eTags = [];
-      final List<Map<String, String>> pTags = [];
-      final List<String> tTags = [];
-
-      for (final tag in tags) {
-        if (tag is List && tag.isNotEmpty) {
-          if (tag[0] == 'e' && tag.length >= 2) {
-            final eventId = tag[1] as String;
-            final relayUrl = tag.length > 2 ? (tag[2] as String? ?? '') : '';
-            final marker = tag.length >= 4 ? tag[3] as String : '';
-            final pubkeyTag = tag.length > 4 ? (tag[4] as String? ?? '') : '';
-
-            eTags.add({
-              'eventId': eventId,
-              'relayUrl': relayUrl,
-              'marker': marker,
-              'pubkey': pubkeyTag,
-            });
-
-            if (marker == 'root') {
-              rootId = eventId;
-            } else if (marker == 'reply') {
-              parentId = eventId;
-            }
-          } else if (tag[0] == 'p' && tag.length >= 2) {
-            pTags.add({
-              'pubkey': tag[1] as String,
-              'relayUrl': tag.length > 2 ? (tag[2] as String? ?? '') : '',
-              'petname': tag.length > 3 ? (tag[3] as String? ?? '') : '',
-            });
-          } else if (tag[0] == 't' && tag.length >= 2) {
-            final hashtag = (tag[1] as String).toLowerCase();
-            if (!tTags.contains(hashtag)) {
-              tTags.add(hashtag);
-            }
-          }
-        }
-      }
-
-      final bool isReply = rootId != null;
+      final parsedTags = _parseTags(tags);
+      final isReply = parsedTags.rootId != null;
 
       final note = NoteModel(
         id: id,
@@ -1871,17 +1742,17 @@ class DataService {
         timestamp: timestamp,
         isReply: isReply,
         isRepost: false,
-        rootId: rootId,
-        parentId: parentId,
+        rootId: parsedTags.rootId,
+        parentId: parsedTags.parentId,
         repostedBy: null,
         reactionCount: 0,
         replyCount: 0,
         repostCount: 0,
         zapAmount: 0,
         rawWs: jsonEncode(eventData),
-        eTags: eTags,
-        pTags: pTags,
-        tTags: tTags,
+        eTags: parsedTags.eTags,
+        pTags: parsedTags.pTags,
+        tTags: parsedTags.tTags,
       );
 
       return note;
@@ -1932,7 +1803,7 @@ class DataService {
       await _relayManager.broadcast(serializedRequest);
 
       final user = await completer.future.timeout(
-        const Duration(milliseconds: 1500),
+        const Duration(milliseconds: _profileFetchTimeoutMs),
         onTimeout: () => null,
       );
 
@@ -1995,17 +1866,7 @@ class DataService {
         return Result.error('Failed to create note event: $e');
       }
 
-      try {
-        if (_relayManager.activeSockets.isEmpty) {
-          await _relayManager.connectRelays(
-            [],
-            onEvent: _handleRelayEvent,
-            onDisconnected: _handleRelayDisconnection,
-            serviceId: 'note_post',
-          );
-        }
-      } catch (e) {
-      }
+      await _ensureRelayConnection();
 
       await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
 
@@ -2128,17 +1989,7 @@ class DataService {
         privateKey: privateKey,
       );
 
-      try {
-        if (_relayManager.activeSockets.isEmpty) {
-          await _relayManager.connectRelays(
-            [],
-            onEvent: _handleRelayEvent,
-            onDisconnected: _handleRelayDisconnection,
-            serviceId: 'repost',
-          );
-        }
-      } catch (e) {
-      }
+      await _ensureRelayConnection('repost');
 
       await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
 
@@ -2403,17 +2254,7 @@ class DataService {
       );
 
 
-      try {
-        if (_relayManager.activeSockets.isEmpty) {
-          await _relayManager.connectRelays(
-            [],
-            onEvent: _handleRelayEvent,
-            onDisconnected: _handleRelayDisconnection,
-            serviceId: 'profile_update',
-          );
-        }
-      } catch (e) {
-      }
+      await _ensureRelayConnection('profile_update');
 
       await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
 
@@ -2478,53 +2319,44 @@ class DataService {
       final request = ['REQ', subscriptionId, filter];
       final serializedRequest = jsonEncode(request);
 
-      final allRelays = _relayManager.relayUrls.toList();
-      if (allRelays.isEmpty) {
+      if (_allRelays.isEmpty) {
         return const Result.error('No relays available');
       }
 
       final fetchedNotifications = <String, NotificationModel>{};
 
-      await Future.wait(allRelays.map((relayUrl) async {
-        try {
-          final completer = await _relayManager.sendQuery(
-            relayUrl,
-            serializedRequest,
-            subscriptionId,
-            timeout: const Duration(seconds: 30),
-            onEvent: (eventData, url) {
-              try {
-                final eventId = eventData['id'] as String? ?? '';
-                final eventKind = eventData['kind'] as int? ?? 0;
-                final eventPubkey = eventData['pubkey'] as String? ?? '';
-                final eventCreatedAt = eventData['created_at'] as int? ?? 0;
-                final eventTags = eventData['tags'] as List<dynamic>? ?? [];
-                final eventContent = eventData['content'] as String? ?? '';
+      await _queryAllRelays(
+        request: serializedRequest,
+        subscriptionId: subscriptionId,
+        timeout: const Duration(seconds: _longQueryTimeoutSeconds),
+        checkClosed: false,
+        onEvent: (eventData, url) {
+          try {
+            final eventId = eventData['id'] as String? ?? '';
+            final eventKind = eventData['kind'] as int? ?? 0;
+            final eventPubkey = eventData['pubkey'] as String? ?? '';
+            final eventCreatedAt = eventData['created_at'] as int? ?? 0;
+            final eventTags = eventData['tags'] as List<dynamic>? ?? [];
+            final eventContent = eventData['content'] as String? ?? '';
 
-                if (eventId.isEmpty || eventPubkey.isEmpty) return;
+            if (eventId.isEmpty || eventPubkey.isEmpty) return;
 
-                final notification = _processNotificationEvent(
-                  eventId: eventId,
-                  eventKind: eventKind,
-                  eventPubkey: eventPubkey,
-                  eventCreatedAt: eventCreatedAt,
-                  eventTags: eventTags,
-                  eventContent: eventContent,
-                  targetUserHex: pubkeyHex,
-                );
+            final notification = _processNotificationEvent(
+              eventId: eventId,
+              eventKind: eventKind,
+              eventPubkey: eventPubkey,
+              eventCreatedAt: eventCreatedAt,
+              eventTags: eventTags,
+              eventContent: eventContent,
+              targetUserHex: pubkeyHex,
+            );
 
-                if (notification != null && !fetchedNotifications.containsKey(notification.id)) {
-                  fetchedNotifications[notification.id] = notification;
-                }
-              } catch (e) {
-              }
-            },
-          );
-
-          await completer.future.timeout(const Duration(seconds: 30), onTimeout: () {});
-        } catch (e) {
-        }
-      }));
+            if (notification != null && !fetchedNotifications.containsKey(notification.id)) {
+              fetchedNotifications[notification.id] = notification;
+            }
+          } catch (_) {}
+        },
+      );
 
       final notificationsList = fetchedNotifications.values.toList();
       notificationsList.sort((a, b) => b.timestamp.compareTo(a.timestamp));
@@ -2564,52 +2396,25 @@ class DataService {
       String actualAuthor = eventPubkey;
 
       if (eventKind == 1) {
-        final pTags = eventTags.where((tag) => tag is List && tag.isNotEmpty && tag[0] == 'p').toList();
-        if (pTags.isNotEmpty && (pTags.first as List)[1] == targetUserHex) {
+        final mentionedUser = _getTagValue(eventTags, 'p');
+        if (mentionedUser == targetUserHex) {
           notificationType = 'mention';
-          final eTags = eventTags.where((tag) => tag is List && tag.isNotEmpty && tag[0] == 'e').toList();
-          if (eTags.isNotEmpty) {
-            targetEventId = (eTags.first as List)[1] as String?;
-          }
-          if (targetEventId == null) {
-            targetEventId = eventId;
-          }
+          targetEventId = _getTagValue(eventTags, 'e') ?? eventId;
         } else {
           return null;
         }
       } else if (eventKind == 6) {
         notificationType = 'repost';
-        final eTags = eventTags.where((tag) => tag is List && tag.isNotEmpty && tag[0] == 'e').toList();
-        if (eTags.isNotEmpty) {
-          targetEventId = (eTags.first as List)[1] as String?;
-        }
+        targetEventId = _getTagValue(eventTags, 'e');
       } else if (eventKind == 7) {
         notificationType = 'reaction';
-        final eTags = eventTags.where((tag) => tag is List && tag.isNotEmpty && tag[0] == 'e').toList();
-        if (eTags.isNotEmpty) {
-          targetEventId = (eTags.first as List)[1] as String?;
-        }
+        targetEventId = _getTagValue(eventTags, 'e');
       } else if (eventKind == 9735) {
         notificationType = 'zap';
-        final eTags = eventTags.where((tag) => tag is List && tag.isNotEmpty && tag[0] == 'e').toList();
-        if (eTags.isNotEmpty) {
-          targetEventId = (eTags.first as List)[1] as String?;
-        }
+        targetEventId = _getTagValue(eventTags, 'e');
 
-        String getTagValue(String key) {
-          try {
-            final tag = eventTags.firstWhere(
-              (t) => t is List && t.isNotEmpty && t[0] == key,
-              orElse: () => [key, ''],
-            );
-            return (tag as List).length > 1 ? (tag[1] as String? ?? '') : '';
-          } catch (e) {
-            return '';
-          }
-        }
-
-        final bolt11 = getTagValue('bolt11');
-        final descriptionJson = getTagValue('description');
+        final bolt11 = _getTagValue(eventTags, 'bolt11') ?? '';
+        final descriptionJson = _getTagValue(eventTags, 'description') ?? '';
 
         zapAmount = parseAmountFromBolt11(bolt11);
 
@@ -2666,48 +2471,25 @@ class DataService {
       final serializedRequest = NostrService.serializeRequest(request);
 
       final following = <String>{};
-      final allRelays = _relayManager.relayUrls.toList();
       final processedEventIds = <String>{};
+      final subscriptionId = _extractSubscriptionId(serializedRequest);
 
-      final requestJson = jsonDecode(serializedRequest) as List;
-      final subscriptionId = requestJson[1] as String;
+      await _queryAllRelays(
+        request: serializedRequest,
+        subscriptionId: subscriptionId,
+        onEvent: (eventData, url) {
+          try {
+            final eventId = eventData['id'] as String;
+            final eventAuthor = eventData['pubkey'] as String;
+            final eventKind = eventData['kind'] as int;
 
-      await Future.wait(allRelays.map((relayUrl) async {
-        try {
-          if (_isClosed) {
-            return;
-          }
-
-          final completer = await _relayManager.sendQuery(
-            relayUrl,
-            serializedRequest,
-            subscriptionId,
-            timeout: const Duration(seconds: 3),
-            onEvent: (eventData, url) {
-              try {
-                final eventId = eventData['id'] as String;
-                final eventAuthor = eventData['pubkey'] as String;
-                final eventKind = eventData['kind'] as int;
-
-                if (eventAuthor == pubkeyHex && eventKind == 3 && !processedEventIds.contains(eventId)) {
-                  processedEventIds.add(eventId);
-
-                  final tags = eventData['tags'] as List<dynamic>;
-                  for (var tag in tags) {
-                    if (tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length >= 2) {
-                      following.add(tag[1] as String);
-                    }
-                  }
-                }
-              } catch (e) {
-              }
-            },
-          );
-
-          await completer.future;
-        } catch (e) {
-        }
-      }));
+            if (eventAuthor == pubkeyHex && eventKind == 3 && !processedEventIds.contains(eventId)) {
+              processedEventIds.add(eventId);
+              following.addAll(_extractPTags(eventData['tags'] as List<dynamic>));
+            }
+          } catch (_) {}
+        },
+      );
 
       final uniqueFollowing = following.toList();
 
@@ -2723,51 +2505,34 @@ class DataService {
         return true;
       }
 
-      final allRelays = _relayManager.relayUrls.toList();
       bool noteFound = false;
+      final filter = NostrService.createEventByIdFilter(eventIds: [noteId]);
+      final request = NostrService.createRequest(filter);
+      final serializedRequest = NostrService.serializeRequest(request);
+      final subscriptionId = _extractSubscriptionId(serializedRequest);
 
-      await Future.wait(allRelays.map((relayUrl) async {
-        try {
-          if (_isClosed) {
-            return;
-          }
+      await _queryAllRelays(
+        request: serializedRequest,
+        subscriptionId: subscriptionId,
+        onEvent: (eventData, url) {
+          try {
+            final eventId = eventData['id'] as String;
 
-          final filter = NostrService.createEventByIdFilter(eventIds: [noteId]);
-          final request = NostrService.createRequest(filter);
-          final serializedRequest = NostrService.serializeRequest(request);
-          final requestJson = jsonDecode(serializedRequest) as List;
-          final subscriptionId = requestJson[1] as String;
-
-          final completer = await _relayManager.sendQuery(
-            relayUrl,
-            serializedRequest,
-            subscriptionId,
-            timeout: const Duration(seconds: 3),
-            onEvent: (eventData, url) {
-              try {
-                final eventId = eventData['id'] as String;
-
-                if (eventId == noteId) {
-                  final kind = eventData['kind'] as int;
-                  if (kind == 1 || kind == 6) {
-                    final pubkeyHex = eventData['pubkey'] as String;
-                    final userNpub = _authService.hexToNpub(pubkeyHex) ?? pubkeyHex;
-                    final note = _processProfileEventDirectlySync(eventData, userNpub);
-                    if (note != null) {
-                      _addNoteToCache(note);
-                      noteFound = true;
-                    }
-                  }
+            if (eventId == noteId) {
+              final kind = eventData['kind'] as int;
+              if (kind == 1 || kind == 6) {
+                final pubkeyHex = eventData['pubkey'] as String;
+                final userNpub = _authService.hexToNpub(pubkeyHex) ?? pubkeyHex;
+                final note = _processProfileEventDirectlySync(eventData, userNpub);
+                if (note != null) {
+                  _addNoteToCache(note);
+                  noteFound = true;
                 }
-              } catch (e) {
               }
-            },
-          );
-
-          await completer.future;
-        } catch (e) {
-        }
-      }));
+            }
+          } catch (_) {}
+        },
+      );
 
       return noteFound || _noteCache.containsKey(noteId);
     } catch (e) {
@@ -2878,7 +2643,7 @@ class DataService {
 
         try {
           return await completer.future.timeout(
-            const Duration(seconds: 5),
+            const Duration(seconds: _followerCountTimeoutSeconds),
             onTimeout: () {
               _pendingCountRequests.remove(subscriptionId);
               throw TimeoutException('Follower COUNT timeout');
@@ -2933,59 +2698,48 @@ class DataService {
       final deletionKinds = [5];
       final quoteKinds = [1];
 
-      await Future.wait(allRelays.map((relayUrl) async {
-        try {
-          if (_isClosed) return;
+      final quoteFilter = NostrService.createQuoteFilter(
+        kinds: quoteKinds,
+        quotedEventIds: targetNoteIds,
+        limit: 1000,
+      );
 
-          final quoteFilter = NostrService.createQuoteFilter(
-            kinds: quoteKinds,
-            quotedEventIds: targetNoteIds,
-            limit: 1000,
-          );
+      final filters = [
+        NostrService.createInteractionFilter(
+          kinds: interactionKinds,
+          eventIds: targetNoteIds,
+          limit: 1000,
+        ),
+        NostrService.createInteractionFilter(
+          kinds: deletionKinds,
+          eventIds: targetNoteIds,
+          limit: 100,
+        ),
+        quoteFilter,
+      ];
 
-          final filters = [
-            NostrService.createInteractionFilter(
-              kinds: interactionKinds,
-              eventIds: targetNoteIds,
-              limit: 1000,
-            ),
-            NostrService.createInteractionFilter(
-              kinds: deletionKinds,
-              eventIds: targetNoteIds,
-              limit: 100,
-            ),
-            quoteFilter,
-          ];
+      final request = NostrService.createMultiFilterRequest(filters);
+      final subscriptionId = _extractSubscriptionId(request);
 
-          final request = NostrService.createMultiFilterRequest(filters);
-          final requestJson = jsonDecode(request) as List;
-          final subscriptionId = requestJson[1] as String;
+      await _queryAllRelays(
+        request: request,
+        subscriptionId: subscriptionId,
+        checkClosed: false,
+        onEvent: (eventData, url) {
+          try {
+            final eventId = eventData['id'] as String;
+            final eventKind = eventData['kind'] as int;
 
-          final completer = await _relayManager.sendQuery(
-            relayUrl,
-            request,
-            subscriptionId,
-            onEvent: (eventData, url) {
-              try {
-                final eventId = eventData['id'] as String;
-                final eventKind = eventData['kind'] as int;
-
-                if ((interactionKinds.contains(eventKind) || 
-                     deletionKinds.contains(eventKind) || 
-                     quoteKinds.contains(eventKind)) && 
-                    !processedInteractionIds.contains(eventId)) {
-                  processedInteractionIds.add(eventId);
-                  unawaited(_processNostrEvent(eventData));
-                }
-              } catch (e) {
-              }
-            },
-          );
-
-          await completer.future;
-        } catch (e) {
-        }
-      }));
+            if ((interactionKinds.contains(eventKind) || 
+                 deletionKinds.contains(eventKind) || 
+                 quoteKinds.contains(eventKind)) && 
+                !processedInteractionIds.contains(eventId)) {
+              processedInteractionIds.add(eventId);
+              unawaited(_processNostrEvent(eventData));
+            }
+          } catch (_) {}
+        },
+      );
 
       for (final noteId in targetNoteIds) {
         final note = _noteCache[noteId];
@@ -3058,17 +2812,7 @@ class DataService {
         additionalTags: additionalTags,
       );
 
-      try {
-        if (_relayManager.activeSockets.isEmpty) {
-          await _relayManager.connectRelays(
-            [],
-            onEvent: _handleRelayEvent,
-            onDisconnected: _handleRelayDisconnection,
-            serviceId: 'quote_post',
-          );
-        }
-      } catch (e) {
-      }
+      await _ensureRelayConnection('quote_post');
 
       await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
 
@@ -3122,17 +2866,7 @@ class DataService {
         reason: reason,
       );
 
-      try {
-        if (_relayManager.activeSockets.isEmpty) {
-          await _relayManager.connectRelays(
-            [],
-            onEvent: _handleRelayEvent,
-            onDisconnected: _handleRelayDisconnection,
-            serviceId: 'note_delete',
-          );
-        }
-      } catch (e) {
-      }
+      await _ensureRelayConnection('note_delete');
 
       await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
 
@@ -3190,17 +2924,7 @@ class DataService {
 
       final currentUserNpub = currentUserResult.data!;
 
-      try {
-        if (_relayManager.activeSockets.isEmpty) {
-          await _relayManager.connectRelays(
-            [],
-            onEvent: _handleRelayEvent,
-            onDisconnected: _handleRelayDisconnection,
-            serviceId: 'follow_event',
-          );
-        }
-      } catch (e) {
-      }
+      await _ensureRelayConnection('follow_event');
 
       final event = NostrService.createFollowEvent(
         followingPubkeys: followingHexList,
@@ -3244,48 +2968,25 @@ class DataService {
       final serializedRequest = NostrService.serializeRequest(request);
 
       final muted = <String>{};
-      final allRelays = _relayManager.relayUrls.toList();
       final processedEventIds = <String>{};
+      final subscriptionId = _extractSubscriptionId(serializedRequest);
 
-      final requestJson = jsonDecode(serializedRequest) as List;
-      final subscriptionId = requestJson[1] as String;
+      await _queryAllRelays(
+        request: serializedRequest,
+        subscriptionId: subscriptionId,
+        onEvent: (eventData, url) {
+          try {
+            final eventId = eventData['id'] as String;
+            final eventAuthor = eventData['pubkey'] as String;
+            final eventKind = eventData['kind'] as int;
 
-      await Future.wait(allRelays.map((relayUrl) async {
-        try {
-          if (_isClosed) {
-            return;
-          }
-
-          final completer = await _relayManager.sendQuery(
-            relayUrl,
-            serializedRequest,
-            subscriptionId,
-            timeout: const Duration(seconds: 3),
-            onEvent: (eventData, url) {
-              try {
-                final eventId = eventData['id'] as String;
-                final eventAuthor = eventData['pubkey'] as String;
-                final eventKind = eventData['kind'] as int;
-
-                if (eventAuthor == pubkeyHex && eventKind == 10000 && !processedEventIds.contains(eventId)) {
-                  processedEventIds.add(eventId);
-
-                  final tags = eventData['tags'] as List<dynamic>;
-                  for (var tag in tags) {
-                    if (tag is List && tag.isNotEmpty && tag[0] == 'p' && tag.length >= 2) {
-                      muted.add(tag[1] as String);
-                    }
-                  }
-                }
-              } catch (e) {
-              }
-            },
-          );
-
-          await completer.future;
-        } catch (e) {
-        }
-      }));
+            if (eventAuthor == pubkeyHex && eventKind == 10000 && !processedEventIds.contains(eventId)) {
+              processedEventIds.add(eventId);
+              muted.addAll(_extractPTags(eventData['tags'] as List<dynamic>));
+            }
+          } catch (_) {}
+        },
+      );
 
       final uniqueMuted = muted.toList();
 
@@ -3312,17 +3013,7 @@ class DataService {
 
       final currentUserNpub = currentUserResult.data!;
 
-      try {
-        if (_relayManager.activeSockets.isEmpty) {
-          await _relayManager.connectRelays(
-            [],
-            onEvent: _handleRelayEvent,
-            onDisconnected: _handleRelayDisconnection,
-            serviceId: 'mute_event',
-          );
-        }
-      } catch (e) {
-      }
+      await _ensureRelayConnection('mute_event');
 
       final event = NostrService.createMuteEvent(
         mutedPubkeys: mutedHexList,
@@ -3495,6 +3186,22 @@ class DataService {
     _noteDeletedController.close();
     clearCaches();
   }
+}
+
+class ParsedTags {
+  final List<Map<String, String>> eTags;
+  final List<Map<String, String>> pTags;
+  final List<String> tTags;
+  final String? rootId;
+  final String? parentId;
+
+  ParsedTags({
+    required this.eTags,
+    required this.pTags,
+    required this.tTags,
+    this.rootId,
+    this.parentId,
+  });
 }
 
 class CachedProfile {
