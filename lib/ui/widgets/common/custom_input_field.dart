@@ -13,11 +13,14 @@ class CustomInputField extends StatelessWidget {
   final VoidCallback? onTap;
   final bool autofocus;
   final bool enabled;
+  final bool readOnly;
   final int? maxLines;
   final int? maxLength;
   final TextInputType? keyboardType;
   final String? Function(String?)? validator;
   final void Function(String)? onChanged;
+  final VoidCallback? onEditingComplete;
+  final void Function(String)? onSubmitted;
   final FocusNode? focusNode;
   final Color? fillColor;
   final EdgeInsets? contentPadding;
@@ -36,11 +39,14 @@ class CustomInputField extends StatelessWidget {
     this.onTap,
     this.autofocus = false,
     this.enabled = true,
+    this.readOnly = false,
     this.maxLines = 1,
     this.maxLength,
     this.keyboardType,
     this.validator,
     this.onChanged,
+    this.onEditingComplete,
+    this.onSubmitted,
     this.focusNode,
     this.fillColor,
     this.contentPadding,
@@ -84,10 +90,13 @@ class CustomInputField extends StatelessWidget {
         focusNode: focusNode,
         autofocus: autofocus,
         enabled: enabled,
+        readOnly: readOnly,
         maxLines: maxLines,
         maxLength: maxLength,
         keyboardType: keyboardType,
         onChanged: onChanged,
+        onEditingComplete: onEditingComplete,
+        onFieldSubmitted: onSubmitted,
         onTap: onTap,
         validator: validator,
         style: style ?? TextStyle(
@@ -103,10 +112,13 @@ class CustomInputField extends StatelessWidget {
         focusNode: focusNode,
         autofocus: autofocus,
         enabled: enabled,
+        readOnly: readOnly,
         maxLines: maxLines,
         maxLength: maxLength,
         keyboardType: keyboardType,
         onChanged: onChanged,
+        onEditingComplete: onEditingComplete,
+        onSubmitted: onSubmitted,
         onTap: onTap,
         style: style ?? TextStyle(
           color: colors.textPrimary,

@@ -11,6 +11,7 @@ import '../../../core/di/app_di.dart';
 import '../../../data/repositories/note_repository.dart';
 import '../../../data/services/event_verifier.dart';
 import '../dialogs/zap_dialog.dart';
+import 'package:provider/provider.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import '../dialogs/delete_note_dialog.dart';
 import '../common/snackbar_widget.dart';
@@ -405,6 +406,68 @@ class _InteractionBarState extends State<InteractionBar> {
     if (widget.note == null || currentState.hasZapped || !mounted) return;
 
     final noteToZap = _findNote() ?? widget.note!;
+    final themeManager = Provider.of<ThemeManager>(context, listen: false);
+
+    if (themeManager.oneTapZap) {
+      _stateNotifier.value = _InteractionState(
+        reactionCount: currentState.reactionCount,
+        repostCount: currentState.repostCount,
+        replyCount: currentState.replyCount,
+        zapAmount: currentState.zapAmount,
+        hasReacted: currentState.hasReacted,
+        hasReposted: currentState.hasReposted,
+        hasZapped: true,
+      );
+
+      await processZapDirectly(
+        context,
+        noteToZap,
+        themeManager.defaultZapAmount,
+      );
+
+      if (!mounted) return;
+
+      final updatedState = _computeInitialState();
+      _stateNotifier.value = _InteractionState(
+        reactionCount: updatedState.reactionCount,
+        repostCount: updatedState.repostCount,
+        replyCount: updatedState.replyCount,
+        zapAmount: updatedState.zapAmount,
+        hasReacted: updatedState.hasReacted,
+        hasReposted: updatedState.hasReposted,
+        hasZapped: updatedState.hasZapped,
+      );
+    } else {
+      _stateNotifier.value = _InteractionState(
+        reactionCount: currentState.reactionCount,
+        repostCount: currentState.repostCount,
+        replyCount: currentState.replyCount,
+        zapAmount: currentState.zapAmount,
+        hasReacted: currentState.hasReacted,
+        hasReposted: currentState.hasReposted,
+        hasZapped: true,
+      );
+
+      final zapResult = await showZapDialog(
+        context: context,
+        note: noteToZap,
+      );
+
+      if (!mounted) return;
+
+      final zapSuccess = zapResult['success'] as bool;
+      if (!zapSuccess) {
+        _stateNotifier.value = currentState;
+      }
+    }
+  }
+
+  void _handleZapLongPress() async {
+    HapticFeedback.mediumImpact();
+    final currentState = _stateNotifier.value;
+    if (widget.note == null || currentState.hasZapped || !mounted) return;
+
+    final noteToZap = _findNote() ?? widget.note!;
 
     _stateNotifier.value = _InteractionState(
       reactionCount: currentState.reactionCount,
@@ -578,6 +641,7 @@ class _InteractionBarState extends State<InteractionBar> {
                 activeColor: colors.zap,
                 inactiveColor: colors.secondary,
                 onTap: _handleZapTap,
+                onLongPress: _handleZapLongPress,
                 activeCarbonIcon: CarbonIcons.flash_filled,
                 isBigSize: widget.isBigSize,
                 buttonType: _ButtonType.zap,
@@ -775,6 +839,7 @@ class _InteractionButton extends StatelessWidget {
   final Color activeColor;
   final Color inactiveColor;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   final bool isBigSize;
   final _ButtonType buttonType;
 
@@ -788,6 +853,7 @@ class _InteractionButton extends StatelessWidget {
     required this.activeColor,
     required this.inactiveColor,
     required this.onTap,
+    this.onLongPress,
     required this.isBigSize,
     this.buttonType = _ButtonType.reply,
   });
@@ -800,31 +866,35 @@ class _InteractionButton extends StatelessWidget {
     final spacing = isBigSize ? 7.0 : 6.5;
 
     return RepaintBoundary(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              _buildIcon(iconSize, effectiveColor),
-              if (count > 0) ...[
-                SizedBox(width: spacing),
-                Transform.translate(
-                  offset: const Offset(0, -3),
-                  child: Text(
-                    _formatCount(count),
-                    style: TextStyle(
-                      fontSize: fontSize,
-                      color: effectiveColor,
-                      fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          onLongPress: onLongPress,
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _buildIcon(iconSize, effectiveColor),
+                if (count > 0) ...[
+                  SizedBox(width: spacing),
+                  Transform.translate(
+                    offset: const Offset(0, -3),
+                    child: Text(
+                      _formatCount(count),
+                      style: TextStyle(
+                        fontSize: fontSize,
+                        color: effectiveColor,
+                        fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

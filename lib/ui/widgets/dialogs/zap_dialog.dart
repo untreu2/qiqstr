@@ -249,6 +249,14 @@ Future<void> _processZapPayment(
   }
 }
 
+Future<void> processZapDirectly(
+  BuildContext context,
+  NoteModel note,
+  int sats,
+) async {
+  await _processZapPayment(context, note, sats, '');
+}
+
 Future<Map<String, dynamic>> showZapDialog({
   required BuildContext context,
   required NoteModel note,

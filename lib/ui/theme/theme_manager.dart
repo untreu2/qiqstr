@@ -7,9 +7,13 @@ class ThemeManager extends ChangeNotifier {
   static const String _themeKey = 'theme_mode';
   static const String _expandedNoteModeKey = 'expanded_note_mode';
   static const String _bottomNavOrderKey = 'bottom_nav_order';
+  static const String _oneTapZapKey = 'one_tap_zap';
+  static const String _defaultZapAmountKey = 'default_zap_amount';
   bool? _isDarkMode;
   bool _isExpandedNoteMode = false;
   List<int> _bottomNavOrder = [0, 1, 2, 3];
+  bool _oneTapZap = false;
+  int _defaultZapAmount = 21;
 
   bool get isDarkMode {
     if (_isDarkMode != null) {
@@ -22,11 +26,15 @@ class ThemeManager extends ChangeNotifier {
   bool get isSystemTheme => _isDarkMode == null;
   bool get isExpandedNoteMode => _isExpandedNoteMode;
   List<int> get bottomNavOrder => List.unmodifiable(_bottomNavOrder);
+  bool get oneTapZap => _oneTapZap;
+  int get defaultZapAmount => _defaultZapAmount;
 
   ThemeManager() {
     _loadTheme();
     _loadExpandedNoteMode();
     _loadBottomNavOrder();
+    _loadOneTapZap();
+    _loadDefaultZapAmount();
   }
 
   Future<void> _loadTheme() async {
@@ -104,6 +112,36 @@ class ThemeManager extends ChangeNotifier {
       _bottomNavOrder = List.from(order);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList(_bottomNavOrderKey, order.map((e) => e.toString()).toList());
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadOneTapZap() async {
+    final prefs = await SharedPreferences.getInstance();
+    _oneTapZap = prefs.getBool(_oneTapZapKey) ?? false;
+    notifyListeners();
+  }
+
+  Future<void> setOneTapZap(bool enabled) async {
+    if (_oneTapZap != enabled) {
+      _oneTapZap = enabled;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_oneTapZapKey, _oneTapZap);
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadDefaultZapAmount() async {
+    final prefs = await SharedPreferences.getInstance();
+    _defaultZapAmount = prefs.getInt(_defaultZapAmountKey) ?? 21;
+    notifyListeners();
+  }
+
+  Future<void> setDefaultZapAmount(int amount) async {
+    if (amount > 0 && _defaultZapAmount != amount) {
+      _defaultZapAmount = amount;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_defaultZapAmountKey, _defaultZapAmount);
       notifyListeners();
     }
   }
