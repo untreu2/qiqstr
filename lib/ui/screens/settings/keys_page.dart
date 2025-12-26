@@ -175,11 +175,14 @@ class _KeysPageState extends State<KeysPage> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    return TitleWidget(
-      title: 'Keys',
-      fontSize: 32,
-      subtitle: "Manage your Nostr identity keys.",
-      useTopPadding: true,
+    return Padding(
+      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 60),
+      child: const TitleWidget(
+        title: 'Keys',
+        fontSize: 32,
+        subtitle: "Manage your Nostr identity keys.",
+        padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+      ),
     );
   }
 

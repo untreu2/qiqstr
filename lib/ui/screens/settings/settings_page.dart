@@ -45,11 +45,14 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    return TitleWidget(
-      title: 'Settings',
-      fontSize: 32,
-      subtitle: "Manage your app preferences.",
-      useTopPadding: true,
+    return Padding(
+      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 60),
+      child: const TitleWidget(
+        title: 'Settings',
+        fontSize: 32,
+        subtitle: "Manage your app preferences.",
+        padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+      ),
     );
   }
 
@@ -64,6 +67,14 @@ class _SettingsPageState extends State<SettingsPage> {
             subtitle: '',
             svgAsset: 'assets/relay_1.svg',
             onTap: () => context.push('/relays'),
+          ),
+          const SizedBox(height: 8),
+          _buildSettingsItem(
+            context: context,
+            title: 'Your Data on Relays',
+            subtitle: '',
+            icon: CarbonIcons.data_connected,
+            onTap: () => context.push('/event-manager'),
           ),
           const SizedBox(height: 8),
           _buildSettingsItem(

@@ -41,11 +41,14 @@ class _DisplayPageState extends State<DisplayPage> {
   }
 
   Widget _buildHeader(BuildContext context) {
-    return TitleWidget(
-      title: 'Display',
-      fontSize: 32,
-      subtitle: "Customize your viewing experience.",
-      useTopPadding: true,
+    return Padding(
+      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 60),
+      child: const TitleWidget(
+        title: 'Display',
+        fontSize: 32,
+        subtitle: "Customize your viewing experience.",
+        padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+      ),
     );
   }
 

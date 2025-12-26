@@ -16,6 +16,7 @@ import '../../ui/screens/settings/settings_page.dart';
 import '../../ui/screens/settings/keys_page.dart';
 import '../../ui/screens/settings/relay_page.dart';
 import '../../ui/screens/settings/display_page.dart';
+import '../../ui/screens/settings/event_manager_page.dart';
 import '../../ui/screens/webview/webview_page.dart';
 import '../../ui/screens/dm/dm_page.dart';
 import '../../ui/screens/wallet/wallet_page.dart';
@@ -484,6 +485,11 @@ class AppRouter {
         path: '/display',
         name: 'display',
         builder: (context, state) => const DisplayPage(),
+      ),
+      GoRoute(
+        path: '/event-manager',
+        name: 'event-manager',
+        builder: (context, state) => const EventManagerPage(),
       ),
       GoRoute(
         path: '/webview',
