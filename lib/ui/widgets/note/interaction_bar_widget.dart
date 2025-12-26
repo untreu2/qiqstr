@@ -9,6 +9,7 @@ import '../../screens/note/share_note.dart';
 import '../../../models/note_model.dart';
 import '../../../core/di/app_di.dart';
 import '../../../data/repositories/note_repository.dart';
+import '../../../data/services/event_verifier.dart';
 import '../dialogs/zap_dialog.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import '../dialogs/delete_note_dialog.dart';
@@ -446,6 +447,36 @@ class _InteractionBarState extends State<InteractionBar> {
     }
   }
 
+  Future<void> _handleVerifyTap() async {
+    HapticFeedback.lightImpact();
+    if (widget.note == null || !mounted) return;
+
+    final note = _findNote() ?? widget.note!;
+    if (note.rawWs == null || note.rawWs!.isEmpty) {
+      if (mounted) {
+        AppSnackbar.error(context, 'Event data not available for verification');
+      }
+      return;
+    }
+
+    try {
+      final verifier = EventVerifier.instance;
+      final isValid = await verifier.verifyNote(note);
+
+      if (!mounted) return;
+
+      if (isValid) {
+        AppSnackbar.success(context, 'Event signature verified successfully');
+      } else {
+        AppSnackbar.error(context, 'Event signature verification failed');
+      }
+    } catch (e) {
+      if (mounted) {
+        AppSnackbar.error(context, 'Failed to verify event: $e');
+      }
+    }
+  }
+
   void _handleDeleteTap() {
     HapticFeedback.lightImpact();
     if (widget.note == null || !mounted) return;
@@ -568,6 +599,26 @@ class _InteractionBarState extends State<InteractionBar> {
 
     final items = <PopupMenuItem<String>>[
       PopupMenuItem(
+        value: 'verify',
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Row(
+            children: [
+              Icon(CarbonIcons.checkmark_filled, size: 18, color: context.colors.background),
+              const SizedBox(width: 12),
+              Text(
+                'Verify signature',
+                style: TextStyle(
+                  color: context.colors.background,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      PopupMenuItem(
         value: 'interactions',
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -628,7 +679,9 @@ class _InteractionBarState extends State<InteractionBar> {
     ).then((value) {
       if (value == null) return;
       HapticFeedback.lightImpact();
-      if (value == 'interactions') {
+      if (value == 'verify') {
+        _handleVerifyTap();
+      } else if (value == 'interactions') {
         _handleStatsTap();
       } else if (value == 'delete') {
         _handleDeleteTap();
