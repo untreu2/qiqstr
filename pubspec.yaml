@@ -78,6 +78,8 @@ dependencies:
     webview_flutter: ^4.13.0
     web_socket_channel: ^3.0.1
     go_router: ^14.6.2
+    qr_flutter: ^4.1.0
+    qr_code_scanner: ^1.0.1
 
 dev_dependencies:
     flutter_test:

@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 import '../../core/base/result.dart';
 import '../../models/wallet_model.dart';
@@ -323,7 +325,20 @@ class WalletRepository {
         return const Result.error('Amount must be greater than 0');
       }
 
-      final result = await _coinosService.payInvoice(lightningAddress);
+      // Create invoice from lightning address using LNURL
+      final invoiceResult = await _createInvoiceFromLightningAddress(
+        lightningAddress,
+        amount,
+      );
+
+      if (invoiceResult.isError) {
+        return Result.error(invoiceResult.error!);
+      }
+
+      final invoice = invoiceResult.data!;
+
+      // Pay the invoice
+      final result = await _coinosService.payInvoice(invoice);
 
       return result.fold(
         (paymentResult) {
@@ -337,6 +352,81 @@ class WalletRepository {
       );
     } catch (e) {
       return Result.error('Failed to send to lightning address: $e');
+    }
+  }
+
+  Future<Result<String>> _createInvoiceFromLightningAddress(
+    String lightningAddress,
+    int amountSatoshis,
+  ) async {
+    try {
+      final int msat = amountSatoshis * 1000;
+      String lnurlp;
+
+      if (lightningAddress.contains('@')) {
+        final parts = lightningAddress.split('@');
+        if (parts.length != 2) {
+          return const Result.error('Invalid lightning address format');
+        }
+        final user = parts[0];
+        final domain = parts[1];
+        lnurlp = 'https://$domain/.well-known/lnurlp/$user';
+      } else if (lightningAddress.toLowerCase().startsWith('lnurl')) {
+        // Decode bech32 lnurl
+        return const Result.error('Bech32 LNURL decoding not yet implemented');
+      } else {
+        return const Result.error('Invalid lightning address format');
+      }
+
+      // Fetch LNURL-pay info
+      final response = await http.get(Uri.parse(lnurlp));
+      if (response.statusCode != 200) {
+        return Result.error('Could not fetch LNURL-pay info: ${response.statusCode}');
+      }
+
+      final lnurlData = jsonDecode(response.body) as Map<String, dynamic>;
+      final minSendable = lnurlData['minSendable'] as int? ?? 0;
+      final maxSendable = lnurlData['maxSendable'] as int? ?? 0;
+
+      if (msat < minSendable || msat > maxSendable) {
+        return Result.error(
+          'Amount out of range. Minimum ${minSendable ~/ 1000} and maximum ${maxSendable ~/ 1000} satoshis allowed.',
+        );
+      }
+
+      final callbackUrl = lnurlData['callback'] as String?;
+      if (callbackUrl == null || callbackUrl.isEmpty) {
+        return const Result.error('LNURL-pay info does not contain a callback URL');
+      }
+
+      // Build callback URL with amount
+      final callbackUri = Uri.parse(callbackUrl);
+      final queryParameters = Map<String, String>.from(callbackUri.queryParameters);
+      queryParameters['amount'] = msat.toString();
+      final newUri = callbackUri.replace(queryParameters: queryParameters);
+
+      // Fetch invoice from callback
+      final invoiceResponse = await http.get(newUri);
+      if (invoiceResponse.statusCode != 200) {
+        return Result.error('Failed to fetch invoice: ${invoiceResponse.statusCode}');
+      }
+
+      final invoiceData = jsonDecode(invoiceResponse.body) as Map<String, dynamic>;
+      if (invoiceData['status'] != null &&
+          invoiceData['status'].toString().toLowerCase() == 'error') {
+        return Result.error(
+          'Invoice error: ${invoiceData['reason'] ?? 'Unknown error'}',
+        );
+      }
+
+      final invoice = invoiceData['pr'] as String?;
+      if (invoice == null || invoice.isEmpty) {
+        return const Result.error('No invoice found in response');
+      }
+
+      return Result.success(invoice);
+    } catch (e) {
+      return Result.error('Failed to create invoice from lightning address: $e');
     }
   }
 

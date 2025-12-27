@@ -113,6 +113,8 @@ class SecondaryButton extends StatelessWidget {
         side: BorderSide.none,
         backgroundColor: backgroundColor ?? colors.textPrimary,
         foregroundColor: foregroundColor ?? colors.background,
+        disabledBackgroundColor: backgroundColor ?? colors.textPrimary,
+        disabledForegroundColor: (foregroundColor ?? colors.background).withValues(alpha: 0.5),
         padding: config.padding,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(config.borderRadius),
