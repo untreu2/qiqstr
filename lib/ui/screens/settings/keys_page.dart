@@ -7,6 +7,7 @@ import 'package:qiqstr/ui/theme/theme_manager.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/common/title_widget.dart';
+import '../../widgets/dialogs/copy_key_warning_dialog.dart';
 import 'package:provider/provider.dart';
 
 class KeysPage extends StatefulWidget {
@@ -69,6 +70,15 @@ class _KeysPageState extends State<KeysPage> {
   }
 
   Future<void> _copyToClipboard(String text, String keyType) async {
+    if (keyType == 'nsec' || keyType == 'mnemonic') {
+      final shouldCopy = await showCopyKeyWarningDialog(
+        context: context,
+        keyType: keyType == 'nsec' ? 'Private Key (nsec)' : 'Seed Phrase',
+      );
+      
+      if (!shouldCopy || !mounted) return;
+    }
+
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
 
@@ -83,28 +93,53 @@ class _KeysPageState extends State<KeysPage> {
     });
   }
 
-  Widget _buildKeyTitle(BuildContext context, String title) {
+  Widget _buildKeyTitle(BuildContext context, String title, {String? description}) {
     return Padding(
       padding: const EdgeInsets.only(left: 33, right: 16, bottom: 8),
-      child: Text(
-        title,
-        style: TextStyle(
-          color: context.colors.textSecondary,
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: context.colors.textSecondary,
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (description != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              description,
+              style: TextStyle(
+                color: context.colors.textSecondary.withValues(alpha: 0.7),
+                fontSize: 13,
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
 
   Widget _buildKeyDisplayCard(BuildContext context, String title, String value, String keyType, bool isCopied) {
-    final displayValue = keyType == 'mnemonic' ? '•' * 48 : value;
-    final isMnemonic = keyType == 'mnemonic';
+    final isMasked = keyType == 'mnemonic' || keyType == 'nsec';
+    final displayValue = isMasked ? '•' * 48 : value;
+
+    String? description;
+    if (keyType == 'npub') {
+      description = 'Share this with others to receive messages and zaps.';
+    } else if (keyType == 'nsec') {
+      description = 'Keep this secret! Never share it with anyone.';
+    } else if (keyType == 'mnemonic') {
+      description = 'Use this to recover your account. Store it safely.';
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildKeyTitle(context, title),
+        _buildKeyTitle(context, title, description: description),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Container(
@@ -119,14 +154,14 @@ class _KeysPageState extends State<KeysPage> {
                 Expanded(
                   child: Text(
                     displayValue,
-                    maxLines: isMnemonic ? 3 : 1,
+                    maxLines: isMasked ? 3 : 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: context.colors.textPrimary,
                       fontSize: 16,
                       fontWeight: FontWeight.w400,
-                      letterSpacing: keyType == 'mnemonic' ? 2 : 0,
-                      height: isMnemonic ? 1.4 : 1.0,
+                      letterSpacing: isMasked ? 2 : 0,
+                      height: isMasked ? 1.4 : 1.0,
                     ),
                   ),
                 ),
