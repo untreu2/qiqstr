@@ -80,6 +80,7 @@ dependencies:
     go_router: ^14.6.2
     qr_flutter: ^4.1.0
     qr_code_scanner: ^1.0.1
+    giphy_get: ^3.6.1+1
 
 dev_dependencies:
     flutter_test:

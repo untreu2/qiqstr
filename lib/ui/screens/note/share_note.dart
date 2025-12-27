@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:giphy_get/giphy_get.dart';
 
 import '../../../core/di/app_di.dart';
 import '../../../data/services/data_service.dart';
@@ -9,6 +10,7 @@ import '../../../data/repositories/user_repository.dart';
 import '../../../data/repositories/note_repository.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import '../../../models/user_model.dart';
+import '../../../constants/giphy_api_key.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/note/quote_widget.dart';
@@ -307,6 +309,36 @@ class _ShareNotePageState extends State<ShareNotePage> {
       _showErrorSnackBar('$_errorSelectingMedia: ${e.toString()}');
     } finally {
       _setMediaUploadingState(false);
+    }
+  }
+
+  Future<void> _selectGif() async {
+    if (_isMediaUploading || !_canAddMoreMedia()) return;
+
+    try {
+      final gif = await GiphyGet.getGif(
+        context: context,
+        apiKey: giphyApiKey,
+        lang: GiphyLanguage.english,
+        tabColor: context.colors.textPrimary,
+        showGIFs: true,
+        showStickers: false,
+        showEmojis: false,
+      );
+
+      if (gif != null && gif.images != null) {
+        final gifUrl = gif.images!.original?.url ?? gif.images!.downsized?.url;
+        if (gifUrl != null && gifUrl.isNotEmpty) {
+          if (mounted) {
+            setState(() {
+              _mediaUrls.add(gifUrl);
+            });
+          }
+          debugPrint('[ShareNotePage] GIF added successfully: $gifUrl');
+        }
+      }
+    } catch (e) {
+      _showErrorSnackBar('Error selecting GIF: ${e.toString()}');
     }
   }
 
@@ -851,6 +883,8 @@ class _ShareNotePageState extends State<ShareNotePage> {
   Widget _buildAppBarActions() {
     return Row(
       children: [
+        _buildGifButton(),
+        const SizedBox(width: 8),
         _buildMediaButton(),
         const SizedBox(width: 8),
         _buildPostButton(),
@@ -914,6 +948,33 @@ class _ShareNotePageState extends State<ShareNotePage> {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGifButton() {
+    return Semantics(
+      label: 'Add GIF from Giphy',
+      button: true,
+      enabled: !_isMediaUploading,
+      child: GestureDetector(
+        onTap: _isMediaUploading ? null : _selectGif,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: context.colors.overlayLight,
+            borderRadius: BorderRadius.circular(40),
+          ),
+          child: Text(
+            'GIF',
+            style: TextStyle(
+              color: context.colors.textPrimary,
+              fontSize: _smallFontSize,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ),
