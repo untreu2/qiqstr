@@ -1047,6 +1047,21 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     );
   }
 
+  String _formatCount(int count) {
+    if (count >= 1000000) {
+      final formatted = (count / 1000000).toStringAsFixed(1);
+      return formatted.endsWith('.0')
+          ? '${formatted.substring(0, formatted.length - 2)}M'
+          : '${formatted}M';
+    } else if (count >= 1000) {
+      final formatted = (count / 1000).toStringAsFixed(1);
+      return formatted.endsWith('.0')
+          ? '${formatted.substring(0, formatted.length - 2)}K'
+          : '${formatted}K';
+    }
+    return count.toString();
+  }
+
   Widget _buildFollowerInfo(BuildContext context) {
     if (_isLoadingCounts) {
       return const SizedBox(
@@ -1058,33 +1073,6 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
     return Row(
       children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '$_followerCount',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: context.colors.textPrimary,
-                ),
-              ),
-              Text(
-                ' followers',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: context.colors.textSecondary,
-                ),
-              ),
-            ],
-          ),
-          Text(
-            ' • ',
-            style: TextStyle(
-              fontSize: 14,
-              color: context.colors.textSecondary,
-            ),
-          ),
           GestureDetector(
             onTap: () {
               final currentLocation = GoRouterState.of(context).matchedLocation;
@@ -1102,7 +1090,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  '$_followingCount',
+                  _formatCount(_followingCount),
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -1118,6 +1106,33 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                 ),
               ],
             ),
+          ),
+          Text(
+            ' • ',
+            style: TextStyle(
+              fontSize: 14,
+              color: context.colors.textSecondary,
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _formatCount(_followerCount),
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: context.colors.textPrimary,
+                ),
+              ),
+              Text(
+                ' followers',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: context.colors.textSecondary,
+                ),
+              ),
+            ],
           ),
           if (_doesUserFollowMe == true && _currentUserNpub != null && _currentUserNpub != _userNotifier.value.pubkeyHex) ...[
             Text(
