@@ -290,7 +290,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       followingResult.fold(
         (followingUsers) {
           final currentUserHex = _convertToHex(_currentUserNpub!);
-          final followingHexList = followingUsers.map((u) => u.pubkeyHex).toList();
+          final followingHexList = followingUsers.map((u) => _convertToHex(u.pubkeyHex)).whereType<String>().toList();
 
           final doesFollow = currentUserHex != null && followingHexList.contains(currentUserHex);
 
