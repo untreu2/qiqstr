@@ -244,18 +244,59 @@ class _InteractionBarState extends State<InteractionBar> {
 
     final offset = renderBox.localToGlobal(Offset.zero);
     final size = renderBox.size;
+    final hasReposted = _stateNotifier.value.hasReposted;
 
-    showMenu(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        offset.dx,
-        offset.dy + size.height,
-        offset.dx + size.width,
-        offset.dy + size.height + 200,
-      ),
-      color: context.colors.textPrimary,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
-      items: [
+    final items = <PopupMenuItem<String>>[];
+
+    if (hasReposted) {
+      items.add(
+        PopupMenuItem(
+          value: 'undo_repost',
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Icon(Icons.undo, size: 18, color: context.colors.background),
+                const SizedBox(width: 12),
+                Text(
+                  'Undo repost',
+                  style: TextStyle(
+                    color: context.colors.background,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          enabled: widget.note != null,
+        ),
+      );
+      items.add(
+        PopupMenuItem(
+          value: 'repost',
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            child: Row(
+              children: [
+                Icon(Icons.repeat, size: 18, color: context.colors.background),
+                const SizedBox(width: 12),
+                Text(
+                  'Repost again',
+                  style: TextStyle(
+                    color: context.colors.background,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          enabled: widget.note != null,
+        ),
+      );
+    } else {
+      items.add(
         PopupMenuItem(
           value: 'repost',
           child: Container(
@@ -275,42 +316,102 @@ class _InteractionBarState extends State<InteractionBar> {
               ],
             ),
           ),
-          enabled: !_stateNotifier.value.hasReposted && widget.note != null,
-        ),
-        PopupMenuItem(
-          value: 'quote',
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Row(
-              children: [
-                Icon(Icons.format_quote, size: 18, color: context.colors.background),
-                const SizedBox(width: 12),
-                Text(
-                  'Quote',
-                  style: TextStyle(
-                    color: context.colors.background,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
           enabled: widget.note != null,
         ),
-      ],
+      );
+    }
+
+    items.add(
+      PopupMenuItem(
+        value: 'quote',
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Row(
+            children: [
+              Icon(Icons.format_quote, size: 18, color: context.colors.background),
+              const SizedBox(width: 12),
+              Text(
+                'Quote',
+                style: TextStyle(
+                  color: context.colors.background,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        enabled: widget.note != null,
+      ),
+    );
+
+    showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        offset.dx,
+        offset.dy + size.height,
+        offset.dx + size.width,
+        offset.dy + size.height + 200,
+      ),
+      color: context.colors.textPrimary,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(40)),
+      items: items,
     ).then((value) {
       if (value == null) return;
       HapticFeedback.lightImpact();
       final currentState = _stateNotifier.value;
-      if (value == 'repost') {
-        if (currentState.hasReposted || widget.note == null) return;
+      if (value == 'undo_repost') {
+        if (widget.note == null) return;
+        _performDeleteRepost(currentState);
+      } else if (value == 'repost') {
+        if (widget.note == null) return;
         final noteToRepost = _findNote() ?? widget.note!;
-        _performRepost(noteToRepost, currentState);
+        if (hasReposted) {
+          _performDeleteRepost(currentState).then((_) {
+            if (mounted) {
+              final updatedState = _stateNotifier.value;
+              _performRepost(noteToRepost, updatedState);
+            }
+          });
+        } else {
+          _performRepost(noteToRepost, currentState);
+        }
       } else if (value == 'quote') {
         _handleQuoteTap();
       }
     });
+  }
+
+  Future<void> _performDeleteRepost(_InteractionState currentState) async {
+    try {
+      final result = await _noteRepository.deleteRepost(widget.noteId);
+      if (!mounted) return;
+
+      result.fold(
+        (_) {
+          if (mounted) {
+            _stateNotifier.value = _InteractionState(
+              reactionCount: currentState.reactionCount,
+              repostCount: currentState.repostCount,
+              replyCount: currentState.replyCount,
+              zapAmount: currentState.zapAmount,
+              hasReacted: currentState.hasReacted,
+              hasReposted: false,
+              hasZapped: currentState.hasZapped,
+            );
+          }
+        },
+        (error) {
+          if (mounted) {
+            AppSnackbar.error(context, 'Failed to undo repost: $error');
+          }
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        AppSnackbar.error(context, 'Failed to undo repost');
+      }
+    }
   }
 
   Future<void> _performRepost(NoteModel note, _InteractionState currentState) async {

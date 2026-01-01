@@ -432,6 +432,16 @@ class NoteRepository {
     }
   }
 
+  Future<Result<void>> deleteRepost(String noteId) async {
+    try {
+      return await _nostrDataService.deleteRepost(
+        noteId: noteId,
+      );
+    } catch (e) {
+      return Result.error('Failed to delete repost: $e');
+    }
+  }
+
   Future<Result<void>> repostNote(String noteId) async {
     try {
       final note = _notesCache[noteId];

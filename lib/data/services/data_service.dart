@@ -1952,6 +1952,72 @@ class DataService {
     }
   }
 
+  Future<Result<void>> deleteRepost({
+    required String noteId,
+  }) async {
+    try {
+      final userResult = await _authService.getCurrentUserNpub();
+      if (userResult.isError || userResult.data == null) {
+        return const Result.error('User not authenticated');
+      }
+
+      final userNpub = userResult.data!;
+      final reposts = _repostsMap[noteId] ?? [];
+      final userRepost = reposts.firstWhere(
+        (repost) => repost.author == userNpub,
+        orElse: () => throw Exception('User has not reposted this note'),
+      );
+
+      final privateKeyResult = await _authService.getCurrentUserPrivateKey();
+      if (privateKeyResult.isError) {
+        return Result.error('Private key not found: ${privateKeyResult.error}');
+      }
+
+      final privateKey = privateKeyResult.data;
+      if (privateKey == null || privateKey.isEmpty) {
+        return const Result.error('Private key not found.');
+      }
+
+      final repostNote = _noteCache[userRepost.id];
+      
+      _repostsMap[noteId]?.removeWhere((repost) => repost.id == userRepost.id);
+      if (_repostsMap[noteId]?.isEmpty ?? false) {
+        _repostsMap.remove(noteId);
+      }
+
+      if (repostNote != null && repostNote.isRepost) {
+        _noteCache.remove(userRepost.id);
+        _eventIds.remove(userRepost.id);
+
+        if (!_isClosed && !_noteDeletedController.isClosed) {
+          _noteDeletedController.add(userRepost.id);
+        }
+      }
+
+      final note = _noteCache[noteId];
+      if (note != null) {
+        if (repostNote != null && repostNote.isRepost) {
+          note.removeBoost(repostNote);
+        }
+        note.repostCount = _repostsMap[noteId]?.length ?? 0;
+        _scheduleUIUpdate();
+      }
+
+      final event = NostrService.createDeletionEvent(
+        eventIds: [userRepost.id],
+        privateKey: privateKey,
+      );
+
+      await _ensureRelayConnection('repost_delete');
+
+      await _relayManager.priorityBroadcastToAll(NostrService.serializeEvent(event));
+
+      return const Result.success(null);
+    } catch (e) {
+      return Result.error('Failed to delete repost: $e');
+    }
+  }
+
   Future<Result<void>> repostNote({
     required String noteId,
     required String noteAuthor,
