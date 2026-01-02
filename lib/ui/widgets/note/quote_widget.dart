@@ -12,10 +12,12 @@ import 'note_content_widget.dart';
 
 class QuoteWidget extends StatefulWidget {
   final String bech32;
+  final bool shortMode;
 
   const QuoteWidget({
     super.key,
     required this.bech32,
+    this.shortMode = false,
   });
 
   @override
@@ -413,7 +415,9 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
   Widget _buildNoteContent(Map<String, dynamic> parsedContent) {
     Map<String, dynamic> contentToShow = parsedContent;
 
-    if (_shouldTruncate) {
+    if (widget.shortMode) {
+      contentToShow = _createShortModeContent(parsedContent);
+    } else if (_shouldTruncate) {
       contentToShow = _createTruncatedContent(parsedContent);
     }
 
@@ -422,7 +426,52 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
       parsedContent: contentToShow,
       onNavigateToMentionProfile: _navigateToMentionProfile,
       onShowMoreTap: _shouldTruncate ? (String noteId) => _navigateToThread() : null,
+      shortMode: widget.shortMode,
     );
+  }
+
+  Map<String, dynamic> _createShortModeContent(Map<String, dynamic> original) {
+    try {
+      const int limit = 120;
+      final textParts = (original['textParts'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final truncatedParts = <Map<String, dynamic>>[];
+      int currentLength = 0;
+
+      for (var part in textParts) {
+        if (part['type'] == 'text') {
+          final text = part['text'] as String? ?? '';
+          if (currentLength + text.length <= limit) {
+            truncatedParts.add(part);
+            currentLength += text.length;
+          } else {
+            final remainingChars = limit - currentLength;
+            if (remainingChars > 0) {
+              truncatedParts.add({
+                'type': 'text',
+                'text': '${text.substring(0, remainingChars)}...',
+              });
+            }
+            break;
+          }
+        } else if (part['type'] == 'mention') {
+          if (currentLength + 8 <= limit) {
+            truncatedParts.add(part);
+            currentLength += 8;
+          } else {
+            break;
+          }
+        }
+      }
+
+      return {
+        'textParts': truncatedParts,
+        'mediaUrls': <String>[],
+        'linkUrls': <String>[],
+        'quoteIds': <String>[],
+      };
+    } catch (e) {
+      return original;
+    }
   }
 
   Map<String, dynamic> _createTruncatedContent(Map<String, dynamic> original) {

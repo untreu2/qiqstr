@@ -1047,7 +1047,10 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      child: QuoteWidget(bech32: _encodeEventId(widget.replyToNoteId!)),
+      child: QuoteWidget(
+        bech32: _encodeEventId(widget.replyToNoteId!),
+        shortMode: true,
+      ),
     );
   }
 
@@ -1190,7 +1193,10 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
     return Padding(
       padding: const EdgeInsets.only(top: 16),
-      child: QuoteWidget(bech32: _encodeEventId(widget.initialText!)),
+      child: QuoteWidget(
+        bech32: _encodeEventId(widget.initialText!),
+        shortMode: true,
+      ),
     );
   }
 

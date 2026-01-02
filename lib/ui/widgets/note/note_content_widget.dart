@@ -26,6 +26,7 @@ class NoteContentWidget extends StatefulWidget {
   final NoteContentSize size;
   final String? authorProfileImageUrl;
   final bool isSelectable;
+  final bool shortMode;
 
   const NoteContentWidget({
     super.key,
@@ -36,6 +37,7 @@ class NoteContentWidget extends StatefulWidget {
     this.size = NoteContentSize.small,
     this.authorProfileImageUrl,
     this.isSelectable = false,
+    this.shortMode = false,
   });
 
   @override
@@ -499,7 +501,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
                       ),
                     ),
             ),
-          if (_mediaUrls.isNotEmpty)
+          if (_mediaUrls.isNotEmpty && !widget.shortMode)
             RepaintBoundary(
               child: Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -510,7 +512,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
                 ),
               ),
             ),
-          if (_linkUrls.isNotEmpty && _mediaUrls.isEmpty)
+          if (_linkUrls.isNotEmpty && _mediaUrls.isEmpty && !widget.shortMode)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Column(
@@ -526,7 +528,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
                     : _linkUrls.map((url) => LinkPreviewWidget(url: url)).toList(),
               ),
             ),
-          if (_quoteIds.isNotEmpty)
+          if (_quoteIds.isNotEmpty && !widget.shortMode)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
