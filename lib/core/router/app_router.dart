@@ -20,7 +20,8 @@ import '../../ui/screens/settings/payments_page.dart';
 import '../../ui/screens/settings/muted_page.dart';
 import '../../ui/screens/settings/event_manager_page.dart';
 import '../../ui/screens/webview/webview_page.dart';
-import '../../ui/screens/dm/dm_page.dart';
+import '../../ui/screens/dm/dm_conversations_page.dart';
+import '../../ui/screens/dm/dm_chat_page.dart';
 import '../../ui/screens/wallet/wallet_page.dart';
 import '../../ui/screens/notification/notification_page.dart';
 import '../../ui/screens/explore/explore_page.dart';
@@ -190,8 +191,24 @@ class AppRouter {
               GoRoute(
                 path: '/home/dm',
                 name: 'dm',
-                builder: (context, state) => const DmPage(),
+                builder: (context, state) => const DmConversationsPage(),
                 routes: [
+                  GoRoute(
+                    path: 'chat',
+                    name: 'dm-chat',
+                    builder: (context, state) {
+                      final pubkeyHexParam = state.uri.queryParameters['pubkeyHex'] ?? '';
+                      String pubkeyHex = pubkeyHexParam;
+                      if (pubkeyHex.startsWith('npub1')) {
+                        try {
+                          pubkeyHex = decodeBasicBech32(pubkeyHex, 'npub');
+                        } catch (e) {
+                          pubkeyHex = pubkeyHexParam;
+                        }
+                      }
+                      return DmChatPage(pubkeyHex: pubkeyHex);
+                    },
+                  ),
                   GoRoute(
                     path: 'profile',
                     name: 'dm-profile',
