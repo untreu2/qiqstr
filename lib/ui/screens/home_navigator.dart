@@ -95,8 +95,8 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                     behavior: HitTestBehavior.opaque,
                     child: Center(
                       child: Container(
-                        width: 46,
-                        height: 46,
+                        width: 45,
+                        height: 45,
                         decoration: BoxDecoration(
                           color: context.colors.textPrimary,
                           shape: BoxShape.circle,
@@ -104,7 +104,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
                         child: Icon(
                           Icons.add,
                           color: context.colors.background,
-                          size: 26,
+                          size: 25,
                         ),
                       ),
                     ),
@@ -148,7 +148,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
     );
   }
 
-  static const double _iconSize = 22.0;
+  static const double _iconSize = 21.0;
 
   Widget _buildIcon({
     required String iconPath,

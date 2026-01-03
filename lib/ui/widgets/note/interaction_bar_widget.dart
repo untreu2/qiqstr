@@ -256,13 +256,13 @@ class _InteractionBarState extends State<InteractionBar> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Row(
               children: [
-                Icon(Icons.undo, size: 18, color: context.colors.background),
+                Icon(Icons.undo, size: 17, color: context.colors.background),
                 const SizedBox(width: 12),
                 Text(
                   'Undo repost',
                   style: TextStyle(
                     color: context.colors.background,
-                    fontSize: 17,
+                    fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -279,13 +279,13 @@ class _InteractionBarState extends State<InteractionBar> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Row(
               children: [
-                Icon(Icons.repeat, size: 18, color: context.colors.background),
+                Icon(Icons.repeat, size: 17, color: context.colors.background),
                 const SizedBox(width: 12),
                 Text(
                   'Repost again',
                   style: TextStyle(
                     color: context.colors.background,
-                    fontSize: 17,
+                    fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -303,13 +303,13 @@ class _InteractionBarState extends State<InteractionBar> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Row(
               children: [
-                Icon(Icons.repeat, size: 18, color: context.colors.background),
+                Icon(Icons.repeat, size: 17, color: context.colors.background),
                 const SizedBox(width: 12),
                 Text(
                   'Repost',
                   style: TextStyle(
                     color: context.colors.background,
-                    fontSize: 17,
+                    fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -328,13 +328,13 @@ class _InteractionBarState extends State<InteractionBar> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Row(
             children: [
-              Icon(Icons.format_quote, size: 18, color: context.colors.background),
+              Icon(Icons.format_quote, size: 17, color: context.colors.background),
               const SizedBox(width: 12),
               Text(
                 'Quote',
                 style: TextStyle(
                   color: context.colors.background,
-                  fontSize: 17,
+                  fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -769,13 +769,13 @@ class _InteractionBarState extends State<InteractionBar> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Row(
             children: [
-              Icon(CarbonIcons.checkmark_filled, size: 18, color: context.colors.background),
+              Icon(CarbonIcons.checkmark_filled, size: 17, color: context.colors.background),
               const SizedBox(width: 12),
               Text(
                 'Verify signature',
                 style: TextStyle(
                   color: context.colors.background,
-                  fontSize: 17,
+                  fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -789,13 +789,13 @@ class _InteractionBarState extends State<InteractionBar> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Row(
             children: [
-              Icon(CarbonIcons.chart_bar, size: 18, color: context.colors.background),
+              Icon(CarbonIcons.chart_bar, size: 17, color: context.colors.background),
               const SizedBox(width: 12),
               Text(
                 'Interactions',
                 style: TextStyle(
                   color: context.colors.background,
-                  fontSize: 17,
+                  fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -813,13 +813,13 @@ class _InteractionBarState extends State<InteractionBar> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Row(
               children: [
-                Icon(CarbonIcons.delete, size: 18, color: context.colors.background),
+                Icon(CarbonIcons.delete, size: 17, color: context.colors.background),
                 const SizedBox(width: 12),
                 Text(
                   'Delete',
                   style: TextStyle(
                     color: context.colors.background,
-                    fontSize: 17,
+                    fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -865,7 +865,7 @@ class _InteractionBarState extends State<InteractionBar> {
           offset: const Offset(-4, 0),
           child: Icon(
             Icons.more_horiz,
-            size: widget.isBigSize ? 20.0 : 18.0,
+            size: widget.isBigSize ? 19.0 : 17.0,
             color: colors.secondary,
           ),
         ),
@@ -962,8 +962,8 @@ class _InteractionButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final effectiveColor = isActive ? activeColor : inactiveColor;
-    final iconSize = isBigSize ? 17.0 : 15.5;
-    final fontSize = isBigSize ? 16.0 : 15.0;
+    final iconSize = isBigSize ? 16.0 : 14.5;
+    final fontSize = isBigSize ? 15.0 : 14.0;
     final spacing = isBigSize ? 7.0 : 6.5;
 
     return RepaintBoundary(
@@ -983,7 +983,7 @@ class _InteractionButton extends StatelessWidget {
                 if (count > 0) ...[
                   SizedBox(width: spacing),
                   Transform.translate(
-                    offset: const Offset(0, -3),
+                    offset: const Offset(0, -3.2),
                     child: Text(
                       _formatCount(count),
                       style: TextStyle(
