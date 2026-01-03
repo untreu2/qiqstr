@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/base/result.dart';
 import '../../models/notification_model.dart';
@@ -16,6 +17,7 @@ class NotificationRepository {
 
   final StreamController<List<NotificationModel>> _notificationsController = StreamController<List<NotificationModel>>.broadcast();
   final StreamController<int> _unreadCountController = StreamController<int>.broadcast();
+  final StreamController<bool> _hasNewNotificationsController = StreamController<bool>.broadcast();
   final Map<String, UserModel> _userProfilesCache = {};
   final List<NotificationModel> _notifications = [];
   int _unreadCount = 0;
@@ -24,6 +26,7 @@ class NotificationRepository {
   StreamSubscription<List<NotificationModel>>? _notificationStreamSubscription;
   DateTime? _lastDebounceTime;
   static const Duration _debounceDelay = Duration(milliseconds: 2000);
+  static const String _lastReadNotificationTimestampKey = 'last_read_notification_timestamp';
 
   NotificationRepository({
     required AuthService authService,
@@ -37,6 +40,7 @@ class NotificationRepository {
 
   Stream<List<NotificationModel>> get notificationsStream => _notificationsController.stream;
   Stream<int> get unreadCountStream => _unreadCountController.stream;
+  Stream<bool> get hasNewNotificationsStream => _hasNewNotificationsController.stream;
 
   void _setupRealTimeNotifications() {
     debugPrint('[NotificationRepository] Setting up real-time notification updates');
@@ -81,7 +85,7 @@ class NotificationRepository {
     }
 
     final filteredNotifications = _filterSelfNotifications(newNotifications);
-    final addedNotifications = _addNewNotifications(filteredNotifications);
+    final addedNotifications = await _addNewNotifications(filteredNotifications);
 
     if (addedNotifications.isNotEmpty) {
       _sortAndEmitNotifications(addedNotifications.length);
@@ -92,14 +96,29 @@ class NotificationRepository {
     return notifications.where((notification) => notification.author != _currentUserHex).toList();
   }
 
-  List<NotificationModel> _addNewNotifications(List<NotificationModel> filteredNotifications) {
+  Future<List<NotificationModel>> _addNewNotifications(List<NotificationModel> filteredNotifications) async {
     final existingIds = _notifications.map((n) => n.id).toSet();
     final newNotifications = filteredNotifications.where((notification) => !existingIds.contains(notification.id)).toList();
 
-    for (final notification in newNotifications) {
-      _insertSortedNotification(notification);
+    if (newNotifications.isNotEmpty) {
+      final lastReadTimestamp = await _getLastReadNotificationTimestamp();
+      bool hasNew = false;
+      
+      if (lastReadTimestamp != null) {
+        hasNew = newNotifications.any((notification) => notification.timestamp.isAfter(lastReadTimestamp));
+      } else {
+        hasNew = true;
+      }
+
+      if (hasNew) {
+        _hasNewNotificationsController.add(true);
+      }
+
+      for (final notification in newNotifications) {
+        _insertSortedNotification(notification);
+      }
+      _unreadCount += newNotifications.length;
     }
-    _unreadCount += newNotifications.length;
 
     return newNotifications;
   }
@@ -150,6 +169,9 @@ class NotificationRepository {
         _notifications.clear();
         _notifications.addAll(filteredNotifications);
         _unreadCount = filteredNotifications.length;
+
+        final hasNew = await hasNewNotifications();
+        _hasNewNotificationsController.add(hasNew);
 
         _notificationsController.add(List.unmodifiable(_notifications));
         _unreadCountController.add(_unreadCount);
@@ -203,10 +225,55 @@ class NotificationRepository {
       _unreadCount = 0;
       _unreadCountController.add(_unreadCount);
 
+      if (_notifications.isNotEmpty) {
+        final latestNotification = _notifications.first;
+        await _saveLastReadNotificationTimestamp(latestNotification.timestamp);
+      } else {
+        await _saveLastReadNotificationTimestamp(DateTime.now());
+      }
+
+      _hasNewNotificationsController.add(false);
+
       return const Result.success(null);
     } catch (e) {
       return Result.error('Failed to mark notifications as read: $e');
     }
+  }
+
+  Future<void> _saveLastReadNotificationTimestamp(DateTime timestamp) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(_lastReadNotificationTimestampKey, timestamp.millisecondsSinceEpoch);
+    } catch (e) {
+      debugPrint('[NotificationRepository] Error saving last read timestamp: $e');
+    }
+  }
+
+  Future<DateTime?> _getLastReadNotificationTimestamp() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final timestampMs = prefs.getInt(_lastReadNotificationTimestampKey);
+      if (timestampMs != null) {
+        return DateTime.fromMillisecondsSinceEpoch(timestampMs);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('[NotificationRepository] Error getting last read timestamp: $e');
+      return null;
+    }
+  }
+
+  Future<bool> hasNewNotifications() async {
+    if (_notifications.isEmpty) {
+      return false;
+    }
+
+    final lastReadTimestamp = await _getLastReadNotificationTimestamp();
+    if (lastReadTimestamp == null) {
+      return _notifications.isNotEmpty;
+    }
+
+    return _notifications.any((notification) => notification.timestamp.isAfter(lastReadTimestamp));
   }
 
   Future<Result<UserModel?>> getUserProfile(String npub) async {
@@ -288,6 +355,7 @@ class NotificationRepository {
     _notificationStreamSubscription?.cancel();
     _notificationsController.close();
     _unreadCountController.close();
+    _hasNewNotificationsController.close();
     _notifications.clear();
     _userProfilesCache.clear();
   }

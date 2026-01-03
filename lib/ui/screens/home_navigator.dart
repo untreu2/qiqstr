@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +9,8 @@ import 'package:go_router/go_router.dart';
 
 import 'package:qiqstr/ui/screens/note/share_note.dart';
 import '../theme/theme_manager.dart';
+import '../../core/di/app_di.dart';
+import '../../data/repositories/notification_repository.dart';
 
 class HomeNavigator extends StatefulWidget {
   final String npub;
@@ -27,7 +30,8 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
   late AnimationController _iconAnimationController;
   late AnimationController _exploreRotationController;
   bool _isFirstBuild = true;
-
+  bool _hasNewNotifications = false;
+  StreamSubscription<bool>? _hasNewNotificationsSubscription;
 
   @override
   void initState() {
@@ -40,12 +44,29 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
       duration: const Duration(milliseconds: 500),
       vsync: this,
     );
+    _subscribeToNewNotifications();
+  }
+
+  void _subscribeToNewNotifications() async {
+    final notificationRepository = AppDI.get<NotificationRepository>();
+    _hasNewNotifications = await notificationRepository.hasNewNotifications();
+    if (mounted) {
+      setState(() {});
+    }
+    _hasNewNotificationsSubscription = notificationRepository.hasNewNotificationsStream.listen((hasNew) {
+      if (mounted) {
+        setState(() {
+          _hasNewNotifications = hasNew;
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
     _iconAnimationController.dispose();
     _exploreRotationController.dispose();
+    _hasNewNotificationsSubscription?.cancel();
     super.dispose();
   }
 
@@ -256,7 +277,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
   }
 
   Widget _buildNotificationIcon(String iconPath, bool isSelected) {
-    return _buildIcon(
+    final icon = _buildIcon(
       iconPath: iconPath,
       isSelected: isSelected,
       carbonIcon: CarbonIcons.notification,
@@ -265,6 +286,29 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
       iconSelectedPath: 'assets/bell_fill.svg',
       isNotification: true,
     );
+
+    if (_hasNewNotifications) {
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          icon,
+          Positioned(
+            right: -2,
+            top: -2,
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: context.colors.accent,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return icon;
   }
 
   Widget _buildWalletIcon(String iconPath, bool isSelected) {
