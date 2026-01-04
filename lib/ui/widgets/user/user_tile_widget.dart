@@ -1,14 +1,13 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
+import 'package:provider/provider.dart';
 import '../../theme/theme_manager.dart';
 import '../../../models/user_model.dart';
 import '../../../core/di/app_di.dart';
-import '../../../data/repositories/user_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../presentation/viewmodels/user_tile_viewmodel.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/dialogs/unfollow_user_dialog.dart';
 
@@ -35,98 +34,34 @@ class UserTile extends StatefulWidget {
 }
 
 class _UserTileState extends State<UserTile> {
-  bool? _isFollowing;
-  bool _isLoading = false;
-  late UserRepository _userRepository;
-  late AuthRepository _authRepository;
-  StreamSubscription<List<UserModel>>? _followingListSubscription;
+  late final UserTileViewModel _viewModel;
 
   @override
   void initState() {
     super.initState();
-    _userRepository = AppDI.get<UserRepository>();
-    _authRepository = AppDI.get<AuthRepository>();
-    _checkFollowStatus();
-    _setupFollowingListListener();
+    _viewModel = UserTileViewModel(
+      userRepository: AppDI.get(),
+      authRepository: AppDI.get(),
+      user: widget.user,
+    );
+    _viewModel.addListener(_onViewModelChanged);
   }
 
   @override
   void dispose() {
-    _followingListSubscription?.cancel();
+    _viewModel.removeListener(_onViewModelChanged);
+    _viewModel.dispose();
     super.dispose();
   }
 
-  void _setupFollowingListListener() async {
-    final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
-    if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
-      return;
-    }
-
-    _followingListSubscription = _userRepository.followingListStream.listen(
-      (followingList) {
-        if (!mounted) return;
-
-        final targetUserHex = widget.user.pubkeyHex;
-        final isFollowing = followingList.any((user) => user.pubkeyHex == targetUserHex);
-
-        if (mounted && _isFollowing != isFollowing) {
-          setState(() {
-            _isFollowing = isFollowing;
-            _isLoading = false;
-          });
-        }
-      },
-      onError: (error) {
-        debugPrint('[UserTile] Error in following list stream: $error');
-      },
-    );
-  }
-
-  Future<void> _checkFollowStatus() async {
-    try {
-      final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
-      if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
-        return;
-      }
-
-      final followStatusResult = await _userRepository.isFollowing(widget.user.pubkeyHex);
-
-      followStatusResult.fold(
-        (isFollowing) {
-          if (mounted) {
-            setState(() {
-              _isFollowing = isFollowing;
-            });
-          }
-        },
-        (error) {
-          if (mounted) {
-            setState(() {
-              _isFollowing = false;
-            });
-          }
-        },
-      );
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isFollowing = false;
-        });
-      }
+  void _onViewModelChanged() {
+    if (mounted) {
+      setState(() {});
     }
   }
 
   Future<void> _toggleFollow() async {
-    final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
-    if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
-      return;
-    }
-
-    if (_isFollowing == null || _isLoading) return;
-
-    final originalFollowState = _isFollowing;
-
-    if (originalFollowState == true) {
+    if (_viewModel.isFollowing == true) {
       final userName = widget.user.name.isNotEmpty
           ? widget.user.name
           : (widget.user.nip05.isNotEmpty ? widget.user.nip05.split('@').first : 'this user');
@@ -134,131 +69,30 @@ class _UserTileState extends State<UserTile> {
       showUnfollowUserDialog(
         context: context,
         userName: userName,
-        onConfirm: () => _performUnfollow(),
+        onConfirm: () => _viewModel.toggleFollow(),
       );
       return;
     }
 
-    _performFollow();
-  }
-
-  Future<void> _performFollow() async {
-    final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
-    if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
-      return;
-    }
-
-    if (_isFollowing == null || _isLoading) return;
-
-    final originalFollowState = _isFollowing;
-
-    setState(() {
-      _isFollowing = !_isFollowing!;
-      _isLoading = true;
-    });
-
-    try {
-      final targetNpub = widget.user.pubkeyHex.startsWith('npub1') ? widget.user.pubkeyHex : _getNpubBech32(widget.user.pubkeyHex);
-
-      final result = await _userRepository.followUser(targetNpub);
-
-      result.fold(
-        (_) {
-          setState(() {
-            _isLoading = false;
-          });
-        },
-        (error) {
-          if (mounted) {
-            setState(() {
-              _isFollowing = originalFollowState;
-              _isLoading = false;
-            });
-            AppSnackbar.error(context, 'Failed to follow user: $error');
-          }
-        },
-      );
-    } catch (e) {
+    _viewModel.toggleFollow().catchError((error) {
       if (mounted) {
-        setState(() {
-          _isFollowing = originalFollowState;
-          _isLoading = false;
-        });
+        AppSnackbar.error(context, 'Failed to follow user: $error');
       }
-    }
-  }
-
-  Future<void> _performUnfollow() async {
-    final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
-    if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
-      return;
-    }
-
-    if (_isFollowing == null || _isLoading) return;
-
-    final originalFollowState = _isFollowing;
-
-    setState(() {
-      _isFollowing = !_isFollowing!;
-      _isLoading = true;
     });
-
-    try {
-      final targetNpub = widget.user.pubkeyHex.startsWith('npub1') ? widget.user.pubkeyHex : _getNpubBech32(widget.user.pubkeyHex);
-
-      final result = await _userRepository.unfollowUser(targetNpub);
-
-      result.fold(
-        (_) {
-          setState(() {
-            _isLoading = false;
-          });
-        },
-        (error) {
-          if (mounted) {
-            setState(() {
-              _isFollowing = originalFollowState;
-              _isLoading = false;
-            });
-            AppSnackbar.error(context, 'Failed to unfollow user: $error');
-          }
-        },
-      );
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isFollowing = originalFollowState;
-          _isLoading = false;
-        });
-      }
-    }
   }
 
-  String _getNpubBech32(String identifier) {
-    if (identifier.isEmpty) return '';
-
-    if (identifier.startsWith('npub1')) {
-      return identifier;
-    }
-
-    if (identifier.length == 64 && RegExp(r'^[0-9a-fA-F]+$').hasMatch(identifier)) {
-      try {
-        return encodeBasicBech32(identifier, "npub");
-      } catch (e) {
-        return identifier;
-      }
-    }
-
-    return identifier;
-  }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: _authRepository.getCurrentUserNpub(),
-      builder: (context, snapshot) {
-        final currentUserNpub = snapshot.data?.fold((data) => data, (error) => null);
-        final isCurrentUser = currentUserNpub == widget.user.pubkeyHex || currentUserNpub == widget.user.npub;
+    return ChangeNotifierProvider<UserTileViewModel>.value(
+      value: _viewModel,
+      child: Consumer<UserTileViewModel>(
+        builder: (context, viewModel, child) {
+          return FutureBuilder(
+            future: AppDI.get<AuthRepository>().getCurrentUserNpub(),
+            builder: (context, snapshot) {
+              final currentUserNpub = snapshot.data?.fold((data) => data, (error) => null);
+              final isCurrentUser = currentUserNpub == widget.user.pubkeyHex || currentUserNpub == widget.user.npub;
 
         return RepaintBoundary(
           child: Padding(
@@ -341,7 +175,7 @@ class _UserTileState extends State<UserTile> {
                             : null,
                       ),
                     ],
-                    if (widget.showFollowButton && !isCurrentUser && _isFollowing != null && !widget.showSelectionIndicator) ...[
+                    if (widget.showFollowButton && !isCurrentUser && viewModel.isFollowing != null && !widget.showSelectionIndicator) ...[
                       const SizedBox(width: 10),
                       Builder(
                         builder: (context) {
@@ -351,29 +185,29 @@ class _UserTileState extends State<UserTile> {
                           final unfollowIconColor = context.colors.textPrimary;
 
                           return GestureDetector(
-                            onTap: _isLoading ? null : _toggleFollow,
+                            onTap: viewModel.isLoading ? null : _toggleFollow,
                             child: Container(
                               width: 40,
                               height: 40,
                               decoration: BoxDecoration(
-                                color: _isFollowing == true ? unfollowBgColor : followBgColor,
+                                color: viewModel.isFollowing == true ? unfollowBgColor : followBgColor,
                                 shape: BoxShape.circle,
                               ),
-                              child: _isLoading
+                              child: viewModel.isLoading
                                   ? SizedBox(
                                       width: 18,
                                       height: 18,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2,
                                         valueColor: AlwaysStoppedAnimation<Color>(
-                                          _isFollowing == true ? unfollowIconColor : followIconColor,
+                                          viewModel.isFollowing == true ? unfollowIconColor : followIconColor,
                                         ),
                                       ),
                                     )
                                   : Icon(
-                                      _isFollowing == true ? CarbonIcons.user_admin : CarbonIcons.user_follow,
+                                      viewModel.isFollowing == true ? CarbonIcons.user_admin : CarbonIcons.user_follow,
                                       size: 18,
-                                      color: _isFollowing == true ? unfollowIconColor : followIconColor,
+                                      color: viewModel.isFollowing == true ? unfollowIconColor : followIconColor,
                                     ),
                             ),
                           );
@@ -386,7 +220,10 @@ class _UserTileState extends State<UserTile> {
             ),
           ),
         );
-      },
+            },
+          );
+        },
+      ),
     );
   }
 }

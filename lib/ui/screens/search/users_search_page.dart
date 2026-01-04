@@ -2,16 +2,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carbon_icons/carbon_icons.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/custom_input_field.dart';
 import '../../../models/user_model.dart';
 import '../../../core/di/app_di.dart';
-import '../../../data/repositories/user_repository.dart';
 import '../../../data/repositories/auth_repository.dart';
+import '../../../presentation/viewmodels/user_search_viewmodel.dart';
+import '../../../presentation/viewmodels/user_tile_viewmodel.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/dialogs/unfollow_user_dialog.dart';
 
@@ -31,123 +32,35 @@ class UserSearchPage extends StatefulWidget {
 
 class _UserSearchPageState extends State<UserSearchPage> {
   final TextEditingController _searchController = TextEditingController();
-  List<UserModel> _filteredUsers = [];
-  List<UserModel> _randomUsers = [];
-  bool _isSearching = false;
-  bool _isLoadingRandom = false;
-  String? _error;
-
-  late final UserRepository _userRepository;
+  late final UserSearchViewModel _viewModel;
 
   @override
   void initState() {
     super.initState();
-    _userRepository = AppDI.get<UserRepository>();
+    _viewModel = UserSearchViewModel(
+      userRepository: AppDI.get(),
+    );
+    _viewModel.addListener(_onViewModelChanged);
     _searchController.addListener(_onSearchChanged);
-    _loadRandomUsers();
+  }
+
+  @override
+  void dispose() {
+    _viewModel.removeListener(_onViewModelChanged);
+    _viewModel.dispose();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onViewModelChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _onSearchChanged() {
     final query = _searchController.text.trim();
-    _searchUsers(query);
-  }
-
-
-  Future<void> _loadRandomUsers() async {
-    setState(() {
-      _isLoadingRandom = true;
-    });
-
-    try {
-      final isarService = _userRepository.isarService;
-
-      if (!isarService.isInitialized) {
-        await isarService.waitForInitialization();
-      }
-
-      final randomIsarProfiles = await isarService.getRandomUsersWithImages(limit: 50);
-
-      final userModels = randomIsarProfiles.map((isarProfile) {
-        final profileData = isarProfile.toProfileData();
-        return UserModel.fromCachedProfile(
-          isarProfile.pubkeyHex,
-          profileData,
-        );
-      }).toList();
-
-      if (mounted) {
-        setState(() {
-          _randomUsers = userModels;
-          _isLoadingRandom = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('[UserSearchPage] Error loading random users: $e');
-      if (mounted) {
-        setState(() {
-          _isLoadingRandom = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _searchUsers(String query) async {
-    if (query.trim().isEmpty) {
-      setState(() {
-        _filteredUsers = [];
-        _isSearching = false;
-        _error = null;
-      });
-      return;
-    }
-
-    setState(() {
-      _isSearching = true;
-      _error = null;
-    });
-
-    try {
-      final result = await _userRepository.searchUsers(query).timeout(
-        const Duration(seconds: 5),
-        onTimeout: () => throw TimeoutException('Search timed out', const Duration(seconds: 5)),
-      );
-
-      if (!mounted) return;
-
-      result.fold(
-        (users) {
-          setState(() {
-            _filteredUsers = users;
-            _isSearching = false;
-          });
-          debugPrint('[UserSearchPage] Found ${users.length} users from cache');
-        },
-        (error) {
-          debugPrint('[UserSearchPage] Search error: $error');
-          setState(() {
-            _error = 'Search failed. Please try again.';
-            _isSearching = false;
-            _filteredUsers = [];
-          });
-        },
-      );
-    } on TimeoutException {
-      if (mounted) {
-        setState(() {
-          _error = 'Search timed out. Please try again.';
-          _isSearching = false;
-          _filteredUsers = [];
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = 'Search failed: $e';
-          _isSearching = false;
-          _filteredUsers = [];
-        });
-      }
-    }
+    _viewModel.searchUsers(query);
   }
 
 
@@ -160,7 +73,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
   }
 
   Widget _buildSearchResults(BuildContext context) {
-    if (_isSearching) {
+    if (_viewModel.isSearching) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -176,7 +89,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
       );
     }
 
-    if (_error != null) {
+    if (_viewModel.error != null) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -197,14 +110,14 @@ class _UserSearchPageState extends State<UserSearchPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              _error!,
+              _viewModel.error!,
               style: TextStyle(color: context.colors.textSecondary),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 16),
             PrimaryButton(
               label: 'Retry',
-              onPressed: () => _searchUsers(_searchController.text.trim()),
+              onPressed: () => _viewModel.searchUsers(_searchController.text.trim()),
               backgroundColor: context.colors.accent,
               foregroundColor: context.colors.background,
             ),
@@ -213,7 +126,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
       );
     }
 
-    if (_filteredUsers.isEmpty && _searchController.text.trim().isNotEmpty) {
+    if (_viewModel.filteredUsers.isEmpty && _searchController.text.trim().isNotEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -243,17 +156,17 @@ class _UserSearchPageState extends State<UserSearchPage> {
       );
     }
 
-    if (_filteredUsers.isNotEmpty) {
+    if (_viewModel.filteredUsers.isNotEmpty) {
       return ListView.builder(
         padding: EdgeInsets.zero,
-        itemCount: _filteredUsers.length,
+        itemCount: _viewModel.filteredUsers.length,
         itemBuilder: (context, index) {
-          final user = _filteredUsers[index];
+          final user = _viewModel.filteredUsers[index];
           return Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               _buildUserItem(context, user),
-              if (index < _filteredUsers.length - 1) const _UserSeparator(),
+              if (index < _viewModel.filteredUsers.length - 1) const _UserSeparator(),
             ],
           );
         },
@@ -264,7 +177,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
   }
 
   Widget _buildRandomUsersBubbleGrid(BuildContext context) {
-    if (_isLoadingRandom) {
+    if (_viewModel.isLoadingRandom) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -280,7 +193,7 @@ class _UserSearchPageState extends State<UserSearchPage> {
       );
     }
 
-    if (_randomUsers.isEmpty) {
+    if (_viewModel.randomUsers.isEmpty) {
       return Center(
         child: Text(
           'No users to discover yet',
@@ -291,14 +204,14 @@ class _UserSearchPageState extends State<UserSearchPage> {
 
     return ListView.builder(
       padding: EdgeInsets.zero,
-      itemCount: _randomUsers.length,
+      itemCount: _viewModel.randomUsers.length,
       itemBuilder: (context, index) {
-        final user = _randomUsers[index];
+        final user = _viewModel.randomUsers[index];
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             _buildUserItem(context, user),
-            if (index < _randomUsers.length - 1) const _UserSeparator(),
+            if (index < _viewModel.randomUsers.length - 1) const _UserSeparator(),
           ],
         );
       },
@@ -313,11 +226,6 @@ class _UserSearchPageState extends State<UserSearchPage> {
     );
   }
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
 
   Widget _buildCancelButton() {
     return Semantics(
@@ -422,98 +330,57 @@ class _UserItemWidget extends StatefulWidget {
 }
 
 class _UserItemWidgetState extends State<_UserItemWidget> {
-  bool? _isFollowing;
-  bool _isLoading = false;
-  late UserRepository _userRepository;
-  late AuthRepository _authRepository;
-  StreamSubscription<List<UserModel>>? _followingListSubscription;
+  late final UserTileViewModel _viewModel;
+  String? _currentUserNpub;
 
   @override
   void initState() {
     super.initState();
-    _userRepository = AppDI.get<UserRepository>();
-    _authRepository = AppDI.get<AuthRepository>();
-    _checkFollowStatus();
-    _setupFollowingListListener();
+    _viewModel = UserTileViewModel(
+      userRepository: AppDI.get(),
+      authRepository: AppDI.get(),
+      user: widget.user,
+    );
+    _viewModel.addListener(_onViewModelChanged);
+    _loadCurrentUserNpub();
   }
 
   @override
   void dispose() {
-    _followingListSubscription?.cancel();
+    _viewModel.removeListener(_onViewModelChanged);
+    _viewModel.dispose();
     super.dispose();
   }
 
-  void _setupFollowingListListener() async {
-    final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
-    if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
-      return;
+  void _onViewModelChanged() {
+    if (mounted) {
+      setState(() {});
     }
+  }
 
-    _followingListSubscription = _userRepository.followingListStream.listen(
-      (followingList) {
-        if (!mounted) return;
-
-        final targetUserHex = widget.user.pubkeyHex;
-        final isFollowing = followingList.any((user) => user.pubkeyHex == targetUserHex);
-
-        if (mounted && _isFollowing != isFollowing) {
+  Future<void> _loadCurrentUserNpub() async {
+    final authRepository = AppDI.get<AuthRepository>();
+    final result = await authRepository.getCurrentUserNpub();
+    result.fold(
+      (npub) {
+        if (mounted) {
           setState(() {
-            _isFollowing = isFollowing;
-            _isLoading = false;
+            _currentUserNpub = npub;
           });
         }
       },
-      onError: (error) {
-        debugPrint('[UserItemWidget] Error in following list stream: $error');
+      (error) {
+        if (mounted) {
+          setState(() {
+            _currentUserNpub = null;
+          });
+        }
       },
     );
   }
 
-  Future<void> _checkFollowStatus() async {
-    try {
-      final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
-      if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
-        return;
-      }
-
-      final followStatusResult = await _userRepository.isFollowing(widget.user.pubkeyHex);
-
-      followStatusResult.fold(
-        (isFollowing) {
-          if (mounted) {
-            setState(() {
-              _isFollowing = isFollowing;
-            });
-          }
-        },
-        (error) {
-          if (mounted) {
-            setState(() {
-              _isFollowing = false;
-            });
-          }
-        },
-      );
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isFollowing = false;
-        });
-      }
-    }
-  }
-
   Future<void> _toggleFollow() async {
-    final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
-    if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
-      return;
-    }
-
-    if (_isFollowing == null || _isLoading) return;
-
-    final originalFollowState = _isFollowing;
-
-    if (originalFollowState == true) {
+    if (_viewModel.isFollowing == true) {
       final userName = widget.user.name.isNotEmpty
           ? widget.user.name
           : (widget.user.nip05.isNotEmpty ? widget.user.nip05.split('@').first : 'this user');
@@ -521,128 +388,22 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
       showUnfollowUserDialog(
         context: context,
         userName: userName,
-        onConfirm: () => _performUnfollow(),
+        onConfirm: () => _viewModel.toggleFollow(),
       );
       return;
     }
 
-    _performFollow();
-  }
-
-  Future<void> _performFollow() async {
-    final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
-    if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
-      return;
-    }
-
-    if (_isFollowing == null || _isLoading) return;
-
-    final originalFollowState = _isFollowing;
-
-    setState(() {
-      _isFollowing = !_isFollowing!;
-      _isLoading = true;
-    });
-
-    try {
-      final targetNpub = widget.user.pubkeyHex.startsWith('npub1') ? widget.user.pubkeyHex : _getNpubBech32(widget.user.pubkeyHex);
-
-      final result = await _userRepository.followUser(targetNpub);
-
-      result.fold(
-        (_) {
-          setState(() {
-            _isLoading = false;
-          });
-        },
-        (error) {
-          if (mounted) {
-            setState(() {
-              _isFollowing = originalFollowState;
-              _isLoading = false;
-            });
-            AppSnackbar.error(context, 'Failed to follow user: $error');
-          }
-        },
-      );
-    } catch (e) {
+    _viewModel.toggleFollow().catchError((error) {
       if (mounted) {
-        setState(() {
-          _isFollowing = originalFollowState;
-          _isLoading = false;
-        });
+        AppSnackbar.error(context, 'Failed to follow user: $error');
       }
-    }
-  }
-
-  Future<void> _performUnfollow() async {
-    final currentUserNpubResult = await _authRepository.getCurrentUserNpub();
-    if (currentUserNpubResult.isError || currentUserNpubResult.data == null) {
-      return;
-    }
-
-    if (_isFollowing == null || _isLoading) return;
-
-    final originalFollowState = _isFollowing;
-
-    setState(() {
-      _isFollowing = !_isFollowing!;
-      _isLoading = true;
     });
-
-    try {
-      final targetNpub = widget.user.pubkeyHex.startsWith('npub1') ? widget.user.pubkeyHex : _getNpubBech32(widget.user.pubkeyHex);
-
-      final result = await _userRepository.unfollowUser(targetNpub);
-
-      result.fold(
-        (_) {
-          setState(() {
-            _isLoading = false;
-          });
-        },
-        (error) {
-          if (mounted) {
-            setState(() {
-              _isFollowing = originalFollowState;
-              _isLoading = false;
-            });
-            AppSnackbar.error(context, 'Failed to unfollow user: $error');
-          }
-        },
-      );
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isFollowing = originalFollowState;
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  String _getNpubBech32(String identifier) {
-    if (identifier.isEmpty) return '';
-
-    if (identifier.startsWith('npub1')) {
-      return identifier;
-    }
-
-    if (identifier.length == 64 && RegExp(r'^[0-9a-fA-F]+$').hasMatch(identifier)) {
-      try {
-        return encodeBasicBech32(identifier, "npub");
-      } catch (e) {
-        return identifier;
-      }
-    }
-
-    return identifier;
   }
 
   Widget _buildFollowButton(BuildContext context) {
-    final isFollowing = _isFollowing!;
+    final isFollowing = _viewModel.isFollowing ?? false;
     return GestureDetector(
-      onTap: _isLoading ? null : _toggleFollow,
+      onTap: _viewModel.isLoading ? null : _toggleFollow,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         alignment: Alignment.center,
@@ -650,7 +411,7 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
           color: isFollowing ? context.colors.overlayLight : context.colors.textPrimary,
           borderRadius: BorderRadius.circular(40),
         ),
-        child: _isLoading
+        child: _viewModel.isLoading
             ? SizedBox(
                 width: 16,
                 height: 16,
@@ -686,13 +447,13 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: _authRepository.getCurrentUserNpub(),
-      builder: (context, snapshot) {
-        final currentUserNpub = snapshot.data?.fold((data) => data, (error) => null);
-        final isCurrentUser = currentUserNpub == widget.user.pubkeyHex || currentUserNpub == widget.user.npub;
+    return ChangeNotifierProvider<UserTileViewModel>.value(
+      value: _viewModel,
+      child: Consumer<UserTileViewModel>(
+        builder: (context, viewModel, child) {
+          final isCurrentUser = _currentUserNpub == widget.user.pubkeyHex || _currentUserNpub == widget.user.npub;
 
-        return GestureDetector(
+          return GestureDetector(
           onTap: () {
             if (widget.onUserSelected != null) {
               widget.onUserSelected!(widget.user);
@@ -759,7 +520,7 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
                     ],
                   ),
                 ),
-                if (!isCurrentUser && _isFollowing != null) ...[
+                if (!isCurrentUser && viewModel.isFollowing != null) ...[
                   const SizedBox(width: 10),
                   _buildFollowButton(context),
                 ],
@@ -767,7 +528,8 @@ class _UserItemWidgetState extends State<_UserItemWidget> {
             ),
           ),
         );
-      },
+        },
+      ),
     );
   }
 

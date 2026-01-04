@@ -4,10 +4,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../theme/theme_manager.dart';
-import '../../../models/user_model.dart';
 import '../../../core/di/app_di.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/services/media_service.dart';
+import '../../../presentation/viewmodels/edit_new_account_profile_viewmodel.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/title_widget.dart';
@@ -34,18 +32,22 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
   final _lud16Controller = TextEditingController();
   final _websiteController = TextEditingController();
 
-  bool _isSaving = false;
-  bool _isUploadingPicture = false;
+  late final EditNewAccountProfileViewModel _viewModel;
 
-  late final UserRepository _userRepository;
   @override
   void initState() {
     super.initState();
-    _userRepository = AppDI.get<UserRepository>();
+    _viewModel = EditNewAccountProfileViewModel(
+      userRepository: AppDI.get(),
+      npub: widget.npub,
+    );
+    _viewModel.addListener(_onViewModelChanged);
   }
 
   @override
   void dispose() {
+    _viewModel.removeListener(_onViewModelChanged);
+    _viewModel.dispose();
     _nameController.dispose();
     _aboutController.dispose();
     _pictureController.dispose();
@@ -54,85 +56,58 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
     super.dispose();
   }
 
-  Future<void> _pickAndUploadMedia() async {
-    setState(() {
-      _isUploadingPicture = true;
-      _pictureController.text = 'Uploading...';
-    });
+  void _onViewModelChanged() {
+    if (mounted) {
+      if (_viewModel.uploadedPictureUrl != null) {
+        _pictureController.text = _viewModel.uploadedPictureUrl!;
+      }
+      setState(() {});
+    }
+  }
 
+  Future<void> _pickAndUploadMedia() async {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.image,
       );
       if (result != null && result.files.single.path != null) {
-        const blossomUrl = 'https://blossom.primal.net'; // Default Blossom server
         final filePath = result.files.single.path!;
 
         try {
-          final mediaUrl = await MediaService().sendMedia(filePath, blossomUrl);
-          setState(() {
-            _pictureController.text = mediaUrl;
-          });
-
+          await _viewModel.uploadPicture(filePath);
           if (mounted) {
             AppSnackbar.success(context, 'Profile image uploaded successfully.');
           }
           if (kDebugMode) {
-            print('[EditNewAccountProfile] Media uploaded successfully: $mediaUrl');
+            print('[EditNewAccountProfile] Media uploaded successfully: ${_viewModel.uploadedPictureUrl}');
           }
         } catch (uploadError) {
           if (mounted) {
             AppSnackbar.error(context, 'Upload failed: $uploadError');
           }
-          setState(() {
-            _pictureController.text = ''; // Clear on upload failure
-          });
+          _pictureController.text = '';
         }
       }
     } catch (e) {
       if (mounted) {
         AppSnackbar.error(context, 'Upload failed: $e');
       }
-    } finally {
-      setState(() {
-        _isUploadingPicture = false;
-      });
     }
   }
 
   Future<void> _saveAndContinue() async {
-    setState(() => _isSaving = true);
+    if (!_formKey.currentState!.validate()) return;
 
     try {
-      final updatedUser = UserModel.create(
-        pubkeyHex: widget.npub,
-        name: _nameController.text.trim().isNotEmpty ? _nameController.text.trim() : 'New User',
+      await _viewModel.saveProfile(
+        name: _nameController.text.trim(),
         about: _aboutController.text.trim(),
         profileImage: _pictureController.text.trim(),
-        nip05: '',
-        banner: '',
         lud16: _lud16Controller.text.trim(),
         website: _websiteController.text.trim(),
-        updatedAt: DateTime.now(),
       );
 
-      debugPrint('[EditNewAccountProfile] Updating profile: ${updatedUser.name}');
-      debugPrint(
-          '[EditNewAccountProfile] Profile data: name=${updatedUser.name}, about=${updatedUser.about}, image=${updatedUser.profileImage}');
-
-      final result = await _userRepository.updateUserProfile(updatedUser);
-
-      result.fold(
-        (success) {
-          debugPrint('[EditNewAccountProfile] Profile updated successfully');
-        },
-        (error) {
-          debugPrint('[EditNewAccountProfile] Profile update failed: $error');
-          if (mounted) {
-            AppSnackbar.error(context, 'Profile update failed: $error');
-          }
-        },
-      );
+      debugPrint('[EditNewAccountProfile] Profile updated successfully');
 
       await Future.delayed(const Duration(milliseconds: 500));
 
@@ -145,8 +120,6 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
         AppSnackbar.error(context, 'Failed to update profile: ${e.toString()}');
         context.go('/suggested-follows?npub=${Uri.encodeComponent(widget.npub)}');
       }
-    } finally {
-      setState(() => _isSaving = false);
     }
   }
 
@@ -186,142 +159,146 @@ class _EditNewAccountProfilePageState extends State<EditNewAccountProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeManager>(
-      builder: (context, themeManager, child) {
-        return Scaffold(
-          backgroundColor: context.colors.background,
-          body: Stack(
-            children: [
-              SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(context),
-                    const SizedBox(height: 8),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Form(
-                        key: _formKey,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            CustomInputField(
-                              controller: _nameController,
-                              labelText: 'Username',
-                              fillColor: context.colors.inputFill,
-                              validator: (value) {
-                                if (value != null && value.trim().length > 50) {
-                                  return 'Username must be 50 characters or less';
-                                }
-                                return null;
-                              },
+    return Consumer<EditNewAccountProfileViewModel>(
+      builder: (context, viewModel, child) {
+        return Consumer<ThemeManager>(
+          builder: (context, themeManager, child) {
+            return Scaffold(
+              backgroundColor: context.colors.background,
+              body: Stack(
+                children: [
+                  SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildHeader(context),
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Form(
+                            key: _formKey,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                CustomInputField(
+                                  controller: _nameController,
+                                  labelText: 'Username',
+                                  fillColor: context.colors.inputFill,
+                                  validator: (value) {
+                                    if (value != null && value.trim().length > 50) {
+                                      return 'Username must be 50 characters or less';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 20),
+                                CustomInputField(
+                                  controller: _aboutController,
+                                  labelText: 'Bio',
+                                  fillColor: context.colors.inputFill,
+                                  maxLines: 3,
+                                  height: null,
+                                  validator: (value) {
+                                    if (value != null && value.trim().length > 300) {
+                                      return 'Bio must be 300 characters or less';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 20),
+                                CustomInputField(
+                                  controller: _pictureController,
+                                  enabled: !viewModel.isUploadingPicture,
+                                  labelText: 'Profile image URL',
+                                  fillColor: context.colors.inputFill,
+                                  validator: (value) {
+                                    if (value != null && value.trim().isNotEmpty) {
+                                      final uri = Uri.tryParse(value.trim());
+                                      if (uri == null || !uri.hasScheme) {
+                                        return 'Please enter a valid URL';
+                                      }
+                                    }
+                                    return null;
+                                  },
+                                  suffixIcon: _inputDecoration(
+                                    context,
+                                    'Profile image URL',
+                                    onUpload: viewModel.isUploadingPicture ? null : _pickAndUploadMedia,
+                                  ).suffixIcon,
+                                ),
+                                const SizedBox(height: 20),
+                                CustomInputField(
+                                  controller: _lud16Controller,
+                                  labelText: 'Lightning address (optional)',
+                                  fillColor: context.colors.inputFill,
+                                  validator: (value) {
+                                    if (value != null && value.trim().isNotEmpty) {
+                                      final lud16 = value.trim();
+                                      if (!lud16.contains('@') || lud16.split('@').length != 2) {
+                                        return 'Please enter a valid lightning address (e.g., user@domain.com)';
+                                      }
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 20),
+                                CustomInputField(
+                                  controller: _websiteController,
+                                  labelText: 'Website (optional)',
+                                  fillColor: context.colors.inputFill,
+                                  validator: (value) {
+                                    if (value != null && value.trim().isNotEmpty) {
+                                      final website = value.trim();
+                                      if (!website.contains('.') || website.contains(' ')) {
+                                        return 'Please enter a valid website URL';
+                                      }
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 60),
+                              ],
                             ),
-                            const SizedBox(height: 20),
-                            CustomInputField(
-                              controller: _aboutController,
-                              labelText: 'Bio',
-                              fillColor: context.colors.inputFill,
-                              maxLines: 3,
-                              height: null,
-                              validator: (value) {
-                                if (value != null && value.trim().length > 300) {
-                                  return 'Bio must be 300 characters or less';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 20),
-                            CustomInputField(
-                              controller: _pictureController,
-                              enabled: !_isUploadingPicture,
-                              labelText: 'Profile image URL',
-                              fillColor: context.colors.inputFill,
-                              validator: (value) {
-                                if (value != null && value.trim().isNotEmpty) {
-                                  final uri = Uri.tryParse(value.trim());
-                                  if (uri == null || !uri.hasScheme) {
-                                    return 'Please enter a valid URL';
-                                  }
-                                }
-                                return null;
-                              },
-                              suffixIcon: _inputDecoration(
-                                context,
-                                'Profile image URL',
-                                onUpload: _isUploadingPicture ? null : _pickAndUploadMedia,
-                              ).suffixIcon,
-                            ),
-                            const SizedBox(height: 20),
-                            CustomInputField(
-                              controller: _lud16Controller,
-                              labelText: 'Lightning address (optional)',
-                              fillColor: context.colors.inputFill,
-                              validator: (value) {
-                                if (value != null && value.trim().isNotEmpty) {
-                                  final lud16 = value.trim();
-                                  if (!lud16.contains('@') || lud16.split('@').length != 2) {
-                                    return 'Please enter a valid lightning address (e.g., user@domain.com)';
-                                  }
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 20),
-                            CustomInputField(
-                              controller: _websiteController,
-                              labelText: 'Website (optional)',
-                              fillColor: context.colors.inputFill,
-                              validator: (value) {
-                                if (value != null && value.trim().isNotEmpty) {
-                                  final website = value.trim();
-                                  if (!website.contains('.') || website.contains(' ')) {
-                                    return 'Please enter a valid website URL';
-                                  }
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 60),
-                          ],
+                          ),
                         ),
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    top: MediaQuery.of(context).padding.top + 16,
+                    right: 16,
+                    child: GestureDetector(
+                      onTap: viewModel.isSaving ? null : _saveAndContinue,
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: context.colors.textPrimary,
+                          borderRadius: BorderRadius.circular(22),
+                        ),
+                        child: viewModel.isSaving
+                            ? Center(
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
+                                  ),
+                                ),
+                              )
+                            : Icon(
+                                Icons.check,
+                                color: context.colors.background,
+                                size: 24,
+                              ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-              Positioned(
-                top: MediaQuery.of(context).padding.top + 16,
-                right: 16,
-                child: GestureDetector(
-                  onTap: _isSaving ? null : _saveAndContinue,
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: context.colors.textPrimary,
-                      borderRadius: BorderRadius.circular(22),
-                    ),
-                    child: _isSaving
-                        ? Center(
-                            child: SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(context.colors.background),
-                              ),
-                            ),
-                          )
-                        : Icon(
-                            Icons.check,
-                            color: context.colors.background,
-                            size: 24,
-                          ),
                   ),
-                ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );

@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,7 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:qiqstr/ui/screens/note/share_note.dart';
 import '../theme/theme_manager.dart';
 import '../../core/di/app_di.dart';
-import '../../data/repositories/notification_repository.dart';
+import '../../presentation/viewmodels/home_navigator_viewmodel.dart';
 
 class HomeNavigator extends StatefulWidget {
   final String npub;
@@ -31,7 +30,7 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
   late AnimationController _exploreRotationController;
   bool _isFirstBuild = true;
   bool _hasNewNotifications = false;
-  StreamSubscription<bool>? _hasNewNotificationsSubscription;
+  HomeNavigatorViewModel? _homeNavigatorViewModel;
 
   @override
   void initState() {
@@ -47,26 +46,28 @@ class _HomeNavigatorState extends State<HomeNavigator> with TickerProviderStateM
     _subscribeToNewNotifications();
   }
 
-  void _subscribeToNewNotifications() async {
-    final notificationRepository = AppDI.get<NotificationRepository>();
-    _hasNewNotifications = await notificationRepository.hasNewNotifications();
+  void _subscribeToNewNotifications() {
+    final viewModel = HomeNavigatorViewModel(
+      notificationRepository: AppDI.get(),
+    );
+    viewModel.addListener(_onViewModelChanged);
+    _homeNavigatorViewModel = viewModel;
+  }
+
+  void _onViewModelChanged() {
     if (mounted) {
-      setState(() {});
+      setState(() {
+        _hasNewNotifications = _homeNavigatorViewModel?.hasNewNotifications ?? false;
+      });
     }
-    _hasNewNotificationsSubscription = notificationRepository.hasNewNotificationsStream.listen((hasNew) {
-      if (mounted) {
-        setState(() {
-          _hasNewNotifications = hasNew;
-        });
-      }
-    });
   }
 
   @override
   void dispose() {
     _iconAnimationController.dispose();
     _exploreRotationController.dispose();
-    _hasNewNotificationsSubscription?.cancel();
+    _homeNavigatorViewModel?.removeListener(_onViewModelChanged);
+    _homeNavigatorViewModel?.dispose();
     super.dispose();
   }
 

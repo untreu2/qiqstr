@@ -1,14 +1,12 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:provider/provider.dart';
 import '../../../models/note_model.dart';
 import '../../../models/user_model.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/services/data_service.dart';
+import '../../../presentation/viewmodels/note_statistics_viewmodel.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/top_action_bar_widget.dart';
 
@@ -25,33 +23,20 @@ class NoteStatisticsPage extends StatefulWidget {
 }
 
 class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
-  late final UserRepository _userRepository;
-  late final DataService _nostrDataService;
+  late final NoteStatisticsViewModel _viewModel;
   late ScrollController _scrollController;
   final ValueNotifier<bool> _showInteractionsBubble = ValueNotifier(false);
-  
-  List<Map<String, dynamic>>? _cachedInteractions;
-  String? _lastNoteId;
-  StreamSubscription<List<NoteModel>>? _notesSubscription;
 
   @override
   void initState() {
     super.initState();
-    _userRepository = AppDI.get<UserRepository>();
-    _nostrDataService = AppDI.get<DataService>();
+    _viewModel = NoteStatisticsViewModel(
+      userRepository: AppDI.get(),
+      dataService: AppDI.get(),
+      note: widget.note,
+    );
+    _viewModel.addListener(_onViewModelChanged);
     _scrollController = ScrollController()..addListener(_scrollListener);
-
-    _notesSubscription = _nostrDataService.notesStream.listen((notes) {
-      if (mounted) {
-        final hasRelevantNote = notes.any((note) => note.id == widget.note.id);
-        if (hasRelevantNote) {
-          _buildInteractionsList();
-          setState(() {});
-        }
-      }
-    });
-
-    _buildInteractionsList();
   }
 
   void _scrollListener() {
@@ -65,28 +50,17 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
 
   @override
   void dispose() {
-    _notesSubscription?.cancel();
+    _viewModel.removeListener(_onViewModelChanged);
+    _viewModel.dispose();
     _scrollController.dispose();
     _showInteractionsBubble.dispose();
     super.dispose();
   }
 
-  Future<UserModel> _getUser(String npub) async {
-    final result = await _userRepository.getUserProfile(npub);
-    return result.fold(
-      (user) => user,
-      (error) => UserModel.create(
-        pubkeyHex: npub,
-        name: '',
-        about: '',
-        profileImage: '',
-        nip05: '',
-        banner: '',
-        lud16: '',
-        website: '',
-        updatedAt: DateTime.now(),
-      ),
-    );
+  void _onViewModelChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _navigateToProfile(String npub) async {
@@ -94,7 +68,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
       if (mounted) {
         debugPrint('[NoteStatisticsPage] Navigating to profile: $npub');
 
-        final user = await _getUser(npub);
+        final user = await _viewModel.getUser(npub);
 
         if (mounted) {
           final currentLocation = GoRouterState.of(context).matchedLocation;
@@ -120,7 +94,7 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
     int? zapAmount,
   }) {
     return FutureBuilder<UserModel>(
-      future: _getUser(npub),
+      future: _viewModel.getUser(npub),
       builder: (_, snapshot) {
         final user = snapshot.data;
         
@@ -268,145 +242,96 @@ class _NoteStatisticsPageState extends State<NoteStatisticsPage> {
     );
   }
 
-  void _buildInteractionsList() {
-    if (_lastNoteId == widget.note.id && _cachedInteractions != null) {
-      return;
-    }
-    
-    final reactions = _nostrDataService.getReactionsForNote(widget.note.id);
-    final reposts = _nostrDataService.getRepostsForNote(widget.note.id);
-    final zaps = _nostrDataService.getZapsForNote(widget.note.id);
-
-    final allInteractions = <Map<String, dynamic>>[];
-    final seenReactions = <String>{};
-
-    for (final reaction in reactions) {
-      final reactionKey = '${reaction.author}:${reaction.content}';
-      if (!seenReactions.contains(reactionKey)) {
-        seenReactions.add(reactionKey);
-        allInteractions.add({
-          'type': 'reaction',
-          'data': reaction,
-          'timestamp': reaction.timestamp,
-          'npub': reaction.author,
-          'content': reaction.content,
-        });
-      }
-    }
-
-    final seenReposts = <String>{};
-    for (final repost in reposts) {
-      if (!seenReposts.contains(repost.author)) {
-        seenReposts.add(repost.author);
-        allInteractions.add({
-          'type': 'repost',
-          'data': repost,
-          'timestamp': repost.timestamp,
-          'npub': repost.author,
-          'content': 'Reposted',
-        });
-      }
-    }
-
-    final seenZaps = <String>{};
-    for (final zap in zaps) {
-      if (!seenZaps.contains(zap.sender)) {
-        seenZaps.add(zap.sender);
-        allInteractions.add({
-          'type': 'zap',
-          'data': zap,
-          'timestamp': zap.timestamp,
-          'npub': zap.sender,
-          'content': zap.comment ?? '',
-          'zapAmount': zap.amount,
-        });
-      }
-    }
-
-    allInteractions.sort((a, b) => (b['timestamp'] as DateTime).compareTo(a['timestamp'] as DateTime));
-    
-    _cachedInteractions = allInteractions;
-    _lastNoteId = widget.note.id;
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_cachedInteractions == null || _lastNoteId != widget.note.id) {
-      _buildInteractionsList();
-    }
-    
-    final interactionWidgets = <Widget>[];
-    for (int i = 0; i < _cachedInteractions!.length; i++) {
-      final interaction = _cachedInteractions![i];
-      interactionWidgets.add(
-        _buildEntry(
-          npub: interaction['npub'],
-          content: interaction['content'],
-          zapAmount: interaction['zapAmount'],
-        ),
-      );
-      if (i < _cachedInteractions!.length - 1) {
-        interactionWidgets.add(const _UserSeparator());
-      }
-    }
+    return ChangeNotifierProvider<NoteStatisticsViewModel>.value(
+      value: _viewModel,
+      child: Consumer<NoteStatisticsViewModel>(
+        builder: (context, viewModel, child) {
+          if (!viewModel.isInitialized) {
+            return Scaffold(
+              backgroundColor: context.colors.background,
+              body: const Center(child: CircularProgressIndicator()),
+            );
+          }
 
-    return Scaffold(
-      backgroundColor: context.colors.background,
-      body: Stack(
-        children: [
-          CustomScrollView(
-            controller: _scrollController,
-            slivers: [
-              SliverToBoxAdapter(
-                child: SizedBox(height: MediaQuery.of(context).padding.top + 60),
-              ),
-              SliverToBoxAdapter(
-                child: _buildHeader(context),
-              ),
-              SliverToBoxAdapter(
-                child: interactionWidgets.isEmpty
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 32),
-                          child: Text(
-                            'No interactions yet.',
-                            style: TextStyle(color: context.colors.textTertiary),
-                          ),
-                        ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
-              SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) => interactionWidgets[index],
-                  childCount: interactionWidgets.length,
-                  addAutomaticKeepAlives: true,
-                  addRepaintBoundaries: false,
-                ),
-              ),
-            ],
-          ),
-          TopActionBarWidget(
-            onBackPressed: () => context.pop(),
-            centerBubble: Text(
-              'Interactions',
-              style: TextStyle(
-                color: context.colors.background,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
+          final cachedInteractions = viewModel.cachedInteractions!;
+
+          final interactionWidgets = <Widget>[];
+          for (int i = 0; i < cachedInteractions.length; i++) {
+            final interaction = cachedInteractions[i];
+          interactionWidgets.add(
+            _buildEntry(
+              npub: interaction['npub'],
+              content: interaction['content'],
+              zapAmount: interaction['zapAmount'],
             ),
-            centerBubbleVisibility: _showInteractionsBubble,
-            onCenterBubbleTap: () {
-              _scrollController.animateTo(
-                0,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeOut,
-              );
-            },
-            showShareButton: false,
+          );
+          if (i < cachedInteractions.length - 1) {
+            interactionWidgets.add(const _UserSeparator());
+          }
+        }
+
+        return Scaffold(
+          backgroundColor: context.colors.background,
+          body: Stack(
+            children: [
+              CustomScrollView(
+                controller: _scrollController,
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: SizedBox(height: MediaQuery.of(context).padding.top + 60),
+                  ),
+                  SliverToBoxAdapter(
+                    child: _buildHeader(context),
+                  ),
+                  SliverToBoxAdapter(
+                    child: interactionWidgets.isEmpty
+                        ? Center(
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 32),
+                              child: Text(
+                                'No interactions yet.',
+                                style: TextStyle(color: context.colors.textTertiary),
+                              ),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                  SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) => interactionWidgets[index],
+                      childCount: interactionWidgets.length,
+                      addAutomaticKeepAlives: true,
+                      addRepaintBoundaries: false,
+                    ),
+                  ),
+                ],
+              ),
+              TopActionBarWidget(
+                onBackPressed: () => context.pop(),
+                centerBubble: Text(
+                  'Interactions',
+                  style: TextStyle(
+                    color: context.colors.background,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                centerBubbleVisibility: _showInteractionsBubble,
+                onCenterBubbleTap: () {
+                  _scrollController.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOut,
+                  );
+                },
+                showShareButton: false,
           ),
         ],
+      ),
+    );
+        },
       ),
     );
   }

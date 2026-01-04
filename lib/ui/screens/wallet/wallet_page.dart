@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
-import '../../../core/di/app_di.dart';
-import '../../../data/repositories/wallet_repository.dart';
 import '../../../models/wallet_model.dart';
 import '../../../presentation/providers/viewmodel_provider.dart';
 import '../../../presentation/viewmodels/wallet_viewmodel.dart';
@@ -19,8 +17,6 @@ class WalletPage extends StatefulWidget {
 }
 
 class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMixin {
-  final _walletRepository = AppDI.get<WalletRepository>();
-
   @override
   bool get wantKeepAlive => true;
 
@@ -276,7 +272,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) => ReceiveDialog(
-        walletRepository: _walletRepository,
+        walletRepository: viewModel.walletRepository,
         lud16: viewModel.getCoinosLud16(),
       ),
     );
@@ -292,7 +288,7 @@ class _WalletPageState extends State<WalletPage> with AutomaticKeepAliveClientMi
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) => SendDialog(
-        walletRepository: _walletRepository,
+        walletRepository: viewModel.walletRepository,
         onPaymentSuccess: () => viewModel.onPaymentSuccess(),
       ),
     );

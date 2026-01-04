@@ -1,192 +1,81 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../../../models/user_model.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../theme/theme_manager.dart';
 import 'package:carbon_icons/carbon_icons.dart';
 import '../../../core/di/app_di.dart';
-import '../../../data/repositories/auth_repository.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/services/data_service.dart';
+import '../../../presentation/viewmodels/sidebar_viewmodel.dart';
+import '../../../models/user_model.dart';
 
-class SidebarWidget extends StatefulWidget {
+class SidebarWidget extends StatelessWidget {
   const SidebarWidget({super.key});
 
   @override
-  State<SidebarWidget> createState() => _SidebarWidgetState();
-}
-
-class _SidebarWidgetState extends State<SidebarWidget> {
-  late UserRepository _userRepository;
-  UserModel? _currentUser;
-  StreamSubscription<UserModel>? _userStreamSubscription;
-  int _followingCount = 0;
-  int _followerCount = 0;
-  bool _isLoadingCounts = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _userRepository = AppDI.get<UserRepository>();
-    _loadInitialUser();
-    _setupUserStreamListener();
-  }
-
-  @override
-  void dispose() {
-    _userStreamSubscription?.cancel();
-    super.dispose();
-  }
-
-  void _setupUserStreamListener() {
-    _userStreamSubscription = _userRepository.currentUserStream.listen(
-      (updatedUser) {
-        debugPrint('[SidebarWidget] Received updated user data from stream: ${updatedUser.name}');
-        if (mounted) {
-          setState(() {
-            _currentUser = updatedUser;
-          });
-          _loadFollowerCounts();
-        }
-      },
-      onError: (error) {
-        debugPrint('[SidebarWidget] Error in user stream: $error');
-      },
-    );
-  }
-
-  Future<void> _loadInitialUser() async {
-    try {
-      final authRepository = AppDI.get<AuthRepository>();
-
-      final npubResult = await authRepository.getCurrentUserNpub();
-      if (npubResult.isError || npubResult.data == null) {
-        return;
-      }
-
-      final userResult = await _userRepository.getUserProfile(npubResult.data!);
-      userResult.fold(
-        (user) {
-          if (mounted) {
-            setState(() {
-              _currentUser = user;
-            });
-            _loadFollowerCounts();
-          }
-        },
-        (error) {
-          debugPrint('[SidebarWidget] Error loading initial user: $error');
-        },
-      );
-    } catch (e) {
-      debugPrint('[SidebarWidget] Error getting current user: $e');
-    }
-  }
-
-  Future<void> _loadFollowerCounts() async {
-    if (_currentUser == null) return;
-
-    try {
-      final followingResult = await _userRepository.getFollowingListForUser(_currentUser!.pubkeyHex);
-
-      followingResult.fold(
-        (followingUsers) {
-          if (mounted) {
-            setState(() {
-              _followingCount = followingUsers.length;
-            });
-          }
-        },
-        (error) {
-          debugPrint('[SidebarWidget] Error loading following count: $error');
-          if (mounted) {
-            setState(() {
-              _followingCount = 0;
-            });
-          }
-        },
-      );
-
-      final nostrDataService = AppDI.get<DataService>();
-      final followerCount = await nostrDataService.fetchFollowerCount(_currentUser!.pubkeyHex);
-      if (mounted) {
-        setState(() {
-          _followerCount = followerCount;
-          _isLoadingCounts = false;
-        });
-        
-        // Update follower count in Isar if it's not 0
-        if (followerCount > 0) {
-          await _userRepository.updateUserFollowerCount(_currentUser!.pubkeyHex, followerCount);
-        }
-      }
-    } catch (e) {
-      debugPrint('[SidebarWidget] Error loading follower counts: $e');
-      if (mounted) {
-        setState(() {
-          _followingCount = 0;
-          _followerCount = 0;
-          _isLoadingCounts = false;
-        });
-      }
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeManager>(
-      builder: (context, themeManager, child) {
-        final colors = themeManager.colors;
+    return ChangeNotifierProvider<SidebarViewModel>(
+      create: (_) => SidebarViewModel(
+        authRepository: AppDI.get(),
+        userRepository: AppDI.get(),
+        dataService: AppDI.get(),
+      ),
+      child: Consumer<SidebarViewModel>(
+        builder: (context, viewModel, child) {
+          return Consumer<ThemeManager>(
+            builder: (context, themeManager, child) {
+              final colors = themeManager.colors;
 
-        return Drawer(
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.only(
-              topRight: Radius.circular(24),
-              bottomRight: Radius.circular(24),
-            ),
-          ),
-          child: Container(
-            color: colors.background,
-            child: _currentUser == null
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        CircularProgressIndicator(color: colors.accent),
-                        const SizedBox(height: 16),
-                        Text(
-                          'Loading profile...',
-                          style: TextStyle(
-                            color: colors.textSecondary,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                : Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(28, 68, 20, 0),
-                        child: _UserProfileHeader(
-                          user: _currentUser!,
-                          colors: colors,
-                          followerCount: _followerCount,
-                          followingCount: _followingCount,
-                          isLoadingCounts: _isLoadingCounts,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      _SidebarContent(user: _currentUser!, colors: colors),
-                    ],
+              return Drawer(
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.only(
+                    topRight: Radius.circular(24),
+                    bottomRight: Radius.circular(24),
                   ),
-          ),
-        );
-      },
+                ),
+                child: Container(
+                  color: colors.background,
+                  child: viewModel.currentUser == null
+                      ? Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              CircularProgressIndicator(color: colors.accent),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Loading profile...',
+                                style: TextStyle(
+                                  color: colors.textSecondary,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(28, 68, 20, 0),
+                              child: _UserProfileHeader(
+                                user: viewModel.currentUser!,
+                                colors: colors,
+                                followerCount: viewModel.followerCount,
+                                followingCount: viewModel.followingCount,
+                                isLoadingCounts: viewModel.isLoadingCounts,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            _SidebarContent(user: viewModel.currentUser!, colors: colors),
+                          ],
+                        ),
+                ),
+              );
+            },
+          );
+        },
+      ),
     );
   }
+
 }
 
 class _UserProfileHeader extends StatelessWidget {

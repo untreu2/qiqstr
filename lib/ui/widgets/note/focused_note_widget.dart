@@ -51,13 +51,11 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
 
   bool _isDisposed = false;
   bool _isInitialized = false;
-  late final UserRepository _userRepository;
 
   @override
   void initState() {
     super.initState();
     try {
-      _userRepository = AppDI.get<UserRepository>();
       _precomputeImmutableData();
       _initializeAsync();
     } catch (e) {
@@ -203,7 +201,8 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
         }
       }
 
-      final authorResult = await _userRepository.getUserProfile(_authorId);
+      final userRepository = AppDI.get<UserRepository>();
+      final authorResult = await userRepository.getUserProfile(_authorId);
       authorResult.fold(
         (user) {
           if (mounted && !_isDisposed) {
@@ -216,7 +215,8 @@ class _FocusedNoteWidgetState extends State<FocusedNoteWidget> with AutomaticKee
 
       if (_reposterId != null) {
         final reposterId = _reposterId;
-        final reposterResult = await _userRepository.getUserProfile(reposterId);
+        final userRepository = AppDI.get<UserRepository>();
+        final reposterResult = await userRepository.getUserProfile(reposterId);
         reposterResult.fold(
           (user) {
             if (mounted && !_isDisposed) {

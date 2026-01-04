@@ -1,13 +1,11 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_linkify/flutter_linkify.dart';
+import 'package:provider/provider.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import '../../theme/theme_manager.dart';
 import '../../../core/di/app_di.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/repositories/auth_repository.dart';
-import '../../../data/services/user_batch_fetcher.dart';
-import '../../../models/user_model.dart';
+import '../../../presentation/viewmodels/note_content_viewmodel.dart';
 import '../../screens/note/feed_page.dart';
 import '../../screens/webview/webview_page.dart';
 import '../media/link_preview_widget.dart';
@@ -50,30 +48,40 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
   late final List<String> _linkUrls;
   late final List<String> _quoteIds;
 
-  final Map<String, UserModel> _mentionUsers = {};
   final Map<String, bool> _mentionLoadingStates = {};
   final List<TapGestureRecognizer> _gestureRecognizers = [];
-  late final UserRepository _userRepository;
   
   List<InlineSpan>? _cachedSpans;
   int _cachedSpansHash = 0;
+  late final NoteContentViewModel _viewModel;
 
   @override
   void initState() {
     super.initState();
-    _userRepository = AppDI.get<UserRepository>();
     _processParsedContent();
-    _loadMentionUsersSync();
-    _preloadMentionUsersAsync();
+    _viewModel = NoteContentViewModel(
+      userRepository: AppDI.get(),
+      authRepository: AppDI.get(),
+      textParts: _textParts.cast<Map<String, dynamic>>(),
+    );
+    _viewModel.addListener(_onViewModelChanged);
   }
 
   @override
   void dispose() {
+    _viewModel.removeListener(_onViewModelChanged);
+    _viewModel.dispose();
     for (final recognizer in _gestureRecognizers) {
       recognizer.dispose();
     }
     _gestureRecognizers.clear();
     super.dispose();
+  }
+
+  void _onViewModelChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _processParsedContent() {
@@ -83,167 +91,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     _quoteIds = (widget.parsedContent['quoteIds'] as List<dynamic>?)?.cast<String>() ?? [];
   }
 
-  String? _extractPubkey(String bech32) {
-    try {
-      if (bech32.startsWith('npub1')) {
-        return decodeBasicBech32(bech32, 'npub');
-      } else if (bech32.startsWith('nprofile1')) {
-        final result = decodeTlvBech32Full(bech32, 'nprofile');
-        return result['type_0_main'];
-      }
-    } catch (e) {
-      return null;
-    }
-    return null;
-  }
 
-  static UserModel _createPlaceholderUser(String pubkey) {
-    return UserModel.create(
-      pubkeyHex: pubkey,
-      name: pubkey.length > 8 ? pubkey.substring(0, 8) : pubkey,
-      about: '',
-      profileImage: '',
-      banner: '',
-      website: '',
-      nip05: '',
-      lud16: '',
-      updatedAt: DateTime.now(),
-      nip05Verified: false,
-    );
-  }
-
-  void _loadMentionUsersSync() {
-    final mentionIds = _textParts.where((part) => part['type'] == 'mention').map((part) => part['id'] as String).toSet();
-
-    for (final mentionId in mentionIds) {
-      final actualPubkey = _extractPubkey(mentionId);
-      if (actualPubkey == null) continue;
-      
-      try {
-        final npubEncoded = encodeBasicBech32(actualPubkey, 'npub');
-        final cachedUser = _userRepository.getCachedUserSync(npubEncoded);
-        
-        if (cachedUser != null) {
-          _mentionUsers[actualPubkey] = cachedUser;
-        } else {
-          _mentionUsers[actualPubkey] = _createPlaceholderUser(actualPubkey);
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-  }
-
-  Future<void> _preloadMentionUsersAsync() async {
-    final mentionIds = _textParts.where((part) => part['type'] == 'mention').map((part) => part['id'] as String).toSet();
-    
-    if (mentionIds.isEmpty) return;
-
-    final pubkeyHexToNpubMap = <String, String>{};
-    final npubsToFetch = <String>[];
-    
-    for (final mentionId in mentionIds) {
-      final actualPubkey = _extractPubkey(mentionId);
-      if (actualPubkey == null) continue;
-      
-      try {
-        if (!_mentionUsers.containsKey(actualPubkey) || _mentionUsers[actualPubkey]!.name == actualPubkey.substring(0, 8)) {
-          final npubEncoded = encodeBasicBech32(actualPubkey, 'npub');
-          pubkeyHexToNpubMap[actualPubkey] = npubEncoded;
-          npubsToFetch.add(npubEncoded);
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-    
-    if (npubsToFetch.isEmpty) return;
-
-    try {
-      final cachedResults = await _userRepository.getUserProfiles(npubsToFetch, priority: FetchPriority.urgent);
-      
-      if (!mounted) return;
-
-      bool hasUpdates = false;
-      for (final entry in cachedResults.entries) {
-        final npub = entry.key;
-        final result = entry.value;
-        
-        final pubkeyHex = pubkeyHexToNpubMap.entries
-            .firstWhere((e) => e.value == npub, orElse: () => MapEntry('', ''))
-            .key;
-        
-        if (pubkeyHex.isEmpty) continue;
-        
-        result.fold(
-          (user) {
-            if (!_mentionUsers.containsKey(pubkeyHex) || _mentionUsers[pubkeyHex]!.name == pubkeyHex.substring(0, 8) || _mentionUsers[pubkeyHex]!.profileImage.isEmpty) {
-              _mentionUsers[pubkeyHex] = user;
-              hasUpdates = true;
-            }
-          },
-          (_) {},
-        );
-      }
-      
-      if (mounted && hasUpdates) {
-        setState(() {});
-      }
-
-      final missingNpubs = cachedResults.entries
-          .where((e) => e.value.isError)
-          .map((e) => e.key)
-          .toList();
-      
-      if (missingNpubs.isNotEmpty) {
-        _loadMentionUsersBatch(missingNpubs, pubkeyHexToNpubMap);
-      }
-    } catch (e) {
-      _loadMentionUsersBatch(npubsToFetch, pubkeyHexToNpubMap);
-    }
-  }
-
-  Future<void> _loadMentionUsersBatch(List<String> npubs, Map<String, String> pubkeyMap) async {
-    if (npubs.isEmpty) return;
-
-    try {
-      final results = await _userRepository.getUserProfiles(npubs, priority: FetchPriority.normal);
-      
-      if (!mounted) return;
-
-      bool hasUpdates = false;
-      for (final entry in results.entries) {
-        final npub = entry.key;
-        final result = entry.value;
-        
-        final pubkeyHex = pubkeyMap.entries
-            .firstWhere((e) => e.value == npub, orElse: () => MapEntry('', ''))
-            .key;
-        
-        if (pubkeyHex.isEmpty) continue;
-        
-        result.fold(
-          (user) {
-            if (!_mentionUsers.containsKey(pubkeyHex) || _mentionUsers[pubkeyHex]!.name == pubkeyHex.substring(0, 8) || _mentionUsers[pubkeyHex]!.profileImage.isEmpty) {
-              _mentionUsers[pubkeyHex] = user;
-              hasUpdates = true;
-            }
-          },
-          (_) {
-            if (!_mentionUsers.containsKey(pubkeyHex)) {
-              _mentionUsers[pubkeyHex] = _createPlaceholderUser(pubkeyHex);
-              hasUpdates = true;
-            }
-          },
-        );
-      }
-      
-      if (mounted && hasUpdates) {
-        setState(() {});
-      }
-    } catch (e) {
-    }
-  }
 
   double _fontSize(BuildContext context) {
     final textScaler = MediaQuery.textScalerOf(context);
@@ -276,10 +124,9 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
     try {
       final cleanHashtag = hashtag.startsWith('#') ? hashtag.substring(1) : hashtag;
 
-      final authRepository = AppDI.get<AuthRepository>();
-      final npubResult = await authRepository.getCurrentUserNpub();
+      final npub = await _viewModel.getCurrentUserNpub();
 
-      if (npubResult.isError || npubResult.data == null) {
+      if (npub == null) {
         if (mounted) {
           AppSnackbar.error(context, 'Could not load hashtag feed');
         }
@@ -290,7 +137,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         Navigator.of(context).push(
           MaterialPageRoute(
             builder: (context) => FeedPage(
-              npub: npubResult.data!,
+              npub: npub,
               hashtag: cleanHashtag,
             ),
           ),
@@ -304,7 +151,7 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
   }
 
   List<InlineSpan> _buildSpans() {
-    final mentionUsersHash = _mentionUsers.entries
+    final mentionUsersHash = _viewModel.mentionUsers.entries
         .map((e) => Object.hash(e.key, e.value.name, e.value.profileImage))
         .fold(0, (prev, hash) => Object.hash(prev, hash));
     
@@ -411,10 +258,10 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
         }
       } else if (p['type'] == 'mention') {
         final id = p['id'] as String;
-        final actualPubkey = _extractPubkey(id);
+        final actualPubkey = _viewModel.extractPubkey(id);
         if (actualPubkey == null) continue;
         
-        final user = _mentionUsers[actualPubkey];
+        final user = _viewModel.mentionUsers[actualPubkey];
         final isLoading = _mentionLoadingStates[actualPubkey] == true;
 
         String displayText;
@@ -473,9 +320,13 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
 
   @override
   Widget build(BuildContext context) {
-    return RepaintBoundary(
-      key: ValueKey('content_${widget.noteId}'),
-      child: Column(
+    return ChangeNotifierProvider<NoteContentViewModel>.value(
+      value: _viewModel,
+      child: Consumer<NoteContentViewModel>(
+        builder: (context, viewModel, child) {
+          return RepaintBoundary(
+            key: ValueKey('content_${widget.noteId}'),
+            child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -540,6 +391,9 @@ class _NoteContentWidgetState extends State<NoteContentWidget> {
                   .toList(),
             ),
         ],
+            ),
+          );
+        },
       ),
     );
   }

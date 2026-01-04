@@ -5,7 +5,6 @@ import '../../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/viewmodels/edit_profile_viewmodel.dart';
-import '../../../data/repositories/user_repository.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../../data/services/media_service.dart';
 import '../../widgets/common/snackbar_widget.dart';
@@ -47,16 +46,13 @@ class _EditProfileContentState extends State<_EditProfileContent> {
   final _lud16Controller = TextEditingController();
   final _websiteController = TextEditingController();
 
-  bool _isLoading = true;
   bool _isUploadingBanner = false;
-
-  late final UserRepository _userRepository;
 
   @override
   void initState() {
     super.initState();
-    _userRepository = AppDI.get<UserRepository>();
-    _loadUser();
+    final viewModel = Provider.of<EditProfileViewModel>(context, listen: false);
+    _loadUser(viewModel);
   }
 
   @override
@@ -71,31 +67,21 @@ class _EditProfileContentState extends State<_EditProfileContent> {
     super.dispose();
   }
 
-  Future<void> _loadUser() async {
-    try {
-      final currentUserResult = await _userRepository.getCurrentUser();
-
-      if (currentUserResult.isSuccess && currentUserResult.data != null) {
-        final user = currentUserResult.data!;
-
-        setState(() {
-          _nameController.text = user.name;
-          _aboutController.text = user.about;
-          _pictureController.text = user.profileImage;
-          _nip05Controller.text = user.nip05;
-          _bannerController.text = user.banner;
-          _lud16Controller.text = user.lud16;
-          _websiteController.text = user.website;
-          _isLoading = false;
-        });
-      } else {
-        setState(() => _isLoading = false);
-      }
-    } catch (e) {
-      if (kDebugMode) {
-        print('[EditProfile] Error loading user: $e');
-      }
-      setState(() => _isLoading = false);
+  Future<void> _loadUser(EditProfileViewModel viewModel) async {
+    await viewModel.loadCurrentUserProfile();
+    final profileState = viewModel.profileState;
+    
+    if (profileState.isLoaded && profileState.data != null) {
+      final user = profileState.data!;
+      setState(() {
+        _nameController.text = user.name;
+        _aboutController.text = user.about;
+        _pictureController.text = user.profileImage;
+        _nip05Controller.text = user.nip05;
+        _bannerController.text = user.banner;
+        _lud16Controller.text = user.lud16;
+        _websiteController.text = user.website;
+      });
     }
   }
 
@@ -170,29 +156,15 @@ class _EditProfileContentState extends State<_EditProfileContent> {
     viewModel.updateName(_nameController.text.trim());
     viewModel.updateAbout(_aboutController.text.trim());
     viewModel.updatePicture(_pictureController.text.trim());
+    viewModel.updateNip05(_nip05Controller.text.trim());
+    viewModel.updateBanner(_bannerController.text.trim());
     viewModel.updateLud16(_lud16Controller.text.trim());
     viewModel.updateWebsite(_websiteController.text.trim());
 
     try {
-      final result = await _userRepository.updateProfile(
-        name: _nameController.text.trim(),
-        about: _aboutController.text.trim(),
-        profileImage: _pictureController.text.trim(),
-        banner: _bannerController.text.trim(),
-        website: _websiteController.text.trim(),
-        nip05: _nip05Controller.text.trim(),
-        lud16: _lud16Controller.text.trim(),
-      );
-
+      await viewModel.saveProfileCommand();
       if (mounted) {
-        result.fold(
-          (updatedUser) {
-            context.pop();
-          },
-          (error) {
-            AppSnackbar.error(context, 'Failed to update profile: $error');
-          },
-        );
+        context.pop();
       }
     } catch (e) {
       if (kDebugMode) {
@@ -242,7 +214,7 @@ class _EditProfileContentState extends State<_EditProfileContent> {
   Widget build(BuildContext context) {
     return Consumer<EditProfileViewModel>(
       builder: (context, viewModel, child) {
-        if (_isLoading) {
+        if (viewModel.profileState.isLoading) {
           return Scaffold(
             backgroundColor: context.colors.background,
             body: Center(child: CircularProgressIndicator(color: context.colors.textPrimary)),

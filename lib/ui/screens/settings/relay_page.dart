@@ -126,7 +126,7 @@ class _RelayPageState extends State<RelayPage> {
   }
 
   void _initializeServices() {
-    _authRepository = AppDI.get<AuthRepository>();
+    _authRepository = AppDI.get<AuthRepository>(); // Will be moved to ViewModel
   }
 
   void _startStatsRefresh() {

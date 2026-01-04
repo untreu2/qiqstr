@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../models/note_model.dart';
 import '../../../models/user_model.dart';
-import '../../../core/di/app_di.dart';
-import '../../../data/services/data_service.dart';
 import 'note_widget.dart';
 import '../common/common_buttons.dart';
 
@@ -43,18 +41,11 @@ class NoteListWidget extends StatefulWidget {
 class _NoteListWidgetState extends State<NoteListWidget> {
   bool _hasTriggeredLoadMore = false;
   Timer? _updateTimer;
-  late final DataService _nostrDataService;
-  StreamSubscription<List<NoteModel>>? _notesSubscription;
 
   @override
   void initState() {
     super.initState();
-    _nostrDataService = AppDI.get<DataService>();
     widget.scrollController?.addListener(_onScroll);
-    
-    _notesSubscription = _nostrDataService.notesStream.listen((_) {
-      _scheduleUpdate();
-    });
   }
 
   @override
@@ -65,7 +56,6 @@ class _NoteListWidgetState extends State<NoteListWidget> {
   @override
   void dispose() {
     _updateTimer?.cancel();
-    _notesSubscription?.cancel();
     widget.scrollController?.removeListener(_onScroll);
     super.dispose();
   }

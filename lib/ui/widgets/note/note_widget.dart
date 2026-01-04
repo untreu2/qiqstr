@@ -65,13 +65,11 @@ class _NoteWidgetState extends State<NoteWidget> {
 
   bool _isDisposed = false;
   bool _isInitialized = false;
-  late final UserRepository _userRepository;
 
   @override
   void initState() {
     super.initState();
     try {
-      _userRepository = AppDI.get<UserRepository>();
       _precomputeImmutableData();
       _setupUserListener();
       _loadInitialUserDataSync();
@@ -193,7 +191,8 @@ class _NoteWidgetState extends State<NoteWidget> {
           currentAuthor.name == _authorId.substring(0, _authorId.length > 8 ? 8 : _authorId.length);
       
       if (shouldLoadAuthor) {
-        final authorResult = await _userRepository.getUserProfile(_authorId);
+        final userRepository = AppDI.get<UserRepository>();
+        final authorResult = await userRepository.getUserProfile(_authorId);
         authorResult.fold(
           (user) {
             if (mounted && !_isDisposed) {
@@ -213,7 +212,8 @@ class _NoteWidgetState extends State<NoteWidget> {
             currentReposter.name == reposterId.substring(0, reposterId.length > 8 ? 8 : reposterId.length);
         
         if (shouldLoadReposter) {
-          final reposterResult = await _userRepository.getUserProfile(reposterId);
+          final userRepository = AppDI.get<UserRepository>();
+          final reposterResult = await userRepository.getUserProfile(reposterId);
           reposterResult.fold(
             (user) {
               if (mounted && !_isDisposed) {

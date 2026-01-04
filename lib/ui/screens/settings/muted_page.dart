@@ -4,207 +4,55 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../theme/theme_manager.dart';
 import '../../../models/user_model.dart';
 import '../../../core/di/app_di.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/services/auth_service.dart';
-import '../../../data/services/data_service.dart';
-import '../../../data/services/mute_cache_service.dart';
-import '../../../data/services/user_batch_fetcher.dart';
+import '../../../presentation/viewmodels/muted_page_viewmodel.dart';
 import '../../widgets/common/back_button_widget.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/snackbar_widget.dart';
+import '../../widgets/common/common_buttons.dart';
 import 'package:carbon_icons/carbon_icons.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
 
-class MutedPage extends StatefulWidget {
+class MutedPage extends StatelessWidget {
   const MutedPage({super.key});
 
   @override
-  State<MutedPage> createState() => _MutedPageState();
-}
-
-class _MutedPageState extends State<MutedPage> {
-  List<UserModel> _mutedUsers = [];
-  bool _isLoading = true;
-  String? _error;
-  final Map<String, bool> _unmutingStates = {};
-
-  late final UserRepository _userRepository;
-  late final AuthService _authService;
-  late final DataService _dataService;
-  late final MuteCacheService _muteCacheService;
-
-  @override
-  void initState() {
-    super.initState();
-    _userRepository = AppDI.get<UserRepository>();
-    _authService = AppDI.get<AuthService>();
-    _dataService = AppDI.get<DataService>();
-    _muteCacheService = MuteCacheService.instance;
-    _loadMutedUsers();
-  }
-
-  Future<void> _loadMutedUsers() async {
-    try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-
-      final currentUserResult = await _authService.getCurrentUserNpub();
-      if (currentUserResult.isError || currentUserResult.data == null) {
-        if (mounted) {
-          setState(() {
-            _error = 'Not authenticated';
-            _isLoading = false;
-          });
-        }
-        return;
-      }
-
-      final currentUserNpub = currentUserResult.data!;
-      String currentUserHex = currentUserNpub;
-      
-      if (currentUserNpub.startsWith('npub1')) {
-        final hexResult = _authService.npubToHex(currentUserNpub);
-        if (hexResult != null) {
-          currentUserHex = hexResult;
-        }
-      }
-
-      final mutedPubkeys = await _muteCacheService.getOrFetch(currentUserHex, () async {
-        final result = await _dataService.getMuteList(currentUserHex);
-        return result.isSuccess ? result.data : null;
-      });
-
-      if (mutedPubkeys == null || mutedPubkeys.isEmpty) {
-        if (mounted) {
-          setState(() {
-            _mutedUsers = [];
-            _isLoading = false;
-          });
-        }
-        return;
-      }
-
-      final npubs = <String>[];
-      for (final pubkey in mutedPubkeys) {
-        String npub = pubkey;
-        try {
-          if (!pubkey.startsWith('npub1')) {
-            npub = encodeBasicBech32(pubkey, 'npub');
-          }
-        } catch (e) {
-          npub = pubkey;
-        }
-        npubs.add(npub);
-      }
-
-      final userResults = await _userRepository.getUserProfiles(npubs, priority: FetchPriority.high);
-
-      final users = <UserModel>[];
-      for (int i = 0; i < npubs.length; i++) {
-        final npub = npubs[i];
-        final pubkey = mutedPubkeys[i];
-        final userResult = userResults[npub];
-        if (userResult != null && userResult.isSuccess) {
-          users.add(userResult.data!);
-        } else {
-          users.add(UserModel.create(
-            pubkeyHex: pubkey,
-            name: npub.length > 16 ? npub.substring(0, 16) : npub,
-            about: '',
-            profileImage: '',
-            banner: '',
-            website: '',
-            nip05: '',
-            lud16: '',
-            updatedAt: DateTime.now(),
-            nip05Verified: false,
-          ));
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          _mutedUsers = users;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _unmuteUser(UserModel user) async {
-    if (_unmutingStates[user.pubkeyHex] == true) return;
-
-    setState(() {
-      _unmutingStates[user.pubkeyHex] = true;
-    });
-
-    try {
-      final result = await _userRepository.unmuteUser(user.npub);
-      
-      if (mounted) {
-        result.fold(
-          (_) {
-            setState(() {
-              _mutedUsers.removeWhere((u) => u.pubkeyHex == user.pubkeyHex);
-              _unmutingStates.remove(user.pubkeyHex);
-            });
-            AppSnackbar.success(context, 'User unmuted successfully');
-          },
-          (error) {
-            setState(() {
-              _unmutingStates.remove(user.pubkeyHex);
-            });
-            AppSnackbar.error(context, 'Failed to unmute user: $error');
-          },
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _unmutingStates.remove(user.pubkeyHex);
-        });
-        AppSnackbar.error(context, 'Failed to unmute user: $e');
-      }
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Consumer<ThemeManager>(
-      builder: (context, themeManager, child) {
-        return Scaffold(
-          backgroundColor: context.colors.background,
-          body: Stack(
-            children: [
-              SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return ChangeNotifierProvider<MutedPageViewModel>(
+      create: (_) => MutedPageViewModel(
+        userRepository: AppDI.get(),
+        authService: AppDI.get(),
+        dataService: AppDI.get(),
+      ),
+      child: Consumer<MutedPageViewModel>(
+        builder: (context, viewModel, child) {
+          return Consumer<ThemeManager>(
+            builder: (context, themeManager, child) {
+              return Scaffold(
+                backgroundColor: context.colors.background,
+                body: Stack(
                   children: [
-                    _buildHeader(context),
-                    const SizedBox(height: 16),
-                    _buildMutedSection(context),
-                    const SizedBox(height: 150),
+                    SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildHeader(context),
+                          const SizedBox(height: 16),
+                          _buildMutedSection(context, viewModel),
+                          const SizedBox(height: 150),
+                        ],
+                      ),
+                    ),
+                    const BackButtonWidget.floating(),
                   ],
                 ),
-              ),
-              const BackButtonWidget.floating(),
-            ],
-          ),
-        );
-      },
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  static Widget _buildHeader(BuildContext context) {
     return Padding(
       padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 60),
       child: const TitleWidget(
@@ -216,8 +64,8 @@ class _MutedPageState extends State<MutedPage> {
     );
   }
 
-  Widget _buildMutedSection(BuildContext context) {
-    if (_isLoading) {
+  static Widget _buildMutedSection(BuildContext context, MutedPageViewModel viewModel) {
+    if (viewModel.isLoading) {
       return Padding(
         padding: const EdgeInsets.all(32),
         child: Center(
@@ -228,7 +76,7 @@ class _MutedPageState extends State<MutedPage> {
       );
     }
 
-    if (_error != null) {
+    if (viewModel.error != null) {
       return Padding(
         padding: const EdgeInsets.all(32),
         child: Center(
@@ -250,17 +98,19 @@ class _MutedPageState extends State<MutedPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                _error!,
+                viewModel.error!,
                 style: TextStyle(
                   color: context.colors.textSecondary,
-                  fontSize: 14,
+                  fontSize: 15,
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _loadMutedUsers,
-                child: const Text('Retry'),
+              const SizedBox(height: 16),
+              PrimaryButton(
+                label: 'Retry',
+                onPressed: () => viewModel.refresh(),
+                backgroundColor: context.colors.accent,
+                foregroundColor: context.colors.background,
               ),
             ],
           ),
@@ -268,7 +118,7 @@ class _MutedPageState extends State<MutedPage> {
       );
     }
 
-    if (_mutedUsers.isEmpty) {
+    if (viewModel.mutedUsers.isEmpty) {
       return Padding(
         padding: const EdgeInsets.all(32),
         child: Center(
@@ -290,10 +140,10 @@ class _MutedPageState extends State<MutedPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Users you mute will appear here',
+                'You haven\'t muted any users yet.',
                 style: TextStyle(
                   color: context.colors.textSecondary,
-                  fontSize: 14,
+                  fontSize: 15,
                 ),
               ),
             ],
@@ -305,16 +155,25 @@ class _MutedPageState extends State<MutedPage> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ..._mutedUsers.map((user) => _buildUserTile(context, user)),
-          const SizedBox(height: 8),
+          Text(
+            '${viewModel.mutedUsers.length} muted ${viewModel.mutedUsers.length == 1 ? 'user' : 'users'}',
+            style: TextStyle(
+              color: context.colors.textSecondary,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...viewModel.mutedUsers.map((user) => _buildUserTile(context, viewModel, user)),
         ],
       ),
     );
   }
 
-  Widget _buildUserTile(BuildContext context, UserModel user) {
-    final isUnmuting = _unmutingStates[user.pubkeyHex] == true;
+  static Widget _buildUserTile(BuildContext context, MutedPageViewModel viewModel, UserModel user) {
+    final isUnmuting = viewModel.isUnmuting(user.npub);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -390,7 +249,13 @@ class _MutedPageState extends State<MutedPage> {
             ),
           ),
           GestureDetector(
-            onTap: isUnmuting ? null : () => _unmuteUser(user),
+            onTap: isUnmuting ? null : () {
+              viewModel.unmuteUser(user.npub).then((_) {
+                AppSnackbar.success(context, 'User unmuted successfully');
+              }).catchError((error) {
+                AppSnackbar.error(context, 'Failed to unmute user: $error');
+              });
+            },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               alignment: Alignment.center,
@@ -433,4 +298,3 @@ class _MutedPageState extends State<MutedPage> {
     );
   }
 }
-

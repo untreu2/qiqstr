@@ -4,60 +4,17 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:carbon_icons/carbon_icons.dart';
+import 'package:provider/provider.dart';
+import 'package:nostr_nip19/nostr_nip19.dart';
 import '../../theme/theme_manager.dart';
 import '../../screens/note/share_note.dart';
 import '../../../models/note_model.dart';
 import '../../../core/di/app_di.dart';
-import '../../../data/repositories/note_repository.dart';
+import '../../../presentation/viewmodels/interaction_bar_viewmodel.dart';
 import '../../../data/services/event_verifier.dart';
 import '../dialogs/zap_dialog.dart';
-import 'package:provider/provider.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
 import '../dialogs/delete_note_dialog.dart';
 import '../common/snackbar_widget.dart';
-
-class _InteractionState {
-  final int reactionCount;
-  final int repostCount;
-  final int replyCount;
-  final int zapAmount;
-  final bool hasReacted;
-  final bool hasReposted;
-  final bool hasZapped;
-
-  const _InteractionState({
-    this.reactionCount = 0,
-    this.repostCount = 0,
-    this.replyCount = 0,
-    this.zapAmount = 0,
-    this.hasReacted = false,
-    this.hasReposted = false,
-    this.hasZapped = false,
-  });
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _InteractionState &&
-          reactionCount == other.reactionCount &&
-          repostCount == other.repostCount &&
-          replyCount == other.replyCount &&
-          zapAmount == other.zapAmount &&
-          hasReacted == other.hasReacted &&
-          hasReposted == other.hasReposted &&
-          hasZapped == other.hasZapped;
-
-  @override
-  int get hashCode => Object.hash(
-        reactionCount,
-        repostCount,
-        replyCount,
-        zapAmount,
-        hasReacted,
-        hasReposted,
-        hasZapped,
-      );
-}
 
 class InteractionBar extends StatefulWidget {
   final String noteId;
@@ -78,151 +35,33 @@ class InteractionBar extends StatefulWidget {
 }
 
 class _InteractionBarState extends State<InteractionBar> {
-  late final NoteRepository _noteRepository;
-  late final ValueNotifier<_InteractionState> _stateNotifier;
-  StreamSubscription<List<NoteModel>>? _streamSubscription;
-  DateTime? _lastUpdateTime;
+  late final InteractionBarViewModel _viewModel;
   final GlobalKey _repostButtonKey = GlobalKey();
   final GlobalKey _moreButtonKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    _noteRepository = AppDI.get<NoteRepository>();
-    _stateNotifier = ValueNotifier(_computeInitialState());
-    _setupStreamListener();
-    _fetchCountsIfNeeded();
-  }
-
-  void _fetchCountsIfNeeded() {
+    _viewModel = InteractionBarViewModel(
+      noteRepository: AppDI.get(),
+      noteId: widget.noteId,
+      currentUserNpub: widget.currentUserNpub,
+      note: widget.note,
+    );
   }
 
   @override
   void didUpdateWidget(InteractionBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.noteId != widget.noteId || oldWidget.note != widget.note) {
-      _updateState();
-      _fetchCountsIfNeeded();
+      _viewModel.updateNote(widget.note);
     }
   }
 
   @override
   void dispose() {
-    _streamSubscription?.cancel();
-    _stateNotifier.dispose();
+    _viewModel.dispose();
     super.dispose();
-  }
-
-  _InteractionState _computeInitialState() {
-    final note = _findNote();
-    if (note == null) {
-      return _InteractionState(
-        reactionCount: 0,
-        repostCount: 0,
-        replyCount: 0,
-        zapAmount: 0,
-        hasReacted: _noteRepository.hasUserReacted(widget.noteId, widget.currentUserNpub),
-        hasReposted: _noteRepository.hasUserReposted(widget.noteId, widget.currentUserNpub),
-        hasZapped: _noteRepository.hasUserZapped(widget.noteId, widget.currentUserNpub),
-      );
-    }
-
-    return _InteractionState(
-      reactionCount: note.reactionCount,
-      repostCount: note.repostCount,
-      replyCount: note.replyCount,
-      zapAmount: note.zapAmount,
-      hasReacted: _noteRepository.hasUserReacted(widget.noteId, widget.currentUserNpub),
-      hasReposted: _noteRepository.hasUserReposted(widget.noteId, widget.currentUserNpub),
-      hasZapped: _noteRepository.hasUserZapped(widget.noteId, widget.currentUserNpub),
-    );
-  }
-
-  NoteModel? _findNote() {
-    if (widget.note == null) {
-      final allNotes = _noteRepository.currentNotes;
-      for (final n in allNotes) {
-        if (n.id == widget.noteId) {
-          return n;
-        }
-      }
-      return null;
-    }
-    
-    if (widget.note!.id == widget.noteId) {
-      return widget.note;
-    }
-    
-    if (widget.note!.isRepost && widget.note!.rootId == widget.noteId) {
-      final allNotes = _noteRepository.currentNotes;
-      for (final n in allNotes) {
-        if (n.id == widget.noteId) {
-          return n;
-        }
-      }
-      return widget.note;
-    }
-    
-    final allNotes = _noteRepository.currentNotes;
-    for (final n in allNotes) {
-      if (n.id == widget.noteId) {
-        return n;
-      }
-    }
-    
-    return widget.note;
-  }
-
-  void _setupStreamListener() {
-    _streamSubscription = _noteRepository.notesStream.listen((notes) {
-      if (!mounted) return;
-
-      final hasRelevantUpdate = notes.any((note) => note.id == widget.noteId);
-      if (!hasRelevantUpdate) return;
-
-      final updateTime = DateTime.now();
-      if (_lastUpdateTime != null && 
-          updateTime.difference(_lastUpdateTime!).inMilliseconds < 1000) {
-        return;
-      }
-      
-      _lastUpdateTime = updateTime;
-      
-      Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted && _lastUpdateTime == updateTime) {
-          _updateState();
-        }
-      });
-    });
-  }
-
-  void _updateState() {
-    if (!mounted) return;
-    
-    final currentState = _stateNotifier.value;
-    final newState = _computeInitialState();
-    
-    final safeNewState = _InteractionState(
-      reactionCount: newState.reactionCount >= currentState.reactionCount 
-          ? newState.reactionCount 
-          : currentState.reactionCount,
-      repostCount: newState.repostCount >= currentState.repostCount 
-          ? newState.repostCount 
-          : currentState.repostCount,
-      replyCount: newState.replyCount >= currentState.replyCount 
-          ? newState.replyCount 
-          : currentState.replyCount,
-      zapAmount: newState.zapAmount >= currentState.zapAmount 
-          ? newState.zapAmount 
-          : currentState.zapAmount,
-      hasReacted: newState.hasReacted || currentState.hasReacted,
-      hasReposted: newState.hasReposted || currentState.hasReposted,
-      hasZapped: newState.hasZapped || currentState.hasZapped,
-    );
-    
-    if (currentState != safeNewState) {
-      _stateNotifier.value = safeNewState;
-    }
   }
 
   void _handleReplyTap() {
@@ -244,7 +83,7 @@ class _InteractionBarState extends State<InteractionBar> {
 
     final offset = renderBox.localToGlobal(Offset.zero);
     final size = renderBox.size;
-    final hasReposted = _stateNotifier.value.hasReposted;
+    final hasReposted = _viewModel.state.hasReposted;
 
     final items = <PopupMenuItem<String>>[];
 
@@ -359,22 +198,31 @@ class _InteractionBarState extends State<InteractionBar> {
     ).then((value) {
       if (value == null) return;
       HapticFeedback.lightImpact();
-      final currentState = _stateNotifier.value;
       if (value == 'undo_repost') {
         if (widget.note == null) return;
-        _performDeleteRepost(currentState);
+        _viewModel.deleteRepost().catchError((error) {
+          if (mounted) {
+            AppSnackbar.error(context, 'Failed to undo repost: $error');
+          }
+        });
       } else if (value == 'repost') {
         if (widget.note == null) return;
-        final noteToRepost = _findNote() ?? widget.note!;
         if (hasReposted) {
-          _performDeleteRepost(currentState).then((_) {
+          _viewModel.deleteRepost().then((_) {
             if (mounted) {
-              final updatedState = _stateNotifier.value;
-              _performRepost(noteToRepost, updatedState);
+              _viewModel.repostNote().catchError((error) {
+                if (mounted) {
+                  AppSnackbar.error(context, 'Failed to repost: $error');
+                }
+              });
             }
           });
         } else {
-          _performRepost(noteToRepost, currentState);
+          _viewModel.repostNote().catchError((error) {
+            if (mounted) {
+              AppSnackbar.error(context, 'Failed to repost: $error');
+            }
+          });
         }
       } else if (value == 'quote') {
         _handleQuoteTap();
@@ -382,73 +230,10 @@ class _InteractionBarState extends State<InteractionBar> {
     });
   }
 
-  Future<void> _performDeleteRepost(_InteractionState currentState) async {
-    try {
-      final result = await _noteRepository.deleteRepost(widget.noteId);
-      if (!mounted) return;
-
-      result.fold(
-        (_) {
-          if (mounted) {
-            _stateNotifier.value = _InteractionState(
-              reactionCount: currentState.reactionCount,
-              repostCount: currentState.repostCount,
-              replyCount: currentState.replyCount,
-              zapAmount: currentState.zapAmount,
-              hasReacted: currentState.hasReacted,
-              hasReposted: false,
-              hasZapped: currentState.hasZapped,
-            );
-          }
-        },
-        (error) {
-          if (mounted) {
-            AppSnackbar.error(context, 'Failed to undo repost: $error');
-          }
-        },
-      );
-    } catch (e) {
-      if (mounted) {
-        AppSnackbar.error(context, 'Failed to undo repost');
-      }
-    }
-  }
-
-  Future<void> _performRepost(NoteModel note, _InteractionState currentState) async {
-    try {
-      final result = await _noteRepository.repostNote(note.id);
-      if (!mounted) return;
-
-      result.fold(
-        (_) {
-        if (mounted) {
-          _stateNotifier.value = _InteractionState(
-            reactionCount: currentState.reactionCount,
-            repostCount: currentState.repostCount,
-            replyCount: currentState.replyCount,
-            zapAmount: currentState.zapAmount,
-            hasReacted: currentState.hasReacted,
-            hasReposted: true,
-            hasZapped: currentState.hasZapped,
-          );
-        }
-      },
-        (error) {
-          if (mounted) {
-            AppSnackbar.error(context, 'Failed to repost: $error');
-          }
-        },
-      );
-    } catch (e) {
-      if (mounted) {
-        AppSnackbar.error(context, 'Failed to repost note');
-      }
-    }
-  }
-
   void _handleQuoteTap() {
     if (widget.note == null) return;
-    final noteToQuote = _findNote() ?? widget.note!;
+    final noteToQuote = _viewModel.getNoteForActions();
+    if (noteToQuote == null) return;
     final bech32 = encodeBasicBech32(noteToQuote.id, 'note');
     final quoteText = 'nostr:$bech32';
 
@@ -460,66 +245,24 @@ class _InteractionBarState extends State<InteractionBar> {
 
   Future<void> _handleReactionTap() async {
     HapticFeedback.lightImpact();
-    final currentState = _stateNotifier.value;
-    if (currentState.hasReacted || !mounted) return;
-
-    _stateNotifier.value = _InteractionState(
-      reactionCount: currentState.reactionCount,
-      repostCount: currentState.repostCount,
-      replyCount: currentState.replyCount,
-      zapAmount: currentState.zapAmount,
-      hasReacted: true,
-      hasReposted: currentState.hasReposted,
-      hasZapped: currentState.hasZapped,
-    );
-
-    try {
-      final result = await _noteRepository.reactToNote(widget.noteId, '+');
-      if (!mounted) return;
-
-      result.fold(
-        (_) {},
-        (error) {
-          if (mounted) {
-            _stateNotifier.value = _InteractionState(
-              reactionCount: currentState.reactionCount,
-              repostCount: currentState.repostCount,
-              replyCount: currentState.replyCount,
-              zapAmount: currentState.zapAmount,
-              hasReacted: false,
-              hasReposted: currentState.hasReposted,
-              hasZapped: currentState.hasZapped,
-            );
-            AppSnackbar.error(context, 'Failed to react: $error');
-          }
-        },
-      );
-    } catch (e) {
+    if (!mounted) return;
+    _viewModel.reactToNote().catchError((error) {
       if (mounted) {
-        _stateNotifier.value = currentState;
+        AppSnackbar.error(context, 'Failed to react: $error');
       }
-    }
+    });
   }
 
   void _handleZapTap() async {
     HapticFeedback.lightImpact();
-    final currentState = _stateNotifier.value;
-    if (widget.note == null || currentState.hasZapped || !mounted) return;
+    if (widget.note == null || _viewModel.state.hasZapped || !mounted) return;
 
-    final noteToZap = _findNote() ?? widget.note!;
+    final noteToZap = _viewModel.getNoteForActions();
+    if (noteToZap == null) return;
+
     final themeManager = Provider.of<ThemeManager>(context, listen: false);
 
     if (themeManager.oneTapZap) {
-      _stateNotifier.value = _InteractionState(
-        reactionCount: currentState.reactionCount,
-        repostCount: currentState.repostCount,
-        replyCount: currentState.replyCount,
-        zapAmount: currentState.zapAmount,
-        hasReacted: currentState.hasReacted,
-        hasReposted: currentState.hasReposted,
-        hasZapped: true,
-      );
-
       await processZapDirectly(
         context,
         noteToZap,
@@ -527,28 +270,8 @@ class _InteractionBarState extends State<InteractionBar> {
       );
 
       if (!mounted) return;
-
-      final updatedState = _computeInitialState();
-      _stateNotifier.value = _InteractionState(
-        reactionCount: updatedState.reactionCount,
-        repostCount: updatedState.repostCount,
-        replyCount: updatedState.replyCount,
-        zapAmount: updatedState.zapAmount,
-        hasReacted: updatedState.hasReacted,
-        hasReposted: updatedState.hasReposted,
-        hasZapped: updatedState.hasZapped,
-      );
+      _viewModel.refreshState();
     } else {
-      _stateNotifier.value = _InteractionState(
-        reactionCount: currentState.reactionCount,
-        repostCount: currentState.repostCount,
-        replyCount: currentState.replyCount,
-        zapAmount: currentState.zapAmount,
-        hasReacted: currentState.hasReacted,
-        hasReposted: currentState.hasReposted,
-        hasZapped: true,
-      );
-
       final zapResult = await showZapDialog(
         context: context,
         note: noteToZap,
@@ -558,27 +281,17 @@ class _InteractionBarState extends State<InteractionBar> {
 
       final zapSuccess = zapResult['success'] as bool;
       if (!zapSuccess) {
-        _stateNotifier.value = currentState;
+        _viewModel.refreshState();
       }
     }
   }
 
   void _handleZapLongPress() async {
     HapticFeedback.mediumImpact();
-    final currentState = _stateNotifier.value;
-    if (widget.note == null || currentState.hasZapped || !mounted) return;
+    if (widget.note == null || _viewModel.state.hasZapped || !mounted) return;
 
-    final noteToZap = _findNote() ?? widget.note!;
-
-    _stateNotifier.value = _InteractionState(
-      reactionCount: currentState.reactionCount,
-      repostCount: currentState.repostCount,
-      replyCount: currentState.replyCount,
-      zapAmount: currentState.zapAmount,
-      hasReacted: currentState.hasReacted,
-      hasReposted: currentState.hasReposted,
-      hasZapped: true,
-    );
+    final noteToZap = _viewModel.getNoteForActions();
+    if (noteToZap == null) return;
 
     final zapResult = await showZapDialog(
       context: context,
@@ -589,7 +302,7 @@ class _InteractionBarState extends State<InteractionBar> {
 
     final zapSuccess = zapResult['success'] as bool;
     if (!zapSuccess) {
-      _stateNotifier.value = currentState;
+      _viewModel.refreshState();
     }
   }
 
@@ -597,7 +310,8 @@ class _InteractionBarState extends State<InteractionBar> {
     HapticFeedback.lightImpact();
     if (widget.note == null) return;
     
-    final noteForStats = _findNote() ?? widget.note!;
+    final noteForStats = _viewModel.getNoteForActions();
+    if (noteForStats == null) return;
     
     final currentLocation = GoRouterState.of(context).matchedLocation;
     if (currentLocation.startsWith('/home/feed')) {
@@ -615,7 +329,8 @@ class _InteractionBarState extends State<InteractionBar> {
     HapticFeedback.lightImpact();
     if (widget.note == null || !mounted) return;
 
-    final note = _findNote() ?? widget.note!;
+    final note = _viewModel.getNoteForActions();
+    if (note == null) return;
     if (note.rawWs == null || note.rawWs!.isEmpty) {
       if (mounted) {
         AppSnackbar.error(context, 'Event data not available for verification');
@@ -653,24 +368,11 @@ class _InteractionBarState extends State<InteractionBar> {
 
   Future<void> _confirmDelete() async {
     if (!mounted) return;
-
-    try {
-      final result = await _noteRepository.deleteNote(widget.noteId);
-      if (!mounted) return;
-
-      result.fold(
-        (_) {},
-        (error) {
-          if (mounted) {
-            AppSnackbar.error(context, 'Failed to delete note: $error');
-          }
-        },
-      );
-    } catch (e) {
+    _viewModel.deleteNote().catchError((error) {
       if (mounted) {
-        AppSnackbar.error(context, 'Failed to delete note: $e');
+        AppSnackbar.error(context, 'Failed to delete note: $error');
       }
-    }
+    });
   }
 
   @override
@@ -678,16 +380,18 @@ class _InteractionBarState extends State<InteractionBar> {
     final colors = context.colors;
     final height = widget.isBigSize ? 36.0 : 32.0;
     
-    return RepaintBoundary(
-      key: ValueKey('interaction_${widget.noteId}'),
-      child: SizedBox(
-        height: height,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
+    return ChangeNotifierProvider<InteractionBarViewModel>.value(
+      value: _viewModel,
+      child: RepaintBoundary(
+        key: ValueKey('interaction_${widget.noteId}'),
+        child: SizedBox(
+          height: height,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
             _SelectiveButton(
-              stateNotifier: _stateNotifier,
+              viewModel: _viewModel,
               selector: (state) => state.replyCount,
               builder: (count, isActive) => _InteractionButton(
                 iconPath: 'assets/reply_button_2.svg',
@@ -700,7 +404,7 @@ class _InteractionBarState extends State<InteractionBar> {
               ),
             ),
             _SelectiveButton(
-              stateNotifier: _stateNotifier,
+              viewModel: _viewModel,
               selector: (state) => state.repostCount,
               activeSelector: (state) => state.hasReposted,
               builder: (count, isActive) => _InteractionButton(
@@ -716,7 +420,7 @@ class _InteractionBarState extends State<InteractionBar> {
               ),
             ),
             _SelectiveButton(
-              stateNotifier: _stateNotifier,
+              viewModel: _viewModel,
               selector: (state) => state.reactionCount,
               activeSelector: (state) => state.hasReacted,
               builder: (count, isActive) => _InteractionButton(
@@ -732,7 +436,7 @@ class _InteractionBarState extends State<InteractionBar> {
               ),
             ),
             _SelectiveButton(
-              stateNotifier: _stateNotifier,
+              viewModel: _viewModel,
               selector: (state) => state.zapAmount,
               activeSelector: (state) => state.hasZapped,
               builder: (count, isActive) => _InteractionButton(
@@ -748,8 +452,9 @@ class _InteractionBarState extends State<InteractionBar> {
                 buttonType: _ButtonType.zap,
               ),
             ),
-            _buildPopupMenu(colors),
-          ],
+              _buildPopupMenu(colors),
+            ],
+          ),
         ),
       ),
     );
@@ -805,7 +510,7 @@ class _InteractionBarState extends State<InteractionBar> {
       ),
     ];
 
-    if (widget.note?.author == widget.currentUserNpub) {
+    if (_viewModel.getNoteForActions()?.author == widget.currentUserNpub) {
       items.add(
         PopupMenuItem(
           value: 'delete',
@@ -876,59 +581,48 @@ class _InteractionBarState extends State<InteractionBar> {
 
 enum _ButtonType { reply, repost, reaction, zap }
 
-class _SelectiveButton extends StatefulWidget {
-  final ValueNotifier<_InteractionState> stateNotifier;
-  final int Function(_InteractionState) selector;
-  final bool Function(_InteractionState)? activeSelector;
+class _SelectiveButton extends StatelessWidget {
+  final InteractionBarViewModel viewModel;
+  final int Function(InteractionState) selector;
+  final bool Function(InteractionState)? activeSelector;
   final Widget Function(int count, bool isActive) builder;
 
   const _SelectiveButton({
-    required this.stateNotifier,
+    required this.viewModel,
     required this.selector,
     this.activeSelector,
     required this.builder,
   });
 
   @override
-  State<_SelectiveButton> createState() => _SelectiveButtonState();
+  Widget build(BuildContext context) {
+    return Selector<InteractionBarViewModel, _ButtonState>(
+      selector: (context, vm) => _ButtonState(
+        count: selector(vm.state),
+        isActive: activeSelector?.call(vm.state) ?? false,
+      ),
+      builder: (context, buttonState, child) {
+        return builder(buttonState.count, buttonState.isActive);
+      },
+    );
+  }
 }
 
-class _SelectiveButtonState extends State<_SelectiveButton> {
-  late int _lastCount;
-  late bool _lastActive;
+class _ButtonState {
+  final int count;
+  final bool isActive;
+
+  _ButtonState({required this.count, required this.isActive});
 
   @override
-  void initState() {
-    super.initState();
-    _lastCount = widget.selector(widget.stateNotifier.value);
-    _lastActive = widget.activeSelector?.call(widget.stateNotifier.value) ?? false;
-    widget.stateNotifier.addListener(_onStateChanged);
-  }
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _ButtonState &&
+          count == other.count &&
+          isActive == other.isActive;
 
   @override
-  void dispose() {
-    widget.stateNotifier.removeListener(_onStateChanged);
-    super.dispose();
-  }
-
-  void _onStateChanged() {
-    final newCount = widget.selector(widget.stateNotifier.value);
-    final newActive = widget.activeSelector?.call(widget.stateNotifier.value) ?? false;
-    
-    if (_lastCount != newCount || _lastActive != newActive) {
-      if (mounted) {
-        setState(() {
-          _lastCount = newCount;
-          _lastActive = newActive;
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return widget.builder(_lastCount, _lastActive);
-  }
+  int get hashCode => Object.hash(count, isActive);
 }
 
 class _InteractionButton extends StatelessWidget {
@@ -983,7 +677,7 @@ class _InteractionButton extends StatelessWidget {
                 if (count > 0) ...[
                   SizedBox(width: spacing),
                   Transform.translate(
-                    offset: const Offset(0, -3.2),
+                    offset: Offset(0, isBigSize ? -2.0 : -3.2),
                     child: Text(
                       _formatCount(count),
                       style: TextStyle(

@@ -27,6 +27,7 @@ class WalletViewModel extends BaseViewModel {
   bool get isLoadingTransactions => _isLoadingTransactions;
   String? get error => _error;
   bool get isInitialized => _isInitialized;
+  WalletRepository get walletRepository => _walletRepository;
 
   @override
   void initialize() {

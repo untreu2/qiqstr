@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:giphy_get/giphy_get.dart';
 
 import '../../../core/di/app_di.dart';
-import '../../../data/services/data_service.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/repositories/note_repository.dart';
+import '../../../presentation/viewmodels/share_note_viewmodel.dart';
+import 'package:provider/provider.dart';
 import 'package:nostr_nip19/nostr_nip19.dart';
 import '../../../models/user_model.dart';
 import '../../../constants/giphy_api_key.dart';
@@ -46,9 +44,7 @@ class ShareNotePage extends StatefulWidget {
 class _ShareNotePageState extends State<ShareNotePage> {
   static const String _serverUrl = "https://blossom.primal.net";
   static const int _maxMediaFiles = 10;
-  static const int _maxUserSuggestions = 5;
   static const int _maxFileSizeBytes = 50 * 1024 * 1024;
-  static const int _npubPreviewLength = 10;
   static const double _mediaItemSize = 160.0;
   static const double _mediaListHeight = 170.0;
   static const double _avatarRadius = 20.0;
@@ -58,11 +54,6 @@ class _ShareNotePageState extends State<ShareNotePage> {
   static const double _lineHeight = 1.4;
   static const double _smallFontSize = 13.0;
 
-  static const String _mentionPattern = r'nostr:(npub1[0-9a-z]+)';
-
-  static const String _errorInitializingText = 'Error initializing text';
-  static const String _errorLoadingUsers = 'Error loading users';
-  static const String _errorLoadingProfile = 'Error loading profile';
   static const String _errorSelectingMedia = 'Error selecting media';
   static const String _errorUploadingFile = 'Error uploading file';
   static const String _errorSelectingUser = 'Error selecting user';
@@ -96,51 +87,40 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   late TextEditingController _noteController;
   final FocusNode _focusNode = FocusNode();
-
-  bool _isPosting = false;
-  bool _isMediaUploading = false;
-  final List<String> _mediaUrls = [];
-  List<UserModel> _allUsers = [];
-  List<UserModel> _filteredUsers = [];
-  bool _isSearchingUsers = false;
-  String _userSearchQuery = '';
-  final Map<String, String> _mentionMap = {};
-  UserModel? _currentUser;
-
-  late DataService _dataService;
-  late UserRepository _userRepository;
-  late NoteRepository _noteRepository;
+  late final ShareNoteViewModel _viewModel;
 
   @override
   void initState() {
     super.initState();
-    _initializeServices();
+    _viewModel = ShareNoteViewModel(
+      dataService: AppDI.get(),
+      userRepository: AppDI.get(),
+      noteRepository: AppDI.get(),
+      initialText: widget.initialText,
+      replyToNoteId: widget.replyToNoteId,
+    );
+    _viewModel.addListener(_onViewModelChanged);
     _initializeController();
-    _loadInitialData();
     _setupTextListener();
     _requestInitialFocus();
   }
 
   @override
   void dispose() {
+    _viewModel.removeListener(_onViewModelChanged);
+    _viewModel.dispose();
     _cleanupResources();
     super.dispose();
   }
 
-  void _initializeServices() {
-    _dataService = AppDI.get<DataService>();
-    _userRepository = AppDI.get<UserRepository>();
-    _noteRepository = AppDI.get<NoteRepository>();
+  void _onViewModelChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _initializeController() {
     _noteController = TextEditingController();
-  }
-
-  void _loadInitialData() {
-    _loadProfile();
-    _loadUsers();
-    _initializeText();
   }
 
   void _setupTextListener() {
@@ -161,144 +141,12 @@ class _ShareNotePageState extends State<ShareNotePage> {
     _focusNode.dispose();
   }
 
-  Future<void> _initializeText() async {
-    try {
-      final initialText = _getInitialTextContent();
-
-      if (!_containsMentions(initialText)) {
-        _setTextContent(initialText);
-        return;
-      }
-
-      await _processMentions(initialText);
-    } catch (e) {
-      _showErrorSnackBar('$_errorInitializingText: ${e.toString()}');
-    }
-  }
-
-  String _getInitialTextContent() {
-    if (widget.initialText == null) return '';
-    return widget.initialText!.startsWith('nostr:') ? '' : widget.initialText!;
-  }
-
-  bool _containsMentions(String text) {
-    return RegExp(_mentionPattern).hasMatch(text);
-  }
-
-  Future<void> _processMentions(String text) async {
-    try {
-      final mentionRegex = RegExp(_mentionPattern);
-      final matches = mentionRegex.allMatches(text);
-
-      final npubs = matches.map((m) => m.group(1)!).toList();
-
-      final Map<String, String> resolvedNames = {};
-      for (final npub in npubs) {
-        try {
-          final userResult = await _userRepository.getUserProfile(npub);
-          if (userResult.isSuccess && userResult.data != null) {
-            resolvedNames[npub] = userResult.data!.name;
-          } else {
-            resolvedNames[npub] = npub.substring(0, _npubPreviewLength);
-          }
-        } catch (e) {
-          resolvedNames[npub] = npub.substring(0, _npubPreviewLength);
-        }
-      }
-
-      String newText = text;
-      for (var match in matches.toList().reversed) {
-        final npub = match.group(1)!;
-        final username = _formatUsername(resolvedNames[npub] ?? npub.substring(0, _npubPreviewLength));
-        final mentionKey = '@$username';
-        _mentionMap[mentionKey] = 'nostr:$npub';
-        newText = newText.replaceRange(match.start, match.end, mentionKey);
-      }
-
-      _setTextContent(newText);
-    } catch (e) {
-      _showErrorSnackBar('$_errorInitializingText: ${e.toString()}');
-    }
-  }
-
   String _formatUsername(String username) {
     return username.replaceAll(' ', '_');
   }
 
-  void _setTextContent(String text) {
-    if (!mounted) return;
-    setState(() {
-      _noteController.text = text;
-    });
-  }
-
-  Future<void> _loadUsers() async {
-    try {
-      debugPrint('[ShareNotePage] Loading users from Isar database...');
-
-      final isarService = _userRepository.isarService;
-
-      if (!isarService.isInitialized) {
-        debugPrint('[ShareNotePage] Isar not initialized, waiting...');
-        await isarService.waitForInitialization();
-      }
-
-      final isarProfiles = await isarService.getAllUserProfiles();
-
-      final userModels = isarProfiles.map((isarProfile) {
-        final profileData = isarProfile.toProfileData();
-        return UserModel.fromCachedProfile(
-          isarProfile.pubkeyHex,
-          profileData,
-        );
-      }).toList();
-
-      if (mounted) {
-        setState(() {
-          _allUsers = userModels;
-        });
-        debugPrint('[ShareNotePage]  Loaded ${userModels.length} users from Isar for mention suggestions');
-      }
-    } catch (e) {
-      debugPrint('[ShareNotePage]  Error loading users from Isar: $e');
-      _showErrorSnackBar('$_errorLoadingUsers: ${e.toString()}');
-
-      try {
-        final cachedUsers = _dataService.cachedUsers;
-        if (mounted) {
-          setState(() {
-            _allUsers = cachedUsers;
-          });
-          debugPrint('[ShareNotePage] Using ${cachedUsers.length} users from NostrDataService fallback');
-        }
-      } catch (fallbackError) {
-        debugPrint('[ShareNotePage]  Fallback also failed: $fallbackError');
-      }
-    }
-  }
-
-  Future<void> _loadProfile() async {
-    try {
-      const storage = FlutterSecureStorage();
-      final npub = await storage.read(key: 'npub');
-
-      if (npub == null || npub.isEmpty) return;
-
-      final userResult = await _userRepository.getUserProfile(npub);
-      if (userResult.isSuccess && userResult.data != null) {
-        if (mounted) {
-          setState(() {
-            _currentUser = userResult.data;
-          });
-        }
-      }
-    } catch (e) {
-      _showErrorSnackBar('$_errorLoadingProfile: ${e.toString()}');
-    }
-  }
-
   Future<void> _selectMedia() async {
-    if (_isMediaUploading || !_canAddMoreMedia()) return;
+    if (_viewModel.isMediaUploading || !_canAddMoreMedia()) return;
 
     try {
       final result = await _pickMediaFiles();
@@ -313,7 +161,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Future<void> _selectGif() async {
-    if (_isMediaUploading || !_canAddMoreMedia()) return;
+    if (_viewModel.isMediaUploading || !_canAddMoreMedia()) return;
 
     try {
       final gif = await GiphyGet.getGif(
@@ -331,7 +179,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
         if (gifUrl != null && gifUrl.isNotEmpty) {
           if (mounted) {
             setState(() {
-              _mediaUrls.add(gifUrl);
+              _viewModel.addMediaUrl(gifUrl);
             });
           }
           debugPrint('[ShareNotePage] GIF added successfully: $gifUrl');
@@ -343,7 +191,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   bool _canAddMoreMedia() {
-    if (_mediaUrls.length >= _maxMediaFiles) {
+    if (_viewModel.mediaUrls.length >= _maxMediaFiles) {
       _showErrorSnackBar(_maxMediaFilesMessage);
       return false;
     }
@@ -359,7 +207,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Future<void> _processSelectedFiles(List<PlatformFile> files) async {
-    final remainingSlots = _maxMediaFiles - _mediaUrls.length;
+    final remainingSlots = _maxMediaFiles - _viewModel.mediaUrls.length;
     final filesToProcess = files.take(remainingSlots).toList();
 
     if (files.length > remainingSlots) {
@@ -387,7 +235,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
     }
 
     try {
-      final mediaResult = await _dataService.sendMedia(file.path!, _serverUrl);
+      final mediaResult = await _viewModel.dataService.sendMedia(file.path!, _serverUrl);
       if (mediaResult.isSuccess && mediaResult.data != null) {
         final uploadedUrl = mediaResult.data!;
 
@@ -399,7 +247,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
         if (mounted) {
           setState(() {
-            _mediaUrls.add(uploadedUrl);
+            _viewModel.addMediaUrl(uploadedUrl);
           });
         }
         debugPrint('[ShareNotePage] Media uploaded successfully: $uploadedUrl');
@@ -462,13 +310,13 @@ class _ShareNotePageState extends State<ShareNotePage> {
   void _setMediaUploadingState(bool isUploading) {
     if (mounted) {
       setState(() {
-        _isMediaUploading = isUploading;
+        _viewModel.setMediaUploading(isUploading);
       });
     }
   }
 
   Future<void> _shareNote() async {
-    if (_isPosting) return;
+    if (_viewModel.isPosting) return;
 
     final noteContent = _prepareNoteContent();
     if (noteContent == null) return;
@@ -509,14 +357,14 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   String _replaceMentions(String noteText) {
-    _mentionMap.forEach((key, value) {
+    _viewModel.mentionMap.forEach((key, value) {
       noteText = noteText.replaceAll(key, value);
     });
     return noteText;
   }
 
   bool _hasContent(String noteText, bool hasQuote) {
-    if (noteText.isEmpty && _mediaUrls.isEmpty && !hasQuote) {
+    if (noteText.isEmpty && _viewModel.mediaUrls.isEmpty && !hasQuote) {
       _showErrorSnackBar(_emptyNoteMessage);
       return false;
     }
@@ -524,7 +372,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   String _buildFinalNoteContent(String noteText, bool hasQuote) {
-    final mediaPart = _mediaUrls.isNotEmpty ? "\n\n${_mediaUrls.join("\n")}" : "";
+    final mediaPart = _viewModel.mediaUrls.isNotEmpty ? "\n\n${_viewModel.mediaUrls.join("\n")}" : "";
 
     String quotePart = "";
     if (hasQuote && widget.initialText != null) {
@@ -603,7 +451,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
     }
 
     if (_isReply()) {
-      final result = await _noteRepository.postReply(
+      final result = await _viewModel.noteRepository.postReply(
         content: content,
         rootId: widget.replyToNoteId!,
         parentAuthor: 'unknown',
@@ -616,7 +464,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
       }
     } else {
       debugPrint('[ShareNotePage] Sending as regular note with content: ${content.length > 100 ? content.substring(0, 100) : content}...');
-      final result = await _noteRepository.postNote(
+      final result = await _viewModel.noteRepository.postNote(
         content: content,
         tags: additionalTags,
       );
@@ -649,14 +497,14 @@ class _ShareNotePageState extends State<ShareNotePage> {
   void _setPostingState(bool isPosting) {
     if (mounted) {
       setState(() {
-        _isPosting = isPosting;
+        _viewModel.setPosting(isPosting);
       });
     }
   }
 
   void _removeMedia(String url) {
     setState(() {
-      _mediaUrls.remove(url);
+      _viewModel.removeMediaUrl(_viewModel.mediaUrls.indexOf(url));
     });
   }
 
@@ -665,8 +513,9 @@ class _ShareNotePageState extends State<ShareNotePage> {
       if (newIndex > oldIndex) {
         newIndex -= 1;
       }
-      final String item = _mediaUrls.removeAt(oldIndex);
-      _mediaUrls.insert(newIndex, item);
+      final item = _viewModel.mediaUrls[oldIndex];
+      _viewModel.removeMediaUrl(oldIndex);
+      _viewModel.addMediaUrl(item);
     });
   }
 
@@ -701,64 +550,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   void _setUserSearchState(bool isSearching, [String query = '']) {
     if (!mounted) return;
-    setState(() {
-      _isSearchingUsers = isSearching;
-      _userSearchQuery = query;
-      if (isSearching) {
-        _filterUsers();
-      }
-    });
-  }
-
-  void _filterUsers() {
-    if (_userSearchQuery.isEmpty) {
-      _setFilteredUsers(_allUsers.take(_maxUserSuggestions).toList());
-      return;
-    }
-
-    final query = _userSearchQuery.toLowerCase().trim();
-    if (query.isEmpty) return;
-
-    final filtered = _getFilteredUsers(query);
-    final sortedFiltered = _sortUsersByRelevance(filtered, query);
-
-    _setFilteredUsers(sortedFiltered.take(_maxUserSuggestions).toList());
-  }
-
-  List<UserModel> _getFilteredUsers(String query) {
-    return _allUsers.where((user) {
-      final name = user.name.toLowerCase();
-      final nip05 = user.nip05.toLowerCase();
-      return name.contains(query) || nip05.contains(query);
-    }).toList();
-  }
-
-  List<UserModel> _sortUsersByRelevance(List<UserModel> users, String query) {
-    users.sort((a, b) {
-      final aName = a.name.toLowerCase();
-      final bName = b.name.toLowerCase();
-
-      final aExact = aName == query ? 0 : 1;
-      final bExact = bName == query ? 0 : 1;
-      if (aExact != bExact) return aExact.compareTo(bExact);
-
-      final aStarts = aName.startsWith(query) ? 0 : 1;
-      final bStarts = bName.startsWith(query) ? 0 : 1;
-      if (aStarts != bStarts) return aStarts.compareTo(bStarts);
-
-      final aIndex = aName.indexOf(query);
-      final bIndex = bName.indexOf(query);
-      return aIndex.compareTo(bIndex);
-    });
-    return users;
-  }
-
-  void _setFilteredUsers(List<UserModel> users) {
-    if (mounted) {
-      setState(() {
-        _filteredUsers = users;
-      });
-    }
+    _viewModel.searchUsers(query);
   }
 
   void _onUserSelected(UserModel user) {
@@ -800,7 +592,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
       }
     }
 
-    _mentionMap[mentionKey] = 'nostr:$npubBech32';
+    _viewModel.addMention('nostr:$npubBech32', mentionKey);
 
     final textAfterCursor = text.substring(cursorPos);
     final newText = '${text.substring(0, atIndex)}$mentionKey $textAfterCursor';
@@ -816,10 +608,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   void _clearUserSearch() {
     if (mounted) {
-      setState(() {
-        _isSearchingUsers = false;
-        _filteredUsers = [];
-      });
+      _viewModel.searchUsers('');
     }
   }
 
@@ -904,100 +693,117 @@ class _ShareNotePageState extends State<ShareNotePage> {
         children: [
           _buildHeader(context),
           Expanded(child: _buildMainContent()),
-          if (_isSearchingUsers) _buildUserSuggestions(),
+          Consumer<ShareNoteViewModel>(
+            builder: (context, vm, child) {
+              if (vm.isSearchingUsers) return _buildUserSuggestions();
+              return const SizedBox.shrink();
+            },
+          ),
         ],
       ),
     );
   }
 
   Widget _buildMediaButton() {
-    return Semantics(
-      label: _isMediaUploading ? 'Uploading media files' : 'Add media files to your post',
-      button: true,
-      enabled: !_isMediaUploading,
-      child: GestureDetector(
-        onTap: _isMediaUploading ? null : _selectMedia,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: context.colors.overlayLight,
-            borderRadius: BorderRadius.circular(40),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_isMediaUploading)
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
+    return Consumer<ShareNoteViewModel>(
+      builder: (context, viewModel, child) {
+        return Semantics(
+          label: viewModel.isMediaUploading ? 'Uploading media files' : 'Add media files to your post',
+          button: true,
+          enabled: !viewModel.isMediaUploading,
+          child: GestureDetector(
+            onTap: viewModel.isMediaUploading ? null : _selectMedia,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: context.colors.overlayLight,
+                borderRadius: BorderRadius.circular(40),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (viewModel.isMediaUploading)
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(context.colors.textPrimary),
+                      ),
+                    )
+                  else
+                    Icon(Icons.attach_file, size: 16, color: context.colors.textPrimary),
+                  const SizedBox(width: 6),
+                  Text(
+                    viewModel.isMediaUploading ? _uploadingText : _addMediaText,
+                    style: TextStyle(
+                      color: context.colors.textPrimary,
+                      fontSize: _smallFontSize,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                )
-              else
-                Icon(Icons.attach_file, size: 16, color: context.colors.textPrimary),
-              const SizedBox(width: 6),
-              Text(
-                _isMediaUploading ? _uploadingText : _addMediaText,
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGifButton() {
+    return Consumer<ShareNoteViewModel>(
+      builder: (context, viewModel, child) {
+        return Semantics(
+          label: 'Add GIF from Giphy',
+          button: true,
+          enabled: !viewModel.isMediaUploading,
+          child: GestureDetector(
+            onTap: viewModel.isMediaUploading ? null : _selectGif,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: context.colors.overlayLight,
+                borderRadius: BorderRadius.circular(40),
+              ),
+              child: Text(
+                'GIF',
                 style: TextStyle(
                   color: context.colors.textPrimary,
                   fontSize: _smallFontSize,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGifButton() {
-    return Semantics(
-      label: 'Add GIF from Giphy',
-      button: true,
-      enabled: !_isMediaUploading,
-      child: GestureDetector(
-        onTap: _isMediaUploading ? null : _selectGif,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: context.colors.overlayLight,
-            borderRadius: BorderRadius.circular(40),
-          ),
-          child: Text(
-            'GIF',
-            style: TextStyle(
-              color: context.colors.textPrimary,
-              fontSize: _smallFontSize,
-              fontWeight: FontWeight.w600,
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
   Widget _buildPostButton() {
-    return Semantics(
-      label: _isPosting ? 'Posting your note, please wait' : 'Post your note',
-      button: true,
-      enabled: !_isPosting,
-      child: GestureDetector(
-        onTap: _isPosting ? null : _shareNote,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: context.colors.textPrimary,
-            borderRadius: BorderRadius.circular(40),
+    return Consumer<ShareNoteViewModel>(
+      builder: (context, viewModel, child) {
+        return Semantics(
+          label: viewModel.isPosting ? 'Posting your note, please wait' : 'Post your note',
+          button: true,
+          enabled: !viewModel.isPosting,
+          child: GestureDetector(
+            onTap: viewModel.isPosting ? null : _shareNote,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: context.colors.textPrimary,
+                borderRadius: BorderRadius.circular(40),
+              ),
+              child: viewModel.isPosting ? _buildPostingIndicator() : _buildPostButtonText(),
+            ),
           ),
-          child: _isPosting ? _buildPostingIndicator() : _buildPostButtonText(),
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -1024,19 +830,23 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Widget _buildMainContent() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_isReply()) _buildReplyPreview(),
-          const SizedBox(height: 12),
-          _buildComposerRow(),
-          const SizedBox(height: 16),
-          if (_mediaUrls.isNotEmpty) _buildMediaList(),
-          if (_hasQuoteContent()) _buildQuoteWidget(),
-        ],
-      ),
+    return Consumer<ShareNoteViewModel>(
+      builder: (context, viewModel, child) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_isReply()) _buildReplyPreview(),
+              const SizedBox(height: 12),
+              _buildComposerRow(),
+              const SizedBox(height: 16),
+              if (viewModel.mediaUrls.isNotEmpty) _buildMediaList(),
+              if (_hasQuoteContent()) _buildQuoteWidget(),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1066,11 +876,15 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Widget _buildUserAvatar() {
-    return CircleAvatar(
-      radius: _avatarRadius,
-      backgroundImage: _currentUser?.profileImage.isNotEmpty == true ? CachedNetworkImageProvider(_currentUser!.profileImage) : null,
-      backgroundColor: context.colors.surfaceTransparent,
-      child: _currentUser?.profileImage.isEmpty != false ? Icon(Icons.person, color: context.colors.textPrimary, size: 20) : null,
+    return Consumer<ShareNoteViewModel>(
+      builder: (context, viewModel, child) {
+        return CircleAvatar(
+          radius: _avatarRadius,
+          backgroundImage: viewModel.currentUser?.profileImage.isNotEmpty == true ? CachedNetworkImageProvider(viewModel.currentUser!.profileImage) : null,
+          backgroundColor: context.colors.surfaceTransparent,
+          child: viewModel.currentUser?.profileImage.isEmpty != false ? Icon(Icons.person, color: context.colors.textPrimary, size: 20) : null,
+        );
+      },
     );
   }
 
@@ -1105,17 +919,21 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Widget _buildMediaList() {
-    return SizedBox(
-      height: _mediaListHeight,
-      child: ReorderableListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: _mediaUrls.length,
-        onReorder: _reorderMedia,
-        itemBuilder: (context, index) {
-          final url = _mediaUrls[index];
-          return _buildMediaItem(url, index);
-        },
-      ),
+    return Consumer<ShareNoteViewModel>(
+      builder: (context, viewModel, child) {
+        return SizedBox(
+          height: _mediaListHeight,
+          child: ReorderableListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: viewModel.mediaUrls.length,
+            onReorder: _reorderMedia,
+            itemBuilder: (context, index) {
+              final url = viewModel.mediaUrls[index];
+              return _buildMediaItem(url, index);
+            },
+          ),
+        );
+      },
     );
   }
 
@@ -1224,32 +1042,36 @@ class _ShareNotePageState extends State<ShareNotePage> {
   }
 
   Widget _buildUserSuggestions() {
-    if (_filteredUsers.isEmpty) return const SizedBox.shrink();
+    return Consumer<ShareNoteViewModel>(
+      builder: (context, viewModel, child) {
+        if (viewModel.filteredUsers.isEmpty) return const SizedBox.shrink();
 
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Material(
-          elevation: 4.0,
-            borderRadius: BorderRadius.circular(40),
-            color: context.colors.textPrimary,
-          child: Container(
-            constraints: const BoxConstraints(maxHeight: _userSuggestionsMaxHeight),
-            child: ListView.builder(
-              padding: EdgeInsets.zero,
-              shrinkWrap: true,
-              itemCount: _filteredUsers.length,
-              itemBuilder: (context, index) {
-                final user = _filteredUsers[index];
-                return _buildUserSuggestionItem(user);
-              },
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Material(
+                elevation: 4.0,
+                borderRadius: BorderRadius.circular(40),
+                color: context.colors.textPrimary,
+                child: Container(
+                  constraints: const BoxConstraints(maxHeight: _userSuggestionsMaxHeight),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    itemCount: viewModel.filteredUsers.length,
+                    itemBuilder: (context, index) {
+                      final user = viewModel.filteredUsers[index];
+                      return _buildUserSuggestionItem(user);
+                    },
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-        const SizedBox(height: 24),
-      ],
+            const SizedBox(height: 24),
+          ],
+        );
+      },
     );
   }
 
@@ -1264,23 +1086,23 @@ class _ShareNotePageState extends State<ShareNotePage> {
           child: Row(
             children: [
               CircleAvatar(
-          radius: _avatarRadius,
-          backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
-          backgroundColor: context.colors.surfaceTransparent,
+                radius: _avatarRadius,
+                backgroundImage: user.profileImage.isNotEmpty ? CachedNetworkImageProvider(user.profileImage) : null,
+                backgroundColor: context.colors.surfaceTransparent,
                 child: user.profileImage.isEmpty ? Icon(Icons.person, color: context.colors.background, size: 20) : null,
-        ),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-          user.name,
+                      user.name,
                       style: TextStyle(
                         color: context.colors.background,
                         fontSize: 17,
                         fontWeight: FontWeight.w600,
-        ),
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (user.about.isNotEmpty) ...[

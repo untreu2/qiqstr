@@ -47,8 +47,8 @@ class EditProfileViewModel extends BaseViewModel with CommandMixin {
     registerCommand('uploadPicture', SimpleCommand(_uploadPicture));
   }
 
-  void saveProfileCommand() => executeCommand('saveProfile');
-  void uploadPicture() => executeCommand('uploadPicture');
+  Future<void> saveProfileCommand() => executeCommand('saveProfile');
+  Future<void> uploadPicture() => executeCommand('uploadPicture');
 
   void updateName(String value) {
     _name = value;

@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:nostr_nip19/nostr_nip19.dart';
+import 'package:provider/provider.dart';
 import '../../theme/theme_manager.dart';
-import '../../../models/note_model.dart';
 import '../../../models/user_model.dart';
 import '../../../core/di/app_di.dart';
-import '../../../data/repositories/user_repository.dart';
-import '../../../data/repositories/note_repository.dart';
+import '../../../presentation/viewmodels/quote_widget_viewmodel.dart';
 import 'note_content_widget.dart';
 
-class QuoteWidget extends StatefulWidget {
+class QuoteWidget extends StatelessWidget {
   final String bech32;
   final bool shortMode;
 
@@ -21,143 +19,97 @@ class QuoteWidget extends StatefulWidget {
   });
 
   @override
-  State<QuoteWidget> createState() => _QuoteWidgetState();
+  Widget build(BuildContext context) {
+    return ChangeNotifierProvider<QuoteWidgetViewModel>(
+      create: (_) => QuoteWidgetViewModel(
+        noteRepository: AppDI.get(),
+        userRepository: AppDI.get(),
+        bech32: bech32,
+      ),
+      child: Consumer<QuoteWidgetViewModel>(
+        builder: (context, viewModel, child) {
+          if (viewModel.isLoading) {
+            return Container(
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: context.colors.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: context.colors.border, width: 1),
+              ),
+              child: const Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            );
+          }
+
+          if (viewModel.hasError || viewModel.note == null) {
+            return const SizedBox.shrink();
+          }
+
+          return _QuoteContent(
+            viewModel: viewModel,
+            shortMode: shortMode,
+          );
+        },
+      ),
+    );
+  }
 }
 
-class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
+class _QuoteContent extends StatelessWidget {
+  final QuoteWidgetViewModel viewModel;
+  final bool shortMode;
 
-  NoteModel? _note;
-  UserModel? _user;
-  bool _isLoading = true;
-  bool _hasError = false;
-  bool _isDisposed = false;
+  const _QuoteContent({
+    required this.viewModel,
+    required this.shortMode,
+  });
 
-  late final NoteRepository _noteRepository;
-  late final UserRepository _userRepository;
-  String? _eventId;
+  void _navigateToThread(BuildContext context) {
+    final note = viewModel.note;
+    if (note == null) return;
 
-  String? _formattedTime;
-  Map<String, dynamic>? _parsedContent;
-  bool _shouldTruncate = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _initializeServices();
-    _loadQuoteData();
-  }
-
-  void _initializeServices() {
-    try {
-      _noteRepository = AppDI.get<NoteRepository>();
-      _userRepository = AppDI.get<UserRepository>();
-      _eventId = _extractEventId(widget.bech32);
-    } catch (e) {
-      _setError();
+    final currentLocation = GoRouterState.of(context).matchedLocation;
+    if (currentLocation.startsWith('/home/feed')) {
+      context.push('/home/feed/thread?rootNoteId=${Uri.encodeComponent(note.id)}');
+    } else if (currentLocation.startsWith('/home/notifications')) {
+      context.push('/home/notifications/thread?rootNoteId=${Uri.encodeComponent(note.id)}');
+    } else {
+      context.push('/thread?rootNoteId=${Uri.encodeComponent(note.id)}');
     }
   }
 
-  String? _extractEventId(String bech32) {
-    try {
-      if (bech32.startsWith('note1')) {
-        return decodeBasicBech32(bech32, 'note');
-      } else if (bech32.startsWith('nevent1')) {
-        final result = decodeTlvBech32Full(bech32, 'nevent');
-        return result['type_0_main'];
-      }
-    } catch (e) {
-      return null;
-    }
-    return null;
-  }
+  void _navigateToProfile(BuildContext context) {
+    final user = viewModel.user;
+    if (user == null) return;
 
-  void _loadQuoteData() async {
-    final eventId = _eventId;
-    if (eventId == null) {
-      _setError();
-      return;
-    }
-
-    try {
-      final result = await _noteRepository.getNoteById(eventId);
-      
-      if (_isDisposed || !mounted) return;
-
-      result.fold(
-        (note) {
-          if (note != null) {
-            _setNote(note);
-          } else {
-            _setError();
-          }
-        },
-        (error) {
-          _setError();
-        },
-      );
-    } catch (e) {
-      _setError();
+    final currentLocation = GoRouterState.of(context).matchedLocation;
+    if (currentLocation.startsWith('/home/feed')) {
+      context.push('/home/feed/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+    } else if (currentLocation.startsWith('/home/notifications')) {
+      context.push('/home/notifications/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+    } else if (currentLocation.startsWith('/home/dm')) {
+      context.push('/home/dm/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
+    } else {
+      context.push('/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
     }
   }
 
-  void _setNote(NoteModel note) {
-    if (_isDisposed || !mounted) return;
-
-    setState(() {
-      _note = note;
-      _isLoading = false;
-      _hasError = false;
-    });
-
-    _precomputeData(note);
-    _loadUser(note.author);
-  }
-
-  void _setError() {
-    if (_isDisposed || !mounted) return;
-
-    setState(() {
-      _isLoading = false;
-      _hasError = true;
-    });
-  }
-
-  void _precomputeData(NoteModel note) {
-    try {
-      _formattedTime = _formatTime(note.timestamp);
-      _parsedContent = note.parsedContentLazy;
-      _shouldTruncate = _checkTruncation(_parsedContent);
-    } catch (e) {
-      _parsedContent = {
-        'textParts': [
-          {'type': 'text', 'text': note.content}
-        ],
-        'mediaUrls': <String>[],
-        'linkUrls': <String>[],
-        'quoteIds': <String>[],
-      };
-    }
-  }
-
-  void _loadUser(String npub) {
-    _userRepository.getUserProfile(npub).then((result) {
-      if (_isDisposed || !mounted) return;
-
-      result.fold(
-        (user) {
-          if (mounted) {
-            setState(() => _user = user);
-          }
-        },
-        (error) {
-          if (mounted) {
-            setState(() => _user = _createFallbackUser(npub));
-          }
-        },
-      );
-    });
+  void _navigateToMentionProfile(BuildContext context, String npub) {
+    final currentLocation = GoRouterState.of(context).matchedLocation;
+    final basePath = currentLocation.startsWith('/home/feed')
+        ? '/home/feed'
+        : currentLocation.startsWith('/home/notifications')
+            ? '/home/notifications'
+            : currentLocation.startsWith('/home/dm')
+                ? '/home/dm'
+                : '';
+    context.push('$basePath/profile?npub=${Uri.encodeComponent(npub)}');
   }
 
   UserModel _createFallbackUser(String npub) {
@@ -176,165 +128,26 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
     );
   }
 
-  String _formatTime(DateTime timestamp) {
-    final diff = DateTime.now().difference(timestamp);
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
-    if (diff.inHours < 24) return '${diff.inHours}h';
-    if (diff.inDays < 7) return '${diff.inDays}d';
-    return '${(diff.inDays / 7).floor()}w';
-  }
-
-  bool _checkTruncation(Map<String, dynamic>? parsed) {
-    if (parsed == null) return false;
-
-    try {
-      final textParts = (parsed['textParts'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      String fullText = '';
-
-      for (var part in textParts) {
-        if (part['type'] == 'text') {
-          fullText += part['text'] as String? ?? '';
-        }
-      }
-
-      return fullText.length > 140;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  void _navigateToThread() {
-    if (_note != null && mounted) {
-      final currentLocation = GoRouterState.of(context).matchedLocation;
-      if (currentLocation.startsWith('/home/feed')) {
-        context.push('/home/feed/thread?rootNoteId=${Uri.encodeComponent(_note!.id)}');
-      } else if (currentLocation.startsWith('/home/notifications')) {
-        context.push('/home/notifications/thread?rootNoteId=${Uri.encodeComponent(_note!.id)}');
-      } else {
-        context.push('/thread?rootNoteId=${Uri.encodeComponent(_note!.id)}');
-      }
-    }
-  }
-
-  void _navigateToProfile() {
-    if (_user != null && mounted) {
-      final currentLocation = GoRouterState.of(context).matchedLocation;
-      if (currentLocation.startsWith('/home/feed')) {
-        context.push('/home/feed/profile?npub=${Uri.encodeComponent(_user!.npub)}&pubkeyHex=${Uri.encodeComponent(_user!.pubkeyHex)}');
-      } else if (currentLocation.startsWith('/home/notifications')) {
-        context.push('/home/notifications/profile?npub=${Uri.encodeComponent(_user!.npub)}&pubkeyHex=${Uri.encodeComponent(_user!.pubkeyHex)}');
-      } else if (currentLocation.startsWith('/home/dm')) {
-        context.push('/home/dm/profile?npub=${Uri.encodeComponent(_user!.npub)}&pubkeyHex=${Uri.encodeComponent(_user!.pubkeyHex)}');
-      } else {
-        context.push('/profile?npub=${Uri.encodeComponent(_user!.npub)}&pubkeyHex=${Uri.encodeComponent(_user!.pubkeyHex)}');
-      }
-    }
-  }
-
-  void _navigateToMentionProfile(String npub) {
-    if (mounted) {
-      _userRepository.getUserProfile(npub).then((result) {
-        result.fold(
-          (user) {
-            final currentLocation = GoRouterState.of(context).matchedLocation;
-            if (currentLocation.startsWith('/home/feed')) {
-              context.push('/home/feed/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
-            } else if (currentLocation.startsWith('/home/notifications')) {
-              context.push('/home/notifications/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
-            } else if (currentLocation.startsWith('/home/dm')) {
-              context.push('/home/dm/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
-            } else {
-              context.push('/profile?npub=${Uri.encodeComponent(user.npub)}&pubkeyHex=${Uri.encodeComponent(user.pubkeyHex)}');
-            }
-          },
-          (error) {},
-        );
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _isDisposed = true;
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
-    super.build(context);
+    final note = viewModel.note!;
+    final user = viewModel.user ?? _createFallbackUser(note.author);
+    final parsedContent = viewModel.parsedContent ?? {
+      'textParts': [{'type': 'text', 'text': note.content}],
+      'mediaUrls': <String>[],
+      'linkUrls': <String>[],
+      'quoteIds': <String>[],
+    };
 
-    if (_isDisposed || !mounted) {
-      return const SizedBox.shrink();
+    Map<String, dynamic> contentToShow = parsedContent;
+    if (shortMode) {
+      contentToShow = _createShortModeContent(parsedContent);
+    } else if (viewModel.shouldTruncate) {
+      contentToShow = _createTruncatedContent(parsedContent, note.id);
     }
-
-    if (_isLoading) {
-      return _buildLoading();
-    }
-
-    if (_hasError || _note == null) {
-      return _buildError();
-    }
-
-    return _buildContent();
-  }
-
-  Widget _buildLoading() {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.colors.surface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.colors.border, width: 1),
-      ),
-      child: const Center(
-        child: SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(strokeWidth: 2),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildError() {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.colors.background,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: context.colors.border, width: 0.8),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.error_outline,
-            color: context.colors.textSecondary,
-            size: 20,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Event not found',
-            style: TextStyle(
-              color: context.colors.textSecondary,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildContent() {
-    final note = _note!;
-    final user = _user ?? _createFallbackUser(note.author);
-    final parsedContent = _parsedContent!;
 
     return GestureDetector(
-      onTap: _navigateToThread,
+      onTap: () => _navigateToThread(context),
       child: Container(
         margin: const EdgeInsets.only(top: 8, bottom: 0),
         padding: const EdgeInsets.all(16),
@@ -347,11 +160,17 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildHeader(user),
+            _buildHeader(context, user),
             if (_hasContent(parsedContent))
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: _buildNoteContent(parsedContent),
+                child: NoteContentWidget(
+                  noteId: note.id,
+                  parsedContent: contentToShow,
+                  onNavigateToMentionProfile: (npub) => _navigateToMentionProfile(context, npub),
+                  onShowMoreTap: viewModel.shouldTruncate ? (String noteId) => _navigateToThread(context) : null,
+                  shortMode: shortMode,
+                ),
               ),
           ],
         ),
@@ -359,11 +178,11 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
     );
   }
 
-  Widget _buildHeader(UserModel user) {
+  Widget _buildHeader(BuildContext context, UserModel user) {
     return Row(
       children: [
         GestureDetector(
-          onTap: _navigateToProfile,
+          onTap: () => _navigateToProfile(context),
           child: Row(
             children: [
               CircleAvatar(
@@ -392,9 +211,9 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
           ),
         ),
         const Spacer(),
-        if (_formattedTime != null)
+        if (viewModel.formattedTime != null)
           Text(
-            _formattedTime!,
+            viewModel.formattedTime!,
             style: TextStyle(
               fontSize: 12,
               color: context.colors.textSecondary,
@@ -410,24 +229,6 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
     final hasText = textParts?.any((p) => p['type'] == 'text' && (p['text'] as String? ?? '').trim().isNotEmpty) ?? false;
     final hasMedia = (parsedContent['mediaUrls'] as List?)?.isNotEmpty ?? false;
     return hasText || hasMedia;
-  }
-
-  Widget _buildNoteContent(Map<String, dynamic> parsedContent) {
-    Map<String, dynamic> contentToShow = parsedContent;
-
-    if (widget.shortMode) {
-      contentToShow = _createShortModeContent(parsedContent);
-    } else if (_shouldTruncate) {
-      contentToShow = _createTruncatedContent(parsedContent);
-    }
-
-    return NoteContentWidget(
-      noteId: _note!.id,
-      parsedContent: contentToShow,
-      onNavigateToMentionProfile: _navigateToMentionProfile,
-      onShowMoreTap: _shouldTruncate ? (String noteId) => _navigateToThread() : null,
-      shortMode: widget.shortMode,
-    );
   }
 
   Map<String, dynamic> _createShortModeContent(Map<String, dynamic> original) {
@@ -474,7 +275,7 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
     }
   }
 
-  Map<String, dynamic> _createTruncatedContent(Map<String, dynamic> original) {
+  Map<String, dynamic> _createTruncatedContent(Map<String, dynamic> original, String noteId) {
     try {
       const int limit = 140;
       final textParts = (original['textParts'] as List?)?.cast<Map<String, dynamic>>() ?? [];
@@ -510,7 +311,7 @@ class _QuoteWidgetState extends State<QuoteWidget> with AutomaticKeepAliveClient
       truncatedParts.add({
         'type': 'show_more',
         'text': 'Show more...',
-        'noteId': _note!.id,
+        'noteId': noteId,
       });
 
       return {
