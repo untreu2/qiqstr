@@ -16,6 +16,7 @@ import '../dialogs/unfollow_user_dialog.dart';
 import '../dialogs/mute_user_dialog.dart';
 import '../../../core/di/app_di.dart';
 import '../../../presentation/viewmodels/profile_info_viewmodel.dart';
+import '../../../data/repositories/auth_repository.dart';
 
 class ProfileInfoWidget extends StatefulWidget {
   final UserModel user;
@@ -393,7 +394,11 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     return Consumer<ProfileInfoViewModel>(
       builder: (context, viewModel, child) {
         final currentUserNpub = viewModel.currentUserNpub;
-        final isOwnProfile = currentUserNpub != null && currentUserNpub == user.pubkeyHex;
+        final authRepository = AppDI.get<AuthRepository>();
+        final currentUserHex = currentUserNpub != null 
+            ? (authRepository.npubToHex(currentUserNpub) ?? currentUserNpub)
+            : null;
+        final isOwnProfile = currentUserHex != null && currentUserHex.toLowerCase() == user.pubkeyHex.toLowerCase();
 
         return Row(
           children: [
@@ -573,6 +578,13 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       );
     }
 
+    final currentUserNpub = viewModel.currentUserNpub;
+    final authRepository = AppDI.get<AuthRepository>();
+    final currentUserHex = currentUserNpub != null 
+        ? (authRepository.npubToHex(currentUserNpub) ?? currentUserNpub)
+        : null;
+    final isOwnProfile = currentUserHex != null && currentUserHex.toLowerCase() == viewModel.user.pubkeyHex.toLowerCase();
+
     return Row(
       children: [
           GestureDetector(
@@ -636,7 +648,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               ),
             ],
           ),
-          if (viewModel.doesUserFollowMe == true) ...[
+          if (viewModel.doesUserFollowMe == true && !isOwnProfile) ...[
             Text(
               ' • ',
               style: TextStyle(

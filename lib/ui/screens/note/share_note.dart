@@ -683,23 +683,26 @@ class _ShareNotePageState extends State<ShareNotePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.9,
-      decoration: BoxDecoration(
-        color: context.colors.background,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        children: [
-          _buildHeader(context),
-          Expanded(child: _buildMainContent()),
-          Consumer<ShareNoteViewModel>(
-            builder: (context, vm, child) {
-              if (vm.isSearchingUsers) return _buildUserSuggestions();
-              return const SizedBox.shrink();
-            },
-          ),
-        ],
+    return ChangeNotifierProvider<ShareNoteViewModel>.value(
+      value: _viewModel,
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.9,
+        decoration: BoxDecoration(
+          color: context.colors.background,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          children: [
+            _buildHeader(context),
+            Expanded(child: _buildMainContent()),
+            Consumer<ShareNoteViewModel>(
+              builder: (context, vm, child) {
+                if (vm.isSearchingUsers) return _buildUserSuggestions();
+                return const SizedBox.shrink();
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

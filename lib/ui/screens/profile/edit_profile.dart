@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:carbon_icons/carbon_icons.dart';
 import '../../theme/theme_manager.dart';
 import 'package:provider/provider.dart';
 import '../../../core/di/app_di.dart';
@@ -9,7 +11,6 @@ import 'package:file_picker/file_picker.dart';
 import '../../../data/services/media_service.dart';
 import '../../widgets/common/snackbar_widget.dart';
 import '../../widgets/common/back_button_widget.dart';
-import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/title_widget.dart';
 import '../../widgets/common/custom_input_field.dart';
 
@@ -47,16 +48,40 @@ class _EditProfileContentState extends State<_EditProfileContent> {
   final _websiteController = TextEditingController();
 
   bool _isUploadingBanner = false;
+  bool _hasLoadedUser = false;
 
   @override
-  void initState() {
-    super.initState();
-    final viewModel = Provider.of<EditProfileViewModel>(context, listen: false);
-    _loadUser(viewModel);
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_hasLoadedUser) {
+      _hasLoadedUser = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          final viewModel = Provider.of<EditProfileViewModel>(context, listen: false);
+          _loadUser(viewModel);
+          _setupControllerListeners();
+        }
+      });
+    }
+  }
+
+  void _setupControllerListeners() {
+    _pictureController.addListener(() {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+    _bannerController.addListener(() {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
   @override
   void dispose() {
+    _pictureController.removeListener(() {});
+    _bannerController.removeListener(() {});
     _nameController.dispose();
     _aboutController.dispose();
     _pictureController.dispose();
@@ -69,19 +94,23 @@ class _EditProfileContentState extends State<_EditProfileContent> {
 
   Future<void> _loadUser(EditProfileViewModel viewModel) async {
     await viewModel.loadCurrentUserProfile();
+    if (!mounted) return;
+    
     final profileState = viewModel.profileState;
     
     if (profileState.isLoaded && profileState.data != null) {
       final user = profileState.data!;
-      setState(() {
-        _nameController.text = user.name;
-        _aboutController.text = user.about;
-        _pictureController.text = user.profileImage;
-        _nip05Controller.text = user.nip05;
-        _bannerController.text = user.banner;
-        _lud16Controller.text = user.lud16;
-        _websiteController.text = user.website;
-      });
+      if (mounted) {
+        setState(() {
+          _nameController.text = user.name;
+          _aboutController.text = user.about;
+          _pictureController.text = user.profileImage;
+          _nip05Controller.text = user.nip05;
+          _bannerController.text = user.banner;
+          _lud16Controller.text = user.lud16;
+          _websiteController.text = user.website;
+        });
+      }
     }
   }
 
@@ -176,37 +205,179 @@ class _EditProfileContentState extends State<_EditProfileContent> {
     }
   }
 
-  InputDecoration _inputDecoration(BuildContext context, String label, {VoidCallback? onUpload}) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: TextStyle(
-        fontWeight: FontWeight.w600,
-        color: context.colors.textSecondary,
-      ),
-      filled: true,
-      fillColor: context.colors.inputFill,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(25),
-        borderSide: BorderSide.none,
-      ),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      isDense: true,
-      suffixIcon: onUpload != null
-          ? IconActionButton(
-              icon: Icons.upload,
-              iconColor: context.colors.accent,
-              onPressed: onUpload,
-              size: ButtonSize.small,
-            )
-          : null,
-    );
-  }
 
   Widget _buildHeader(BuildContext context) {
     return TitleWidget(
       title: 'Edit Profile',
       fontSize: 32,
       useTopPadding: true,
+    );
+  }
+
+  Widget _buildBannerPreview(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final bannerHeight = screenWidth * (3.5 / 10);
+    final bannerUrl = _bannerController.text.trim();
+
+    return GestureDetector(
+      onTap: _isUploadingBanner
+          ? null
+          : () => _pickAndUploadMedia(
+                controller: _bannerController,
+                label: 'Banner',
+                isPicture: false,
+              ),
+      child: Stack(
+        children: [
+          Container(
+            width: screenWidth,
+            height: bannerHeight,
+            color: context.colors.background,
+            child: _isUploadingBanner
+                ? Container(
+                    height: bannerHeight,
+                    width: screenWidth,
+                    color: context.colors.grey700,
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: context.colors.textPrimary,
+                      ),
+                    ),
+                  )
+                : bannerUrl.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: bannerUrl,
+                        width: screenWidth,
+                        height: bannerHeight,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) => Container(
+                          height: bannerHeight,
+                          width: screenWidth,
+                          color: context.colors.grey700,
+                        ),
+                        errorWidget: (_, __, ___) => Container(
+                          height: bannerHeight,
+                          width: screenWidth,
+                          color: context.colors.background,
+                          child: Icon(
+                            Icons.image,
+                            color: context.colors.textSecondary,
+                            size: 40,
+                          ),
+                        ),
+                      )
+                    : Container(
+                        height: bannerHeight,
+                        width: screenWidth,
+                        color: context.colors.background,
+                        child: Icon(
+                          Icons.add_photo_alternate,
+                          color: context.colors.textSecondary,
+                          size: 40,
+                        ),
+                      ),
+          ),
+          if (!_isUploadingBanner)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withOpacity(0.3),
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: context.colors.background.withOpacity(0.9),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      CarbonIcons.camera,
+                      color: context.colors.textPrimary,
+                      size: 24,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfilePicturePreview(BuildContext context) {
+    return Consumer<EditProfileViewModel>(
+      builder: (context, viewModel, child) {
+        final pictureUrl = _pictureController.text.trim();
+        final avatarRadius = 40.0;
+        final isUploading = viewModel.isUploadingPicture;
+
+        return Row(
+          children: [
+            GestureDetector(
+              onTap: isUploading
+                  ? null
+                  : () => _pickAndUploadMedia(
+                        controller: _pictureController,
+                        label: 'Profile image',
+                        isPicture: true,
+                      ),
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: context.colors.background,
+                    width: 3,
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: avatarRadius,
+                      backgroundColor: context.colors.surfaceTransparent,
+                      backgroundImage: pictureUrl.isNotEmpty && !isUploading
+                          ? CachedNetworkImageProvider(pictureUrl)
+                          : null,
+                      child: isUploading
+                          ? CircularProgressIndicator(
+                              color: context.colors.textPrimary,
+                              strokeWidth: 2,
+                            )
+                          : pictureUrl.isEmpty
+                              ? Icon(
+                                  Icons.person,
+                                  size: avatarRadius,
+                                  color: context.colors.textSecondary,
+                                )
+                              : null,
+                    ),
+                    if (!isUploading)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.black.withOpacity(0.3),
+                          ),
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: context.colors.background.withOpacity(0.9),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                CarbonIcons.camera,
+                                color: context.colors.textPrimary,
+                                size: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -230,6 +401,18 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildHeader(context),
+                    const SizedBox(height: 8),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildBannerPreview(context),
+                        Container(
+                          transform: Matrix4.translationValues(0, -16, 0),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: _buildProfilePicturePreview(context),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 8),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -264,61 +447,6 @@ class _EditProfileContentState extends State<_EditProfileContent> {
                                 }
                                 return null;
                               },
-                            ),
-                            const SizedBox(height: 20),
-                            CustomInputField(
-                              controller: _pictureController,
-                              enabled: !viewModel.isUploadingPicture,
-                              labelText: 'Profile image URL',
-                              fillColor: context.colors.inputFill,
-                              onChanged: (value) => viewModel.updatePicture(value),
-                              validator: (value) {
-                                if (value != null && value.trim().isNotEmpty) {
-                                  final uri = Uri.tryParse(value.trim());
-                                  if (uri == null || !uri.hasScheme) {
-                                    return 'Please enter a valid URL';
-                                  }
-                                }
-                                return null;
-                              },
-                              suffixIcon: _inputDecoration(
-                                context,
-                                'Profile image URL',
-                                onUpload: viewModel.isUploadingPicture
-                                    ? null
-                                    : () => _pickAndUploadMedia(
-                                          controller: _pictureController,
-                                          label: 'Profile image',
-                                          isPicture: true,
-                                        ),
-                              ).suffixIcon,
-                            ),
-                            const SizedBox(height: 20),
-                            CustomInputField(
-                              controller: _bannerController,
-                              enabled: !_isUploadingBanner,
-                              labelText: 'Banner URL',
-                              fillColor: context.colors.inputFill,
-                              validator: (value) {
-                                if (value != null && value.trim().isNotEmpty) {
-                                  final uri = Uri.tryParse(value.trim());
-                                  if (uri == null || !uri.hasScheme) {
-                                    return 'Please enter a valid URL';
-                                  }
-                                }
-                                return null;
-                              },
-                              suffixIcon: _inputDecoration(
-                                context,
-                                'Banner URL',
-                                onUpload: _isUploadingBanner
-                                    ? null
-                                    : () => _pickAndUploadMedia(
-                                          controller: _bannerController,
-                                          label: 'Banner',
-                                          isPicture: false,
-                                        ),
-                              ).suffixIcon,
                             ),
                             const SizedBox(height: 20),
                             CustomInputField(
