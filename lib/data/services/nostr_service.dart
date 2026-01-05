@@ -485,11 +485,13 @@ class NostrService {
     required List<int> kinds,
     required List<String> eventIds,
     int? limit,
+    int? since,
   }) {
     return Filter(
       kinds: kinds,
       eTags: eventIds,
       limit: limit,
+      since: since,
     );
   }
 

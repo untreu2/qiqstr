@@ -61,15 +61,18 @@ class DataService {
 
   final Map<String, DateTime> _lastInteractionFetch = {};
   final Map<String, bool> _eventProcessingLock = {};
+  final Set<String> _processedInteractionIds = {};
 
   bool _notificationSubscriptionActive = false;
   String? _notificationSubscriptionId;
 
-  final Set<String> _pendingInteractionFetch = {};
+  final Map<String, int> _interactionFetchPriority = {};
   Timer? _interactionFetchTimer;
-  Timer? _periodicInteractionFetchTimer;
-  static const Duration _interactionFetchDebounce = Duration(seconds: 1);
-  static const Duration _periodicInteractionFetchInterval = Duration(seconds: 30);
+  static const Duration _interactionFetchDebounce = Duration(milliseconds: 500);
+  static const Duration _interactionFetchTTL = Duration(seconds: 60);
+  static const int _maxInteractionBatchSize = 50;
+  static const int _maxRelayQueriesPerSecond = 3;
+  DateTime _lastRelayQueryTime = DateTime(2000);
 
   DataService({
     required AuthService authService,
@@ -78,7 +81,6 @@ class DataService {
         _relayManager = relayManager ?? WebSocketManager.instance {
     _setupRelayEventHandling();
     _startCacheCleanup();
-    _startPeriodicInteractionFetch();
   }
 
   Stream<List<NoteModel>> get notesStream => _notesController.stream;
@@ -565,17 +567,31 @@ class DataService {
   Future<void> _processKind1Event(Map<String, dynamic> eventData) async {
     try {
       final tags = List<dynamic>.from(eventData['tags'] ?? []);
+      String? firstETag;
       String? rootId;
+      String? replyId;
 
       for (var tag in tags) {
-        if (tag is List && tag.length >= 4 && tag[0] == 'e' && tag[3] == 'root') {
-          rootId = tag[1] as String;
-          break;
+        if (tag is List && tag.isNotEmpty && tag[0] == 'e') {
+          final eventId = tag.length >= 2 ? tag[1] as String? : null;
+          if (eventId == null || eventId.isEmpty) continue;
+
+          firstETag ??= eventId;
+
+          if (tag.length >= 4) {
+            final marker = tag[3] as String?;
+            if (marker == 'root') {
+              rootId = eventId;
+            } else if (marker == 'reply') {
+              replyId = eventId;
+            }
+          }
         }
       }
 
-      if (rootId != null) {
-        await _handleReplyEvent(eventData, rootId);
+      if (rootId != null || replyId != null || firstETag != null) {
+        final parentId = replyId ?? rootId ?? firstETag!;
+        await _handleReplyEvent(eventData, parentId);
       } else {
         await _processNoteEvent(eventData);
       }
@@ -1207,29 +1223,39 @@ class DataService {
 
   void _startCacheCleanup() {}
 
-  void _startPeriodicInteractionFetch() {
-    _periodicInteractionFetchTimer?.cancel();
-    _periodicInteractionFetchTimer = Timer.periodic(_periodicInteractionFetchInterval, (_) {
-      if (!_isClosed && _noteCache.isNotEmpty) {
-        unawaited(fetchInteractionsForNotesBatchWithEOSE(null));
-      }
+  void _scheduleInteractionFetch(String noteId, {int priority = 0}) {
+    if (_isClosed) return;
+
+    final now = timeService.now;
+    final lastFetch = _lastInteractionFetch[noteId];
+
+    if (lastFetch != null && now.difference(lastFetch) < _interactionFetchTTL) {
+      return;
+    }
+
+    _interactionFetchPriority[noteId] = priority;
+
+    _interactionFetchTimer?.cancel();
+    _interactionFetchTimer = Timer(_interactionFetchDebounce, () {
+      if (_isClosed) return;
+      unawaited(_processPendingInteractionFetches());
     });
   }
 
-  void _scheduleInteractionFetch(String noteId) {
-    if (_isClosed) return;
-    
-    _pendingInteractionFetch.add(noteId);
-    
-    _interactionFetchTimer?.cancel();
-    _interactionFetchTimer = Timer(_interactionFetchDebounce, () {
-      if (_isClosed || _pendingInteractionFetch.isEmpty) return;
-      
-      final noteIds = _pendingInteractionFetch.toList();
-      _pendingInteractionFetch.clear();
-      
-      unawaited(fetchInteractionsForNotesBatchWithEOSE(noteIds));
-    });
+  Future<void> _processPendingInteractionFetches() async {
+    if (_interactionFetchPriority.isEmpty) return;
+
+    final sortedNotes = _interactionFetchPriority.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    final notesToFetch = sortedNotes
+        .take(_maxInteractionBatchSize)
+        .map((e) => e.key)
+        .toList();
+
+    _interactionFetchPriority.clear();
+
+    await _fetchInteractionsOptimized(notesToFetch);
   }
 
   void _addNoteToCache(NoteModel note) {
@@ -1243,7 +1269,7 @@ class DataService {
 
   void _cleanupCacheIfNeeded() {
     final now = timeService.now;
-    
+
     if (_profileCache.length > _profileCacheMaxSize) {
       final cutoffTime = now.subtract(_profileCacheTTL);
       _profileCache.removeWhere((key, cached) => cached.fetchedAt.isBefore(cutoffTime));
@@ -1254,6 +1280,10 @@ class DataService {
       _lastInteractionFetch.removeWhere((key, timestamp) => timestamp.isBefore(interactionCutoff));
     }
 
+    if (_processedInteractionIds.length > 10000) {
+      _processedInteractionIds.clear();
+    }
+
     if (_eventProcessingLock.length > _eventProcessingLockMaxSize) {
       _eventProcessingLock.clear();
     }
@@ -1261,7 +1291,7 @@ class DataService {
     if (_noteCache.length > _noteCacheMaxSize) {
       final sortedNotes = _noteCache.values.toList()
         ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      
+
       final notesToRemove = sortedNotes.skip(_noteCacheKeepSize).map((n) => n.id).toList();
       for (final id in notesToRemove) {
         _noteCache.remove(id);
@@ -1269,6 +1299,8 @@ class DataService {
         _reactionsMap.remove(id);
         _repostsMap.remove(id);
         _zapsMap.remove(id);
+        _lastInteractionFetch.remove(id);
+        _interactionFetchPriority.remove(id);
       }
     }
   }
@@ -2740,48 +2772,69 @@ class DataService {
   }
 
   Future<void> fetchInteractionsForNotesWithEOSE(String noteId) async {
-    await fetchInteractionsForNotesBatchWithEOSE([noteId]);
+    _scheduleInteractionFetch(noteId, priority: 100);
   }
 
   Future<void> fetchInteractionsForNotesBatchWithEOSE(List<String>? noteIds) async {
-    if (_isClosed) return;
+    if (noteIds == null || noteIds.isEmpty) return;
+    for (final noteId in noteIds) {
+      _scheduleInteractionFetch(noteId, priority: 50);
+    }
+  }
+
+  void fetchInteractionsForVisibleNotes(List<String> visibleNoteIds) {
+    for (final noteId in visibleNoteIds) {
+      _scheduleInteractionFetch(noteId, priority: 200);
+    }
+  }
+
+  Future<void> _fetchInteractionsOptimized(List<String> noteIds) async {
+    if (_isClosed || noteIds.isEmpty) return;
+
+    final now = timeService.now;
+    final minDelay = Duration(milliseconds: 1000 ~/ _maxRelayQueriesPerSecond);
+    final timeSinceLastQuery = now.difference(_lastRelayQueryTime);
+
+    if (timeSinceLastQuery < minDelay) {
+      await Future.delayed(minDelay - timeSinceLastQuery);
+    }
+    _lastRelayQueryTime = timeService.now;
 
     try {
       final allRelays = _relayManager.relayUrls.toList();
       if (allRelays.isEmpty) return;
 
-      final List<String> targetNoteIds;
-      if (noteIds?.isNotEmpty == true) {
-        targetNoteIds = noteIds!.toSet().toList()..sort();
-      } else {
-        targetNoteIds = _noteCache.keys.toList()..sort();
-      }
-
-      if (targetNoteIds.isEmpty) return;
-
-      final processedInteractionIds = <String>{};
-      final interactionKinds = [1, 7, 6, 9735];
+      final replyKinds = [1];
+      final interactionKinds = [7, 6, 9735];
       final deletionKinds = [5];
-      final quoteKinds = [1];
 
-      final quoteFilter = NostrService.createQuoteFilter(
-        kinds: quoteKinds,
-        quotedEventIds: targetNoteIds,
-        limit: 1000,
-      );
+      final oldestFetch = noteIds
+          .map((id) => _lastInteractionFetch[id])
+          .whereType<DateTime>()
+          .fold<DateTime?>(null, (oldest, date) =>
+              oldest == null || date.isBefore(oldest) ? date : oldest);
+
+      final since = oldestFetch != null ? oldestFetch.millisecondsSinceEpoch ~/ 1000 : null;
 
       final filters = [
         NostrService.createInteractionFilter(
+          kinds: replyKinds,
+          eventIds: noteIds,
+          limit: 200,
+          since: since,
+        ),
+        NostrService.createInteractionFilter(
           kinds: interactionKinds,
-          eventIds: targetNoteIds,
-          limit: 1000,
+          eventIds: noteIds,
+          limit: 500,
+          since: since,
         ),
         NostrService.createInteractionFilter(
           kinds: deletionKinds,
-          eventIds: targetNoteIds,
-          limit: 100,
+          eventIds: noteIds,
+          limit: 50,
+          since: since,
         ),
-        quoteFilter,
       ];
 
       final request = NostrService.createMultiFilterRequest(filters);
@@ -2790,24 +2843,27 @@ class DataService {
       await _queryAllRelays(
         request: request,
         subscriptionId: subscriptionId,
-        checkClosed: false,
+        checkClosed: true,
+        timeout: const Duration(seconds: 5),
         onEvent: (eventData, url) {
           try {
             final eventId = eventData['id'] as String;
             final eventKind = eventData['kind'] as int;
 
-            if ((interactionKinds.contains(eventKind) || 
-                 deletionKinds.contains(eventKind) || 
-                 quoteKinds.contains(eventKind)) && 
-                !processedInteractionIds.contains(eventId)) {
-              processedInteractionIds.add(eventId);
+            if (_processedInteractionIds.contains(eventId)) return;
+
+            if (replyKinds.contains(eventKind) ||
+                interactionKinds.contains(eventKind) ||
+                deletionKinds.contains(eventKind)) {
+              _processedInteractionIds.add(eventId);
               unawaited(_processNostrEvent(eventData));
             }
           } catch (_) {}
         },
       );
 
-      for (final noteId in targetNoteIds) {
+      for (final noteId in noteIds) {
+        _lastInteractionFetch[noteId] = now;
         final note = _noteCache[noteId];
         if (note != null) {
           note.reactionCount = _reactionsMap[noteId]?.length ?? 0;
@@ -3244,7 +3300,6 @@ class DataService {
     _batchProcessingTimer?.cancel();
     _uiUpdateThrottleTimer?.cancel();
     _interactionFetchTimer?.cancel();
-    _periodicInteractionFetchTimer?.cancel();
     _relayManager.unregisterService('nostr_data_service');
     _notesController.close();
     _usersController.close();
