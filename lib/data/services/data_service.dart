@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:collection';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/base/result.dart';
@@ -2402,57 +2403,83 @@ class DataService {
 
       _currentUserNpub = (await _authService.getCurrentUserNpub()).data ?? '';
 
+      final fetchedNotifications = <String, NotificationModel>{};
+
+      final sinceTimestamp = since != null ? since.millisecondsSinceEpoch ~/ 1000 : null;
+
+      try {
+        final primalService = PrimalCacheService.instance;
+        final primalNotifications = await primalService.fetchNotifications(
+          pubkeyHex: pubkeyHex,
+          since: sinceTimestamp,
+          limit: 100,
+        );
+
+        for (final notifData in primalNotifications) {
+          try {
+            final notification = _processPrimalNotification(notifData, pubkeyHex);
+            if (notification != null && !fetchedNotifications.containsKey(notification.id)) {
+              fetchedNotifications[notification.id] = notification;
+            }
+          } catch (e) {
+            if (kDebugMode) {
+              print('[DataService] Error processing primal notification: $e');
+            }
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('[DataService] Error fetching primal notifications: $e');
+        }
+      }
+
       final filter = <String, dynamic>{
         'kinds': [1, 6, 7, 9735],
         '#p': [pubkeyHex],
       };
 
       if (since != null) {
-        filter['since'] = since.millisecondsSinceEpoch ~/ 1000;
+        filter['since'] = sinceTimestamp;
       }
 
       final subscriptionId = NostrService.generateUUID();
       final request = ['REQ', subscriptionId, filter];
       final serializedRequest = jsonEncode(request);
 
-      if (_allRelays.isEmpty) {
-        return const Result.error('No relays available');
+      if (_allRelays.isNotEmpty) {
+        await _queryAllRelays(
+          request: serializedRequest,
+          subscriptionId: subscriptionId,
+          timeout: const Duration(seconds: _longQueryTimeoutSeconds),
+          checkClosed: false,
+          onEvent: (eventData, url) {
+            try {
+              final eventId = eventData['id'] as String? ?? '';
+              final eventKind = eventData['kind'] as int? ?? 0;
+              final eventPubkey = eventData['pubkey'] as String? ?? '';
+              final eventCreatedAt = eventData['created_at'] as int? ?? 0;
+              final eventTags = eventData['tags'] as List<dynamic>? ?? [];
+              final eventContent = eventData['content'] as String? ?? '';
+
+              if (eventId.isEmpty || eventPubkey.isEmpty) return;
+
+              final notification = _processNotificationEvent(
+                eventId: eventId,
+                eventKind: eventKind,
+                eventPubkey: eventPubkey,
+                eventCreatedAt: eventCreatedAt,
+                eventTags: eventTags,
+                eventContent: eventContent,
+                targetUserHex: pubkeyHex,
+              );
+
+              if (notification != null && !fetchedNotifications.containsKey(notification.id)) {
+                fetchedNotifications[notification.id] = notification;
+              }
+            } catch (_) {}
+          },
+        );
       }
-
-      final fetchedNotifications = <String, NotificationModel>{};
-
-      await _queryAllRelays(
-        request: serializedRequest,
-        subscriptionId: subscriptionId,
-        timeout: const Duration(seconds: _longQueryTimeoutSeconds),
-        checkClosed: false,
-        onEvent: (eventData, url) {
-          try {
-            final eventId = eventData['id'] as String? ?? '';
-            final eventKind = eventData['kind'] as int? ?? 0;
-            final eventPubkey = eventData['pubkey'] as String? ?? '';
-            final eventCreatedAt = eventData['created_at'] as int? ?? 0;
-            final eventTags = eventData['tags'] as List<dynamic>? ?? [];
-            final eventContent = eventData['content'] as String? ?? '';
-
-            if (eventId.isEmpty || eventPubkey.isEmpty) return;
-
-            final notification = _processNotificationEvent(
-              eventId: eventId,
-              eventKind: eventKind,
-              eventPubkey: eventPubkey,
-              eventCreatedAt: eventCreatedAt,
-              eventTags: eventTags,
-              eventContent: eventContent,
-              targetUserHex: pubkeyHex,
-            );
-
-            if (notification != null && !fetchedNotifications.containsKey(notification.id)) {
-              fetchedNotifications[notification.id] = notification;
-            }
-          } catch (_) {}
-        },
-      );
 
       final notificationsList = fetchedNotifications.values.toList();
       notificationsList.sort((a, b) => b.timestamp.compareTo(a.timestamp));
@@ -2469,6 +2496,96 @@ class DataService {
       return Result.success(notificationsList);
     } catch (e) {
       return Result.error('Failed to fetch notifications: $e');
+    }
+  }
+
+  NotificationModel? _processPrimalNotification(
+    Map<String, dynamic> notifData,
+    String targetUserHex,
+  ) {
+    try {
+      final notifType = notifData['type'] as int?;
+      final createdAt = notifData['created_at'] as int?;
+      
+      if (notifType == null || createdAt == null) {
+        return null;
+      }
+
+      final timestamp = DateTime.fromMillisecondsSinceEpoch(createdAt * 1000);
+      String notificationType = 'mention';
+      String? authorHex;
+      String? targetEventId;
+      String content = '';
+
+      if (notifType == 1) {
+        notificationType = 'follow';
+        if (notifData.containsKey('follower')) {
+          final follower = notifData['follower'];
+          if (follower is String) {
+            authorHex = follower;
+          } else if (follower is List && follower.isNotEmpty) {
+            authorHex = follower[0].toString();
+          }
+        } else if (notifData.containsKey('arg1')) {
+          final arg1 = notifData['arg1'];
+          if (arg1 is String) {
+            authorHex = arg1;
+          } else if (arg1 is Map) {
+            authorHex = arg1['follower'] as String?;
+          }
+        }
+        content = 'started following you';
+        targetEventId = 'follow_${authorHex ?? ''}_${createdAt}';
+      } else if (notifType == 2) {
+        notificationType = 'unfollow';
+        if (notifData.containsKey('follower')) {
+          final follower = notifData['follower'];
+          if (follower is String) {
+            authorHex = follower;
+          } else if (follower is List && follower.isNotEmpty) {
+            authorHex = follower[0].toString();
+          }
+        } else if (notifData.containsKey('arg1')) {
+          final arg1 = notifData['arg1'];
+          if (arg1 is String) {
+            authorHex = arg1;
+          } else if (arg1 is Map) {
+            authorHex = arg1['follower'] as String?;
+          }
+        }
+        content = 'unfollowed you';
+        targetEventId = 'unfollow_${authorHex ?? ''}_${createdAt}';
+      } else {
+        return null;
+      }
+
+      if (authorHex == null || authorHex.isEmpty) {
+        return null;
+      }
+
+      if (authorHex == targetUserHex) {
+        return null;
+      }
+
+      final authorNpub = _authService.hexToNpub(authorHex) ?? authorHex;
+      final notificationId = 'primal_${notifType}_${authorHex}_${createdAt}';
+
+      return NotificationModel(
+        id: notificationId,
+        type: notificationType,
+        author: authorNpub,
+        targetEventId: targetEventId,
+        timestamp: timestamp,
+        content: content,
+        fetchedAt: DateTime.now(),
+        isRead: false,
+        amount: 0,
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        print('[DataService] Error processing primal notification: $e');
+      }
+      return null;
     }
   }
 

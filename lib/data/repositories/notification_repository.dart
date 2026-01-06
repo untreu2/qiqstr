@@ -190,7 +190,7 @@ class NotificationRepository {
     final standaloneNotifications = <NotificationModel>[];
 
     for (final notification in notifications) {
-      if (notification.type == 'zap' || notification.type == 'mention') {
+      if (notification.type == 'zap' || notification.type == 'mention' || notification.type == 'follow' || notification.type == 'unfollow') {
         standaloneNotifications.add(notification);
       } else {
         final key = '${notification.type}_${notification.targetEventId}';

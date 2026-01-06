@@ -315,6 +315,10 @@ class NotificationViewModel extends BaseViewModel with CommandMixin {
           return '$name mentioned you';
         case 'repost':
           return '$name reposted your post';
+        case 'follow':
+          return '$name started following you';
+        case 'unfollow':
+          return '$name unfollowed you';
         default:
           return 'Notification from $name';
       }

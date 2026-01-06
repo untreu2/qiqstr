@@ -312,7 +312,13 @@ class _NotificationPageState extends State<NotificationPage> {
       final image = profile?.profileImage ?? '';
 
       return GestureDetector(
-        onTap: () => _navigateToTargetNote(item.targetEventId),
+        onTap: () {
+          if (item.type == 'follow' || item.type == 'unfollow') {
+            _navigateToAuthorProfile(item.author, viewModel);
+          } else {
+            _navigateToTargetNote(item.targetEventId);
+          }
+        },
         child: Container(
           color: context.colors.background,
           child: Padding(
@@ -357,7 +363,7 @@ class _NotificationPageState extends State<NotificationPage> {
                               color: context.colors.textSecondary,
                             ),
                           ),
-                          if (item.content.trim().isNotEmpty && item.type != 'repost' && item.type != 'reaction') ...[
+                          if (item.content.trim().isNotEmpty && item.type != 'repost' && item.type != 'reaction' && item.type != 'follow' && item.type != 'unfollow') ...[
                             const SizedBox(height: 4),
                             NoteContentWidget(
                               parsedContent: _parseContent(item.content),
@@ -365,10 +371,12 @@ class _NotificationPageState extends State<NotificationPage> {
                               onNavigateToMentionProfile: (npub) => _navigateToProfileFromContent(npub, viewModel),
                             ),
                           ],
-                          const SizedBox(height: 2),
-                          QuoteWidget(
-                            bech32: _encodeEventId(item.targetEventId),
-                          ),
+                          if (item.type != 'follow' && item.type != 'unfollow') ...[
+                            const SizedBox(height: 2),
+                            QuoteWidget(
+                              bech32: _encodeEventId(item.targetEventId),
+                            ),
+                          ],
                         ],
                       ),
                     ),
