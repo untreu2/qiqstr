@@ -801,7 +801,11 @@ class NoteRepository {
         until: until,
         since: since,
       );
-      
+
+      if (result.isSuccess && result.data != null && result.data!.isNotEmpty) {
+        _fetchInteractionsForNotes(result.data!);
+      }
+
       return result;
     } catch (e) {
       _logger.error('Exception in getHashtagNotes', 'NoteRepository', e);
@@ -844,11 +848,13 @@ class NoteRepository {
           ).then((_) {}).catchError((e) {
             _logger.error('Error fetching notes in background', 'NoteRepository', e);
           });
-          
+
+          _fetchInteractionsForNotes(cachedNotes);
+
           return Result.success(cachedNotes);
         }
       }
-      
+
       await fetchNotesFromRelays(
         authorNpubs: authorNpubs,
         limit: limit,
@@ -856,17 +862,24 @@ class NoteRepository {
         since: since,
         isProfileMode: isProfileMode,
       );
-      
+
       final result = await getFilteredNotes(filter);
-      
+
       if (result.isSuccess && until != null && result.data!.isNotEmpty) {
         final filteredNotes = result.data!.where((note) {
           final noteTime = note.isRepost ? (note.repostTimestamp ?? note.timestamp) : note.timestamp;
           return noteTime.isBefore(until);
         }).toList();
+
+        _fetchInteractionsForNotes(filteredNotes);
+
         return Result.success(filteredNotes);
       }
-      
+
+      if (result.isSuccess && result.data!.isNotEmpty) {
+        _fetchInteractionsForNotes(result.data!);
+      }
+
       return result;
     } catch (e) {
       _logger.error('Exception in _getFeedNotesForAuthors', 'NoteRepository', e);
@@ -970,6 +983,23 @@ class NoteRepository {
       isProfileMode: true,
       skipCache: skipCache,
     );
+  }
+
+  void _fetchInteractionsForNotes(List<NoteModel> notes) {
+    try {
+      final noteIds = notes.map((note) {
+        if (note.isRepost && note.rootId != null && note.rootId!.isNotEmpty) {
+          return note.rootId!;
+        }
+        return note.id;
+      }).toSet().toList();
+
+      if (noteIds.isEmpty) return;
+
+      _nostrDataService.fetchInteractionsForNotesBatchWithEOSE(noteIds);
+    } catch (e) {
+      _logger.error('Error fetching interactions for notes', 'NoteRepository', e);
+    }
   }
 
   void dispose() {

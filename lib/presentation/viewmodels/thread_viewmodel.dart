@@ -189,6 +189,7 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
 
         final allThreadNotes = [rootNote, ...replies];
         _loadUserProfiles(allThreadNotes);
+        _fetchInteractionsForAllNotes(allThreadNotes);
         safeNotifyListeners();
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -200,7 +201,9 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
                   _repliesState = LoadedState(newReplies);
                   final newStructure = _buildThreadStructure(rootNote, newReplies);
                   _threadStructureState = LoadedState(newStructure);
-                  _loadUserProfiles([rootNote, ...newReplies]);
+                  final allUpdatedNotes = [rootNote, ...newReplies];
+                  _loadUserProfiles(allUpdatedNotes);
+                  _fetchInteractionsForAllNotes(allUpdatedNotes);
                   safeNotifyListeners();
                 }
               }
@@ -224,25 +227,26 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
   Future<void> checkRepliesFromCache() async {
     try {
       final cachedRepliesResult = await _noteRepository.getThreadReplies(_rootNoteId);
-      
+
       if (cachedRepliesResult.isSuccess && cachedRepliesResult.data != null) {
         final replies = cachedRepliesResult.data!;
         final currentReplies = _repliesState.data ?? [];
-        
-        if (replies.length != currentReplies.length || 
+
+        if (replies.length != currentReplies.length ||
             replies.any((r) => !currentReplies.any((cr) => cr.id == r.id))) {
           final rootNote = _rootNoteState.data;
           if (rootNote != null) {
             final structure = _buildThreadStructure(rootNote, replies);
             _threadStructureState = LoadedState(structure);
             _repliesState = LoadedState(replies);
-            
+
             final newReplies = replies.where((r) => !currentReplies.any((cr) => cr.id == r.id)).toList();
             if (newReplies.isNotEmpty) {
               final allThreadNotes = [rootNote, ...newReplies];
               _loadUserProfiles(allThreadNotes);
+              _fetchInteractionsForAllNotes(allThreadNotes);
             }
-            
+
             safeNotifyListeners();
           }
         }
@@ -329,6 +333,23 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     }
   }
 
+  Future<void> _fetchInteractionsForAllNotes(List<NoteModel> notes) async {
+    try {
+      final noteIds = notes.map((note) {
+        if (note.isRepost && note.rootId != null && note.rootId!.isNotEmpty) {
+          return note.rootId!;
+        }
+        return note.id;
+      }).toSet().toList();
+
+      if (noteIds.isEmpty) return;
+
+      await _noteRepository.nostrDataService.fetchInteractionsForNotesBatchWithEOSE(noteIds);
+    } catch (e) {
+      debugPrint('[ThreadViewModel] Error fetching interactions: $e');
+    }
+  }
+
 
   ThreadStructure _buildThreadStructure(NoteModel root, List<NoteModel> replies) {
     final Map<String, List<NoteModel>> childrenMap = {};
@@ -407,14 +428,14 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
     try {
       final currentReplies = _repliesState.data ?? [];
       final updatedRepliesList = List<NoteModel>.from(currentReplies);
-      
+
       for (final updatedReply in updatedReplies) {
         final index = updatedRepliesList.indexWhere((r) => r.id == updatedReply.id);
         if (index != -1) {
           updatedRepliesList[index] = updatedReply;
         }
       }
-      
+
       for (final newReply in newReplies) {
         if (!updatedRepliesList.any((r) => r.id == newReply.id)) {
           updatedRepliesList.add(newReply);
@@ -432,8 +453,9 @@ class ThreadViewModel extends BaseViewModel with CommandMixin {
         final allNewNotes = [...newReplies, ...updatedReplies];
         if (allNewNotes.isNotEmpty) {
           _loadUserProfiles(allNewNotes);
+          _fetchInteractionsForAllNotes(allNewNotes);
         }
-        
+
         safeNotifyListeners();
       }
     } catch (e) {

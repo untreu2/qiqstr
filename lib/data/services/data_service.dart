@@ -1260,11 +1260,9 @@ class DataService {
 
   void _addNoteToCache(NoteModel note) {
     if (_noteCache.containsKey(note.id)) return;
-    
+
     _noteCache[note.id] = note;
     _eventIds.add(note.id);
-    
-    _scheduleInteractionFetch(note.id);
   }
 
   void _cleanupCacheIfNeeded() {
@@ -2779,12 +2777,6 @@ class DataService {
     if (noteIds == null || noteIds.isEmpty) return;
     for (final noteId in noteIds) {
       _scheduleInteractionFetch(noteId, priority: 50);
-    }
-  }
-
-  void fetchInteractionsForVisibleNotes(List<String> visibleNoteIds) {
-    for (final noteId in visibleNoteIds) {
-      _scheduleInteractionFetch(noteId, priority: 200);
     }
   }
 
