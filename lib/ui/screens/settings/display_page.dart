@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../theme/theme_manager.dart';
 import '../../widgets/common/back_button_widget.dart';
 import 'package:carbon_icons/carbon_icons.dart';
@@ -154,10 +155,10 @@ class _DisplayPageState extends State<DisplayPage> {
 
   Widget _buildBottomNavOrderSection(BuildContext context, ThemeManager themeManager) {
     final navItems = [
-      {'index': 0, 'name': 'Home', 'icon': CarbonIcons.home},
-      {'index': 1, 'name': 'Search', 'icon': CarbonIcons.send_alt},
-      {'index': 2, 'name': 'Wallet', 'icon': CarbonIcons.wallet},
-      {'index': 3, 'name': 'Notifications', 'icon': CarbonIcons.notification},
+      {'index': 0, 'name': 'Home', 'icon': 'assets/house.svg'},
+      {'index': 1, 'name': 'Search', 'icon': 'assets/chat.svg'},
+      {'index': 2, 'name': 'Wallet', 'icon': 'assets/wallet.svg'},
+      {'index': 3, 'name': 'Notifications', 'icon': 'assets/bell.svg'},
     ];
 
     final currentOrder = themeManager.bottomNavOrder;
@@ -203,7 +204,7 @@ class _DisplayPageState extends State<DisplayPage> {
           Row(
             children: orderedItems.map((item) {
               final originalIndex = item['index'] as int;
-              
+
               return Expanded(
                 child: LongPressDraggable<int>(
                   data: originalIndex,
@@ -216,10 +217,14 @@ class _DisplayPageState extends State<DisplayPage> {
                         color: context.colors.background,
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(
-                        item['icon'] as IconData,
-                        size: 24,
-                        color: context.colors.textPrimary,
+                      child: SvgPicture.asset(
+                        item['icon'] as String,
+                        width: 21,
+                        height: 21,
+                        colorFilter: ColorFilter.mode(
+                          context.colors.textPrimary,
+                          BlendMode.srcIn,
+                        ),
                       ),
                     ),
                   ),
@@ -249,10 +254,16 @@ class _DisplayPageState extends State<DisplayPage> {
                                 )
                               : null,
                         ),
-                        child: Icon(
-                          item['icon'] as IconData,
-                          size: 24,
-                          color: context.colors.textPrimary,
+                        child: Center(
+                          child: SvgPicture.asset(
+                            item['icon'] as String,
+                            width: 21,
+                            height: 21,
+                            colorFilter: ColorFilter.mode(
+                              context.colors.textPrimary,
+                              BlendMode.srcIn,
+                            ),
+                          ),
                         ),
                       );
                     },
@@ -266,4 +277,3 @@ class _DisplayPageState extends State<DisplayPage> {
     );
   }
 }
-
