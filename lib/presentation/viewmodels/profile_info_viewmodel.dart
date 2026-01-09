@@ -183,7 +183,7 @@ class ProfileInfoViewModel extends BaseViewModel {
     }
 
     final currentUserNpub = _currentUserNpub!;
-    
+
     String? currentUserHex;
     try {
       if (currentUserNpub.startsWith('npub1')) {
@@ -205,9 +205,8 @@ class ProfileInfoViewModel extends BaseViewModel {
     _doesUserFollowMe = followingUsers.any((user) {
       final userPubkey = user.pubkeyHex;
       final userPubkeyNormalized = userPubkey.toLowerCase();
-      
-      if (userPubkeyNormalized == currentUserNpubNormalized || 
-          userPubkeyNormalized == currentUserHexNormalized) {
+
+      if (userPubkeyNormalized == currentUserNpubNormalized || userPubkeyNormalized == currentUserHexNormalized) {
         return true;
       }
 
@@ -228,9 +227,9 @@ class ProfileInfoViewModel extends BaseViewModel {
 
       final userHexNormalized = userHex.toLowerCase();
 
-      return userHexNormalized == currentUserHexNormalized || 
-             userHexNormalized == currentUserNpubNormalized ||
-             userPubkeyNormalized == currentUserHexNormalized;
+      return userHexNormalized == currentUserHexNormalized ||
+          userHexNormalized == currentUserNpubNormalized ||
+          userPubkeyNormalized == currentUserHexNormalized;
     });
   }
 
@@ -246,9 +245,9 @@ class ProfileInfoViewModel extends BaseViewModel {
         (followingUsers) {
           if (!isDisposed) {
             _followingCount = followingUsers.length;
-            
+
             _checkIfUserFollowsMe(followingUsers);
-            
+
             safeNotifyListeners();
           }
         },
@@ -274,8 +273,16 @@ class ProfileInfoViewModel extends BaseViewModel {
     if (isDisposed) return;
 
     await executeOperation('toggleFollow', () async {
+      String targetNpub = userPubkeyHex;
+      if (!userPubkeyHex.startsWith('npub1')) {
+        final npubResult = _authRepository.hexToNpub(userPubkeyHex);
+        if (npubResult != null) {
+          targetNpub = npubResult;
+        }
+      }
+
       if (_isFollowing == true) {
-        final result = await _userRepository.unfollowUser(userPubkeyHex);
+        final result = await _userRepository.unfollowUser(targetNpub);
         result.fold(
           (_) {
             if (!isDisposed) {
@@ -290,7 +297,7 @@ class ProfileInfoViewModel extends BaseViewModel {
           },
         );
       } else {
-        final result = await _userRepository.followUser(userPubkeyHex);
+        final result = await _userRepository.followUser(targetNpub);
         result.fold(
           (_) {
             if (!isDisposed) {
@@ -312,8 +319,16 @@ class ProfileInfoViewModel extends BaseViewModel {
     if (isDisposed) return;
 
     await executeOperation('toggleMute', () async {
+      String targetNpub = userPubkeyHex;
+      if (!userPubkeyHex.startsWith('npub1')) {
+        final npubResult = _authRepository.hexToNpub(userPubkeyHex);
+        if (npubResult != null) {
+          targetNpub = npubResult;
+        }
+      }
+
       if (_isMuted == true) {
-        final result = await _userRepository.unmuteUser(userPubkeyHex);
+        final result = await _userRepository.unmuteUser(targetNpub);
         result.fold(
           (_) {
             if (!isDisposed) {
@@ -328,7 +343,7 @@ class ProfileInfoViewModel extends BaseViewModel {
           },
         );
       } else {
-        final result = await _userRepository.muteUser(userPubkeyHex);
+        final result = await _userRepository.muteUser(targetNpub);
         result.fold(
           (_) {
             if (!isDisposed) {

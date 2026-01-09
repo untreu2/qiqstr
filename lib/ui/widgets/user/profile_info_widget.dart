@@ -111,25 +111,21 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
     );
   }
 
-
-
-
   Future<void> _toggleFollow() async {
-    final viewModel = Provider.of<ProfileInfoViewModel>(context, listen: false);
-    if (viewModel.isFollowing == true) {
-      final userName = viewModel.user.name.isNotEmpty
-          ? viewModel.user.name
-          : (viewModel.user.nip05.isNotEmpty ? viewModel.user.nip05.split('@').first : 'this user');
+    if (_viewModel.isFollowing == true) {
+      final userName = _viewModel.user.name.isNotEmpty
+          ? _viewModel.user.name
+          : (_viewModel.user.nip05.isNotEmpty ? _viewModel.user.nip05.split('@').first : 'this user');
 
       showUnfollowUserDialog(
         context: context,
         userName: userName,
-        onConfirm: () => viewModel.toggleFollow(),
+        onConfirm: () => _viewModel.toggleFollow(),
       );
       return;
     }
 
-    viewModel.toggleFollow().catchError((error) {
+    _viewModel.toggleFollow().catchError((error) {
       if (mounted) {
         AppSnackbar.error(context, 'Failed to follow user: $error');
       }
@@ -143,59 +139,59 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       child: Consumer<ProfileInfoViewModel>(
         builder: (context, viewModel, child) {
           final user = viewModel.user;
-        final screenWidth = MediaQuery.of(context).size.width;
-        final websiteUrl = user.website.isNotEmpty && !(user.website.startsWith("http://") || user.website.startsWith("https://"))
-            ? "https://${user.website}"
-            : user.website;
+          final screenWidth = MediaQuery.of(context).size.width;
+          final websiteUrl = user.website.isNotEmpty && !(user.website.startsWith("http://") || user.website.startsWith("https://"))
+              ? "https://${user.website}"
+              : user.website;
 
-        return Container(
-          color: context.colors.background,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildOptimizedBanner(context, user, screenWidth),
-              Container(
-                transform: Matrix4.translationValues(0, -16, 0),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildAvatarAndActionsRow(context, user),
-                    const SizedBox(height: 2),
-                    _buildNameRow(context, user),
-                    if (user.about.isNotEmpty) ...[
+          return Container(
+            color: context.colors.background,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildOptimizedBanner(context, user, screenWidth),
+                Container(
+                  transform: Matrix4.translationValues(0, -16, 0),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildAvatarAndActionsRow(context, user),
                       const SizedBox(height: 2),
-                      _buildBioContent(user),
-                      const SizedBox(height: 4),
-                    ],
-                    if (user.website.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      GestureDetector(
-                        onTap: () async {
-                          final Uri url = Uri.parse(websiteUrl);
-                          if (!await launchUrl(url)) {
-                            throw Exception('Could not launch $url');
-                          }
-                        },
-                        child: InkWell(
-                          child: Text(
-                            user.website,
-                            style: const TextStyle(
-                              decoration: TextDecoration.underline,
-                              fontSize: 14,
+                      _buildNameRow(context, user),
+                      if (user.about.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        _buildBioContent(user),
+                        const SizedBox(height: 4),
+                      ],
+                      if (user.website.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        GestureDetector(
+                          onTap: () async {
+                            final Uri url = Uri.parse(websiteUrl);
+                            if (!await launchUrl(url)) {
+                              throw Exception('Could not launch $url');
+                            }
+                          },
+                          child: InkWell(
+                            child: Text(
+                              user.website,
+                              style: const TextStyle(
+                                decoration: TextDecoration.underline,
+                                fontSize: 14,
+                              ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
+                      const SizedBox(height: 4),
+                      _buildFollowerInfo(context),
                     ],
-                    const SizedBox(height: 4),
-                    _buildFollowerInfo(context),
-                  ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-        );
+              ],
+            ),
+          );
         },
       ),
     );
@@ -276,9 +272,9 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(
-              color: context.colors.background,
-              width: 3,
-            ),
+                color: context.colors.background,
+                width: 3,
+              ),
             ),
             child: _getCachedAvatar(
               currentUser.profileImage,
@@ -395,9 +391,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
       builder: (context, viewModel, child) {
         final currentUserNpub = viewModel.currentUserNpub;
         final authRepository = AppDI.get<AuthRepository>();
-        final currentUserHex = currentUserNpub != null 
-            ? (authRepository.npubToHex(currentUserNpub) ?? currentUserNpub)
-            : null;
+        final currentUserHex = currentUserNpub != null ? (authRepository.npubToHex(currentUserNpub) ?? currentUserNpub) : null;
         final isOwnProfile = currentUserHex != null && currentUserHex.toLowerCase() == user.pubkeyHex.toLowerCase();
 
         return Row(
@@ -414,8 +408,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                       _buildMuteButton(context),
                       const SizedBox(width: 8),
                     ],
-                    if (viewModel.isFollowing != null)
-                      _buildFollowButton(context),
+                    if (viewModel.isFollowing != null) _buildFollowButton(context),
                   ],
                 ),
               )
@@ -455,115 +448,128 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
   }
 
   Future<void> _toggleMute() async {
-    final viewModel = Provider.of<ProfileInfoViewModel>(context, listen: false);
-    if (viewModel.isMuted == true) {
-      viewModel.toggleMute().catchError((error) {
+    if (_viewModel.isMuted == true) {
+      _viewModel.toggleMute().catchError((error) {
         if (mounted) {
           AppSnackbar.error(context, 'Failed to unmute user: $error');
         }
       });
     } else {
-      final userName = viewModel.user.name.isNotEmpty
-          ? viewModel.user.name
-          : (viewModel.user.nip05.isNotEmpty ? viewModel.user.nip05.split('@').first : 'this user');
+      final userName = _viewModel.user.name.isNotEmpty
+          ? _viewModel.user.name
+          : (_viewModel.user.nip05.isNotEmpty ? _viewModel.user.nip05.split('@').first : 'this user');
 
       showMuteUserDialog(
         context: context,
         userName: userName,
-        onConfirm: () => viewModel.toggleMute(),
+        onConfirm: () => _viewModel.toggleMute(),
       );
     }
   }
 
   Widget _buildMuteButton(BuildContext context) {
-    final viewModel = Provider.of<ProfileInfoViewModel>(context, listen: false);
-    final isMuted = viewModel.isMuted ?? false;
-    return GestureDetector(
-      onTap: _toggleMute,
-      child: Container(
-        padding: isMuted
-            ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
-            : const EdgeInsets.all(8),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: isMuted ? context.colors.textPrimary : context.colors.overlayLight,
-          borderRadius: BorderRadius.circular(40),
-        ),
-        child: isMuted
-            ? Row(
+    return Consumer<ProfileInfoViewModel>(
+      builder: (context, viewModel, child) {
+        final isMuted = viewModel.isMuted ?? false;
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              debugPrint('Mute button tapped');
+              _toggleMute();
+            },
+            borderRadius: BorderRadius.circular(40),
+            child: Ink(
+              padding: isMuted ? const EdgeInsets.symmetric(horizontal: 16, vertical: 8) : const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isMuted ? context.colors.textPrimary : context.colors.overlayLight,
+                borderRadius: BorderRadius.circular(40),
+              ),
+              child: isMuted
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          CarbonIcons.notification_off,
+                          size: 16,
+                          color: context.colors.background,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Muted',
+                          style: TextStyle(
+                            color: context.colors.background,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Icon(
+                      CarbonIcons.notification,
+                      size: 20,
+                      color: context.colors.textPrimary,
+                    ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFollowButton(BuildContext context) {
+    return Consumer<ProfileInfoViewModel>(
+      builder: (context, viewModel, child) {
+        final isFollowing = viewModel.isFollowing ?? false;
+        return Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              debugPrint('Follow button tapped');
+              _toggleFollow();
+            },
+            borderRadius: BorderRadius.circular(40),
+            child: Ink(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: isFollowing ? context.colors.overlayLight : context.colors.textPrimary,
+                borderRadius: BorderRadius.circular(40),
+              ),
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    CarbonIcons.notification_off,
+                    isFollowing ? CarbonIcons.user_admin : CarbonIcons.user_follow,
                     size: 16,
-                    color: context.colors.background,
+                    color: isFollowing ? context.colors.textPrimary : context.colors.background,
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Muted',
+                    isFollowing ? 'Following' : 'Follow',
                     style: TextStyle(
-                      color: context.colors.background,
+                      color: isFollowing ? context.colors.textPrimary : context.colors.background,
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                 ],
-              )
-            : Icon(
-                CarbonIcons.notification,
-                size: 20,
-                color: context.colors.textPrimary,
-              ),
-      ),
-    );
-  }
-
-  Widget _buildFollowButton(BuildContext context) {
-    final viewModel = Provider.of<ProfileInfoViewModel>(context, listen: false);
-    final isFollowing = viewModel.isFollowing ?? false;
-    return GestureDetector(
-      onTap: _toggleFollow,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: isFollowing ? context.colors.overlayLight : context.colors.textPrimary,
-          borderRadius: BorderRadius.circular(40),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              isFollowing ? CarbonIcons.user_admin : CarbonIcons.user_follow,
-              size: 16,
-              color: isFollowing ? context.colors.textPrimary : context.colors.background,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              isFollowing ? 'Following' : 'Follow',
-              style: TextStyle(
-                color: isFollowing ? context.colors.textPrimary : context.colors.background,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
               ),
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
   String _formatCount(int count) {
     if (count >= 1000000) {
       final formatted = (count / 1000000).toStringAsFixed(1);
-      return formatted.endsWith('.0')
-          ? '${formatted.substring(0, formatted.length - 2)}M'
-          : '${formatted}M';
+      return formatted.endsWith('.0') ? '${formatted.substring(0, formatted.length - 2)}M' : '${formatted}M';
     } else if (count >= 1000) {
       final formatted = (count / 1000).toStringAsFixed(1);
-      return formatted.endsWith('.0')
-          ? '${formatted.substring(0, formatted.length - 2)}K'
-          : '${formatted}K';
+      return formatted.endsWith('.0') ? '${formatted.substring(0, formatted.length - 2)}K' : '${formatted}K';
     }
     return count.toString();
   }
@@ -580,59 +586,30 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
 
     final currentUserNpub = viewModel.currentUserNpub;
     final authRepository = AppDI.get<AuthRepository>();
-    final currentUserHex = currentUserNpub != null 
-        ? (authRepository.npubToHex(currentUserNpub) ?? currentUserNpub)
-        : null;
+    final currentUserHex = currentUserNpub != null ? (authRepository.npubToHex(currentUserNpub) ?? currentUserNpub) : null;
     final isOwnProfile = currentUserHex != null && currentUserHex.toLowerCase() == viewModel.user.pubkeyHex.toLowerCase();
 
     return Row(
       children: [
-          GestureDetector(
-            onTap: () {
-              final currentLocation = GoRouterState.of(context).matchedLocation;
-              if (currentLocation.startsWith('/home/feed')) {
-                context.push('/home/feed/following', extra: viewModel.user);
-              } else if (currentLocation.startsWith('/home/notifications')) {
-                context.push('/home/notifications/following', extra: viewModel.user);
-              } else if (currentLocation.startsWith('/home/dm')) {
-                context.push('/home/dm/following', extra: viewModel.user);
-              } else {
-                context.push('/following', extra: viewModel.user);
-              }
-            },
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _formatCount(viewModel.followingCount),
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: context.colors.textPrimary,
-                  ),
-                ),
-                Text(
-                  ' following',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: context.colors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            ' • ',
-            style: TextStyle(
-              fontSize: 14,
-              color: context.colors.textSecondary,
-            ),
-          ),
-          Row(
+        GestureDetector(
+          onTap: () {
+            final currentLocation = GoRouterState.of(context).matchedLocation;
+            if (currentLocation.startsWith('/home/feed')) {
+              context.push('/home/feed/following', extra: viewModel.user);
+            } else if (currentLocation.startsWith('/home/notifications')) {
+              context.push('/home/notifications/following', extra: viewModel.user);
+            } else if (currentLocation.startsWith('/home/dm')) {
+              context.push('/home/dm/following', extra: viewModel.user);
+            } else {
+              context.push('/following', extra: viewModel.user);
+            }
+          },
+          behavior: HitTestBehavior.opaque,
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                _formatCount(viewModel.followerCount),
+                _formatCount(viewModel.followingCount),
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -640,7 +617,7 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
                 ),
               ),
               Text(
-                ' followers',
+                ' following',
                 style: TextStyle(
                   fontSize: 14,
                   color: context.colors.textSecondary,
@@ -648,24 +625,51 @@ class _ProfileInfoWidgetState extends State<ProfileInfoWidget> {
               ),
             ],
           ),
-          if (viewModel.doesUserFollowMe == true && !isOwnProfile) ...[
+        ),
+        Text(
+          ' • ',
+          style: TextStyle(
+            fontSize: 14,
+            color: context.colors.textSecondary,
+          ),
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
             Text(
-              ' • ',
+              _formatCount(viewModel.followerCount),
               style: TextStyle(
                 fontSize: 14,
-                color: context.colors.textSecondary,
+                fontWeight: FontWeight.w600,
+                color: context.colors.textPrimary,
               ),
             ),
             Text(
-              'Following you',
+              ' followers',
               style: TextStyle(
                 fontSize: 14,
                 color: context.colors.textSecondary,
               ),
             ),
           ],
+        ),
+        if (viewModel.doesUserFollowMe == true && !isOwnProfile) ...[
+          Text(
+            ' • ',
+            style: TextStyle(
+              fontSize: 14,
+              color: context.colors.textSecondary,
+            ),
+          ),
+          Text(
+            'Following you',
+            style: TextStyle(
+              fontSize: 14,
+              color: context.colors.textSecondary,
+            ),
+          ),
+        ],
       ],
     );
   }
-
 }
