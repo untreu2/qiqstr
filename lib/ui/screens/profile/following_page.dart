@@ -8,8 +8,9 @@ import '../../../core/di/app_di.dart';
 import '../../../presentation/viewmodels/following_page_viewmodel.dart';
 import '../../widgets/common/common_buttons.dart';
 import '../../widgets/common/title_widget.dart';
+import '../../widgets/common/top_action_bar_widget.dart';
 
-class FollowingPage extends StatelessWidget {
+class FollowingPage extends StatefulWidget {
   final UserModel user;
 
   const FollowingPage({
@@ -18,64 +19,122 @@ class FollowingPage extends StatelessWidget {
   });
 
   @override
+  State<FollowingPage> createState() => _FollowingPageState();
+}
+
+class _FollowingPageState extends State<FollowingPage> {
+  late ScrollController _scrollController;
+  final ValueNotifier<bool> _showFollowingBubble = ValueNotifier(false);
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController()..addListener(_scrollListener);
+  }
+
+  void _scrollListener() {
+    if (_scrollController.hasClients) {
+      final shouldShow = _scrollController.offset > 100;
+      if (_showFollowingBubble.value != shouldShow) {
+        _showFollowingBubble.value = shouldShow;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    _showFollowingBubble.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider<FollowingPageViewModel>(
       create: (_) => FollowingPageViewModel(
         userRepository: AppDI.get(),
-        userNpub: user.npub,
+        userNpub: widget.user.npub,
       ),
       child: Consumer<FollowingPageViewModel>(
         builder: (context, viewModel, child) {
           return Scaffold(
             backgroundColor: context.colors.background,
-            body: CustomScrollView(
-              slivers: [
-                _buildHeader(context),
-                if (viewModel.isLoading)
-                  const SliverFillRemaining(
-                    child: Center(child: CircularProgressIndicator()),
-                  )
-                else if (viewModel.error != null)
-                  SliverFillRemaining(
-                    child: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Error: ${viewModel.error}',
+            body: Stack(
+              children: [
+                CustomScrollView(
+                  controller: _scrollController,
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: SizedBox(height: MediaQuery.of(context).padding.top + 60),
+                    ),
+                    _buildHeader(context),
+                    if (viewModel.isLoading)
+                      const SliverFillRemaining(
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else if (viewModel.error != null)
+                      SliverFillRemaining(
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Error: ${viewModel.error}',
+                                style: TextStyle(color: context.colors.textSecondary),
+                              ),
+                              const SizedBox(height: 16),
+                              PrimaryButton(
+                                label: 'Retry',
+                                onPressed: () => viewModel.refresh(),
+                                backgroundColor: context.colors.accent,
+                                foregroundColor: context.colors.background,
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    else if (viewModel.followingUsers.isEmpty)
+                      SliverFillRemaining(
+                        child: Center(
+                          child: Text(
+                            'No following users',
                             style: TextStyle(color: context.colors.textSecondary),
                           ),
-                          const SizedBox(height: 16),
-                          PrimaryButton(
-                            label: 'Retry',
-                            onPressed: () => viewModel.refresh(),
-                            backgroundColor: context.colors.accent,
-                            foregroundColor: context.colors.background,
-                          ),
-                        ],
+                        ),
+                      )
+                    else
+                      SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final user = viewModel.followingUsers[index];
+                            final loadedUser = viewModel.loadedUsers[user.npub] ?? user;
+                            return _buildUserTile(context, viewModel, loadedUser, index);
+                          },
+                          childCount: viewModel.followingUsers.length,
+                        ),
                       ),
-                    ),
-                  )
-                else if (viewModel.followingUsers.isEmpty)
-                  SliverFillRemaining(
-                    child: Center(
-                      child: Text(
-                        'No following users',
-                        style: TextStyle(color: context.colors.textSecondary),
-                      ),
-                    ),
-                  )
-                else
-                  SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final user = viewModel.followingUsers[index];
-                        final loadedUser = viewModel.loadedUsers[user.npub] ?? user;
-                        return _buildUserTile(context, viewModel, loadedUser, index);
-                      },
-                      childCount: viewModel.followingUsers.length,
+                  ],
+                ),
+                TopActionBarWidget(
+                  onBackPressed: () => context.pop(),
+                  centerBubble: Text(
+                    'Following',
+                    style: TextStyle(
+                      color: context.colors.background,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
+                  centerBubbleVisibility: _showFollowingBubble,
+                  onCenterBubbleTap: () {
+                    _scrollController.animateTo(
+                      0,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOut,
+                    );
+                  },
+                  showShareButton: false,
+                ),
               ],
             ),
           );
@@ -88,7 +147,7 @@ class FollowingPage extends StatelessWidget {
     return const SliverToBoxAdapter(
       child: TitleWidget(
         title: 'Following',
-        useTopPadding: true,
+        padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
       ),
     );
   }
@@ -107,11 +166,14 @@ class FollowingPage extends StatelessWidget {
           onTap: () {
             final currentLocation = GoRouterState.of(context).matchedLocation;
             if (currentLocation.startsWith('/home/feed')) {
-              context.push('/home/feed/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
+              context.push(
+                  '/home/feed/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
             } else if (currentLocation.startsWith('/home/notifications')) {
-              context.push('/home/notifications/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
+              context.push(
+                  '/home/notifications/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
             } else if (currentLocation.startsWith('/home/dm')) {
-              context.push('/home/dm/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
+              context.push(
+                  '/home/dm/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
             } else {
               context.push('/profile?npub=${Uri.encodeComponent(loadedUser.npub)}&pubkeyHex=${Uri.encodeComponent(loadedUser.pubkeyHex)}');
             }
@@ -158,8 +220,7 @@ class FollowingPage extends StatelessWidget {
             ),
           ),
         ),
-        if (index < viewModel.followingUsers.length - 1)
-          const _UserSeparator(),
+        if (index < viewModel.followingUsers.length - 1) const _UserSeparator(),
       ],
     );
   }
