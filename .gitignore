@@ -26,4 +26,3 @@ doc/api/
 .flutter-plugins
 .flutter-plugins-dependencies
 .DS_Store
-lib/constants/giphy_api_key.dart

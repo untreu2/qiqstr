@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:provider/provider.dart' as provider;
 import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'ui/theme/theme_manager.dart' as theme;
 import 'data/services/logging_service.dart';
 import 'core/di/app_di.dart';
@@ -18,6 +19,8 @@ void main() {
   runZonedGuarded(() async {
     final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
     FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
+
+    await dotenv.load(fileName: '.env');
 
     PaintingBinding.instance.imageCache.maximumSizeBytes = 150 << 20;
     PaintingBinding.instance.imageCache.maximumSize = 600;

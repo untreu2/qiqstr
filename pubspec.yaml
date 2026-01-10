@@ -81,6 +81,7 @@ dependencies:
     qr_flutter: ^4.1.0
     qr_code_scanner: ^1.0.1
     giphy_get: ^3.6.1+1
+    flutter_dotenv: ^5.2.1
 
 dev_dependencies:
     flutter_test:
@@ -107,6 +108,7 @@ flutter:
     # To add assets to your application, add an assets section, like this:
     assets:
         - assets/
+        - .env
 
 flutter_native_splash:
     color: "#ffffff"             
