@@ -393,13 +393,13 @@ class _ShareNotePageState extends State<ShareNotePage> {
   Future<void> _sendNote(String content) async {
     final hashtags = _extractHashtags(content);
     final tags = _createHashtagTags(hashtags);
-    
+
     final additionalTags = <List<String>>[];
     additionalTags.addAll(tags);
-    
+
     if (widget.initialText != null && widget.initialText!.startsWith('nostr:')) {
       final cleanId = widget.initialText!.replaceFirst('nostr:', '');
-      
+
       if (cleanId.startsWith('note1')) {
         try {
           final eventIdHex = decodeBasicBech32(cleanId, 'note');
@@ -421,7 +421,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
         debugPrint('[ShareNotePage] Added e tag for hex event ID: $cleanId');
       }
     }
-    
+
     if (_isReply() && widget.replyToNoteId != null) {
       try {
         String eventIdHex;
@@ -432,7 +432,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
         } else {
           eventIdHex = widget.replyToNoteId!;
         }
-        
+
         bool hasETag = false;
         for (final tag in additionalTags) {
           if (tag.isNotEmpty && tag[0] == 'e' && tag.length > 1 && tag[1] == eventIdHex) {
@@ -440,7 +440,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
             break;
           }
         }
-        
+
         if (!hasETag) {
           additionalTags.add(['e', eventIdHex]);
           debugPrint('[ShareNotePage] Added e tag for reply: $eventIdHex');
@@ -883,9 +883,12 @@ class _ShareNotePageState extends State<ShareNotePage> {
       builder: (context, viewModel, child) {
         return CircleAvatar(
           radius: _avatarRadius,
-          backgroundImage: viewModel.currentUser?.profileImage.isNotEmpty == true ? CachedNetworkImageProvider(viewModel.currentUser!.profileImage) : null,
+          backgroundImage: viewModel.currentUser?.profileImage.isNotEmpty == true
+              ? CachedNetworkImageProvider(viewModel.currentUser!.profileImage)
+              : null,
           backgroundColor: context.colors.surfaceTransparent,
-          child: viewModel.currentUser?.profileImage.isEmpty != false ? Icon(Icons.person, color: context.colors.textPrimary, size: 20) : null,
+          child:
+              viewModel.currentUser?.profileImage.isEmpty != false ? Icon(Icons.person, color: context.colors.textPrimary, size: 20) : null,
         );
       },
     );
@@ -908,6 +911,7 @@ class _ShareNotePageState extends State<ShareNotePage> {
           textAlignVertical: TextAlignVertical.top,
           style: textStyle.copyWith(color: context.colors.textPrimary),
           cursorColor: context.colors.textPrimary,
+          textCapitalization: TextCapitalization.sentences,
           strutStyle: strutStyle,
           decoration: InputDecoration(
             hintText: _noteController.text.isEmpty ? _hintText : "",
