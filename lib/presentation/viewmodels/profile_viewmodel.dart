@@ -14,6 +14,7 @@ import '../../models/note_model.dart';
 class ProfileViewModel extends BaseViewModel with CommandMixin {
   final UserRepository _userRepository;
   final AuthRepository _authRepository;
+  final NoteRepository _noteRepository;
   final FeedLoaderService _feedLoader;
 
   ProfileViewModel({
@@ -23,6 +24,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
     required FeedLoaderService feedLoader,
   })  : _userRepository = userRepository,
         _authRepository = authRepository,
+        _noteRepository = noteRepository,
         _feedLoader = feedLoader;
 
   UIState<UserModel> _profileState = const InitialState();
@@ -51,6 +53,8 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
 
   String _currentUserNpub = '';
   String get currentUserNpub => _currentUserNpub;
+
+  bool _isSubscribedToProfileNotes = false;
 
   static const int _pageSize = 30;
   int get currentLimit => _pageSize;
@@ -94,6 +98,7 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
     _profileNotesState = const LoadingState();
     safeNotifyListeners();
     loadProfileNotes(npub);
+    _subscribeToProfileNotes();
   }
 
   Future<void> loadProfile(String npub) async {
@@ -217,29 +222,21 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
         final result = await _feedLoader.loadFeed(params);
 
         if (result.isSuccess) {
-          final filteredNotes = _feedLoader.filterProfileNotes(result.notes);
+          if (result.notes.isNotEmpty) {
+            _profileNotesState = LoadedState(result.notes);
+            safeNotifyListeners();
 
-          _profileNotesState = filteredNotes.isEmpty ? const EmptyState('No notes from this user yet') : LoadedState(filteredNotes);
-
-          safeNotifyListeners();
-
-          _feedLoader.preloadCachedUserProfilesSync(
-            filteredNotes,
-            _profiles,
-            (profiles) {
-              _profilesController.add(Map.from(profiles));
-            },
-          );
-
-          _feedLoader.loadUserProfilesForNotes(
-            filteredNotes,
-            _profiles,
-            (profiles) {
-              _profilesController.add(Map.from(profiles));
-            },
-          ).catchError((e) {
-            debugPrint('[ProfileViewModel] Error loading user profiles in background: $e');
-          });
+            _feedLoader.loadProfilesAndInteractionsForNotes(
+              result.notes,
+              _profiles,
+              (profiles) {
+                _profilesController.add(Map.from(profiles));
+              },
+            );
+          } else {
+            _profileNotesState = const LoadingState();
+            safeNotifyListeners();
+          }
         } else {
           _profileNotesState = ErrorState(result.error ?? 'Failed to load notes');
         }
@@ -292,29 +289,17 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
             }
           }
 
-          final filteredNotes = _feedLoader.filterProfileNotes(deduplicatedNotes);
-
-          _profileNotesState = filteredNotes.isEmpty ? const EmptyState('No notes from this user yet') : LoadedState(filteredNotes);
+          _profileNotesState = deduplicatedNotes.isEmpty ? const EmptyState('No notes from this user yet') : LoadedState(deduplicatedNotes);
 
           safeNotifyListeners();
 
-          _feedLoader.preloadCachedUserProfilesSync(
+          _feedLoader.loadProfilesAndInteractionsForNotes(
             uniqueNewNotes,
             _profiles,
             (profiles) {
               _profilesController.add(Map.from(profiles));
             },
           );
-
-          _feedLoader.loadUserProfilesForNotes(
-            uniqueNewNotes,
-            _profiles,
-            (profiles) {
-              _profilesController.add(Map.from(profiles));
-            },
-          ).catchError((e) {
-            debugPrint('[ProfileViewModel] Error loading user profiles: $e');
-          });
         }
       }
     } catch (e) {
@@ -351,6 +336,110 @@ class ProfileViewModel extends BaseViewModel with CommandMixin {
         if (!isDisposed && user.npub == _currentProfileNpub) {
           _profileState = LoadedState(user);
           safeNotifyListeners();
+        }
+      }),
+    );
+  }
+
+  void _subscribeToProfileNotes() {
+    if (_currentProfileNpub.isEmpty || _isSubscribedToProfileNotes) return;
+    
+    _isSubscribedToProfileNotes = true;
+
+    final profileNpubHex = _authRepository.npubToHex(_currentProfileNpub);
+    if (profileNpubHex == null) {
+      debugPrint('[ProfileViewModel] Could not convert npub to hex: $_currentProfileNpub');
+      return;
+    }
+
+    addSubscription(
+      _noteRepository.notesStream.listen((allNotes) {
+        if (isDisposed) return;
+
+        final currentNotes = _profileNotesState.data ?? <NoteModel>[];
+        final currentNoteIds = currentNotes.map((n) => n.id).toSet();
+
+        final profileNpub = _currentProfileNpub;
+        final profileNpubHexForFilter = _authRepository.npubToHex(profileNpub);
+        if (profileNpubHexForFilter == null) return;
+
+        final allProfileNotes = allNotes.where((note) {
+          if (note.isRepost) {
+            final repostedByHex = note.repostedBy != null 
+                ? (note.repostedBy!.length == 64 
+                    ? note.repostedBy 
+                    : _authRepository.npubToHex(note.repostedBy!))
+                : null;
+            return repostedByHex == profileNpubHexForFilter;
+          } else {
+            if (note.isReply && !note.isRepost) {
+              return false;
+            }
+            final noteAuthorHex = _authRepository.npubToHex(note.author);
+            return noteAuthorHex == profileNpubHexForFilter;
+          }
+        }).toList();
+
+        final newProfileNoteIds = allProfileNotes.map((n) => n.id).toSet();
+        final existingNotesFromCache = currentNotes.where((note) => newProfileNoteIds.contains(note.id)).toList();
+        final newNotesFromStream = allProfileNotes.where((note) => !currentNoteIds.contains(note.id)).toList();
+
+        if (newNotesFromStream.isNotEmpty || (currentNotes.isNotEmpty && existingNotesFromCache.length != currentNotes.length)) {
+          final updatedNotes = [...newNotesFromStream, ...existingNotesFromCache];
+          
+          final seenIds = <String>{};
+          final deduplicatedNotes = <NoteModel>[];
+          for (final note in updatedNotes) {
+            if (!seenIds.contains(note.id)) {
+              seenIds.add(note.id);
+              deduplicatedNotes.add(note);
+            }
+          }
+
+          deduplicatedNotes.sort((a, b) {
+            final aTime = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
+            final bTime = b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
+            return bTime.compareTo(aTime);
+          });
+          
+          _profileNotesState = deduplicatedNotes.isEmpty ? const EmptyState('No notes from this user yet') : LoadedState(deduplicatedNotes);
+          safeNotifyListeners();
+
+          if (newNotesFromStream.isNotEmpty) {
+            _feedLoader.loadProfilesAndInteractionsForNotes(
+              newNotesFromStream,
+              _profiles,
+              (profiles) {
+                _profilesController.add(Map.from(profiles));
+              },
+            );
+          }
+        } else if (currentNotes.isEmpty && allProfileNotes.isNotEmpty) {
+          final seenIds = <String>{};
+          final deduplicatedNotes = <NoteModel>[];
+          for (final note in allProfileNotes) {
+            if (!seenIds.contains(note.id)) {
+              seenIds.add(note.id);
+              deduplicatedNotes.add(note);
+            }
+          }
+
+          deduplicatedNotes.sort((a, b) {
+            final aTime = a.isRepost ? (a.repostTimestamp ?? a.timestamp) : a.timestamp;
+            final bTime = b.isRepost ? (b.repostTimestamp ?? b.timestamp) : b.timestamp;
+            return bTime.compareTo(aTime);
+          });
+          
+          _profileNotesState = LoadedState(deduplicatedNotes);
+          safeNotifyListeners();
+
+          _feedLoader.loadProfilesAndInteractionsForNotes(
+            deduplicatedNotes,
+            _profiles,
+            (profiles) {
+              _profilesController.add(Map.from(profiles));
+            },
+          );
         }
       }),
     );

@@ -1408,6 +1408,7 @@ class DataService {
     int limit = 50,
     DateTime? until,
     DateTime? since,
+    bool isProfileMode = false,
   }) async {
     try {
       final currentUser = await _authService.getCurrentUserNpub();
@@ -1421,7 +1422,7 @@ class DataService {
 
       if (authorHexKeys.isEmpty) {
         return Result.success([]);
-      } else if (authorHexKeys.length == 1 && authorHexKeys.first == _authService.npubToHex(_currentUserNpub)) {
+      } else if (!isProfileMode && authorHexKeys.length == 1 && authorHexKeys.first == _authService.npubToHex(_currentUserNpub)) {
 
         final currentUserHex = _authService.npubToHex(_currentUserNpub);
         if (currentUserHex == null) {
@@ -1483,47 +1484,10 @@ class DataService {
         until: until != null ? until.millisecondsSinceEpoch ~/ 1000 : null,
       );
 
-      final serializedRequest = NostrService.createRequest(filter);
-      final subscriptionId = _extractSubscriptionId(serializedRequest);
-      final fetchedNotes = <String, NoteModel>{};
+      final request = NostrService.createRequest(filter);
+      await _relayManager.broadcast(NostrService.serializeRequest(request));
 
-      await _queryAllRelays(
-        request: serializedRequest,
-        subscriptionId: subscriptionId,
-        timeout: const Duration(seconds: _longQueryTimeoutSeconds),
-        onEvent: (data, url) {
-          try {
-            final eventData = data;
-            final eventAuthor = eventData['pubkey'] as String? ?? '';
-            final eventKind = eventData['kind'] as int? ?? 0;
-            final eventId = eventData['id'] as String? ?? '';
-
-            if (eventAuthor == pubkeyHex && (eventKind == 1 || eventKind == 6) && eventId.isNotEmpty) {
-              if (!fetchedNotes.containsKey(eventId)) {
-                final note = _processProfileEventDirectlySync(eventData, userNpub);
-                if (note != null) {
-                  fetchedNotes[eventId] = note;
-                }
-              }
-            }
-          } catch (_) {}
-        },
-      );
-
-      for (final note in fetchedNotes.values) {
-        _addNoteToCache(note);
-      }
-
-      final allProfileNotes = _noteCache.values.where((note) {
-        final noteAuthorHex = _authService.npubToHex(note.author);
-        return noteAuthorHex == pubkeyHex;
-      }).toList();
-
-      final filteredProfileNotes = await filterNotesByMuteList(allProfileNotes);
-
-      _notesController.add(_getFilteredNotesList());
-
-      return Result.success(filteredProfileNotes);
+      return Result.success([]);
     } catch (e) {
       return Result.error('Failed to fetch profile notes: $e');
     }

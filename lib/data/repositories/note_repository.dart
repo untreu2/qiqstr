@@ -92,21 +92,12 @@ class NoteRepository {
   }) async {
     try {
       if (authorNpubs != null && authorNpubs.isNotEmpty) {
-        if (isProfileMode && authorNpubs.length == 1) {
-          final result = await _nostrDataService.fetchProfileNotes(
-            userNpub: authorNpubs.first,
-            limit: limit,
-            until: until,
-            since: since,
-          );
-          return result.isSuccess ? const Result.success(null) : Result.error(result.error!);
-        }
-
         final result = await _nostrDataService.fetchFeedNotes(
           authorNpubs: authorNpubs,
           limit: limit,
           until: until,
           since: since,
+          isProfileMode: isProfileMode,
         );
         return result.isSuccess ? const Result.success(null) : Result.error(result.error!);
       }

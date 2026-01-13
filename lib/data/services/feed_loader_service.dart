@@ -119,6 +119,8 @@ class FeedLoaderService {
 
           final processedNotes = _processNotes(notes);
           
+          _fetchInteractionsForNotes(processedNotes);
+          
           return FeedLoadResult(
             notes: processedNotes,
             hasMore: notes.length >= params.limit,
@@ -136,6 +138,23 @@ class FeedLoaderService {
     } catch (e) {
       _logger.error('Failed to load feed', 'FeedLoaderService', e);
       return FeedLoadResult(notes: [], error: 'Failed to load feed: ${e.toString()}');
+    }
+  }
+
+  void _fetchInteractionsForNotes(List<NoteModel> notes) {
+    try {
+      final noteIds = notes.map((note) {
+        if (note.isRepost && note.rootId != null && note.rootId!.isNotEmpty) {
+          return note.rootId!;
+        }
+        return note.id;
+      }).toSet().toList();
+
+      if (noteIds.isEmpty) return;
+
+      _noteRepository.nostrDataService.fetchInteractionsForNotesBatchWithEOSE(noteIds);
+    } catch (e) {
+      _logger.error('Error fetching interactions for notes', 'FeedLoaderService', e);
     }
   }
 
@@ -279,6 +298,18 @@ class FeedLoaderService {
     } catch (e) {
       _logger.error('Error preloading cached user profiles', 'FeedLoaderService', e);
     }
+  }
+
+  void loadProfilesAndInteractionsForNotes(
+    List<NoteModel> notes,
+    Map<String, UserModel> profiles,
+    Function(Map<String, UserModel>) onProfilesUpdated,
+  ) {
+    _fetchInteractionsForNotes(notes);
+    preloadCachedUserProfilesSync(notes, profiles, onProfilesUpdated);
+    loadUserProfilesForNotes(notes, profiles, onProfilesUpdated).catchError((e) {
+      _logger.error('Error loading user profiles', 'FeedLoaderService', e);
+    });
   }
 
   Future<void> loadUserProfilesForNotes(

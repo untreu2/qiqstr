@@ -226,24 +226,14 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
 
           final notesToPreload = _feedState is LoadedState<List<NoteModel>> ? (_feedState as LoadedState<List<NoteModel>>).data : sortedNotes;
           
-          _feedLoader.preloadCachedUserProfilesSync(
-            notesToPreload,
-            _profiles,
-            (profiles) {
-              _profilesController.add(Map.from(profiles));
-            },
-          );
-
-          _feedLoader.loadUserProfilesForNotes(
+          _feedLoader.loadProfilesAndInteractionsForNotes(
             notesToPreload,
             _profiles,
             (profiles) {
               _profilesController.add(Map.from(profiles));
               safeNotifyListeners();
             },
-          ).catchError((e) {
-            debugPrint('[FeedViewModel] Error loading user profiles in background: $e');
-          });
+          );
         }
 
       } else {
@@ -305,24 +295,14 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           _feedState = LoadedState(sortedNotes);
           safeNotifyListeners();
 
-          _feedLoader.preloadCachedUserProfilesSync(
-            sortedNotes,
-            _profiles,
-            (profiles) {
-              _profilesController.add(Map.from(profiles));
-            },
-          );
-
-          _feedLoader.loadUserProfilesForNotes(
+          _feedLoader.loadProfilesAndInteractionsForNotes(
             sortedNotes,
             _profiles,
             (profiles) {
               _profilesController.add(Map.from(profiles));
               safeNotifyListeners();
             },
-          ).catchError((e) {
-            debugPrint('[FeedViewModel] Error loading user profiles in background: $e');
-          });
+          );
         }
       } else {
         final currentNotes = _feedState is LoadedState<List<NoteModel>> ? (_feedState as LoadedState<List<NoteModel>>).data : <NoteModel>[];
@@ -390,24 +370,14 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           _feedState = LoadedState(sortedNotes);
           safeNotifyListeners();
 
-          _feedLoader.preloadCachedUserProfilesSync(
-            uniqueNewNotes,
-            _profiles,
-            (profiles) {
-              _profilesController.add(Map.from(profiles));
-            },
-          );
-
-          _feedLoader.loadUserProfilesForNotes(
+          _feedLoader.loadProfilesAndInteractionsForNotes(
             uniqueNewNotes,
             _profiles,
             (profiles) {
               _profilesController.add(Map.from(profiles));
               safeNotifyListeners();
             },
-          ).catchError((e) {
-            debugPrint('[FeedViewModel] Error loading user profiles: $e');
-          });
+          );
         }
       }
     } catch (e) {
@@ -553,31 +523,13 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           _feedState = LoadedState(sortedNotes);
           safeNotifyListeners();
 
-          _feedLoader.preloadCachedUserProfilesSync(
+          _feedLoader.loadProfilesAndInteractionsForNotes(
             userNewNotes,
             _profiles,
             (profiles) {
               _profilesController.add(Map.from(profiles));
             },
           );
-
-          _feedLoader.preloadCachedUserProfiles(
-            userNewNotes,
-            _profiles,
-            (profiles) {
-              _profilesController.add(Map.from(profiles));
-            },
-          );
-
-          _feedLoader.loadUserProfilesForNotes(
-            userNewNotes,
-            _profiles,
-            (profiles) {
-              _profilesController.add(Map.from(profiles));
-            },
-          ).catchError((e) {
-            debugPrint('[FeedViewModel] Error loading user profiles for new notes: $e');
-          });
         }
       }),
     );
@@ -632,31 +584,13 @@ class FeedViewModel extends BaseViewModel with CommandMixin {
           _feedState = LoadedState(sortedNotes);
           safeNotifyListeners();
 
-          _feedLoader.preloadCachedUserProfilesSync(
+          _feedLoader.loadProfilesAndInteractionsForNotes(
             userNewNotes,
             _profiles,
             (profiles) {
               _profilesController.add(Map.from(profiles));
             },
           );
-
-          _feedLoader.preloadCachedUserProfiles(
-            userNewNotes,
-            _profiles,
-            (profiles) {
-              _profilesController.add(Map.from(profiles));
-            },
-          );
-
-          _feedLoader.loadUserProfilesForNotes(
-            userNewNotes,
-            _profiles,
-            (profiles) {
-              _profilesController.add(Map.from(profiles));
-            },
-          ).catchError((e) {
-            debugPrint('[FeedViewModel] Error loading user profiles for new notes: $e');
-          });
         }
       }),
     );
