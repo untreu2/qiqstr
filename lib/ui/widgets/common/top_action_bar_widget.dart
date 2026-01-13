@@ -109,6 +109,8 @@ class TopActionBarWidget extends StatelessWidget {
   }
 
   Widget _buildCenterBubble(dynamic colors) {
+    final processedBubble = _processCenterBubble(centerBubble!);
+    
     final bubbleWidget = GestureDetector(
       onTap: onCenterBubbleTap,
       child: Container(
@@ -117,7 +119,7 @@ class TopActionBarWidget extends StatelessWidget {
           color: colors.textPrimary,
           borderRadius: BorderRadius.circular(40),
         ),
-        child: centerBubble!,
+        child: processedBubble,
       ),
     );
 
@@ -145,6 +147,79 @@ class TopActionBarWidget extends StatelessWidget {
         child: bubbleWidget,
       ),
     );
+  }
+
+  Widget _processCenterBubble(Widget widget) {
+    return _processWidgetRecursively(widget);
+  }
+
+  Widget _processWidgetRecursively(Widget widget) {
+    if (widget is Text) {
+      final text = widget.data ?? '';
+      if (text.length > 15) {
+        return Text(
+          '${text.substring(0, 15)}...',
+          style: widget.style,
+          textAlign: widget.textAlign,
+          maxLines: widget.maxLines ?? 1,
+          overflow: TextOverflow.ellipsis,
+        );
+      }
+      return widget;
+    }
+    
+    if (widget is Row) {
+      return Row(
+        mainAxisSize: widget.mainAxisSize,
+        mainAxisAlignment: widget.mainAxisAlignment,
+        crossAxisAlignment: widget.crossAxisAlignment,
+        children: widget.children.map((child) => _processWidgetRecursively(child)).toList(),
+      );
+    }
+    
+    if (widget is Flexible) {
+      return Flexible(
+        flex: widget.flex,
+        fit: widget.fit,
+        child: _processWidgetRecursively(widget.child),
+      );
+    }
+    
+    if (widget is Expanded) {
+      return Expanded(
+        flex: widget.flex,
+        child: _processWidgetRecursively(widget.child),
+      );
+    }
+    
+    if (widget is Padding) {
+      final padding = widget;
+      return Padding(
+        padding: padding.padding,
+        child: padding.child != null ? _processWidgetRecursively(padding.child!) : null,
+      );
+    }
+    
+    if (widget is Container) {
+      final container = widget;
+      if (container.child != null) {
+        return Container(
+          key: container.key,
+          alignment: container.alignment,
+          padding: container.padding,
+          color: container.color,
+          decoration: container.decoration,
+          foregroundDecoration: container.foregroundDecoration,
+          constraints: container.constraints,
+          margin: container.margin,
+          transform: container.transform,
+          transformAlignment: container.transformAlignment,
+          child: _processWidgetRecursively(container.child!),
+        );
+      }
+    }
+    
+    return widget;
   }
 }
 
